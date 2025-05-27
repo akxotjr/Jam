@@ -1,0 +1,138 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="99.Header">
+      <UniqueIdentifier>{f61c58c4-06c7-4039-91d0-834718b516ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="02.Thread">
+      <UniqueIdentifier>{6ac1e2a9-1ff4-46b8-a28c-a5d88c3a16bf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="03.Job">
+      <UniqueIdentifier>{9ce9db4f-1a60-42aa-976d-2a37600e0ed2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="01.Memory">
+      <UniqueIdentifier>{b6d568f9-e37f-4803-bc62-270ec60ce085}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="04.Utils">
+      <UniqueIdentifier>{fbe92348-57ce-4621-a417-aeb31bc78800}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="98.Interface">
+      <UniqueIdentifier>{08afba46-0ab1-43d0-b356-7fba5ae79b7c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <Filter>99.Header</Filter>
+    </ClCompile>
+    <ClCompile Include="Logger.cpp">
+      <Filter>04.Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="TimeManager.cpp">
+      <Filter>04.Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Allocator.cpp">
+      <Filter>01.Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryPool.cpp">
+      <Filter>01.Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryManager.cpp">
+      <Filter>01.Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="Lock.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="DeadLockProfiler.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="LockQueue.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadManager.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="Job.cpp">
+      <Filter>03.Job</Filter>
+    </ClCompile>
+    <ClCompile Include="JobTimer.cpp">
+      <Filter>03.Job</Filter>
+    </ClCompile>
+    <ClCompile Include="JobQueue.cpp">
+      <Filter>03.Job</Filter>
+    </ClCompile>
+    <ClCompile Include="GlobalQueue.cpp">
+      <Filter>03.Job</Filter>
+    </ClCompile>
+    <ClCompile Include="ILayer.cpp">
+      <Filter>98.Interface</Filter>
+    </ClCompile>
+    <ClCompile Include="ISingletonLayer.cpp">
+      <Filter>98.Interface</Filter>
+    </ClCompile>
+    <ClCompile Include="TLS.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Logger.h">
+      <Filter>04.Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="TimeManager.h">
+      <Filter>04.Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Containers.h">
+      <Filter>01.Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="TypeCast.h">
+      <Filter>01.Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="ObjectPool.h">
+      <Filter>01.Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryPool.h">
+      <Filter>01.Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryManager.h">
+      <Filter>01.Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="Allocator.h">
+      <Filter>01.Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="Lock.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="DeadLockProfiler.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadManager.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="LockQueue.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="Job.h">
+      <Filter>03.Job</Filter>
+    </ClInclude>
+    <ClInclude Include="JobTimer.h">
+      <Filter>03.Job</Filter>
+    </ClInclude>
+    <ClInclude Include="JobQueue.h">
+      <Filter>03.Job</Filter>
+    </ClInclude>
+    <ClInclude Include="GlobalQueue.h">
+      <Filter>03.Job</Filter>
+    </ClInclude>
+    <ClInclude Include="ILayer.h">
+      <Filter>98.Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="ISingletonLayer.h">
+      <Filter>98.Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="TLS.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
