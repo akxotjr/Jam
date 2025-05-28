@@ -1,8 +1,10 @@
 #pragma once
+#include "ISingletonLayer.h"
 #include "Lock.h"
 
 namespace jam::utils::job
 {
+	class Job;
 	class JobQueue;
 
 	struct JobData
@@ -21,22 +23,25 @@ namespace jam::utils::job
 		}
 
 		double							executeTime = 0;
-		JobData* jobData = nullptr;
+		JobData*						jobData = nullptr;
 	};
 
 
-	class JobTimer
+	class JobTimer : public ISingletonLayer<JobTimer>
 	{
-		DECLARE_SINGLETON(JobTimer)
+		friend class jam::ISingletonLayer<JobTimer>;
 
 	public:
+		void							Init() override;
+		void							Shutdown() override;
+
 		void							Reserve(double afterTime, std::weak_ptr<JobQueue> owner, JobRef job);
 		void							Distribute(double now);
 		void							Clear();
 
 	private:
 		USE_LOCK
-		PriorityQueue<TimerItem>		_items;
-		Atomic<bool>					_distributing = false;
+		xpriority_queue<TimerItem>		m_items;
+		Atomic<bool>					m_distributing = false;
 	};
 }

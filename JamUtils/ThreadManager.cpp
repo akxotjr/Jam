@@ -18,7 +18,7 @@ namespace jam::utils::thread
 		ISingletonLayer::Shutdown();
 	}
 
-	void ThreadManager::Launch(std::function<void(void)> callback)
+	void ThreadManager::Launch(Callback callback)
 	{
 		LockGuard guard(m_lock);
 

@@ -5,11 +5,11 @@ namespace jam::utils::job
 {
 	void GlobalQueue::Push(const JobQueueRef& jobQueue)
 	{
-		_jobQueues.Push(jobQueue);
+		m_jobQueues.Push(jobQueue);
 	}
 
 	JobQueueRef GlobalQueue::Pop()
 	{
-		return _jobQueues.Pop();
+		return m_jobQueues.Pop();
 	}
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "Allocator.h"
+#include "ISingletonLayer.h"
 
 
 namespace jam::utils::memory
@@ -10,19 +11,20 @@ namespace jam::utils::memory
 	inline constexpr int32 MAX_ALLOC_SIZE = 4096;
 
 
-
-
-	class MemoryManager
+	class MemoryManager : public ISingletonLayer<MemoryManager>
 	{
-		DECLARE_SINGLETON(MemoryManager)
+		friend class jam::ISingletonLayer<MemoryManager>;
 
 	public:
+		void	Init() override;
+		void	Shutdown() override;
+
 		void*	Allocate(int32 size);
 		void	Release(void* ptr);
 
 	private:
-		std::vector<MemoryPool*>	_pools;
-		MemoryPool*					_poolTable[MAX_ALLOC_SIZE + 1];
+		std::vector<MemoryPool*>	m_pools;
+		MemoryPool*					m_poolTable[MAX_ALLOC_SIZE + 1];
 	};
 
 

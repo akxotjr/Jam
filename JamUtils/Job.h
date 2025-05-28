@@ -9,21 +9,21 @@ namespace jam::utils::job
 	class Job
 	{
 	public:
-		Job(CallbackType&& callback) : _callback(std::move(callback)) {}
+		Job(CallbackType&& callback) : m_callback(std::move(callback)) {}
 
 		template<typename T, typename Ret, typename... Args>
 		Job(std::shared_ptr<T> owner, Ret(T::* memFunc)(Args...), Args&&... args)
 		{
-			_callback = [owner, memFunc, args...]()
+			m_callback = [owner, memFunc, args...]()
 				{
 					(owner.get()->*memFunc)(args...);
 				};
 		}
 
-		void			Execute() { _callback(); }
+		void			Execute() { m_callback(); }
 
 	private:
-		CallbackType	_callback;
+		CallbackType	m_callback;
 	};
 }
 

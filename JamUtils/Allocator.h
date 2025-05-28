@@ -9,7 +9,7 @@ namespace jam::utils::memory
 	class BaseAllocator
 	{
 	public:
-		static void* Alloc(int32 size);
+		static void*	Alloc(int32 size);
 		static void		Release(void* ptr);
 	};
 
@@ -22,7 +22,7 @@ namespace jam::utils::memory
 		enum { PAGE_SIZE = 0x1000 };
 
 	public:
-		static void* Alloc(int32 size);
+		static void*	Alloc(int32 size);
 		static void		Release(void* ptr);
 	};
 
@@ -33,7 +33,7 @@ namespace jam::utils::memory
 	class PoolAllocator
 	{
 	public:
-		static void* Alloc(int32 size);
+		static void*	Alloc(int32 size);
 		static void		Release(void* ptr);
 	};
 

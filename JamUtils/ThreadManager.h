@@ -3,6 +3,8 @@
 
 namespace jam::utils::thread
 {
+	using Callback = std::function<void()>;
+
 	class ThreadManager : public ISingletonLayer<ThreadManager>
 	{
 		friend class jam::ISingletonLayer<ThreadManager>;
@@ -11,7 +13,7 @@ namespace jam::utils::thread
 		void							Init() override;
 		void							Shutdown() override;
 
-		void							Launch(std::function<void(void)> callback);
+		void							Launch(Callback callback);
 		void							Join();
 
 		void							InitTLS();
@@ -23,5 +25,7 @@ namespace jam::utils::thread
 	private:
 		Mutex							m_lock;
 		std::vector<std::thread>		m_threads;
+
+		
 	};
 }

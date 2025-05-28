@@ -72,6 +72,12 @@
     <ClCompile Include="TLS.cpp">
       <Filter>02.Thread</Filter>
     </ClCompile>
+    <ClCompile Include="JamUtilsPCH.cpp">
+      <Filter>99.Header</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadPool.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -132,6 +138,24 @@
       <Filter>98.Interface</Filter>
     </ClInclude>
     <ClInclude Include="TLS.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="JamUtilsPCH.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Enums.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Macro.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Types.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Values.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadPool.h">
       <Filter>02.Thread</Filter>
     </ClInclude>
   </ItemGroup>

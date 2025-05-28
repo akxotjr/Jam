@@ -38,14 +38,14 @@ namespace jam::utils::job
 			JobTimer::Instance()->Reserve(afterTime, shared_from_this(), job);
 		}
 
-		void							ClearJobs() { _jobs.Clear(); }
+		void							ClearJobs() { m_jobs.Clear(); }
 
 		void							Push(JobRef job, bool pushOnly = false);
 		void							Execute();
 
 	protected:
-		jam::utils::thread::LockQueue<JobRef>		_jobs;
-		Atomic<int32>								_jobCount = 0;
+		jam::utils::thread::LockQueue<JobRef>		m_jobs;
+		Atomic<int32>								m_jobCount = 0;
 	};
 }
 

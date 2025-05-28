@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Allocator.h"
+#include "MemoryManager.h"
 
 namespace jam::utils::memory
 {
@@ -42,11 +43,11 @@ namespace jam::utils::memory
 
 	void* PoolAllocator::Alloc(int32 size)
 	{
-		return GMemory->Allocate(size);
+		return MemoryManager::Instance()->Allocate(size);
 	}
 
 	void PoolAllocator::Release(void* ptr)
 	{
-		GMemory->Release(ptr);
+		MemoryManager::Instance()->Release(ptr);
 	}
 }

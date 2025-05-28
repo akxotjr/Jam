@@ -30,8 +30,8 @@ namespace jam::utils::thread
         void            ReadUnlock(const char* name);
 
     private:
-        Atomic<uint32>  _lockFlag = EMPTY_FLAG;
-        uint16          _writeCount = 0;
+        Atomic<uint32>  m_lockFlag = EMPTY_FLAG;
+        uint16          m_writeCount = 0;
     };
 
     /*----------------
@@ -41,23 +41,23 @@ namespace jam::utils::thread
     class ReadLockGuard
     {
     public:
-        ReadLockGuard(Lock& lock, const char* name) : _lock(lock), _name(name) { _lock.ReadLock(name); }
-        ~ReadLockGuard() { _lock.ReadUnlock(_name); }
+        ReadLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.ReadLock(name); }
+        ~ReadLockGuard() { m_lock.ReadUnlock(m_name); }
 
     private:
-        Lock& _lock;
-        const char* _name;
+        Lock&           m_lock;
+        const char*     m_name;
     };
 
     class WriteLockGuard
     {
     public:
-        WriteLockGuard(Lock& lock, const char* name) : _lock(lock), _name(name) { _lock.WriteLock(name); }
-        ~WriteLockGuard() { _lock.WriteUnlock(_name); }
+        WriteLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.WriteLock(name); }
+        ~WriteLockGuard() { m_lock.WriteUnlock(m_name); }
 
     private:
-        Lock& _lock;
-        const char* _name;
+        Lock&           m_lock;
+        const char*     m_name;
     };
 }
 

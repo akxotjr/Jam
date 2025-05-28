@@ -7,28 +7,28 @@ namespace jam::utils::thread
 	void Lock::WriteLock(const char* name)
 	{
 #if _DEBUG
-		DeadLockProfiler::Instance().PushLock(name);
+		DeadLockProfiler::Instance()->PushLock(name);
 #endif
 
 		// 동일한 쓰레드가 소유하고 있다면 무조건 성공.
-		const uint32 lockThreadId = (_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
-		if (LThreadId == lockThreadId)
+		const uint32 lockThreadId = (m_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
+		if (tl_ThreadId == lockThreadId)
 		{
-			_writeCount++;
+			m_writeCount++;
 			return;
 		}
 
 		// 아무도 소유 및 공유하고 있지 않을 때, 경합해서 소유권을 얻는다.
 		const int64 beginTick = ::GetTickCount64();
-		const uint32 desired = ((LThreadId << 16) & WRITE_THREAD_MASK);
+		const uint32 desired = ((tl_ThreadId << 16) & WRITE_THREAD_MASK);
 		while (true)
 		{
 			for (uint32 spinCount = 0; spinCount < MAX_SPIN_COUNT; spinCount++)
 			{
 				uint32 expected = EMPTY_FLAG;
-				if (_lockFlag.compare_exchange_strong(OUT expected, desired))
+				if (m_lockFlag.compare_exchange_strong(OUT expected, desired))
 				{
-					_writeCount++;
+					m_writeCount++;
 					return;
 				}
 			}
@@ -43,29 +43,29 @@ namespace jam::utils::thread
 	void Lock::WriteUnlock(const char* name)
 	{
 #if _DEBUG
-		DeadLockProfiler::Instance().PopLock(name);
+		DeadLockProfiler::Instance()->PopLock(name);
 #endif
 
 		// ReadLock 다 풀기 전에는 WriteUnlock 불가능.
-		if ((_lockFlag.load() & READ_COUNT_MASK) != 0)
+		if ((m_lockFlag.load() & READ_COUNT_MASK) != 0)
 			CRASH("INVALID_UNLOCK_ORDER");
 
-		const int32 lockCount = --_writeCount;
+		const int32 lockCount = --m_writeCount;
 		if (lockCount == 0)
-			_lockFlag.store(EMPTY_FLAG);
+			m_lockFlag.store(EMPTY_FLAG);
 	}
 
 	void Lock::ReadLock(const char* name)
 	{
 #if _DEBUG
-		DeadLockProfiler::Instance().PushLock(name);
+		DeadLockProfiler::Instance()->PushLock(name);
 #endif
 
 		// 동일한 쓰레드가 소유하고 있다면 무조건 성공.
-		const uint32 lockThreadId = (_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
-		if (LThreadId == lockThreadId)
+		const uint32 lockThreadId = (m_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
+		if (tl_ThreadId == lockThreadId)
 		{
-			_lockFlag.fetch_add(1);
+			m_lockFlag.fetch_add(1);
 			return;
 		}
 
@@ -75,8 +75,8 @@ namespace jam::utils::thread
 		{
 			for (uint32 spinCount = 0; spinCount < MAX_SPIN_COUNT; spinCount++)
 			{
-				uint32 expected = (_lockFlag.load() & READ_COUNT_MASK);
-				if (_lockFlag.compare_exchange_strong(OUT expected, expected + 1))
+				uint32 expected = (m_lockFlag.load() & READ_COUNT_MASK);
+				if (m_lockFlag.compare_exchange_strong(OUT expected, expected + 1))
 					return;
 			}
 
@@ -90,10 +90,10 @@ namespace jam::utils::thread
 	void Lock::ReadUnlock(const char* name)
 	{
 #if _DEBUG
-		DeadLockProfiler::Instance().PopLock(name);
+		DeadLockProfiler::Instance()->PopLock(name);
 #endif
 
-		if ((_lockFlag.fetch_sub(1) & READ_COUNT_MASK) == 0)
+		if ((m_lockFlag.fetch_sub(1) & READ_COUNT_MASK) == 0)
 			CRASH("MULTIPLE_UNLOCK");
 	}
 }

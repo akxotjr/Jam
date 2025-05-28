@@ -12,6 +12,6 @@ namespace jam::utils::job
 		JobQueueRef						Pop();
 
 	private:
-		thread::LockQueue<JobQueueRef>	_jobQueues;
+		thread::LockQueue<JobQueueRef>	m_jobQueues;
 	};
 }

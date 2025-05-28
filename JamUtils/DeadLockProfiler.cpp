@@ -33,7 +33,7 @@ namespace jam::utils::thread
 			const int32 prevId = tl_LockStack.top();
 			if (lockId != prevId)
 			{
-				set<int32>& history = m_lockHistory[prevId];
+				xset<int32>& history = m_lockHistory[prevId];
 				if (history.find(lockId) == history.end())
 				{
 					history.insert(lockId);
@@ -62,10 +62,10 @@ namespace jam::utils::thread
 	void DeadLockProfiler::CheckCycle()
 	{
 		const int32 lockCount = static_cast<int32>(m_nameToId.size());
-		m_discoveredOrder = Vector<int32>(lockCount, -1);
+		m_discoveredOrder = xvector<int32>(lockCount, -1);
 		m_discoveredCount = 0;
-		m_finished = Vector<bool>(lockCount, false);
-		m_parent = vector<int32>(lockCount, -1);
+		m_finished = xvector<bool>(lockCount, false);
+		m_parent = xvector<int32>(lockCount, -1);
 
 		for (int32 lockId = 0; lockId < lockCount; lockId++)
 			Dfs(lockId);
@@ -89,7 +89,7 @@ namespace jam::utils::thread
 			return;
 		}
 
-		set<int32>& nextSet = findIt->second;
+		xset<int32>& nextSet = findIt->second;
 		for (int32 there : nextSet)
 		{
 			if (m_discoveredOrder[there] == -1)
