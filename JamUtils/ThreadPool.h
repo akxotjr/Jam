@@ -1,11 +1,20 @@
 #pragma once
+#include "GlobalQueue.h"
 
-namespace jam::utils::thread
+
+namespace jam::utils::thrd
 {
+	class Worker;
+	class Scheduler;
+	
 	class ThreadPool
 	{
+		friend class Worker;
+
+		using WorkerFactory = std::function<Uptr<Worker>()>;
+
 	public:
-		ThreadPool(int32 numThreads, const Function& func);
+		ThreadPool(int32 numThreads, WorkerFactory factory);
 		~ThreadPool();
 
 		void Run();
@@ -17,11 +26,15 @@ namespace jam::utils::thread
 	private:
 		void InitTLS();
 		void DestoryTLS();
+		void Execute();
 
 	private:
-		Function				m_function = nullptr;
-		std::list<std::thread>	m_threads;
-		Atomic<int32>			m_numThreads;
+		std::list<std::thread>					m_threads;
+		Atomic<int32>							m_numThreads;
+
+		std::vector<std::unique_ptr<Worker>>	m_workers;
+
+		Uptr<job::GlobalQueue>					m_globalQueue;
 	};
 }
 

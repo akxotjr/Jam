@@ -1,11 +1,11 @@
 #pragma once
-#include "ISingletonLayer.h"
 #include "Lock.h"
 
 namespace jam::utils::job
 {
 	class Job;
 	class JobQueue;
+	class GlobalQueue;
 
 	struct JobData
 	{
@@ -27,14 +27,9 @@ namespace jam::utils::job
 	};
 
 
-	class JobTimer : public ISingletonLayer<JobTimer>
+	class JobTimer
 	{
-		friend class jam::ISingletonLayer<JobTimer>;
-
 	public:
-		void							Init() override;
-		void							Shutdown() override;
-
 		void							Reserve(double afterTime, std::weak_ptr<JobQueue> owner, JobRef job);
 		void							Distribute(double now);
 		void							Clear();

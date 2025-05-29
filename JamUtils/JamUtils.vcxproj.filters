@@ -48,9 +48,6 @@
     <ClCompile Include="LockQueue.cpp">
       <Filter>02.Thread</Filter>
     </ClCompile>
-    <ClCompile Include="ThreadManager.cpp">
-      <Filter>02.Thread</Filter>
-    </ClCompile>
     <ClCompile Include="Job.cpp">
       <Filter>03.Job</Filter>
     </ClCompile>
@@ -76,6 +73,15 @@
       <Filter>99.Header</Filter>
     </ClCompile>
     <ClCompile Include="ThreadPool.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="LockDeque.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="Worker.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="Scheduler.cpp">
       <Filter>02.Thread</Filter>
     </ClCompile>
   </ItemGroup>
@@ -111,9 +117,6 @@
       <Filter>02.Thread</Filter>
     </ClInclude>
     <ClInclude Include="DeadLockProfiler.h">
-      <Filter>02.Thread</Filter>
-    </ClInclude>
-    <ClInclude Include="ThreadManager.h">
       <Filter>02.Thread</Filter>
     </ClInclude>
     <ClInclude Include="LockQueue.h">
@@ -156,6 +159,15 @@
       <Filter>99.Header</Filter>
     </ClInclude>
     <ClInclude Include="ThreadPool.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="LockDeque.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="Worker.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="Scheduler.h">
       <Filter>02.Thread</Filter>
     </ClInclude>
   </ItemGroup>

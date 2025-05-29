@@ -1,7 +1,8 @@
 #pragma once
+#include "GlobalQueue.h"
 #include "Job.h"
 #include "JobTimer.h"
-#include "LockQueue.h"
+#include "LockDeque.h"
 #include "ObjectPool.h"
 
 
@@ -12,6 +13,9 @@ namespace jam::utils::job
 	class JobQueue : public enable_shared_from_this<JobQueue>
 	{
 	public:
+		JobQueue(Sptr<GlobalQueue> owner);
+		virtual ~JobQueue() = default;
+
 		void DoAsync(CallbackType&& callback)
 		{
 			Push(ObjectPool<Job>::MakeShared(std::move(callback)));
@@ -27,7 +31,7 @@ namespace jam::utils::job
 		void DoTimer(double afterTime, CallbackType&& callback)
 		{
 			JobRef job = memory::ObjectPool<Job>::MakeShared(std::move(callback));
-			JobTimer::Instance()->Reserve(afterTime, shared_from_this(), job);
+			m_owner.lock()->m_jobTimer->Reserve(afterTime, shared_from_this(), job);
 		}
 
 		template<typename T, typename Ret, typename... Args>
@@ -35,7 +39,7 @@ namespace jam::utils::job
 		{
 			shared_ptr<T> owner = static_pointer_cast<T>(shared_from_this());
 			JobRef job = memory::ObjectPool<Job>::MakeShared(owner, memFunc, std::forward<Args>(args)...);
-			JobTimer::Instance()->Reserve(afterTime, shared_from_this(), job);
+			m_owner.lock()->m_jobTimer->Reserve(afterTime, shared_from_this(), job);
 		}
 
 		void							ClearJobs() { m_jobs.Clear(); }
@@ -44,8 +48,10 @@ namespace jam::utils::job
 		void							Execute();
 
 	protected:
-		jam::utils::thread::LockQueue<JobRef>		m_jobs;
-		Atomic<int32>								m_jobCount = 0;
+		thrd::LockDeque<JobRef>			m_jobs;
+		Atomic<int32>					m_jobCount = 0;
+
+		Wptr<GlobalQueue>				m_owner;
 	};
 }
 

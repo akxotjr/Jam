@@ -4,6 +4,8 @@
 #include <atomic>
 #include <cstdint>
 
+#include "Macro.h"
+
 using BYTE = unsigned char;
 using int8 = int8_t;
 using int16 = int16_t;
@@ -24,3 +26,10 @@ using LockGuard = std::lock_guard<std::mutex>;
 
 using Callback = std::function<void()>;
 using Function = std::function<void()>;
+
+template<typename T>
+using Sptr = std::shared_ptr<T>;
+template<typename T>
+using Uptr = std::unique_ptr<T>;
+template<typename T>
+using Wptr = std::weak_ptr<T>;

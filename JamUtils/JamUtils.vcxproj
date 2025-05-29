@@ -163,6 +163,7 @@
     <ClInclude Include="JobQueue.h" />
     <ClInclude Include="JobTimer.h" />
     <ClInclude Include="Lock.h" />
+    <ClInclude Include="LockDeque.h" />
     <ClInclude Include="LockQueue.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="Macro.h" />
@@ -170,13 +171,14 @@
     <ClInclude Include="MemoryPool.h" />
     <ClInclude Include="ObjectPool.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="ThreadManager.h" />
+    <ClInclude Include="Scheduler.h" />
     <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="TimeManager.h" />
     <ClInclude Include="TLS.h" />
     <ClInclude Include="TypeCast.h" />
     <ClInclude Include="Types.h" />
     <ClInclude Include="Values.h" />
+    <ClInclude Include="Worker.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Allocator.cpp" />
@@ -189,6 +191,7 @@
     <ClCompile Include="JobQueue.cpp" />
     <ClCompile Include="JobTimer.cpp" />
     <ClCompile Include="Lock.cpp" />
+    <ClCompile Include="LockDeque.cpp" />
     <ClCompile Include="LockQueue.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
@@ -199,10 +202,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="ThreadManager.cpp" />
+    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="TimeManager.cpp" />
     <ClCompile Include="TLS.cpp" />
+    <ClCompile Include="Worker.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

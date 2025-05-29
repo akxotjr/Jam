@@ -2,7 +2,7 @@
 #include "Containers.h"
 #include "ISingletonLayer.h"
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
 	class DeadLockProfiler : public ISingletonLayer<DeadLockProfiler>
 	{

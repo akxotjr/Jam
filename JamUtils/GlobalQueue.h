@@ -1,17 +1,23 @@
 #pragma once
-#include "ISingletonLayer.h"
+#include "LockQueue.h"
 
 namespace jam::utils::job
 {
-	class GlobalQueue : public ISingletonLayer<GlobalQueue>
+	class JobTimer;
+
+	class GlobalQueue
 	{
-		friend class jam::ISingletonLayer<GlobalQueue>;
+		friend class JobQueue;
 
 	public:
-		void							Push(const JobQueueRef& jobQueue);
-		JobQueueRef						Pop();
+		GlobalQueue();
+		~GlobalQueue() = default;
+
+		void								Push(const Sptr<JobQueue>& jobQueue);
+		Sptr<JobQueue>						Pop();
 
 	private:
-		thread::LockQueue<JobQueueRef>	m_jobQueues;
+		thrd::LockQueue<Sptr<JobQueue>>		m_jobQueues;
+		Uptr<JobTimer>						m_jobTimer;
 	};
 }

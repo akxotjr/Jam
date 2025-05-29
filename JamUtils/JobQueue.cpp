@@ -1,35 +1,35 @@
 #include "pch.h"
 #include "JobQueue.h"
-
 #include "GlobalQueue.h"
 #include "TimeManager.h"
 
 namespace jam::utils::job
 {
+	JobQueue::JobQueue(Sptr<GlobalQueue> owner)
+	{
+		m_owner = owner;
+	}
+
 	void JobQueue::Push(JobRef job, bool pushOnly)
 	{
 		const int32 prevCount = m_jobCount.fetch_add(1);
-		m_jobs.Push(job);
+		m_jobs.PushBack(job);
 
 		if (prevCount == 0)
 		{
-			if (thread::tl_CurrentJobQueue == nullptr && pushOnly == false)
+			if (thrd::tl_Worker != nullptr && thrd::tl_Worker->GetCurrentJobQueue() == nullptr && pushOnly == false)
 			{
 				Execute();
 			}
 			else
 			{
-				GlobalQueue::Instance()->Push(shared_from_this());
+				m_owner.lock()->Push(shared_from_this());
 			}
 		}
 	}
 
-
-
 	void JobQueue::Execute()
 	{
-		thread::tl_CurrentJobQueue = this;
-
 		while (true)
 		{
 			xvector<JobRef> jobs;
@@ -42,16 +42,13 @@ namespace jam::utils::job
 
 			if (m_jobCount.fetch_sub(jobCount) == jobCount)
 			{
-				thread::tl_CurrentJobQueue = nullptr;
 				return;
 			}
 
-			const double now = TimeManager::Instance()->GetServerTime();
-			if (now >= thread::tl_EndTime)
+			const double now = TimeManager::Instance()->GetCurrentTime();
+			if (now >= thrd::tl_EndTime)
 			{
-				thread::tl_CurrentJobQueue = nullptr;
-
-				GlobalQueue::Instance()->Push(shared_from_this());
+				m_owner.lock()->Push(shared_from_this());
 				break;
 			}
 		}

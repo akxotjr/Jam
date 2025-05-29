@@ -22,7 +22,7 @@ namespace jam::utils
 		::QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&currentCount));
 
 		m_deltaTime = static_cast<double>(currentCount - m_prevCount) / static_cast<double>(m_frequency);
-		m_serverTime += m_deltaTime;
+		m_currentTime += m_deltaTime;
 		m_prevCount = currentCount;
 	}
 }

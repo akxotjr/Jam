@@ -1,7 +1,7 @@
 #pragma once
 #include "Lock.h"
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
 	template<typename T>
 	class LockQueue
@@ -53,5 +53,7 @@ namespace jam::utils::thread
 	private:
 		USE_LOCK
 		xqueue<T>	m_items;
+
+		
 	};
 }

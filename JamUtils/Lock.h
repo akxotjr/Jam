@@ -1,6 +1,6 @@
 #pragma once
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
     /*----------------
 	    RW SpinLock
@@ -62,10 +62,10 @@ namespace jam::utils::thread
 }
 
 
-#define USE_MANY_LOCKS(count)	jam::utils::thread::Lock _locks[count];
+#define USE_MANY_LOCKS(count)	jam::utils::thrd::Lock _locks[count];
 #define USE_LOCK				USE_MANY_LOCKS(1)
-#define	READ_LOCK_IDX(idx)		jam::utils::thread::ReadLockGuard readLockGuard_##idx(_locks[idx], typeid(this).name());
+#define	READ_LOCK_IDX(idx)		jam::utils::thrd::ReadLockGuard readLockGuard_##idx(_locks[idx], typeid(this).name());
 #define READ_LOCK				READ_LOCK_IDX(0)
-#define	WRITE_LOCK_IDX(idx)		jam::utils::thread::WriteLockGuard writeLockGuard_##idx(_locks[idx], typeid(this).name());
+#define	WRITE_LOCK_IDX(idx)		jam::utils::thrd::WriteLockGuard writeLockGuard_##idx(_locks[idx], typeid(this).name());
 #define WRITE_LOCK				WRITE_LOCK_IDX(0)
 

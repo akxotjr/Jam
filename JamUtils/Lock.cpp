@@ -2,7 +2,7 @@
 #include "Lock.h"
 #include "DeadLockProfiler.h"
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
 	void Lock::WriteLock(const char* name)
 	{

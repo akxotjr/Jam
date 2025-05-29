@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "DeadLockProfiler.h"
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
 	/*--------------------
 		DeadLockProfiler

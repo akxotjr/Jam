@@ -13,14 +13,14 @@ namespace jam::utils
 
 		void			Update();
 
-		double			GetServerTime() { return m_serverTime; }
+		double			GetCurrentTime() { return m_currentTime; }
 		double			GetDeltaTime() { return m_deltaTime; }
 
 	private:
 		uint64			m_frequency = 0;
 		uint64			m_prevCount = 0;
 		double			m_deltaTime = 0.0f;
-		double			m_serverTime = 0.0f;
+		double			m_currentTime = 0.0f;
 	};
 }
 

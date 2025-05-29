@@ -4,20 +4,9 @@
 
 namespace jam::utils::job
 {
-	void JobTimer::Init()
-	{
-		ISingletonLayer::Init();
-	}
-
-	void JobTimer::Shutdown()
-	{
-		ISingletonLayer::Shutdown();
-	}
-
-
 	void JobTimer::Reserve(double afterTime, std::weak_ptr<JobQueue> owner, JobRef job)
 	{
-		const double executeTime = TimeManager::Instance()->GetServerTime() + afterTime;
+		const double executeTime = TimeManager::Instance()->GetCurrentTime() + afterTime;
 		JobData* jobData = memory::ObjectPool<JobData>::Pop(owner, job);
 
 		WRITE_LOCK

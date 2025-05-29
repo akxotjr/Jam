@@ -2,11 +2,13 @@
 #include <stack>
 
 #include "JobQueue.h"
+#include "Worker.h"
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
 	extern thread_local uint32										tl_ThreadId;
 	extern thread_local double										tl_EndTime;
 	extern thread_local std::stack<int32>							tl_LockStack;
 	extern thread_local job::JobQueue*								tl_CurrentJobQueue;
+	extern thread_local Worker* tl_Worker;
 }
