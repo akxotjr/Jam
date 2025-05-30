@@ -23,3 +23,5 @@
 #include "Containers.h"
 #include "TypeCast.h"
 #include "TLS.h"
+
+#define _STOMP

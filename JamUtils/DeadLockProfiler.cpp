@@ -34,7 +34,7 @@ namespace jam::utils::thread
 			if (lockId != prevId)
 			{
 				set<int32>& history = m_lockHistory[prevId];
-				if (history.find(lockId) == history.end())
+				if (!history.contains(lockId))
 				{
 					history.insert(lockId);
 					CheckCycle();
