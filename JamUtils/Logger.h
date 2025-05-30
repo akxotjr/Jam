@@ -11,6 +11,8 @@ namespace jam::utils
 
 	public:
 		void			Init() override;
+		void			Shutdown() override;
+
 		spdlogRef&		GetLogger() { return _logger; }
 
 	private:

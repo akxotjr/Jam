@@ -27,8 +27,9 @@ namespace jam::utils::memory
 		}
 
 		int32 allocSize;
-		// TODO : 필요한 추가 정보
 	};
+
+
 
 	/*-----------------
 		MemoryPool
@@ -46,10 +47,10 @@ namespace jam::utils::memory
 		MemoryHeader*			Pop();
 
 	private:
-		SLIST_HEADER			_header;
-		int32					_allocSize = 0;
-		std::atomic<int32>		_useCount = 0;
-		std::atomic<int32>		_reserveCount = 0;
+		SLIST_HEADER			m_header;
+		int32					m_allocSize = 0;
+		Atomic<int32>			m_useCount = 0;
+		Atomic<int32>			m_reserveCount = 0;
 	};
 }
 

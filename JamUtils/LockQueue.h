@@ -1,7 +1,7 @@
 #pragma once
 #include "Lock.h"
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
 	template<typename T>
 	class LockQueue
@@ -10,48 +10,50 @@ namespace jam::utils::thread
 		void Push(T job)
 		{
 			WRITE_LOCK
-				_items.push(job);
+			m_items.push(job);
 		}
 
 		std::optional<T> TryPop()
 		{
 			WRITE_LOCK
-				if (_items.empty())
-					return std::nullopt;
+			if (m_items.empty())
+				return std::nullopt;
 
-			T job = std::move(_items.front());
-			_items.pop();
+			T job = std::move(m_items.front());
+			m_items.pop();
 			return job;
 		}
 
 		T Pop()
 		{
 			WRITE_LOCK
-				if (_items.empty())
+				if (m_items.empty())
 					return T();
 
-			T ret = _items.front();
-			_items.pop();
+			T ret = m_items.front();
+			m_items.pop();
 			return ret;
 		}
 
-		void PopAll(OUT Vector<T>& items)
+		void PopAll(OUT xvector<T>& items)
 		{
 			WRITE_LOCK
-				while (T item = Pop())
-				{
-					items.push_back(item);
-				}
+			while (T item = Pop())
+			{
+				items.push_back(item);
+			}
 		}
 
 		void Clear()
 		{
 			WRITE_LOCK
-				_items = Queue<T>();
+			m_items = xqueue<T>();
 		}
 
 	private:
 		USE_LOCK
-			Queue<T> _items;
+		xqueue<T>	m_items;
+
+		
 	};
 }

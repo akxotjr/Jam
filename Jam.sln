@@ -9,14 +9,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "JamPx", "JamPx\JamPx.vcxpro
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "JamNet", "JamNet\JamNet.vcxproj", "{38826A1F-878F-409C-82BA-5E5AEE590362}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "JamCommon", "JamCommon", "{2A3A057F-5D22-31FD-628C-DF5EF75AEF1E}"
-	ProjectSection(SolutionItems) = preProject
-		JamCommon\Enums.h = JamCommon\Enums.h
-		JamCommon\Macro.h = JamCommon\Macro.h
-		JamCommon\Types.h = JamCommon\Types.h
-		JamCommon\Values.h = JamCommon\Values.h
-	EndProjectSection
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64

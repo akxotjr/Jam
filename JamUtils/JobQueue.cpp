@@ -1,54 +1,69 @@
 #include "pch.h"
 #include "JobQueue.h"
+#include "GlobalQueue.h"
+#include "TimeManager.h"
+#include "Worker.h"
 
 namespace jam::utils::job
 {
+	JobQueue::JobQueue(Sptr<GlobalQueue> owner)
+	{
+		m_owner = owner;
+	}
+
 	void JobQueue::Push(JobRef job, bool pushOnly)
 	{
-		const int32 prevCount = _jobCount.fetch_add(1);
-		_jobs.Push(job);
+		const int32 prevCount = m_jobCount.fetch_add(1);
+		m_jobs.PushBack(job);
 
 		if (prevCount == 0)
 		{
-			if (thread::LCurrentJobQueue == nullptr && pushOnly == false)
+			if (thrd::tl_Worker != nullptr && thrd::tl_Worker->GetCurrentJobQueue() == nullptr && pushOnly == false)
 			{
-				Execute();
+				ExecuteFront();
 			}
 			else
 			{
-				GlobalQueue::Instance().Push(shared_from_this());
+				m_owner.lock()->Push(shared_from_this());
 			}
 		}
 	}
 
-
-
-	void JobQueue::Execute()
+	void JobQueue::ExecuteFront()
 	{
-		thread::LCurrentJobQueue = this;
-
 		while (true)
 		{
-			Vector<JobRef> jobs;
-			_jobs.PopAll(OUT jobs);
+			Sptr<Job> job = m_jobs.PopFront();
+			if (job == nullptr)
+				break;
 
-			const int32 jobCount = static_cast<int32>(jobs.size());
+			job->Execute();
+			thrd::tl_Worker->m_workCount.fetch_add(1);
 
-			for (int32 i = 0; i < jobCount; i++)
-				jobs[i]->Execute();
-
-			if (_jobCount.fetch_sub(jobCount) == jobCount)
+			const double now = TimeManager::Instance()->GetCurrentTime();
+			if (now >= thrd::tl_EndTime)
 			{
-				thread::LCurrentJobQueue = nullptr;
-				return;
+				m_owner.lock()->Push(shared_from_this());
+				break;
 			}
+		}
+	}
 
-			const double now = TimeManager::Instance().GetServerTime();
-			if (now >= thread::LEndTime)
+	void JobQueue::ExecuteBack()
+	{
+		while (true)
+		{
+			Sptr<Job> job = m_jobs.PopBack();
+			if (job == nullptr)
+				break;
+
+			job->Execute();
+			thrd::tl_Worker->m_workCount.fetch_add(1);
+
+			const double now = TimeManager::Instance()->GetCurrentTime();
+			if (now >= thrd::tl_EndTime)
 			{
-				thread::LCurrentJobQueue = nullptr;
-
-				GlobalQueue::Instance().Push(shared_from_this());
+				m_owner.lock()->Push(shared_from_this());
 				break;
 			}
 		}

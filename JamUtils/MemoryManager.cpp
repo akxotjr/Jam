@@ -48,6 +48,7 @@ namespace jam::utils::memory
 		}
 	}
 
+
 	void MemoryManager::Shutdown()
 	{
 		for (MemoryPool* pool : m_pools)

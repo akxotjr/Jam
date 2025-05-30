@@ -11,18 +11,16 @@ namespace jam::utils::memory
 	inline constexpr int32 MAX_ALLOC_SIZE = 4096;
 
 
-
-
 	class MemoryManager : public ISingletonLayer<MemoryManager>
 	{
 		friend class jam::ISingletonLayer<MemoryManager>;
 
 	public:
-		void						Init() override;
-		void						Shutdown() override;
+		void	Init() override;
+		void	Shutdown() override;
 
-		void*						Allocate(int32 size);
-		void						Release(void* ptr);
+		void*	Allocate(int32 size);
+		void	Release(void* ptr);
 
 	private:
 		std::vector<MemoryPool*>	m_pools;

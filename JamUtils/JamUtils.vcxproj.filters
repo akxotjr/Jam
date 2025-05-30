@@ -48,9 +48,6 @@
     <ClCompile Include="LockQueue.cpp">
       <Filter>02.Thread</Filter>
     </ClCompile>
-    <ClCompile Include="ThreadManager.cpp">
-      <Filter>02.Thread</Filter>
-    </ClCompile>
     <ClCompile Include="Job.cpp">
       <Filter>03.Job</Filter>
     </ClCompile>
@@ -70,6 +67,21 @@
       <Filter>98.Interface</Filter>
     </ClCompile>
     <ClCompile Include="TLS.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="JamUtilsPCH.cpp">
+      <Filter>99.Header</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadPool.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="LockDeque.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="Worker.cpp">
+      <Filter>02.Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="Scheduler.cpp">
       <Filter>02.Thread</Filter>
     </ClCompile>
   </ItemGroup>
@@ -107,9 +119,6 @@
     <ClInclude Include="DeadLockProfiler.h">
       <Filter>02.Thread</Filter>
     </ClInclude>
-    <ClInclude Include="ThreadManager.h">
-      <Filter>02.Thread</Filter>
-    </ClInclude>
     <ClInclude Include="LockQueue.h">
       <Filter>02.Thread</Filter>
     </ClInclude>
@@ -132,6 +141,33 @@
       <Filter>98.Interface</Filter>
     </ClInclude>
     <ClInclude Include="TLS.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="JamUtilsPCH.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Enums.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Macro.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Types.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="Values.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadPool.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="LockDeque.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="Worker.h">
+      <Filter>02.Thread</Filter>
+    </ClInclude>
+    <ClInclude Include="Scheduler.h">
       <Filter>02.Thread</Filter>
     </ClInclude>
   </ItemGroup>

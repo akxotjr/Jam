@@ -74,7 +74,7 @@
     <TargetName>libjamutils</TargetName>
     <OutDir>$(SolutionDir)Binaries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
     <IntDir>$(SolutionDir)Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
-    <IncludePath>$(SolutionDir)JamCommon;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -123,6 +123,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -153,23 +154,31 @@
     <ClInclude Include="Allocator.h" />
     <ClInclude Include="Containers.h" />
     <ClInclude Include="DeadLockProfiler.h" />
+    <ClInclude Include="Enums.h" />
     <ClInclude Include="GlobalQueue.h" />
     <ClInclude Include="ILayer.h" />
     <ClInclude Include="ISingletonLayer.h" />
+    <ClInclude Include="JamUtilsPCH.h" />
     <ClInclude Include="Job.h" />
     <ClInclude Include="JobQueue.h" />
     <ClInclude Include="JobTimer.h" />
     <ClInclude Include="Lock.h" />
+    <ClInclude Include="LockDeque.h" />
     <ClInclude Include="LockQueue.h" />
     <ClInclude Include="Logger.h" />
+    <ClInclude Include="Macro.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MemoryPool.h" />
     <ClInclude Include="ObjectPool.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="ThreadManager.h" />
+    <ClInclude Include="Scheduler.h" />
+    <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="TimeManager.h" />
     <ClInclude Include="TLS.h" />
     <ClInclude Include="TypeCast.h" />
+    <ClInclude Include="Types.h" />
+    <ClInclude Include="Values.h" />
+    <ClInclude Include="Worker.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Allocator.cpp" />
@@ -177,10 +186,12 @@
     <ClCompile Include="GlobalQueue.cpp" />
     <ClCompile Include="ILayer.cpp" />
     <ClCompile Include="ISingletonLayer.cpp" />
+    <ClCompile Include="JamUtilsPCH.cpp" />
     <ClCompile Include="Job.cpp" />
     <ClCompile Include="JobQueue.cpp" />
     <ClCompile Include="JobTimer.cpp" />
     <ClCompile Include="Lock.cpp" />
+    <ClCompile Include="LockDeque.cpp" />
     <ClCompile Include="LockQueue.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
@@ -191,9 +202,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="ThreadManager.cpp" />
+    <ClCompile Include="Scheduler.cpp" />
+    <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="TimeManager.cpp" />
     <ClCompile Include="TLS.cpp" />
+    <ClCompile Include="Worker.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

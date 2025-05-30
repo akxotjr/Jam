@@ -3,7 +3,9 @@
 
 namespace jam::utils::job
 {
+	class Job;
 	class JobQueue;
+	class GlobalQueue;
 
 	struct JobData
 	{
@@ -21,14 +23,12 @@ namespace jam::utils::job
 		}
 
 		double							executeTime = 0;
-		JobData* jobData = nullptr;
+		JobData*						jobData = nullptr;
 	};
 
 
 	class JobTimer
 	{
-		DECLARE_SINGLETON(JobTimer)
-
 	public:
 		void							Reserve(double afterTime, std::weak_ptr<JobQueue> owner, JobRef job);
 		void							Distribute(double now);
@@ -36,7 +36,7 @@ namespace jam::utils::job
 
 	private:
 		USE_LOCK
-		PriorityQueue<TimerItem>		_items;
-		Atomic<bool>					_distributing = false;
+		xpriority_queue<TimerItem>		m_items;
+		Atomic<bool>					m_distributing = false;
 	};
 }

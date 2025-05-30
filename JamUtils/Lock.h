@@ -1,6 +1,6 @@
 #pragma once
 
-namespace jam::utils::thread
+namespace jam::utils::thrd
 {
     /*----------------
 	    RW SpinLock
@@ -30,8 +30,8 @@ namespace jam::utils::thread
         void            ReadUnlock(const char* name);
 
     private:
-        Atomic<uint32>  _lockFlag = EMPTY_FLAG;
-        uint16          _writeCount = 0;
+        Atomic<uint32>  m_lockFlag = EMPTY_FLAG;
+        uint16          m_writeCount = 0;
     };
 
     /*----------------
@@ -41,31 +41,31 @@ namespace jam::utils::thread
     class ReadLockGuard
     {
     public:
-        ReadLockGuard(Lock& lock, const char* name) : _lock(lock), _name(name) { _lock.ReadLock(name); }
-        ~ReadLockGuard() { _lock.ReadUnlock(_name); }
+        ReadLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.ReadLock(name); }
+        ~ReadLockGuard() { m_lock.ReadUnlock(m_name); }
 
     private:
-        Lock& _lock;
-        const char* _name;
+        Lock&           m_lock;
+        const char*     m_name;
     };
 
     class WriteLockGuard
     {
     public:
-        WriteLockGuard(Lock& lock, const char* name) : _lock(lock), _name(name) { _lock.WriteLock(name); }
-        ~WriteLockGuard() { _lock.WriteUnlock(_name); }
+        WriteLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.WriteLock(name); }
+        ~WriteLockGuard() { m_lock.WriteUnlock(m_name); }
 
     private:
-        Lock& _lock;
-        const char* _name;
+        Lock&           m_lock;
+        const char*     m_name;
     };
 }
 
 
-#define USE_MANY_LOCKS(count)	jam::utils::thread::Lock _locks[count];
+#define USE_MANY_LOCKS(count)	jam::utils::thrd::Lock _locks[count];
 #define USE_LOCK				USE_MANY_LOCKS(1)
-#define	READ_LOCK_IDX(idx)		jam::utils::thread::ReadLockGuard readLockGuard_##idx(_locks[idx], typeid(this).name());
+#define	READ_LOCK_IDX(idx)		jam::utils::thrd::ReadLockGuard readLockGuard_##idx(_locks[idx], typeid(this).name());
 #define READ_LOCK				READ_LOCK_IDX(0)
-#define	WRITE_LOCK_IDX(idx)		jam::utils::thread::WriteLockGuard writeLockGuard_##idx(_locks[idx], typeid(this).name());
+#define	WRITE_LOCK_IDX(idx)		jam::utils::thrd::WriteLockGuard writeLockGuard_##idx(_locks[idx], typeid(this).name());
 #define WRITE_LOCK				WRITE_LOCK_IDX(0)
 
