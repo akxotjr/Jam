@@ -74,7 +74,7 @@
     <OutDir>$(SolutionDir)Binaries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
     <IntDir>$(SolutionDir)Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
     <TargetName>libjampx</TargetName>
-    <IncludePath>$(SolutionDir)JamCommon;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)JamUtils;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)Binaries\$(Platform)\$(Configuration);$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

@@ -5,7 +5,7 @@ namespace jam::px
 {
 	class PhysicsWorker : public utils::thrd::Worker
 	{
-
+	public:
 	};
 }
 
