@@ -11,7 +11,7 @@ namespace jam
 		{
 			if (!_instance)
 			{
-				_instance = std::make_shared<T>();
+				_instance = std::make_unique<T>();
 				_instance->ILayer::Init();
 			}
 		}
@@ -20,20 +20,19 @@ namespace jam
 			if (_instance)
 			{
 				_instance->ILayer::Shutdown();
-				_instance.reset();
 			}
 		}
 
-		static std::shared_ptr<T> Instance()
+		static T* Instance()
 		{
-			return _instance;
+			return _instance.get();
 		}
 
 	protected:
 		ISingletonLayer() = default;
 
 	private:
-		static inline std::shared_ptr<T> _instance;
+		static inline std::unique_ptr<T> _instance;
 	};
 }
 

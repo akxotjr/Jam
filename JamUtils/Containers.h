@@ -20,7 +20,7 @@ template<typename Type>
 using xvector = vector<Type, StlAllocator<Type>>;
 
 template<typename Type>
-using xlList = list<Type, StlAllocator<Type>>;
+using xlist = list<Type, StlAllocator<Type>>;
 
 template<typename Key, typename Type, typename Pred = less<Key>>
 using xmap = map<Key, Type, Pred, StlAllocator<pair<const Key, Type>>>;

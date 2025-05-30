@@ -23,18 +23,22 @@ namespace jam::utils::thrd
 		void Stop();
 		void Attach();
 
+		job::JobQueue* GetJobQueueFromAnotherWokrer();
+
 	private:
 		void InitTLS();
 		void DestoryTLS();
+
 		void Execute();
+		void DistributeReservedJob();
 
 	private:
-		std::list<std::thread>					m_threads;
-		Atomic<int32>							m_numThreads;
+		xlist<std::thread>					m_threads;
+		Atomic<int32>						m_numThreads;
 
-		std::vector<std::unique_ptr<Worker>>	m_workers;
+		xvector<Uptr<Worker>>				m_workers;
 
-		Uptr<job::GlobalQueue>					m_globalQueue;
+		Uptr<job::GlobalQueue>				m_globalQueue;
 	};
 }
 

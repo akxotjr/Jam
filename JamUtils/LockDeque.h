@@ -18,22 +18,22 @@ namespace jam::utils::thrd
 			m_items.push_back(job);
 		}
 
-		std::optional<T> TryPopFront()
+		T PopFront()
 		{
 			WRITE_LOCK
 			if (m_items.empty())
-				return std::nullopt;
+				return nullptr;
 
 			T job = std::move(m_items.front());
 			m_items.pop_front();
 			return job;
 		}
 
-		std::optional<T> TryStealBack()
+		T PopBack()
 		{
 			WRITE_LOCK
 			if (m_items.empty())
-				return std::nullopt;
+				return nullptr;
 
 			T job = std::move(m_items.back());
 			m_items.pop_back();

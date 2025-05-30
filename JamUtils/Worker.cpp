@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "Worker.h"
-
+#include "ThreadPool.h"
 #include "TimeManager.h"
 
 namespace jam::utils::thrd
@@ -9,13 +9,13 @@ namespace jam::utils::thrd
 	{
 	}
 
-	int32 Worker::Execute()
+	void Worker::Execute()
 	{
-		int32 workCount = 0;
-
 		const double now = TimeManager::Instance()->GetCurrentTime();
 		if (now >= tl_EndTime)
-			return workCount;
+		{
+			return;
+		}
 
 		if (m_jobQueue == nullptr)
 			m_jobQueue = m_owner.lock()->m_globalQueue->Pop().get();
@@ -26,12 +26,22 @@ namespace jam::utils::thrd
 			if (nowInner >= tl_EndTime)
 				break;
 
-			m_jobQueue->Execute();
-			++workCount;
+			m_jobQueue->ExecuteFront();
 		}
 
 		m_jobQueue = nullptr;
 
-		return workCount;
+		Steal();
+	}
+
+	void Worker::Steal()
+	{
+		const double now = TimeManager::Instance()->GetCurrentTime();
+
+		if (now >= tl_EndTime)
+			return;
+
+		job::JobQueue* jobQueue = m_owner.lock()->GetJobQueueFromAnotherWokrer();
+		jobQueue->ExecuteBack();
 	}
 }

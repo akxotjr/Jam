@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "ThreadPool.h"
-
 #include "TimeManager.h"
 
 namespace jam::utils::thrd
@@ -49,6 +48,19 @@ namespace jam::utils::thrd
 	{
 	}
 
+	job::JobQueue* ThreadPool::GetJobQueueFromAnotherWokrer()
+	{
+		for (auto& worker : m_workers)
+		{
+			if (auto jobQueue = worker->GetCurrentJobQueue())
+			{
+				return jobQueue;
+			}
+		}
+
+		return nullptr;
+	}
+
 
 	void ThreadPool::InitTLS()
 	{
@@ -69,10 +81,7 @@ namespace jam::utils::thrd
 	{
 		while (true)
 		{
-			//DistributeReservedJob();
-			//int32 workCount = DoGlobalQueueWork();
-
-			int32 workCount = 0;
+			DistributeReservedJob();
 
 			while (true)
 			{
@@ -80,9 +89,11 @@ namespace jam::utils::thrd
 				if (now >= tl_EndTime)
 					break;
 
-				workCount += tl_Worker->Execute();
+				tl_Worker->Execute();
 			}
 
+			int32 workCount = tl_Worker->m_workCount;
+			tl_Worker->m_workCount.store(0);
 
 			double nextTime = 0.0;
 
@@ -98,5 +109,10 @@ namespace jam::utils::thrd
 		}
 	}
 
+	void ThreadPool::DistributeReservedJob()
+	{
+		const double now = TimeManager::Instance()->GetCurrentTime();
 
+		m_globalQueue->GetJobTimer()->Distribute(now);
+	}
 }

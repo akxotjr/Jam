@@ -2,6 +2,7 @@
 #include "JobQueue.h"
 #include "GlobalQueue.h"
 #include "TimeManager.h"
+#include "Worker.h"
 
 namespace jam::utils::job
 {
@@ -19,7 +20,7 @@ namespace jam::utils::job
 		{
 			if (thrd::tl_Worker != nullptr && thrd::tl_Worker->GetCurrentJobQueue() == nullptr && pushOnly == false)
 			{
-				Execute();
+				ExecuteFront();
 			}
 			else
 			{
@@ -28,22 +29,36 @@ namespace jam::utils::job
 		}
 	}
 
-	void JobQueue::Execute()
+	void JobQueue::ExecuteFront()
 	{
 		while (true)
 		{
-			xvector<JobRef> jobs;
-			m_jobs.PopAll(OUT jobs);
+			Sptr<Job> job = m_jobs.PopFront();
+			if (job == nullptr)
+				break;
 
-			const int32 jobCount = static_cast<int32>(jobs.size());
+			job->Execute();
+			thrd::tl_Worker->m_workCount.fetch_add(1);
 
-			for (int32 i = 0; i < jobCount; i++)
-				jobs[i]->Execute();
-
-			if (m_jobCount.fetch_sub(jobCount) == jobCount)
+			const double now = TimeManager::Instance()->GetCurrentTime();
+			if (now >= thrd::tl_EndTime)
 			{
-				return;
+				m_owner.lock()->Push(shared_from_this());
+				break;
 			}
+		}
+	}
+
+	void JobQueue::ExecuteBack()
+	{
+		while (true)
+		{
+			Sptr<Job> job = m_jobs.PopBack();
+			if (job == nullptr)
+				break;
+
+			job->Execute();
+			thrd::tl_Worker->m_workCount.fetch_add(1);
 
 			const double now = TimeManager::Instance()->GetCurrentTime();
 			if (now >= thrd::tl_EndTime)

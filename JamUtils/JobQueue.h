@@ -45,7 +45,8 @@ namespace jam::utils::job
 		void							ClearJobs() { m_jobs.Clear(); }
 
 		void							Push(JobRef job, bool pushOnly = false);
-		void							Execute();
+		void							ExecuteFront();
+		void							ExecuteBack();
 
 	protected:
 		thrd::LockDeque<JobRef>			m_jobs;
