@@ -54,7 +54,7 @@
     <ClInclude Include="TcpSession.h">
       <Filter>02.Network\TCP</Filter>
     </ClInclude>
-    <ClInclude Include="Listener.h">
+    <ClInclude Include="TcpListener.h">
       <Filter>02.Network\TCP</Filter>
     </ClInclude>
     <ClInclude Include="UdpSession.h">
@@ -98,7 +98,7 @@
     <ClCompile Include="TcpSession.cpp">
       <Filter>02.Network\TCP</Filter>
     </ClCompile>
-    <ClCompile Include="Listener.cpp">
+    <ClCompile Include="TcpListener.cpp">
       <Filter>02.Network\TCP</Filter>
     </ClCompile>
     <ClCompile Include="UdpSession.cpp">

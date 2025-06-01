@@ -3,6 +3,9 @@
 
 namespace jam::net
 {
+    class Service;
+    class UpdSession;
+
     class UdpReceiver : public IocpObject
     {
         enum { BUFFER_SIZE = 0x10000 };
@@ -10,10 +13,10 @@ namespace jam::net
     public:
         UdpReceiver();
 
-        bool                        Start(ServiceRef service);
-        virtual void                OnRecv(SessionRef& session, BYTE* buffer, int32 len) = 0;
+        bool                        Start(Sptr<Service> service);
+        virtual void                OnRecv(Sptr<Session>& session, BYTE* buffer, int32 len) = 0;
 
-        SOCKET                      GetSocket() const { return _socket; }
+        SOCKET                      GetSocket() const { return m_socket; }
 
         /* IocpObject interface impl */
         virtual HANDLE              GetHandle() override;
@@ -21,16 +24,16 @@ namespace jam::net
 
     private:
         void                        RegisterRecv();
-        bool                        ProcessRecv(int32 numOfBytes, UdpSessionRef session);
-        int32                       IsParsingPacket(BYTE* buffer, const int32 len, UdpSessionRef session);
+        bool                        ProcessRecv(int32 numOfBytes, Sptr<UdpSession> session);
+        int32                       IsParsingPacket(BYTE* buffer, const int32 len, Sptr<UdpSession> session);
 
     private:
-        SOCKET                      _socket = INVALID_SOCKET;
-        RecvBuffer                  _recvBuffer;
-        SOCKADDR_IN                 _remoteAddr = {};	// is thread safe? 
-        RecvEvent                   _recvEvent;
+        SOCKET                      m_socket = INVALID_SOCKET;
+        RecvBuffer                  m_recvBuffer;
+        SOCKADDR_IN                 m_remoteAddr = {};	// is thread safe? 
+        RecvEvent                   m_recvEvent;
 
-        std::weak_ptr<Service>      _service;
+        std::weak_ptr<Service>      m_service;
     };
 }
 

@@ -15,10 +15,10 @@ namespace jam::net
 
 	struct PendingPacket
 	{
-		SendBufferRef	buffer;
-		uint16			sequence;
-		double			timestamp;
-		uint32			retryCount = 0;
+		Sptr<SendBuffer>	buffer;
+		uint16				sequence;
+		double				timestamp;
+		uint32				retryCount = 0;
 	};
 
 	class UdpSession : public Session
@@ -36,8 +36,8 @@ namespace jam::net
 	public:
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
-		virtual void							Send(SendBufferRef sendBuffer) override;
-		virtual void							SendReliable(SendBufferRef sendBuffer, double timestamp);
+		virtual void							Send(Sptr<SendBuffer> sendBuffer) override;
+		virtual void							SendReliable(Sptr<SendBuffer> sendBuffer, double timestamp);
 
 		virtual bool							IsTcp() const override { return false; }
 		virtual bool							IsUdp() const override { return true; }
@@ -52,7 +52,7 @@ namespace jam::net
 		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 	private:
-		void									RegisterSend(SendBufferRef sendbuffer);
+		void									RegisterSend(Sptr<SendBuffer> sendbuffer);
 
 
 		void									ProcessConnect();

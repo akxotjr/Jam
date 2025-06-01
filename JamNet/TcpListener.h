@@ -7,18 +7,18 @@ namespace jam::net
 	class ServerService;
 
 	/*------------------
-		  Listener
+		  TcpListener
 	-------------------*/
 
-	class Listener : public IocpObject
+	class TcpListener : public IocpObject
 	{
 	public:
-		Listener() = default;
-		~Listener();
+		TcpListener() = default;
+		~TcpListener();
 
 	public:
 		// 외부에서 사용
-		bool					StartAccept(ServiceRef service);
+		bool					StartAccept(Sptr<Service> service);
 		void					CloseSocket();
 
 	public:
@@ -32,9 +32,9 @@ namespace jam::net
 		void					ProcessAccept(AcceptEvent* acceptEvent);
 
 	protected:
-		SOCKET					_socket = INVALID_SOCKET;
-		Vector<AcceptEvent*>	_acceptEvents;
-		ServiceRef				_service;	// todo circular
+		SOCKET					m_socket = INVALID_SOCKET;
+		xvector<AcceptEvent*>	m_acceptEvents;
+		Sptr<Service>			m_service;	// todo circular
 	};
 }
 

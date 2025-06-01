@@ -1,4 +1,5 @@
 #pragma once
+#include "IocpCore.h"
 
 namespace jam::net
 {
@@ -10,18 +11,18 @@ namespace jam::net
 
 		virtual bool							Connect() = 0;
 		virtual void							Disconnect(const WCHAR* cause) = 0;
-		virtual void							Send(SendBufferRef sendBuffer) = 0;
+		virtual void							Send(Sptr<SendBuffer> sendBuffer) = 0;
 		virtual bool							IsTcp() const = 0;
 		virtual bool							IsUdp() const = 0;
 
-		ServiceRef								GetService() { return _service.lock(); }
-		void									SetService(ServiceRef service) { _service = service; }
+		Sptr<Service>							GetService() { return _service.lock(); }
+		void									SetService(Sptr<Service> service) { _service = service; }
 
 		NetAddress& GetRemoteNetAddress() { return _remoteAddress; }
 		void									SetRemoteNetAddress(NetAddress address) { _remoteAddress = address; }
 		SOCKET									GetSocket() { return _socket; }	//todo
 		bool									IsConnected() { return _connected; }
-		SessionRef								GetSessionRef() { return static_pointer_cast<Session>(shared_from_this()); }
+		Sptr<Session>							GetSessionRef() { return static_pointer_cast<Session>(shared_from_this()); }
 		uint32									GetId() { return _id; }
 		void									SetId(uint32 id) { _id = id; }
 

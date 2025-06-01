@@ -28,6 +28,7 @@
 #include "Containers.h"
 #include "TypeCast.h"
 #include "MemoryPool.h"
+#include "MemoryManager.h"
 
 /** jam::utils::thread **/
 #include "TLS.h"

@@ -7,9 +7,9 @@ namespace jam::net
 		TcpSession
 	------------------*/
 
-	TcpSession::TcpSession() : _recvBuffer(BUFFER_SIZE)
+	TcpSession::TcpSession() : m_recvBuffer(BUFFER_SIZE)
 	{
-		_socket = SocketUtils::CreateSocket(ProtocolType::PROTOCOL_TCP);
+		_socket = SocketUtils::CreateSocket(EProtocolType::TCP);
 	}
 
 	TcpSession::~TcpSession()
@@ -30,7 +30,7 @@ namespace jam::net
 		RegisterDisconnect();
 	}
 
-	void TcpSession::Send(SendBufferRef sendBuffer)
+	void TcpSession::Send(Sptr<SendBuffer> sendBuffer)
 	{
 		if (IsConnected() == false)
 			return;
@@ -39,9 +39,9 @@ namespace jam::net
 
 		{
 			WRITE_LOCK;
-			_sendQueue.push(sendBuffer);
+			m_sendQueue.push(sendBuffer);
 
-			if (_sendRegistered.exchange(true) == false)
+			if (m_sendRegistered.exchange(true) == false)
 				registerSend = true;
 		}
 
@@ -56,7 +56,7 @@ namespace jam::net
 
 	void TcpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
 	{
-		switch (iocpEvent->eventType)
+		switch (iocpEvent->m_eventType)
 		{
 		case EventType::Connect:
 			ProcessConnect();
@@ -81,17 +81,17 @@ namespace jam::net
 
 		if (SocketUtils::BindAnyAddress(_socket, 0) == false) return false;
 
-		_connectEvent.Init();
-		_connectEvent.owner = shared_from_this();
+		m_connectEvent.Init();
+		m_connectEvent.m_owner = shared_from_this();
 
 		DWORD numOfBytes = 0;
 		SOCKADDR_IN sockAddr = GetService()->GetTcpNetAddress().GetSockAddr();
-		if (SOCKET_ERROR == SocketUtils::ConnectEx(_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &numOfBytes, &_connectEvent))
+		if (SOCKET_ERROR == SocketUtils::ConnectEx(_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &numOfBytes, &m_connectEvent))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
-				_connectEvent.owner = nullptr;
+				m_connectEvent.m_owner = nullptr;
 				return false;
 			}
 		}
@@ -100,15 +100,15 @@ namespace jam::net
 
 	bool TcpSession::RegisterDisconnect()
 	{
-		_disconnectEvent.Init();
-		_disconnectEvent.owner = shared_from_this();
+		m_disconnectEvent.Init();
+		m_disconnectEvent.m_owner = shared_from_this();
 
-		if (false == SocketUtils::DisconnectEx(_socket, &_disconnectEvent, TF_REUSE_SOCKET, 0))
+		if (false == SocketUtils::DisconnectEx(_socket, &m_disconnectEvent, TF_REUSE_SOCKET, 0))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
-				_disconnectEvent.owner = nullptr;
+				m_disconnectEvent.m_owner = nullptr;
 				return false;
 			}
 		}
@@ -120,22 +120,22 @@ namespace jam::net
 		if (IsConnected() == false)
 			return;
 
-		_recvEvent.Init();
-		_recvEvent.owner = shared_from_this();
+		m_recvEvent.Init();
+		m_recvEvent.m_owner = shared_from_this();
 
 		WSABUF wsaBuf;
-		wsaBuf.buf = reinterpret_cast<char*>(_recvBuffer.WritePos());
-		wsaBuf.len = _recvBuffer.FreeSize();
+		wsaBuf.buf = reinterpret_cast<char*>(m_recvBuffer.WritePos());
+		wsaBuf.len = m_recvBuffer.FreeSize();
 
 		DWORD numOfBytes = 0;
 		DWORD flags = 0;
-		if (SOCKET_ERROR == ::WSARecv(_socket, &wsaBuf, 1, OUT & numOfBytes, OUT & flags, &_recvEvent, nullptr))
+		if (SOCKET_ERROR == ::WSARecv(_socket, &wsaBuf, 1, OUT & numOfBytes, OUT & flags, &m_recvEvent, nullptr))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
 				HandleError(errorCode);
-				_recvEvent.owner = nullptr;
+				m_recvEvent.m_owner = nullptr;
 			}
 		}
 	}
@@ -145,29 +145,29 @@ namespace jam::net
 		if (IsConnected() == false)
 			return;
 
-		_sendEvent.Init();
-		_sendEvent.owner = shared_from_this();
+		m_sendEvent.Init();
+		m_sendEvent.m_owner = shared_from_this();
 
 		{
 			WRITE_LOCK;
 
 			int32 writeSize = 0;
-			while (_sendQueue.empty() == false)
+			while (m_sendQueue.empty() == false)
 			{
-				SendBufferRef sendBuffer = _sendQueue.front();
+				SendBufferRef sendBuffer = m_sendQueue.front();
 
 				writeSize += sendBuffer->WriteSize();
 				// TODO: exception check
 
-				_sendQueue.pop();
-				_sendEvent.sendBuffers.push_back(sendBuffer);
+				m_sendQueue.pop();
+				m_sendEvent.sendBuffers.push_back(sendBuffer);
 			}
 		}
 
 		// Scatter-Gather
-		Vector<WSABUF> wsaBufs;
-		wsaBufs.reserve(_sendEvent.sendBuffers.size());
-		for (const SendBufferRef& sendBuffer : _sendEvent.sendBuffers)
+		xvector<WSABUF> wsaBufs;
+		wsaBufs.reserve(m_sendEvent.sendBuffers.size());
+		for (const SendBufferRef& sendBuffer : m_sendEvent.sendBuffers)
 		{
 			WSABUF wsaBuf;
 			wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
@@ -176,22 +176,22 @@ namespace jam::net
 		}
 
 		DWORD numOfBytes = 0;
-		if (SOCKET_ERROR == ::WSASend(_socket, wsaBufs.data(), static_cast<DWORD>(wsaBufs.size()), OUT & numOfBytes, 0, &_sendEvent, nullptr))
+		if (SOCKET_ERROR == ::WSASend(_socket, wsaBufs.data(), static_cast<DWORD>(wsaBufs.size()), OUT & numOfBytes, 0, &m_sendEvent, nullptr))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
 				HandleError(errorCode);
-				_sendEvent.owner = nullptr;
-				_sendEvent.sendBuffers.clear();
-				_sendRegistered.store(false);
+				m_sendEvent.m_owner = nullptr;
+				m_sendEvent.sendBuffers.clear();
+				m_sendRegistered.store(false);
 			}
 		}
 	}
 
 	void TcpSession::ProcessConnect()
 	{
-		_connectEvent.owner = nullptr;
+		m_connectEvent.m_owner = nullptr;
 		_connected.store(true);
 
 		GetService()->AddTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
@@ -201,7 +201,7 @@ namespace jam::net
 
 	void TcpSession::ProcessDisconnect()
 	{
-		_disconnectEvent.owner = nullptr;
+		m_disconnectEvent.m_owner = nullptr;
 
 		OnDisconnected();
 		GetService()->ReleaseTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
@@ -209,7 +209,7 @@ namespace jam::net
 
 	void TcpSession::ProcessRecv(int32 numOfBytes)
 	{
-		_recvEvent.owner = nullptr;
+		m_recvEvent.m_owner = nullptr;
 
 		if (numOfBytes == 0)
 		{
@@ -217,30 +217,30 @@ namespace jam::net
 			return;
 		}
 
-		if (_recvBuffer.OnWrite(numOfBytes) == false)
+		if (m_recvBuffer.OnWrite(numOfBytes) == false)
 		{
 			Disconnect(L"OnWrite Overflow");
 			return;
 		}
 
-		const int32 dataSize = _recvBuffer.DataSize();
-		const int32 processLen = IsParsingPacket(_recvBuffer.ReadPos(), dataSize);
+		const int32 dataSize = m_recvBuffer.DataSize();
+		const int32 processLen = IsParsingPacket(m_recvBuffer.ReadPos(), dataSize);
 
-		if (processLen < 0 || dataSize < processLen || _recvBuffer.OnRead(processLen) == false)
+		if (processLen < 0 || dataSize < processLen || m_recvBuffer.OnRead(processLen) == false)
 		{
 			Disconnect(L"OnRead Overflow");
 			return;
 		}
 
-		_recvBuffer.Clean();
+		m_recvBuffer.Clean();
 
 		RegisterRecv();
 	}
 
 	void TcpSession::ProcessSend(int32 numOfBytes)
 	{
-		_sendEvent.owner = nullptr;
-		_sendEvent.sendBuffers.clear();
+		m_sendEvent.m_owner = nullptr;
+		m_sendEvent.sendBuffers.clear();
 
 		if (numOfBytes == 0)
 		{
@@ -251,10 +251,10 @@ namespace jam::net
 		OnSend(numOfBytes);
 
 		WRITE_LOCK
-			if (_sendQueue.empty())
-				_sendRegistered.store(false);
-			else
-				RegisterSend();
+		if (m_sendQueue.empty())
+			m_sendRegistered.store(false);
+		else
+			RegisterSend();
 	}
 
 	int32 TcpSession::IsParsingPacket(BYTE* buffer, const int32 len)

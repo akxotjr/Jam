@@ -3,22 +3,25 @@
 
 namespace jam::net
 {
-	/*----------------
-	SendBuffer
------------------*/
 
-	SendBuffer::SendBuffer(SendBufferChunkRef owner, BYTE* buffer, int32 allocSize)
-		: _owner(owner), _buffer(buffer), _allocSize(allocSize)
+	thread_local Sptr<SendBufferChunk> tl_SendBufferChunk;
+
+	/*----------------
+		SendBuffer
+	-----------------*/
+
+	SendBuffer::SendBuffer(Sptr<SendBufferChunk> owner, BYTE* buffer, int32 allocSize)
+		: m_owner(owner), m_buffer(buffer), m_allocSize(allocSize)
 	{
 
 	}
 
 	void SendBuffer::Close(uint32 writeSize)
 	{
-		ASSERT_CRASH(_allocSize >= writeSize);
-		_writeSize = writeSize;
+		ASSERT_CRASH(m_allocSize >= writeSize);
+		m_writeSize = writeSize;
 
-		_owner->Close(writeSize);
+		m_owner->Close(writeSize);
 	}
 
 
@@ -38,29 +41,29 @@ namespace jam::net
 
 	void SendBufferChunk::Reset()
 	{
-		_open = false;
-		_usedSize = 0;
+		m_open = false;
+		m_usedSize = 0;
 	}
 
-	SendBufferRef SendBufferChunk::Open(uint32 allocSize)
+	Sptr<SendBuffer> SendBufferChunk::Open(uint32 allocSize)
 	{
 		ASSERT_CRASH(allocSize <= SEND_BUFFER_CHUNK_SIZE);
-		ASSERT_CRASH(_open == false);
+		ASSERT_CRASH(m_open == false);
 
 		if (allocSize > FreeSize())
 			return nullptr;
 
-		_open = true;
+		m_open = true;
 
-		return memory::ObjectPool<SendBuffer>::MakeShared(shared_from_this(), Buffer(), allocSize);
+		return utils::memory::ObjectPool<SendBuffer>::MakeShared(shared_from_this(), Buffer(), allocSize);
 	}
 
 	void SendBufferChunk::Close(uint32 writeSize)
 	{
-		ASSERT_CRASH(_open == true);
+		ASSERT_CRASH(m_open == true);
 
-		_open = false;
-		_usedSize += writeSize;
+		m_open = false;
+		m_usedSize += writeSize;
 	}
 
 
@@ -70,48 +73,48 @@ namespace jam::net
 	   SendBufferManager
 	----------------------*/
 
-	SendBufferRef SendBufferManager::Open(uint32 size)
+	Sptr<SendBuffer> SendBufferManager::Open(uint32 size)
 	{
-		if (thread::LSendBufferChunk == nullptr)
+		if (tl_SendBufferChunk == nullptr)
 		{
-			thread::LSendBufferChunk = Pop();
-			thread::LSendBufferChunk->Reset();
+			tl_SendBufferChunk = Pop();
+			tl_SendBufferChunk->Reset();
 		}
 
-		ASSERT_CRASH(thread::LSendBufferChunk->IsOpen() == false);
+		ASSERT_CRASH(tl_SendBufferChunk->IsOpen() == false);
 
-		if (thread::LSendBufferChunk->FreeSize() < size)
+		if (tl_SendBufferChunk->FreeSize() < size)
 		{
-			thread::LSendBufferChunk = Pop();
-			thread::LSendBufferChunk->Reset();
+			tl_SendBufferChunk = Pop();
+			tl_SendBufferChunk->Reset();
 		}
 
-		return thread::LSendBufferChunk->Open(size);
+		return tl_SendBufferChunk->Open(size);
 	}
 
-	SendBufferChunkRef SendBufferManager::Pop()
+	Sptr<SendBufferChunk> SendBufferManager::Pop()
 	{
 		{
 			WRITE_LOCK
-				if (_sendBufferChunks.empty() == false)
-				{
-					SendBufferChunkRef sendBufferChunk = _sendBufferChunks.back();
-					_sendBufferChunks.pop_back();
-					return sendBufferChunk;
-				}
+			if (m_sendBufferChunks.empty() == false)
+			{
+				Sptr<SendBufferChunk> sendBufferChunk = m_sendBufferChunks.back();
+				m_sendBufferChunks.pop_back();
+				return sendBufferChunk;
+			}
 		}
-		return SendBufferChunkRef(memory::xnew<SendBufferChunk>(), PushGlobal);
+		return Sptr<SendBufferChunk>(utils::memory::xnew<SendBufferChunk>(), PushGlobal);
 	}
 
-	void SendBufferManager::Push(SendBufferChunkRef buffer)
+	void SendBufferManager::Push(Sptr<SendBufferChunk> buffer)
 	{
 		WRITE_LOCK
-			_sendBufferChunks.push_back(buffer);
+		m_sendBufferChunks.push_back(buffer);
 	}
 
 	void SendBufferManager::PushGlobal(SendBufferChunk* buffer)
 	{
-		SendBufferManager::Instance().Push(SendBufferChunkRef(buffer, PushGlobal));
+		SendBufferManager::Instance()->Push(Sptr<SendBufferChunk>(buffer, PushGlobal));
 	}
 
 }

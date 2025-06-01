@@ -7,10 +7,10 @@ namespace jam::net
 	RecvBuffer
 -----------------*/
 
-	RecvBuffer::RecvBuffer(int32 bufferSize) : _bufferSize(bufferSize)
+	RecvBuffer::RecvBuffer(int32 bufferSize) : m_bufferSize(bufferSize)
 	{
-		_capacity = bufferSize * BUFFER_COUNT;
-		_buffer.resize(_capacity);
+		m_capacity = bufferSize * BUFFER_COUNT;
+		m_buffer.resize(m_capacity);
 	}
 
 
@@ -20,15 +20,15 @@ namespace jam::net
 
 		if (dataSize == 0)
 		{
-			_readPos = _writePos = 0;
+			m_readPos = m_writePos = 0;
 		}
 		else
 		{
-			if (FreeSize() > _bufferSize)
+			if (FreeSize() > m_bufferSize)
 			{
-				::memcpy(&_buffer[0], &_buffer[_readPos], dataSize);
-				_readPos = 0;
-				_writePos = dataSize;
+				::memcpy(&m_buffer[0], &m_buffer[m_readPos], dataSize);
+				m_readPos = 0;
+				m_writePos = dataSize;
 			}
 		}
 	}
@@ -38,7 +38,7 @@ namespace jam::net
 		if (numOfBytes > DataSize())
 			return false;
 
-		_readPos += numOfBytes;
+		m_readPos += numOfBytes;
 		return true;
 	}
 
@@ -47,7 +47,7 @@ namespace jam::net
 		if (numOfBytes > FreeSize())
 			return false;
 
-		_writePos += numOfBytes;
+		m_writePos += numOfBytes;
 		return true;
 	}
 

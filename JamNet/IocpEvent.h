@@ -1,15 +1,17 @@
 #pragma once
+#include "IocpCore.h"
 
 namespace jam::net
 {
 	class Session;
+	class TcpSession;
+	class SendBuffer;
 
 	enum class EventType : uint8
 	{
 		Connect,
 		Disconnect,
 		Accept,
-		//PreRecv,
 		Recv,
 		Send
 	};
@@ -23,11 +25,11 @@ namespace jam::net
 	public:
 		IocpEvent(EventType type);
 
-		void			Init();
+		void				Init();
 
 	public:
-		EventType		eventType;
-		IocpObjectRef	owner;
+		EventType			m_eventType;
+		Sptr<IocpObject>	m_owner;
 	};
 
 	/*----------------
@@ -60,7 +62,7 @@ namespace jam::net
 		AcceptEvent() : IocpEvent(EventType::Accept) {}
 
 	public:
-		TcpSessionRef session = nullptr;
+		Sptr<TcpSession> session = nullptr;
 	};
 
 	/*----------------
@@ -83,7 +85,7 @@ namespace jam::net
 		SendEvent() : IocpEvent(EventType::Send) {}
 
 	public:
-		vector<SendBufferRef> sendBuffers;
+		xvector<Sptr<SendBuffer>> sendBuffers;
 	};
 }
 

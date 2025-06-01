@@ -12,7 +12,7 @@ namespace jam::net
 		WSADATA wsaData;
 		ASSERT_CRASH(::WSAStartup(MAKEWORD(2, 2), OUT & wsaData) == 0);
 
-		SOCKET dummySocket = CreateSocket(ProtocolType::PROTOCOL_TCP);
+		SOCKET dummySocket = CreateSocket(EProtocolType::TCP);
 		ASSERT_CRASH(BindWindowsFunction(dummySocket, WSAID_CONNECTEX, reinterpret_cast<LPVOID*>(&ConnectEx)));
 		ASSERT_CRASH(BindWindowsFunction(dummySocket, WSAID_DISCONNECTEX, reinterpret_cast<LPVOID*>(&DisconnectEx)));
 		ASSERT_CRASH(BindWindowsFunction(dummySocket, WSAID_ACCEPTEX, reinterpret_cast<LPVOID*>(&AcceptEx)));
@@ -30,13 +30,13 @@ namespace jam::net
 		return SOCKET_ERROR != ::WSAIoctl(socket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), fn, sizeof(*fn), OUT & bytes, NULL, NULL);
 	}
 
-	SOCKET SocketUtils::CreateSocket(ProtocolType protocol)
+	SOCKET SocketUtils::CreateSocket(EProtocolType protocol)
 	{
 		switch (protocol)
 		{
-		case ProtocolType::PROTOCOL_TCP:
+		case EProtocolType::TCP:
 			return ::WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nullptr, 0, WSA_FLAG_OVERLAPPED);
-		case ProtocolType::PROTOCOL_UDP:
+		case EProtocolType::UDP:
 			return ::WSASocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, nullptr, 0, WSA_FLAG_OVERLAPPED);
 		default:
 			return INVALID_SOCKET;

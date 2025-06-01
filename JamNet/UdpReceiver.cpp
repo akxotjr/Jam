@@ -3,28 +3,28 @@
 
 namespace jam::net
 {
-    UdpReceiver::UdpReceiver() : _recvBuffer(BUFFER_SIZE)
+    UdpReceiver::UdpReceiver() : m_recvBuffer(BUFFER_SIZE)
     {
-        memset(&_remoteAddr, 0, sizeof(_remoteAddr));
+        memset(&m_remoteAddr, 0, sizeof(m_remoteAddr));
     }
 
-    bool UdpReceiver::Start(ServiceRef service)
+    bool UdpReceiver::Start(Sptr<Service> service)
     {
-        _service = service;
-        if (_service.lock() == nullptr)
+        m_service = service;
+        if (m_service.lock() == nullptr)
             return false;
 
-        _socket = SocketUtils::CreateSocket(ProtocolType::PROTOCOL_UDP);
-        if (_socket == INVALID_SOCKET)
+        m_socket = SocketUtils::CreateSocket(EProtocolType::UDP);
+        if (m_socket == INVALID_SOCKET)
             return false;
 
-        if (_service.lock()->GetIocpCore()->Register(shared_from_this()) == false)
+        if (m_service.lock()->GetIocpCore()->Register(shared_from_this()) == false)
             return false;
 
-        if (SocketUtils::SetReuseAddress(_socket, true) == false)
+        if (SocketUtils::SetReuseAddress(m_socket, true) == false)
             return false;
 
-        if (SocketUtils::Bind(_socket, _service.lock()->GetUdpNetAddress()) == false)
+        if (SocketUtils::Bind(m_socket, m_service.lock()->GetUdpNetAddress()) == false)
             return false;
 
         RegisterRecv();
@@ -35,7 +35,7 @@ namespace jam::net
 
     HANDLE UdpReceiver::GetHandle()
     {
-        return reinterpret_cast<HANDLE>(_socket);
+        return reinterpret_cast<HANDLE>(m_socket);
     }
 
     void UdpReceiver::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
@@ -43,11 +43,11 @@ namespace jam::net
         if (numOfBytes == 0)
             return;
 
-        if (iocpEvent->eventType != EventType::Recv)
+        if (iocpEvent->m_eventType != EventType::Recv)
             return;
 
-        NetAddress from(_remoteAddr);
-        auto service = _service.lock();
+        NetAddress from(m_remoteAddr);
+        auto service = m_service.lock();
         if (service == nullptr)
             return;
 
@@ -57,20 +57,20 @@ namespace jam::net
 
     void UdpReceiver::RegisterRecv()
     {
-        int32 fromLen = sizeof(_remoteAddr);
+        int32 fromLen = sizeof(m_remoteAddr);
 
-        _recvEvent.Init();
-        _recvEvent.owner = shared_from_this();
+        m_recvEvent.Init();
+        m_recvEvent.m_owner = shared_from_this();
 
         WSABUF wsaBuf = {};
-        wsaBuf.len = _recvBuffer.FreeSize();
+        wsaBuf.len = m_recvBuffer.FreeSize();
 
-        wsaBuf.buf = reinterpret_cast<CHAR*>(_recvBuffer.WritePos());
+        wsaBuf.buf = reinterpret_cast<CHAR*>(m_recvBuffer.WritePos());
 
         DWORD numOfBytes = 0;
         DWORD flags = 0;
 
-        if (SOCKET_ERROR == ::WSARecvFrom(_socket, &wsaBuf, 1, OUT & numOfBytes, OUT & flags, reinterpret_cast<SOCKADDR*>(&_remoteAddr), OUT & fromLen, &_recvEvent, nullptr))
+        if (SOCKET_ERROR == ::WSARecvFrom(m_socket, &wsaBuf, 1, OUT & numOfBytes, OUT & flags, reinterpret_cast<SOCKADDR*>(&m_remoteAddr), OUT & fromLen, &m_recvEvent, nullptr))
         {
             const int errorCode = ::WSAGetLastError();
             if (errorCode != WSA_IO_PENDING)
@@ -80,7 +80,7 @@ namespace jam::net
         }
     }
 
-    bool UdpReceiver::ProcessRecv(int32 numOfBytes, UdpSessionRef session)
+    bool UdpReceiver::ProcessRecv(int32 numOfBytes, Sptr<UdpSession> session)
     {
 
         if (!session)
@@ -89,34 +89,34 @@ namespace jam::net
             return false;
         }
 
-        if (_recvBuffer.OnWrite(numOfBytes) == false)
+        if (m_recvBuffer.OnWrite(numOfBytes) == false)
         {
-            std::cout << "[ProcessRecv] OnWrite failed! FreeSize: " << _recvBuffer.FreeSize() << ", numOfBytes: " << numOfBytes << "\n";
+            std::cout << "[ProcessRecv] OnWrite failed! FreeSize: " << m_recvBuffer.FreeSize() << ", numOfBytes: " << numOfBytes << "\n";
             return false;
         }
 
-        BYTE* buf = _recvBuffer.ReadPos();
+        BYTE* buf = m_recvBuffer.ReadPos();
         if (!buf)
         {
             std::cout << "[ProcessRecv] buffer is null\n";
             return false;
         }
 
-        int32 dataSize = _recvBuffer.DataSize();
+        int32 dataSize = m_recvBuffer.DataSize();
         int32 processLen = IsParsingPacket(buf, dataSize, session);
 
-        if (processLen < 0 || dataSize < processLen || _recvBuffer.OnRead(processLen) == false)
+        if (processLen < 0 || dataSize < processLen || m_recvBuffer.OnRead(processLen) == false)
         {
             std::cout << "[ProcessRecv] Invalid processLen: " << processLen << ", dataSize: " << dataSize << "\n";
             return false;
         }
 
-        _recvBuffer.Clean();
+        m_recvBuffer.Clean();
         RegisterRecv();
         return true;
     }
 
-    int32 UdpReceiver::IsParsingPacket(BYTE* buffer, const int32 len, UdpSessionRef session)
+    int32 UdpReceiver::IsParsingPacket(BYTE* buffer, const int32 len, Sptr<UdpSession> session)
     {
         int32 processLen = 0;
 

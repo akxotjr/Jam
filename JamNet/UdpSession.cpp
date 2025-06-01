@@ -28,7 +28,7 @@ namespace jam::net
 		ProcessDisconnect();
 	}
 
-	void UdpSession::Send(SendBufferRef sendBuffer)
+	void UdpSession::Send(Sptr<SendBuffer> sendBuffer)
 	{
 		if (IsConnected() == false)
 			return;
@@ -36,7 +36,7 @@ namespace jam::net
 		RegisterSend(sendBuffer);
 	}
 
-	void UdpSession::SendReliable(SendBufferRef sendBuffer, double timestamp)
+	void UdpSession::SendReliable(Sptr<SendBuffer> sendBuffer, double timestamp)
 	{
 		uint16 seq = _sendSeq++;
 
@@ -62,19 +62,19 @@ namespace jam::net
 
 	void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
 	{
-		if (iocpEvent->eventType != EventType::Send)
+		if (iocpEvent->m_eventType != EventType::Send)
 			return;
 
 		ProcessSend(numOfBytes);
 	}
 
-	void UdpSession::RegisterSend(SendBufferRef sendBuffer)
+	void UdpSession::RegisterSend(Sptr<SendBuffer> sendBuffer)
 	{
 		if (IsConnected() == false)
 			return;
 
 		_sendEvent.Init();
-		_sendEvent.owner = shared_from_this();
+		_sendEvent.m_owner = shared_from_this();
 
 		WSABUF wsaBuf;
 		wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
@@ -125,30 +125,30 @@ namespace jam::net
 
 	void UdpSession::Update(double serverTime)
 	{
-		Vector<uint16> resendList;
+		xvector<uint16> resendList;
 
 		{
 			WRITE_LOCK
 
-				for (auto& [seq, pkt] : _pendingAckMap)
+			for (auto& [seq, pkt] : _pendingAckMap)
+			{
+				double elapsed = serverTime - pkt.timestamp;
+
+				if (elapsed >= _resendIntervalMs)
 				{
-					double elapsed = serverTime - pkt.timestamp;
+					pkt.timestamp = serverTime;
+					pkt.retryCount++;
 
-					if (elapsed >= _resendIntervalMs)
-					{
-						pkt.timestamp = serverTime;
-						pkt.retryCount++;
-
-						resendList.push_back(seq);
-					}
-
-					if (pkt.retryCount > 5)
-					{
-						std::cout << "[ReliableUDP] Max retry reached. Disconnecting.\n";
-						Disconnect(L"Too many retries");
-						continue;
-					}
+					resendList.push_back(seq);
 				}
+
+				if (pkt.retryCount > 5)
+				{
+					std::cout << "[ReliableUDP] Max retry reached. Disconnecting.\n";
+					Disconnect(L"Too many retries");
+					continue;
+				}
+			}
 		}
 
 		for (uint16 seq : resendList)

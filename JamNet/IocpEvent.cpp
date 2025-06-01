@@ -3,14 +3,14 @@
 
 namespace jam::net
 {
-	IocpEvent::IocpEvent(EventType type) : eventType(type)
+	IocpEvent::IocpEvent(EventType type) : m_eventType(type)
 	{
 		Init();
 	}
 
 	void IocpEvent::Init()
 	{
-		OVERLAPPED::hEvent = 0;
+		OVERLAPPED::hEvent = nullptr;
 		OVERLAPPED::Internal = 0;
 		OVERLAPPED::InternalHigh = 0;
 		OVERLAPPED::Offset = 0;

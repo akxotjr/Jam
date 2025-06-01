@@ -1,8 +1,21 @@
 #pragma once
+#include "Session.h"
+#include "Listener.h"
+#include "UdpReceiver.h"
 
 namespace jam::net
 {
-	using SessionFactory = std::function<SessionRef()>;
+	enum class EProtocolType : uint8
+	{
+		TCP,
+		UDP
+	};
+
+	class TcpSession;
+	class UdpSession;
+
+
+	using SessionFactory = std::function<Sptr<Session>()>;
 
 	/*--------------
 		 Service
@@ -17,11 +30,11 @@ namespace jam::net
 	class Service : public enable_shared_from_this<Service>
 	{
 	public:
-		Service(TransportConfig config, IocpCoreRef core, int32 maxSTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
+		Service(TransportConfig config, Sptr<IocpCore> core, int32 maxSTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
 		virtual ~Service();
 
 		virtual bool						Start();
-		bool								CanStart() const { return _tcpSessionFactory != nullptr || _udpSessionFactory; }
+		bool								CanStart() const { return m_tcpSessionFactory != nullptr || m_udpSessionFactory; }
 
 		virtual void						CloseService();
 
@@ -29,72 +42,72 @@ namespace jam::net
 		void								SetSessionFactory();
 
 
-		void								Broadcast(SendBufferRef sendBuffer);
-		SessionRef							CreateSession(ProtocolType protocol);
+		void								Broadcast(Sptr<SendBuffer> sendBuffer);
+		Sptr<Session>						CreateSession(EProtocolType protocol);
 
-		void								AddTcpSession(TcpSessionRef session);
-		void								ReleaseTcpSession(TcpSessionRef session);
+		void								AddTcpSession(Sptr<TcpSession> session);
+		void								ReleaseTcpSession(Sptr<TcpSession> session);
 
-		void								AddUdpSession(ReliableUdpSessionRef session);
-		void								ReleaseUdpSession(ReliableUdpSessionRef session);
-
-
-		int32								GetCurrentTcpSessionCount() const { return _tcpSessionCount; }
-		int32								GetMaxTcpSessionCount() const { return _maxTcpSessionCount; }
-		int32								GetCurrentUdpSessionCount() const { return _udpSessionCount; }
-		int32								GetMaxUdpSessionCount() const { return _maxUdpSessionCount; }
+		void								AddUdpSession(Sptr<UdpSession> session);
+		void								ReleaseUdpSession(Sptr<UdpSession> session);
 
 
-		void								SetUdpReceiver(UdpReceiverRef udpReceiver) { _udpReceiver = udpReceiver; };
-		SOCKET								GetUdpSocket() const { return _udpReceiver->GetSocket(); }
+		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount; }
+		int32								GetMaxTcpSessionCount() const { return m_maxTcpSessionCount; }
+		int32								GetCurrentUdpSessionCount() const { return m_udpSessionCount; }
+		int32								GetMaxUdpSessionCount() const { return m_maxUdpSessionCount; }
 
-		ReliableUdpSessionRef				FindOrCreateUdpSession(const NetAddress& from);
+
+		void								SetUdpReceiver(Sptr<UdpReceiver> udpReceiver) { m_udpReceiver = udpReceiver; };
+		SOCKET								GetUdpSocket() const { return m_udpReceiver->GetSocket(); }
+
+		Sptr<UdpSession>					FindOrCreateUdpSession(const NetAddress& from);
 		void								CompleteUdpHandshake(const NetAddress& from);
 
 	public:
-		NetAddress							GetTcpNetAddress() const { return _config.tcpAddress.value_or(NetAddress(L"0.0.0.0", 0)); }
-		NetAddress							GetUdpNetAddress() const { return _config.udpAddress.value_or(NetAddress(L"0.0.0.0", 0)); }
-		IocpCoreRef& GetIocpCore() { return _iocpCore; }
+		NetAddress							GetTcpNetAddress() const { return m_config.tcpAddress.value_or(NetAddress(L"0.0.0.0", 0)); }
+		NetAddress							GetUdpNetAddress() const { return m_config.udpAddress.value_or(NetAddress(L"0.0.0.0", 0)); }
+		Sptr<IocpCore>&						GetIocpCore() { return m_iocpCore; }
 
 	protected:
 		USE_LOCK
 
-			TransportConfig										_config;
+		TransportConfig										m_config;
 
-		IocpCoreRef											_iocpCore;
+		Sptr<IocpCore>										m_iocpCore;
 
-		Set<TcpSessionRef>									_tcpSessions;
-		Set<ReliableUdpSessionRef>							_udpSessions;
-		unordered_map<NetAddress, ReliableUdpSessionRef>	_pendingUdpSessions;
+		xset<Sptr<TcpSession>>								m_tcpSessions;
+		xset<Sptr<UdpSession>>								m_udpSessions;
+		unordered_map<NetAddress, Sptr<UdpSession>>			m_pendingUdpSessions;
 
 
-		int32												_sessionCount = 0;
-		int32												_maxSessionCount = 0;
+		int32												m_sessionCount = 0;
+		int32												m_maxSessionCount = 0;
 
-		int32												_tcpSessionCount = 0;
-		int32												_maxTcpSessionCount = 0;
-		int32												_udpSessionCount = 0;
-		int32												_maxUdpSessionCount = 0;
+		int32												m_tcpSessionCount = 0;
+		int32												m_maxTcpSessionCount = 0;
+		int32												m_udpSessionCount = 0;
+		int32												m_maxUdpSessionCount = 0;
 
-		SessionFactory										_tcpSessionFactory;
-		SessionFactory										_udpSessionFactory;
+		SessionFactory										m_tcpSessionFactory;
+		SessionFactory										m_udpSessionFactory;
 
 	private:
-		ListenerRef											_listener = nullptr;
-		UdpReceiverRef										_udpReceiver = nullptr;
+		Sptr<TcpListener>										m_listener = nullptr;
+		Sptr<UdpReceiver>									m_udpReceiver = nullptr;
 	};
 
 	template<typename TCP, typename UDP>
 	inline void Service::SetSessionFactory()
 	{
-		_tcpSessionFactory = []() -> SessionRef
+		m_tcpSessionFactory = []() -> Sptr<Session>
 			{
-				return memory::MakeShared<TCP>();
+				return jam::utils::memory::MakeShared<TCP>();
 			};
 
-		_udpSessionFactory = []() -> SessionRef
+		m_udpSessionFactory = []() -> Sptr<Session>
 			{
-				return memory::MakeShared<UDP>();
+				return jam::utils::memory::MakeShared<UDP>();
 			};
 	}
 }

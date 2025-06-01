@@ -7,7 +7,7 @@ namespace jam::net
 	{
 		enum { BUFFER_SIZE = 0x10000 }; // 64KB
 
-		friend class Listener;
+		friend class TcpListener;
 		friend class IocpCore;
 		friend class Service;
 
@@ -18,7 +18,7 @@ namespace jam::net
 	public:
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
-		virtual void							Send(SendBufferRef sendBuffer) override;
+		virtual void							Send(Sptr<SendBuffer> sendBuffer) override;
 		virtual bool							IsTcp() const override { return true; }
 		virtual bool							IsUdp() const override { return false; }
 
@@ -46,15 +46,15 @@ namespace jam::net
 	private:
 		USE_LOCK
 
-			RecvBuffer								_recvBuffer;
-		Queue<SendBufferRef>					_sendQueue;
-		Atomic<bool>							_sendRegistered = false;
+		RecvBuffer								m_recvBuffer;
+		xqueue<Sptr<SendBuffer>>				m_sendQueue;
+		Atomic<bool>							m_sendRegistered = false;
 
 	private:
-		ConnectEvent							_connectEvent;
-		DisconnectEvent							_disconnectEvent;
-		RecvEvent								_recvEvent;
-		SendEvent								_sendEvent;
+		ConnectEvent							m_connectEvent;
+		DisconnectEvent							m_disconnectEvent;
+		RecvEvent								m_recvEvent;
+		SendEvent								m_sendEvent;
 	};
 }
 

@@ -19,17 +19,17 @@ namespace jam::net
 		bool			OnRead(int32 numOfBytes);
 		bool			OnWrite(int32 numOfBytes);
 
-		BYTE* ReadPos() { return &_buffer[_readPos]; }
-		BYTE* WritePos() { return &_buffer[_writePos]; }
-		int32			DataSize() { return _writePos - _readPos; }
-		int32			FreeSize() { return _capacity - _writePos; }
+		BYTE*			ReadPos() { return &m_buffer[m_readPos]; }
+		BYTE*			WritePos() { return &m_buffer[m_writePos]; }
+		int32			DataSize() { return m_writePos - m_readPos; }
+		int32			FreeSize() { return m_capacity - m_writePos; }
 
 	private:
-		int32			_capacity = 0;
-		int32			_bufferSize = 0;
-		int32			_readPos = 0;
-		int32			_writePos = 0;
-		Vector<BYTE>	_buffer;
+		int32			m_capacity = 0;
+		int32			m_bufferSize = 0;
+		int32			m_readPos = 0;
+		int32			m_writePos = 0;
+		xvector<BYTE>	m_buffer;
 	};
 }
 
