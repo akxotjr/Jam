@@ -4,12 +4,13 @@
 namespace jam::net
 {
 	/*--------------
- Service
----------------*/
+		 Service
+		---------------*/
 
-	Service::Service(TransportConfig config, Sptr<IocpCore> core, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
-		: m_config(config), m_iocpCore(core), m_maxTcpSessionCount(maxTcpSessionCount), m_maxUdpSessionCount(maxUdpSessionCount)
+	Service::Service(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
+		: m_config(config), m_maxTcpSessionCount(maxTcpSessionCount), m_maxUdpSessionCount(maxUdpSessionCount)
 	{
+		m_iocpCore = make_unique<IocpCore>();
 	}
 
 	Service::~Service()
@@ -23,18 +24,19 @@ namespace jam::net
 			return false;
 
 		m_listener = utils::memory::MakeShared<TcpListener>();
-		if (m_listener == nullptr)
+		//m_udpReceiver = utils::memory::MakeShared<UdpReceiver>();
+
+		m_udpRouter = utils::memory::MakeShared<UdpRouter>();
+
+		if (m_listener->StartAccept(shared_from_this()) == false)
 			return false;
 
-		Sptr<Service> service = static_pointer_cast<Service>(shared_from_this());
-		if (m_listener->StartAccept(service) == false)
+		//if (m_udpReceiver->Start(shared_from_this()) == false)
+		//	return false;
+
+		if (m_udpRouter->Start(shared_from_this()) == false)
 			return false;
 
-		if (m_udpReceiver == nullptr)
-			return false;
-
-		if (m_udpReceiver->Start(service) == false)
-			return false;
 
 		return true;
 	}
@@ -44,14 +46,14 @@ namespace jam::net
 		// TODO
 	}
 
-	void Service::Broadcast(Sptr<SendBuffer> sendBuffer)
-	{
-		//WRITE_LOCK;
-		//for (const auto& session : _sessions)
-		//{
-		//	session->Send(sendBuffer);
-		//}
-	}
+	//void Service::Broadcast(Sptr<SendBuffer> sendBuffer)
+	//{
+	//	//WRITE_LOCK;
+	//	//for (const auto& session : _sessions)
+	//	//{
+	//	//	session->Send(sendBuffer);
+	//	//}
+	//}
 
 	Sptr<Session> Service::CreateSession(EProtocolType protocol)
 	{
@@ -76,14 +78,14 @@ namespace jam::net
 		WRITE_LOCK
 
 		m_tcpSessionCount++;
-		m_tcpSessions.insert(session);
+		m_tcpSessions[session->GetRemoteNetAddress()] = session;
 	}
 
 	void Service::ReleaseTcpSession(Sptr<TcpSession> session)
 	{
 		WRITE_LOCK
 
-		ASSERT_CRASH(m_tcpSessions.erase(session) != 0);
+		ASSERT_CRASH(m_tcpSessions.erase(session->GetRemoteNetAddress()) != 0);
 		m_tcpSessionCount--;
 	}
 
@@ -92,55 +94,78 @@ namespace jam::net
 		WRITE_LOCK
 
 		m_udpSessionCount++;
-		m_udpSessions.insert(session);
+		m_udpSessions[session->GetRemoteNetAddress()] = session;
 	}
 
 	void Service::ReleaseUdpSession(Sptr<UdpSession> session)
 	{
 		WRITE_LOCK
 
-		ASSERT_CRASH(m_udpSessions.erase(session) != 0);
+		ASSERT_CRASH(m_udpSessions.erase(session->GetRemoteNetAddress()) != 0);
 		m_udpSessionCount--;
 	}
 
-	Sptr<UdpSession> Service::FindOrCreateUdpSession(const NetAddress& from)
-	{
-		WRITE_LOCK
+	//Sptr<UdpSession> Service::FindOrCreateUdpSession(const NetAddress& from)
+	//{
+	//	WRITE_LOCK
 
-		for (auto& session : m_udpSessions)
-		{
-			if (session->GetRemoteNetAddress() == from)
-				return session;
-		}
+	//	if (m_udpSessions.contains(from))
+	//		return m_udpSessions[from];
 
-		auto it = m_pendingUdpSessions.find(from);
-		if (it != m_pendingUdpSessions.end())
-		{
-			return it->second;
-		}
+	//	if (m_pendingUdpSessions.contains(from))
+	//		return m_pendingUdpSessions[from];
 
-		auto newSession = static_pointer_cast<UdpSession>(CreateSession(EProtocolType::UDP));
-		if (newSession == nullptr)
-			return nullptr;
+	//	auto newSession = static_pointer_cast<UdpSession>(CreateSession(EProtocolType::UDP));
+	//	if (newSession == nullptr)
+	//		return nullptr;
 
-		newSession->SetRemoteNetAddress(from);
+	//	newSession->SetRemoteNetAddress(from);
 
-		m_pendingUdpSessions[from] = newSession;
+	//	m_pendingUdpSessions[from] = newSession;
 
-		newSession->ProcessConnect();
+	//	//newSession->ProcessConnect();
 
-		return newSession;
-	}
+	//	return newSession;
+	//}
 
 	void Service::CompleteUdpHandshake(const NetAddress& from)
 	{
 		WRITE_LOCK
 
-		auto it = m_pendingUdpSessions.find(from);
-		if (it != m_pendingUdpSessions.end())
+		auto it = m_handshakingUdpSessions.find(from);
+		if (it != m_handshakingUdpSessions.end())
 		{
 			AddUdpSession(it->second);
-			m_pendingUdpSessions.erase(it);
+			m_handshakingUdpSessions.erase(it);
 		}
 	}
+
+	Sptr<UdpSession> Service::FindUpdSession(const NetAddress& from)
+	{
+		if (m_udpSessions.contains(from))
+			return m_udpSessions[from];
+
+		return nullptr;
+	}
+
+	void Service::ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer)
+	{
+		if (m_udpSessions.contains(from))
+		{
+			m_udpSessions[from]->ProcessRecv(numOfBytes, recvBuffer);
+			return;
+		}
+
+		if (m_handshakingUdpSessions.contains(from))
+		{
+			m_handshakingUdpSessions[from]->ProcessHandshake();	// todo
+			return;
+		}
+
+		auto newSession = static_pointer_cast<UdpSession>(CreateSession(EProtocolType::UDP));
+		newSession->SetRemoteNetAddress(from);
+		m_handshakingUdpSessions[from] = newSession;
+		newSession->ProcessHandshake();
+	}
+
 }

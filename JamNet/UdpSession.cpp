@@ -14,15 +14,12 @@ namespace jam::net
 
 	bool UdpSession::Connect()
 	{
-		//RegisterConnect();
-		//ProcessConnect();
-		// temp
-		return true;
+		return RegisterConnect();
 	}
 
 	void UdpSession::Disconnect(const WCHAR* cause)
 	{
-		if (_connected.exchange(false) == false)
+		if (m_connected.exchange(false) == false)
 			return;
 
 		ProcessDisconnect();
@@ -46,59 +43,63 @@ namespace jam::net
 		PendingPacket pkt = { .buffer = sendBuffer, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
 
 		{
-			WRITE_LOCK;
+			WRITE_LOCK
 			_pendingAckMap[seq] = pkt;
 		}
 
 		Send(sendBuffer);
 	}
 
+	//HANDLE UdpSession::GetHandle()
+	//{
+	//	return reinterpret_cast<HANDLE>(GetService()->GetUdpSocket());
+	//}
 
+	//void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
+	//{
+	//	if (iocpEvent->m_eventType != EventType::Send)
+	//		return;
 
-	HANDLE UdpSession::GetHandle()
-	{
-		return reinterpret_cast<HANDLE>(GetService()->GetUdpSocket());
-	}
-
-	void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
-	{
-		if (iocpEvent->m_eventType != EventType::Send)
-			return;
-
-		ProcessSend(numOfBytes);
-	}
+	//	ProcessSend(numOfBytes);
+	//}
 
 	void UdpSession::RegisterSend(Sptr<SendBuffer> sendBuffer)
 	{
-		if (IsConnected() == false)
-			return;
+		//if (IsConnected() == false)
+		//	return;
 
-		_sendEvent.Init();
-		_sendEvent.m_owner = shared_from_this();
+		//m_sendEvent.Init();
+		//m_sendEvent.m_owner = shared_from_this();
 
-		WSABUF wsaBuf;
-		wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
-		wsaBuf.len = static_cast<ULONG>(sendBuffer->WriteSize());
+		//WSABUF wsaBuf;
+		//wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
+		//wsaBuf.len = static_cast<ULONG>(sendBuffer->WriteSize());
 
-		DWORD numOfBytes = 0;
-		SOCKADDR_IN remoteAddr = GetRemoteNetAddress().GetSockAddr();
+		//DWORD numOfBytes = 0;
+		//SOCKADDR_IN remoteAddr = GetRemoteNetAddress().GetSockAddr();
 
-		if (SOCKET_ERROR == ::WSASendTo(GetService()->GetUdpSocket(), &wsaBuf, 1, OUT & numOfBytes, 0, reinterpret_cast<SOCKADDR*>(&remoteAddr), sizeof(SOCKADDR_IN), &_sendEvent, nullptr))
-		{
-			const int32 errorCode = ::WSAGetLastError();
-			if (errorCode != WSA_IO_PENDING)
-			{
-				cout << "Handle Error : " << errorCode << '\n';
-				HandleError(errorCode);
-				//_sendEvent.owner = nullptr;
-				_sendEvent.sendBuffers.clear();
-			}
-		}
+		//if (SOCKET_ERROR == ::WSASendTo(GetService()->GetUdpSocket(), &wsaBuf, 1, OUT &numOfBytes, 0, reinterpret_cast<SOCKADDR*>(&remoteAddr), sizeof(SOCKADDR_IN), &m_sendEvent, nullptr))
+		//{
+		//	const int32 errorCode = ::WSAGetLastError();
+		//	if (errorCode != WSA_IO_PENDING)
+		//	{
+		//		cout << "Handle Error : " << errorCode << '\n';
+		//		HandleError(errorCode);
+		//		//_sendEvent.owner = nullptr;
+		//		m_sendEvent.sendBuffers.clear();
+		//	}
+		//}
+
+		GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
+	}
+
+	void UdpSession::RegisterRecv()
+	{
 	}
 
 	void UdpSession::ProcessConnect()
 	{
-		_connected.store(true);
+		m_connected.store(true);
 		GetService()->CompleteUdpHandshake(GetRemoteNetAddress());
 		OnConnected();
 	}
@@ -111,16 +112,76 @@ namespace jam::net
 
 	void UdpSession::ProcessSend(int32 numOfBytes)
 	{
-		//_sendEvent.owner = nullptr;
-		_sendEvent.sendBuffers.clear();
+		//m_sendEvent.sendBuffers.clear();
 
-		if (numOfBytes == 0)
+		//if (numOfBytes == 0)
+		//{
+		//	Disconnect(L"Send 0 byte");
+		//	return;
+		//}
+
+		OnSend(numOfBytes);
+	}
+
+	void UdpSession::ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer)
+	{
+		m_recvBuffer = recvBuffer;
+		if (m_recvBuffer.OnWrite(numOfBytes) == false)
 		{
-			Disconnect(L"Send 0 byte");
+			std::cout << "[ProcessRecv] OnWrite failed! FreeSize: " << m_recvBuffer.FreeSize() << ", numOfBytes: " << numOfBytes << "\n";
 			return;
 		}
 
-		OnSend(numOfBytes);
+		BYTE* buf = m_recvBuffer.ReadPos();
+		if (!buf)
+		{
+			std::cout << "[ProcessRecv] buffer is null\n";
+			return;
+		}
+
+		int32 dataSize = m_recvBuffer.DataSize();
+		int32 processLen = IsParsingPacket(buf, dataSize);
+
+		if (processLen < 0 || dataSize < processLen || m_recvBuffer.OnRead(processLen) == false)
+		{
+			std::cout << "[ProcessRecv] Invalid processLen: " << processLen << ", dataSize: " << dataSize << "\n";
+			return;
+		}
+
+		m_recvBuffer.Clean();
+		RegisterRecv();
+	}
+
+	int32 UdpSession::IsParsingPacket(BYTE* buffer, const int32 len)
+	{
+		int32 processLen = 0;
+
+		while (true)
+		{
+			int32 dataSize = len - processLen;
+
+			if (dataSize < sizeof(UdpPacketHeader))
+				break;
+
+			UdpPacketHeader header = *reinterpret_cast<UdpPacketHeader*>(&buffer[processLen]);
+
+			if (dataSize < header.size || header.size < sizeof(UdpPacketHeader))
+				break;
+
+			if (processLen + header.size > len)
+				break;
+
+			OnRecv(&buffer[0], header.size);
+
+			processLen += header.size;
+		}
+
+		return processLen;
+	}
+
+	void UdpSession::ProcessHandshake()
+	{
+
 	}
 
 	void UdpSession::Update(double serverTime)
@@ -166,19 +227,19 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
-			for (int32 i = 0; i <= BITFIELD_SIZE; ++i)
-			{
-				uint16 ackSeq = latestSeq - i;
+		for (int32 i = 0; i <= BITFIELD_SIZE; ++i)
+		{
+			uint16 ackSeq = latestSeq - i;
 
-				if (i == 0 || (bitfield & (1 << (i - 1))))
+			if (i == 0 || (bitfield & (1 << (i - 1))))
+			{
+				auto it = _pendingAckMap.find(ackSeq);
+				if (it != _pendingAckMap.end())
 				{
-					auto it = _pendingAckMap.find(ackSeq);
-					if (it != _pendingAckMap.end())
-					{
-						_pendingAckMap.erase(it);
-					}
+					_pendingAckMap.erase(it);
 				}
 			}
+		}
 	}
 
 	bool UdpSession::CheckAndRecordReceiveHistory(uint16 seq)

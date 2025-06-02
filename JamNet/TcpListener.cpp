@@ -13,8 +13,6 @@ namespace jam::net
 
 		for (AcceptEvent* acceptEvent : m_acceptEvents)
 		{
-			// TODO
-
 			utils::memory::xdelete(acceptEvent);
 		}
 	}
@@ -22,7 +20,7 @@ namespace jam::net
 	bool TcpListener::StartAccept(Sptr<Service> service)
 	{
 		m_service = service;
-		if (m_service == nullptr)
+		if (m_service.lock() == nullptr)
 			return false;
 
 
@@ -30,7 +28,7 @@ namespace jam::net
 		if (m_socket == INVALID_SOCKET)
 			return false;
 
-		if (m_service->GetIocpCore()->Register(shared_from_this()) == false)
+		if (m_service.lock()->GetIocpCore()->Register(shared_from_this()) == false)
 			return false;
 
 		if (SocketUtils::SetReuseAddress(m_socket, true) == false)
@@ -39,13 +37,13 @@ namespace jam::net
 		if (SocketUtils::SetLinger(m_socket, 0, 0) == false)
 			return false;
 
-		if (SocketUtils::Bind(m_socket, m_service->GetTcpNetAddress()) == false)
+		if (SocketUtils::Bind(m_socket, m_service.lock()->GetLocalTcpNetAddress()) == false)
 			return false;
 
 		if (SocketUtils::Listen(m_socket) == false)
 			return false;
 
-		const int32 acceptCount = m_service->GetMaxTcpSessionCount();
+		const int32 acceptCount = m_service.lock()->GetMaxTcpSessionCount();	// todo
 		for (int32 i = 0; i < acceptCount; i++)
 		{
 			AcceptEvent* acceptEvent = utils::memory::xnew<AcceptEvent>();
@@ -76,13 +74,13 @@ namespace jam::net
 
 	void TcpListener::RegisterAccept(AcceptEvent* acceptEvent)
 	{
-		Sptr<TcpSession> session = static_pointer_cast<TcpSession>(m_service->CreateSession(EProtocolType::TCP));
+		Sptr<TcpSession> session = static_pointer_cast<TcpSession>(m_service.lock()->CreateSession(EProtocolType::TCP));
 
 		acceptEvent->Init();
 		acceptEvent->session = session;
 
 		DWORD bytesReceived = 0;
-		if (false == SocketUtils::AcceptEx(m_socket, session->GetSocket(), session->m_recvBuffer.WritePos(), 0, sizeof(SOCKADDR_IN) + 16, sizeof(SOCKADDR_IN) + 16, OUT & bytesReceived, static_cast<LPOVERLAPPED>(acceptEvent)))
+		if (false == SocketUtils::AcceptEx(m_socket, session->GetSocket(), session->m_recvBuffer.WritePos(), 0, sizeof(SOCKADDR_IN) + 16, sizeof(SOCKADDR_IN) + 16, OUT &bytesReceived, static_cast<LPOVERLAPPED>(acceptEvent)))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)

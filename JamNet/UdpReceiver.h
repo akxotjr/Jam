@@ -4,7 +4,7 @@
 namespace jam::net
 {
     class Service;
-    class UpdSession;
+    class UdpSession;
 
     class UdpReceiver : public IocpObject
     {
@@ -18,7 +18,7 @@ namespace jam::net
 
         SOCKET                      GetSocket() const { return m_socket; }
 
-        /* IocpObject interface impl */
+        /** IocpObject interface impl **/
         virtual HANDLE              GetHandle() override;
         virtual void                Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
@@ -30,10 +30,10 @@ namespace jam::net
     private:
         SOCKET                      m_socket = INVALID_SOCKET;
         RecvBuffer                  m_recvBuffer;
-        SOCKADDR_IN                 m_remoteAddr = {};	// is thread safe? 
+        SOCKADDR_IN                 m_remoteAddr = {};
         RecvEvent                   m_recvEvent;
 
-        std::weak_ptr<Service>      m_service;
+        Wptr<Service>               m_service;
     };
 }
 

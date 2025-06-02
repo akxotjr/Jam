@@ -1,5 +1,6 @@
 #pragma once
 #include "Session.h"
+#include <bitset>
 
 namespace jam::net
 {
@@ -19,6 +20,17 @@ namespace jam::net
 		uint16				sequence;
 		double				timestamp;
 		uint32				retryCount = 0;
+	};
+
+
+	enum class EUdpSessionState : uint8
+	{
+		Connected,
+		Disconnected,
+		Handshaking,
+		Timeout,
+
+		None,
 	};
 
 	class UdpSession : public Session
@@ -48,21 +60,38 @@ namespace jam::net
 
 	private:
 		/* Iocp Object impl */
-		virtual HANDLE							GetHandle() override;
-		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
+		//virtual HANDLE							GetHandle() override;
+		//virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
-	private:
+	public:
 		void									RegisterSend(Sptr<SendBuffer> sendbuffer);
-
+		void									RegisterRecv();
 
 		void									ProcessConnect();
 		void									ProcessDisconnect();
 		void									ProcessSend(int32 numOfBytes);
+		void									ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
+
+
+		int32									IsParsingPacket(BYTE* buffer, const int32 len);
+
+
+		void									ProcessHandshake();
+
 
 		void									Update(double serverTime);
-		bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }	// util 로 뺄지
+		bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }
 
 		void									HandleError(int32 errorCode);
+
+		void									SendHandshakePacket();
+		void									SendAckPacket();
+
+		void									RetryHandshake();
+
+		void									HandleAck();
+		void									UpdateRecvWindow();
+
 
 	private:
 		USE_LOCK
@@ -76,7 +105,11 @@ namespace jam::net
 		float									_resendIntervalMs = 0.1f; // 재전송 대기 시간
 
 	private:
-		SendEvent								_sendEvent;
+		EUdpSessionState						m_state = EUdpSessionState::Disconnected;
+
+		//SendEvent								m_sendEvent;
+
+		RecvBuffer								m_recvBuffer;
 	};
 }
 

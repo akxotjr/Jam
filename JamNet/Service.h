@@ -1,7 +1,8 @@
 #pragma once
 #include "Session.h"
-#include "Listener.h"
+#include "TcpListener.h"
 #include "UdpReceiver.h"
+#include "UdpRouter.h"
 
 namespace jam::net
 {
@@ -15,7 +16,6 @@ namespace jam::net
 	class UdpSession;
 
 
-	using SessionFactory = std::function<Sptr<Session>()>;
 
 	/*--------------
 		 Service
@@ -23,14 +23,21 @@ namespace jam::net
 
 	struct TransportConfig
 	{
-		std::optional<NetAddress> tcpAddress;
-		std::optional<NetAddress> udpAddress;
+		NetAddress localTcpAddress = {};
+		NetAddress localUdpAddress = {};
+		NetAddress remoteTcpAddress = {};
+		NetAddress remoteUdpAddress = {};
 	};
 
 	class Service : public enable_shared_from_this<Service>
 	{
+		using SessionFactory = std::function<Sptr<Session>()>;
+
+		friend class TcpSession;
+		friend class UdpSession;
+
 	public:
-		Service(TransportConfig config, Sptr<IocpCore> core, int32 maxSTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
+		Service(TransportConfig config, int32 maxTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
 		virtual ~Service();
 
 		virtual bool						Start();
@@ -39,10 +46,10 @@ namespace jam::net
 		virtual void						CloseService();
 
 		template<typename TCP, typename UDP>
-		void								SetSessionFactory();
+		bool								SetSessionFactory();
 
 
-		void								Broadcast(Sptr<SendBuffer> sendBuffer);
+		//void								Broadcast(Sptr<SendBuffer> sendBuffer);
 		Sptr<Session>						CreateSession(EProtocolType protocol);
 
 		void								AddTcpSession(Sptr<TcpSession> session);
@@ -57,28 +64,32 @@ namespace jam::net
 		int32								GetCurrentUdpSessionCount() const { return m_udpSessionCount; }
 		int32								GetMaxUdpSessionCount() const { return m_maxUdpSessionCount; }
 
+		//SOCKET								GetUdpSocket() const { return m_udpReceiver->GetSocket(); }
 
-		void								SetUdpReceiver(Sptr<UdpReceiver> udpReceiver) { m_udpReceiver = udpReceiver; };
-		SOCKET								GetUdpSocket() const { return m_udpReceiver->GetSocket(); }
-
-		Sptr<UdpSession>					FindOrCreateUdpSession(const NetAddress& from);
+		//Sptr<UdpSession>					FindOrCreateUdpSession(const NetAddress& from);
 		void								CompleteUdpHandshake(const NetAddress& from);
 
+		Sptr<UdpSession>					FindUpdSession(const NetAddress& from);
+		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer);
+
 	public:
-		NetAddress							GetTcpNetAddress() const { return m_config.tcpAddress.value_or(NetAddress(L"0.0.0.0", 0)); }
-		NetAddress							GetUdpNetAddress() const { return m_config.udpAddress.value_or(NetAddress(L"0.0.0.0", 0)); }
-		Sptr<IocpCore>&						GetIocpCore() { return m_iocpCore; }
+		const NetAddress&					GetLocalTcpNetAddress() const { return m_config.localTcpAddress; }
+		const NetAddress&					GetLocalUdpNetAddress() const { return m_config.localUdpAddress; }
+		const NetAddress&					GetRemoteTcpNetAddress() const { return m_config.remoteTcpAddress; }
+		const NetAddress&					GetRemoteUdpNetAddress() const { return m_config.remoteUdpAddress; }
+
+		IocpCore*						GetIocpCore() { return m_iocpCore.get(); }
 
 	protected:
 		USE_LOCK
 
 		TransportConfig										m_config;
 
-		Sptr<IocpCore>										m_iocpCore;
+		Uptr<IocpCore>										m_iocpCore;
 
-		xset<Sptr<TcpSession>>								m_tcpSessions;
-		xset<Sptr<UdpSession>>								m_udpSessions;
-		unordered_map<NetAddress, Sptr<UdpSession>>			m_pendingUdpSessions;
+		unordered_map<NetAddress, Sptr<TcpSession>>			m_tcpSessions;
+		unordered_map<NetAddress, Sptr<UdpSession>>			m_udpSessions;
+		unordered_map<NetAddress, Sptr<UdpSession>>			m_handshakingUdpSessions;
 
 
 		int32												m_sessionCount = 0;
@@ -93,13 +104,20 @@ namespace jam::net
 		SessionFactory										m_udpSessionFactory;
 
 	private:
-		Sptr<TcpListener>										m_listener = nullptr;
-		Sptr<UdpReceiver>									m_udpReceiver = nullptr;
+		Sptr<TcpListener>									m_listener = nullptr;
+		//Sptr<UdpReceiver>									m_udpReceiver = nullptr;
+
+		Sptr<UdpRouter>										m_udpRouter = nullptr;
 	};
 
+
+
 	template<typename TCP, typename UDP>
-	inline void Service::SetSessionFactory()
+	inline bool Service::SetSessionFactory()
 	{
+		if (!std::is_base_of_v<Session, TCP> || !std::is_base_of_v<Session, UDP>)
+			return false;
+
 		m_tcpSessionFactory = []() -> Sptr<Session>
 			{
 				return jam::utils::memory::MakeShared<TCP>();
@@ -109,6 +127,9 @@ namespace jam::net
 			{
 				return jam::utils::memory::MakeShared<UDP>();
 			};
+		return true;
 	}
+
+
 }
 

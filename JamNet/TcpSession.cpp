@@ -9,12 +9,12 @@ namespace jam::net
 
 	TcpSession::TcpSession() : m_recvBuffer(BUFFER_SIZE)
 	{
-		_socket = SocketUtils::CreateSocket(EProtocolType::TCP);
+		m_socket = SocketUtils::CreateSocket(EProtocolType::TCP);
 	}
 
 	TcpSession::~TcpSession()
 	{
-		SocketUtils::Close(_socket);
+		SocketUtils::Close(m_socket);
 	}
 
 	bool TcpSession::Connect()
@@ -24,7 +24,7 @@ namespace jam::net
 
 	void TcpSession::Disconnect(const WCHAR* cause)
 	{
-		if (_connected.exchange(false) == false)
+		if (m_connected.exchange(false) == false)
 			return;
 
 		RegisterDisconnect();
@@ -51,7 +51,7 @@ namespace jam::net
 
 	HANDLE TcpSession::GetHandle()
 	{
-		return reinterpret_cast<HANDLE>(_socket);
+		return reinterpret_cast<HANDLE>(m_socket);
 	}
 
 	void TcpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
@@ -77,16 +77,16 @@ namespace jam::net
 	{
 		if (IsConnected()) return false;
 
-		if (SocketUtils::SetReuseAddress(_socket, true) == false) return false;
+		if (SocketUtils::SetReuseAddress(m_socket, true) == false) return false;
 
-		if (SocketUtils::BindAnyAddress(_socket, 0) == false) return false;
+		if (SocketUtils::BindAnyAddress(m_socket, 0) == false) return false;
 
 		m_connectEvent.Init();
 		m_connectEvent.m_owner = shared_from_this();
 
 		DWORD numOfBytes = 0;
-		SOCKADDR_IN sockAddr = GetService()->GetTcpNetAddress().GetSockAddr();
-		if (SOCKET_ERROR == SocketUtils::ConnectEx(_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &numOfBytes, &m_connectEvent))
+		SOCKADDR_IN sockAddr = GetService()->GetRemoteTcpNetAddress().GetSockAddr();
+		if (SOCKET_ERROR == SocketUtils::ConnectEx(m_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &numOfBytes, &m_connectEvent))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
@@ -103,7 +103,7 @@ namespace jam::net
 		m_disconnectEvent.Init();
 		m_disconnectEvent.m_owner = shared_from_this();
 
-		if (false == SocketUtils::DisconnectEx(_socket, &m_disconnectEvent, TF_REUSE_SOCKET, 0))
+		if (false == SocketUtils::DisconnectEx(m_socket, &m_disconnectEvent, TF_REUSE_SOCKET, 0))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
@@ -129,7 +129,7 @@ namespace jam::net
 
 		DWORD numOfBytes = 0;
 		DWORD flags = 0;
-		if (SOCKET_ERROR == ::WSARecv(_socket, &wsaBuf, 1, OUT & numOfBytes, OUT & flags, &m_recvEvent, nullptr))
+		if (SOCKET_ERROR == ::WSARecv(m_socket, &wsaBuf, 1, OUT &numOfBytes, OUT &flags, &m_recvEvent, nullptr))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
@@ -149,12 +149,12 @@ namespace jam::net
 		m_sendEvent.m_owner = shared_from_this();
 
 		{
-			WRITE_LOCK;
+			WRITE_LOCK
 
 			int32 writeSize = 0;
 			while (m_sendQueue.empty() == false)
 			{
-				SendBufferRef sendBuffer = m_sendQueue.front();
+				Sptr<SendBuffer> sendBuffer = m_sendQueue.front();
 
 				writeSize += sendBuffer->WriteSize();
 				// TODO: exception check
@@ -167,7 +167,7 @@ namespace jam::net
 		// Scatter-Gather
 		xvector<WSABUF> wsaBufs;
 		wsaBufs.reserve(m_sendEvent.sendBuffers.size());
-		for (const SendBufferRef& sendBuffer : m_sendEvent.sendBuffers)
+		for (const Sptr<SendBuffer>& sendBuffer : m_sendEvent.sendBuffers)
 		{
 			WSABUF wsaBuf;
 			wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
@@ -176,7 +176,7 @@ namespace jam::net
 		}
 
 		DWORD numOfBytes = 0;
-		if (SOCKET_ERROR == ::WSASend(_socket, wsaBufs.data(), static_cast<DWORD>(wsaBufs.size()), OUT & numOfBytes, 0, &m_sendEvent, nullptr))
+		if (SOCKET_ERROR == ::WSASend(m_socket, wsaBufs.data(), static_cast<DWORD>(wsaBufs.size()), OUT & numOfBytes, 0, &m_sendEvent, nullptr))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
@@ -192,7 +192,7 @@ namespace jam::net
 	void TcpSession::ProcessConnect()
 	{
 		m_connectEvent.m_owner = nullptr;
-		_connected.store(true);
+		m_connected.store(true);
 
 		GetService()->AddTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
 		OnConnected();

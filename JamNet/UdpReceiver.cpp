@@ -24,11 +24,10 @@ namespace jam::net
         if (SocketUtils::SetReuseAddress(m_socket, true) == false)
             return false;
 
-        if (SocketUtils::Bind(m_socket, m_service.lock()->GetUdpNetAddress()) == false)
+        if (SocketUtils::Bind(m_socket, m_service.lock()->GetLocalUdpNetAddress()) == false)
             return false;
 
         RegisterRecv();
-
 
         return true;
     }
@@ -51,8 +50,9 @@ namespace jam::net
         if (service == nullptr)
             return;
 
-        auto session = service->FindOrCreateUdpSession(from);
-        ProcessRecv(numOfBytes, session);
+        //auto session = service->FindOrCreateUdpSession(from);
+        //ProcessRecv(numOfBytes, session);
+
     }
 
     void UdpReceiver::RegisterRecv()
@@ -82,7 +82,6 @@ namespace jam::net
 
     bool UdpReceiver::ProcessRecv(int32 numOfBytes, Sptr<UdpSession> session)
     {
-
         if (!session)
         {
             std::cout << "[ProcessRecv] session is nullptr or expired!\n";

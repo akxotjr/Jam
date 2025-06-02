@@ -63,6 +63,7 @@
     <ClInclude Include="UdpReceiver.h">
       <Filter>02.Network\UDP</Filter>
     </ClInclude>
+    <ClInclude Include="UdpRouter.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -107,5 +108,6 @@
     <ClCompile Include="UdpReceiver.cpp">
       <Filter>02.Network\UDP</Filter>
     </ClCompile>
+    <ClCompile Include="UdpRouter.cpp" />
   </ItemGroup>
 </Project>

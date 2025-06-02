@@ -9,10 +9,10 @@ namespace jam::net
 		NetAddress(SOCKADDR_IN sockAddr);
 		NetAddress(wstring ip, uint16 port);
 
-		SOCKADDR_IN&		GetSockAddr() { return _sockAddr; }
-		const SOCKADDR_IN&	GetSockAddr() const { return _sockAddr; }
+		SOCKADDR_IN&		GetSockAddr() { return m_sockAddr; }
+		const SOCKADDR_IN&	GetSockAddr() const { return m_sockAddr; }
 		wstring				GetIpAddress() const;
-		uint16				GetPort() const { return ::ntohs(_sockAddr.sin_port); }
+		uint16				GetPort() const { return ::ntohs(m_sockAddr.sin_port); }
 
 		bool				IsValid() const;
 
@@ -21,13 +21,12 @@ namespace jam::net
 
 		bool				operator==(const NetAddress& other) const
 		{
-			return _sockAddr.sin_addr.S_un.S_addr == other._sockAddr.sin_addr.S_un.S_addr &&
-				_sockAddr.sin_port == other._sockAddr.sin_port;
+			return m_sockAddr.sin_addr.s_addr == other.m_sockAddr.sin_addr.s_addr && m_sockAddr.sin_port == other.m_sockAddr.sin_port;
 		}
 
 
 	public:
-		SOCKADDR_IN			_sockAddr = {};
+		SOCKADDR_IN			m_sockAddr = {};
 	};
 }
 

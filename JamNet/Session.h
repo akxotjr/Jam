@@ -3,6 +3,8 @@
 
 namespace jam::net
 {
+	class Service;
+
 	class Session : public IocpObject
 	{
 	public:
@@ -12,34 +14,35 @@ namespace jam::net
 		virtual bool							Connect() = 0;
 		virtual void							Disconnect(const WCHAR* cause) = 0;
 		virtual void							Send(Sptr<SendBuffer> sendBuffer) = 0;
+
 		virtual bool							IsTcp() const = 0;
 		virtual bool							IsUdp() const = 0;
 
-		Sptr<Service>							GetService() { return _service.lock(); }
-		void									SetService(Sptr<Service> service) { _service = service; }
+		Sptr<Service>							GetService() { return m_service.lock(); }
+		void									SetService(Sptr<Service> service) { m_service = service; }
 
-		NetAddress& GetRemoteNetAddress() { return _remoteAddress; }
-		void									SetRemoteNetAddress(NetAddress address) { _remoteAddress = address; }
-		SOCKET									GetSocket() { return _socket; }	//todo
-		bool									IsConnected() { return _connected; }
+		NetAddress&								GetRemoteNetAddress() { return m_remoteAddress; }
+		void									SetRemoteNetAddress(NetAddress address) { m_remoteAddress = address; }
+		SOCKET									GetSocket() { return m_socket; }
+		bool									IsConnected() { return m_connected; }
 		Sptr<Session>							GetSessionRef() { return static_pointer_cast<Session>(shared_from_this()); }
-		uint32									GetId() { return _id; }
-		void									SetId(uint32 id) { _id = id; }
+		uint32									GetId() { return m_id; }
+		void									SetId(uint32 id) { m_id = id; }
 
 	protected:
 		virtual void							OnConnected() {}
 		virtual void							OnDisconnected() {}
-		virtual void							OnRecv(BYTE* buffer, int32 len) {}
 		virtual void							OnSend(int32 len) {}
+		virtual void							OnRecv(BYTE* buffer, int32 len) {}
 
 
 	protected:
-		SOCKET									_socket = INVALID_SOCKET;
-		Atomic<bool>							_connected = false;
+		SOCKET									m_socket = INVALID_SOCKET;
+		Atomic<bool>							m_connected = false;
 
 	private:
-		weak_ptr<Service>						_service;
-		NetAddress								_remoteAddress = {};
-		uint32									_id = 0;
+		Wptr<Service>							m_service;
+		NetAddress								m_remoteAddress = {};
+		uint32									m_id = 0;
 	};
 }

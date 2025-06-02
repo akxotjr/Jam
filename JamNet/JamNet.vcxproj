@@ -160,6 +160,7 @@
     <ClInclude Include="SocketUtils.h" />
     <ClInclude Include="TcpSession.h" />
     <ClInclude Include="UdpReceiver.h" />
+    <ClInclude Include="UdpRouter.h" />
     <ClInclude Include="UdpSession.h" />
   </ItemGroup>
   <ItemGroup>
@@ -181,6 +182,7 @@
     <ClCompile Include="SocketUtils.cpp" />
     <ClCompile Include="TcpSession.cpp" />
     <ClCompile Include="UdpReceiver.cpp" />
+    <ClCompile Include="UdpRouter.cpp" />
     <ClCompile Include="UdpSession.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

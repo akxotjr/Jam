@@ -19,25 +19,28 @@ namespace jam::net
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(Sptr<SendBuffer> sendBuffer) override;
+
 		virtual bool							IsTcp() const override { return true; }
 		virtual bool							IsUdp() const override { return false; }
 
 	private:
-		/* Iocp Object impl */
+		/** Iocp Object impl **/
+
 		virtual HANDLE							GetHandle() override;
 		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
-	private:
-		// 전송 관련
+
+		/** Transport **/
+
 		bool									RegisterConnect();
 		bool									RegisterDisconnect();
-		void									RegisterRecv();
 		void									RegisterSend();
+		void									RegisterRecv();
 
 		void									ProcessConnect();
 		void									ProcessDisconnect();
-		void									ProcessRecv(int32 numOfBytes);
 		void									ProcessSend(int32 numOfBytes);
+		void									ProcessRecv(int32 numOfBytes);
 
 		int32									IsParsingPacket(BYTE* buffer, int32 len);
 
@@ -53,8 +56,8 @@ namespace jam::net
 	private:
 		ConnectEvent							m_connectEvent;
 		DisconnectEvent							m_disconnectEvent;
-		RecvEvent								m_recvEvent;
 		SendEvent								m_sendEvent;
+		RecvEvent								m_recvEvent;
 	};
 }
 

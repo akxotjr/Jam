@@ -4,7 +4,7 @@
 namespace jam::net
 {
 	class AcceptEvent;
-	class ServerService;
+	class Service;
 
 	/*------------------
 		  TcpListener
@@ -34,7 +34,7 @@ namespace jam::net
 	protected:
 		SOCKET					m_socket = INVALID_SOCKET;
 		xvector<AcceptEvent*>	m_acceptEvents;
-		Sptr<Service>			m_service;	// todo circular
+		Wptr<Service>			m_service;
 	};
 }
 
