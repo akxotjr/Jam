@@ -12,9 +12,9 @@ namespace jam::net
 	{
 	}
 
-	bool UdpSession::Connect()
+	void UdpSession::Connect()
 	{
-		return RegisterConnect();
+		ProcessHandshake();
 	}
 
 	void UdpSession::Disconnect(const WCHAR* cause)
@@ -181,6 +181,22 @@ namespace jam::net
 
 	void UdpSession::ProcessHandshake()
 	{
+		if (IsConnected())
+			return;
+
+		if (m_handshakeStage == 1)
+		{
+			m_state = EUdpSessionState::Handshaking;
+
+			SendHandshakePacket();
+		}
+		else if (m_handshakeStage == 2)
+		{
+			
+		}
+
+		
+
 
 	}
 

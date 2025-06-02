@@ -110,6 +110,9 @@ namespace jam::net
 		//SendEvent								m_sendEvent;
 
 		RecvBuffer								m_recvBuffer;
+
+
+		int32 m_handshakeStage = 1;
 	};
 }
 
