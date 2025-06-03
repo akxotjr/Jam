@@ -19,6 +19,5 @@ namespace jam::utils
 
 	void Logger::Shutdown()
 	{
-		ISingletonLayer::Shutdown();
 	}
 }

@@ -27,23 +27,20 @@
 	}								\
 }
 
-#define DECLARE_SINGLETON(ClassType)                      \
-public:                                                   \
-    static void PreInit()                                 \
-    {                                                     \
-        if (!_instance)                                   \
-            _instance = std::make_shared<ClassType>();    \
-    }                                                     \
-    static void Shutdown()                                \
-    {                                                     \
-        _instance.reset();                                \
-    }                                                     \
-    static std::shared_ptr<ClassType> Instance()          \
-    {                                                     \
-        return _instance;                                 \
-    }                                                     \
-private:                                                  \
-    static inline std::shared_ptr<ClassType> _instance;
+
+#define DECLARE_SINGLETON(ClassType)                            \
+public:                                                         \
+    static ClassType& Instance()                                \
+    {                                                           \
+        static ClassType instance;                              \
+        return instance;                                        \
+    }                                                           \
+private:                                                        \
+    ClassType() = default;                                      \
+    ~ClassType() = default;                                     \
+    ClassType(const ClassType&) = delete;                       \
+    ClassType& operator=(const ClassType&) = delete;
+
 
 
 #define USING_SHARED_PTR(name) using name##Ref = std::shared_ptr<class name>;

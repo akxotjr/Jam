@@ -43,11 +43,11 @@ namespace jam::utils::memory
 
 	void* PoolAllocator::Alloc(int32 size)
 	{
-		return MemoryManager::Instance()->Allocate(size);
+		return MemoryManager::Instance().Allocate(size);
 	}
 
 	void PoolAllocator::Release(void* ptr)
 	{
-		MemoryManager::Instance()->Release(ptr);
+		MemoryManager::Instance().Release(ptr);
 	}
 }

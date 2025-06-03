@@ -9,9 +9,9 @@ namespace jam::utils::job
 
 	struct JobData
 	{
-		JobData(std::weak_ptr<JobQueue> owner, JobRef job) : owner(owner), job(job) {}
+		JobData(Wptr<JobQueue> owner, JobRef job) : owner(owner), job(job) {}
 
-		std::weak_ptr<JobQueue>			owner;
+		Wptr<JobQueue>					owner;
 		JobRef							job;
 	};
 
@@ -30,13 +30,13 @@ namespace jam::utils::job
 	class JobTimer
 	{
 	public:
-		void							Reserve(double afterTime, std::weak_ptr<JobQueue> owner, JobRef job);
+		void							Reserve(double afterTime, Wptr<JobQueue> owner, JobRef job);
 		void							Distribute(double now);
 		void							Clear();
 
 	private:
 		USE_LOCK
-		xpriority_queue<TimerItem>		m_items;
+		xpqueue<TimerItem>				m_items;
 		Atomic<bool>					m_distributing = false;
 	};
 }

@@ -4,9 +4,9 @@
 
 namespace jam::utils::job
 {
-	void JobTimer::Reserve(double afterTime, std::weak_ptr<JobQueue> owner, JobRef job)
+	void JobTimer::Reserve(double afterTime, Wptr<JobQueue> owner, JobRef job)
 	{
-		const double executeTime = TimeManager::Instance()->GetCurrentTime() + afterTime;
+		const double executeTime = TimeManager::Instance().GetCurrentTime() + afterTime;
 		JobData* jobData = memory::ObjectPool<JobData>::Pop(owner, job);
 
 		WRITE_LOCK

@@ -11,7 +11,7 @@ namespace jam::utils::thrd
 
 	void Worker::Execute()
 	{
-		const double now = TimeManager::Instance()->GetCurrentTime();
+		const double now = TimeManager::Instance().GetCurrentTime();
 		if (now >= tl_EndTime)
 		{
 			return;
@@ -22,7 +22,7 @@ namespace jam::utils::thrd
 
 		while (true)
 		{
-			double nowInner = TimeManager::Instance()->GetCurrentTime();
+			double nowInner = TimeManager::Instance().GetCurrentTime();
 			if (nowInner >= tl_EndTime)
 				break;
 
@@ -36,7 +36,7 @@ namespace jam::utils::thrd
 
 	void Worker::Steal()
 	{
-		const double now = TimeManager::Instance()->GetCurrentTime();
+		const double now = TimeManager::Instance().GetCurrentTime();
 
 		if (now >= tl_EndTime)
 			return;

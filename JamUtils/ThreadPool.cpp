@@ -85,7 +85,7 @@ namespace jam::utils::thrd
 
 			while (true)
 			{
-				double now = TimeManager::Instance()->GetCurrentTime();
+				double now = TimeManager::Instance().GetCurrentTime();
 				if (now >= tl_EndTime)
 					break;
 
@@ -104,14 +104,14 @@ namespace jam::utils::thrd
 			else
 				nextTime = 0.001;
 
-			tl_EndTime = TimeManager::Instance()->GetCurrentTime() + nextTime;
+			tl_EndTime = TimeManager::Instance().GetCurrentTime() + nextTime;
 			std::this_thread::yield();	// opt
 		}
 	}
 
 	void ThreadPool::DistributeReservedJob()
 	{
-		const double now = TimeManager::Instance()->GetCurrentTime();
+		const double now = TimeManager::Instance().GetCurrentTime();
 
 		m_globalQueue->GetJobTimer()->Distribute(now);
 	}

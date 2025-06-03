@@ -1,15 +1,14 @@
 #pragma once
-#include "ISingletonLayer.h"
 
 namespace jam::utils
 {
-	class TimeManager : public ISingletonLayer<TimeManager>
+	class TimeManager
 	{
-		friend class jam::ISingletonLayer<TimeManager>;
+		DECLARE_SINGLETON(TimeManager)
 
 	public:
-		void			Init() override;
-		void			Shutdown() override;
+		void			Init();
+		void			Shutdown();
 
 		void			Update();
 

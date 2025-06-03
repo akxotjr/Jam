@@ -4,10 +4,9 @@
 
 namespace jam::utils::memory
 {
+
 	void MemoryManager::Init()
 	{
-		ISingletonLayer::Init();
-
 		int32 size = 0;
 		int32 tableIndex = 0;
 
@@ -55,8 +54,6 @@ namespace jam::utils::memory
 			delete pool;
 
 		m_pools.clear();
-
-		ISingletonLayer::Shutdown();
 	}
 
 

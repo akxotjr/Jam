@@ -16,9 +16,6 @@
     <Filter Include="04.Utils">
       <UniqueIdentifier>{fbe92348-57ce-4621-a417-aeb31bc78800}</UniqueIdentifier>
     </Filter>
-    <Filter Include="98.Interface">
-      <UniqueIdentifier>{08afba46-0ab1-43d0-b356-7fba5ae79b7c}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -59,12 +56,6 @@
     </ClCompile>
     <ClCompile Include="GlobalQueue.cpp">
       <Filter>03.Job</Filter>
-    </ClCompile>
-    <ClCompile Include="ILayer.cpp">
-      <Filter>98.Interface</Filter>
-    </ClCompile>
-    <ClCompile Include="ISingletonLayer.cpp">
-      <Filter>98.Interface</Filter>
     </ClCompile>
     <ClCompile Include="TLS.cpp">
       <Filter>02.Thread</Filter>
@@ -133,12 +124,6 @@
     </ClInclude>
     <ClInclude Include="GlobalQueue.h">
       <Filter>03.Job</Filter>
-    </ClInclude>
-    <ClInclude Include="ILayer.h">
-      <Filter>98.Interface</Filter>
-    </ClInclude>
-    <ClInclude Include="ISingletonLayer.h">
-      <Filter>98.Interface</Filter>
     </ClInclude>
     <ClInclude Include="TLS.h">
       <Filter>02.Thread</Filter>

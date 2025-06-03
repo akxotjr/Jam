@@ -38,14 +38,14 @@ template<typename Type, typename Container = xdeque<Type>>
 using xstack = stack<Type, Container>;
 
 template<typename Type, typename Container = xvector<Type>, typename Pred = less<typename Container::value_type>>
-using xpriority_queue = priority_queue<Type, Container, Pred>;
+using xpqueue = priority_queue<Type, Container, Pred>;
 
 using xstring = basic_string<char, char_traits<char>, StlAllocator<char>>;
 
 using xwstring = basic_string<wchar_t, char_traits<wchar_t>, StlAllocator<wchar_t>>;
 
 template<typename Key, typename Type, typename Hasher = hash<Key>, typename KeyEq = equal_to<Key>>
-using HashMap = unordered_map<Key, Type, Hasher, KeyEq, StlAllocator<pair<const Key, Type>>>;
+using xumap = unordered_map<Key, Type, Hasher, KeyEq, StlAllocator<pair<const Key, Type>>>;
 
 template<typename Key, typename Hasher = hash<Key>, typename KeyEq = equal_to<Key>>
-using HashSet = unordered_set<Key, Hasher, KeyEq, StlAllocator<Key>>;
+using xuset = unordered_set<Key, Hasher, KeyEq, StlAllocator<Key>>;

@@ -5,15 +5,12 @@ namespace jam::utils
 {
 	void TimeManager::Init()
 	{
-		ISingletonLayer::Init();
-
 		::QueryPerformanceFrequency(reinterpret_cast<LARGE_INTEGER*>(&m_frequency));
 		::QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&m_prevCount));
 	}
 
 	void TimeManager::Shutdown()
 	{
-		ISingletonLayer::Shutdown();
 	}
 
 	void TimeManager::Update()

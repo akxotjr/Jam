@@ -40,7 +40,7 @@ namespace jam::utils::job
 			job->Execute();
 			thrd::tl_Worker->m_workCount.fetch_add(1);
 
-			const double now = TimeManager::Instance()->GetCurrentTime();
+			const double now = TimeManager::Instance().GetCurrentTime();
 			if (now >= thrd::tl_EndTime)
 			{
 				m_owner.lock()->Push(shared_from_this());
@@ -60,7 +60,7 @@ namespace jam::utils::job
 			job->Execute();
 			thrd::tl_Worker->m_workCount.fetch_add(1);
 
-			const double now = TimeManager::Instance()->GetCurrentTime();
+			const double now = TimeManager::Instance().GetCurrentTime();
 			if (now >= thrd::tl_EndTime)
 			{
 				m_owner.lock()->Push(shared_from_this());
