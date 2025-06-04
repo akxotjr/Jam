@@ -23,15 +23,43 @@ namespace jam::net
 	};
 
 
+
+
 	enum class EUdpSessionState : uint8
 	{
 		Connected,
 		Disconnected,
-		Handshaking,
-		Timeout,
 
-		None,
+		// client
+		SynSent,			// 1
+		SynAckReceived,		// 3
+		AckSent,			// 5
+
+		// server
+		SynReceived,		// 2
+		SynAckSent,			// 4
+		AckReceived,		// 6
+
+
+		Timeout,
 	};
+
+
+	enum class HandshakePacketId : uint16
+	{
+		C_HANDSHAKE_SYN = 1,
+		S_HANDSHAKE_SYN,
+		C_HANDSHAKE_SYNACK,
+		S_HANDSHAKE_SYNACK,
+		C_HANDSHAKE_ACK,
+		S_HANDSHAKE_ACK
+	};
+
+	constexpr int32		WINDOW_SIZE = 1024;
+	constexpr int32		BITFIELD_SIZE = 32;
+
+	constexpr int32		MAX_HANDSHAKE_RETRIES = 5;
+	constexpr double	HANDSHAKE_RETRY_INTERVAL = 0.5; 
 
 	class UdpSession : public Session
 	{
@@ -60,8 +88,8 @@ namespace jam::net
 
 	private:
 		/* Iocp Object impl */
-		//virtual HANDLE							GetHandle() override;
-		//virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
+		virtual HANDLE							GetHandle() override;
+		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 	public:
 		void									RegisterSend(Sptr<SendBuffer> sendbuffer);
@@ -76,22 +104,31 @@ namespace jam::net
 		int32									IsParsingPacket(BYTE* buffer, const int32 len);
 
 
-		void									ProcessHandshake();
+		void									ProcessHandshake(int32 numOfBytes, RecvBuffer& recvBuffer);
 
 
 		void									Update(double serverTime);
+		void									CheckRetryHandshake();
+
+
 		bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }
 
 		void									HandleError(int32 errorCode);
 
-		void									SendHandshakePacket();
-		void									SendAckPacket();
+		/** 3-Handshake **/
+		/** Client **/
 
-		void									RetryHandshake();
 
-		void									HandleAck();
-		void									UpdateRecvWindow();
+		void SendHandshakeSyn();
+		void OnRecvHandshakeSynAck();
+		void SendHandshakeAck();
 
+		/** Server **/
+		void OnRecvHandshakeSyn();
+		void SendHandshakeSynAck();
+		void OnRecvHandshakeAck();
+
+		Sptr<SendBuffer> MakeHandshakePkt(HandshakePacketId id);
 
 	private:
 		USE_LOCK
@@ -112,7 +149,10 @@ namespace jam::net
 		RecvBuffer								m_recvBuffer;
 
 
-		int32 m_handshakeStage = 1;
+		// UdpSession ¸â¹ö º¯¼ö
+		int32									m_handshakeRetryCount = 0;
+		double									m_lastHandshakeTime = 0.0;
 	};
+
 }
 

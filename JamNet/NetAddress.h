@@ -28,5 +28,21 @@ namespace jam::net
 	public:
 		SOCKADDR_IN			m_sockAddr = {};
 	};
+
+
+
+}
+
+namespace std
+{
+	template <>
+	struct hash<jam::net::NetAddress>
+	{
+		size_t operator()(const jam::net::NetAddress& addr) const
+		{
+			return hash<uint32_t>()(addr.GetSockAddr().sin_addr.S_un.S_addr) ^
+				(hash<uint16_t>()(addr.GetSockAddr().sin_port) << 1);
+		}
+	};
 }
 

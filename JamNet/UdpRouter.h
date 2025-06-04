@@ -3,8 +3,11 @@
 
 namespace jam::net
 {
+
 	class UdpRouter : public IocpObject
 	{
+		enum { BUFFER_SIZE = 0x10000 }; // 64KB
+
 	public:
 		UdpRouter();
 		~UdpRouter();
@@ -22,6 +25,7 @@ namespace jam::net
 		void					ProcessSend(int32 numOfBytes);
 		void					ProcessRecv(int32 numOfBytes);
 
+		void					HandleError(int32 errorCode);
 
 	private:
 		SOCKET					m_socket = INVALID_SOCKET;
@@ -34,5 +38,6 @@ namespace jam::net
 
 		Wptr<Service>			m_service;
 	};
+
 }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "NetAddress.h"
 #include "Session.h"
 #include "TcpListener.h"
 #include "UdpReceiver.h"
@@ -6,20 +7,22 @@
 
 namespace jam::net
 {
+	class TcpSession;
+	class UdpSession;
+
 	enum class EProtocolType : uint8
 	{
 		TCP,
 		UDP
 	};
 
-	class TcpSession;
-	class UdpSession;
+	enum class EPeerType
+	{
+		Client,
+		Server,
 
-
-
-	/*--------------
-		 Service
-	---------------*/
+		None
+	};
 
 	struct TransportConfig
 	{
@@ -35,12 +38,14 @@ namespace jam::net
 
 		friend class TcpSession;
 		friend class UdpSession;
+		friend class TcpListener;
+		friend class UdpRouter;
 
 	public:
 		Service(TransportConfig config, int32 maxTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
 		virtual ~Service();
 
-		virtual bool						Start();
+		virtual bool						Start() = 0;
 		bool								CanStart() const { return m_tcpSessionFactory != nullptr || m_udpSessionFactory; }
 
 		virtual void						CloseService();
@@ -58,6 +63,8 @@ namespace jam::net
 		void								AddUdpSession(Sptr<UdpSession> session);
 		void								ReleaseUdpSession(Sptr<UdpSession> session);
 
+		void								AddHandshakingUdpSession(Sptr<UdpSession> session);
+
 
 		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount; }
 		int32								GetMaxTcpSessionCount() const { return m_maxTcpSessionCount; }
@@ -70,7 +77,7 @@ namespace jam::net
 		void								CompleteUdpHandshake(const NetAddress& from);
 
 		Sptr<UdpSession>					FindUpdSession(const NetAddress& from);
-		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer);
+		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer recvBuffer);
 
 	public:
 		const NetAddress&					GetLocalTcpNetAddress() const { return m_config.localTcpAddress; }
@@ -78,7 +85,7 @@ namespace jam::net
 		const NetAddress&					GetRemoteTcpNetAddress() const { return m_config.remoteTcpAddress; }
 		const NetAddress&					GetRemoteUdpNetAddress() const { return m_config.remoteUdpAddress; }
 
-		IocpCore*						GetIocpCore() { return m_iocpCore.get(); }
+		IocpCore*							GetIocpCore() { return m_iocpCore.get(); }
 
 	protected:
 		USE_LOCK
@@ -103,11 +110,12 @@ namespace jam::net
 		SessionFactory										m_tcpSessionFactory;
 		SessionFactory										m_udpSessionFactory;
 
-	private:
 		Sptr<TcpListener>									m_listener = nullptr;
 		//Sptr<UdpReceiver>									m_udpReceiver = nullptr;
 
 		Sptr<UdpRouter>										m_udpRouter = nullptr;
+
+		EPeerType											m_peer = EPeerType::None;
 	};
 
 
@@ -129,6 +137,29 @@ namespace jam::net
 			};
 		return true;
 	}
+
+
+
+
+	class ClientService : public Service
+	{
+	public:
+		ClientService(TransportConfig config, int32 maxTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
+		~ClientService() override;
+
+		bool Start() override;
+	};
+
+
+
+	class ServerService : public Service
+	{
+	public:
+		ServerService(TransportConfig config, int32 maxTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
+		~ServerService() override;
+
+		bool Start() override;
+	};
 
 
 }

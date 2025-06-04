@@ -19,6 +19,9 @@
     <Filter Include="02.Network\TCP">
       <UniqueIdentifier>{90c880e0-3ca4-4c45-a817-d983f4a04d74}</UniqueIdentifier>
     </Filter>
+    <Filter Include="05">
+      <UniqueIdentifier>{abc79d7d-5fc3-43b4-b3a8-74876ef2cc4e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetAddress.h">
@@ -63,7 +66,19 @@
     <ClInclude Include="UdpReceiver.h">
       <Filter>02.Network\UDP</Filter>
     </ClInclude>
-    <ClInclude Include="UdpRouter.h" />
+    <ClInclude Include="UdpRouter.h">
+      <Filter>02.Network\UDP</Filter>
+    </ClInclude>
+    <ClInclude Include="BufferWriter.h">
+      <Filter>03.Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="BufferReader.h">
+      <Filter>03.Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="NetWorker.h">
+      <Filter>05</Filter>
+    </ClInclude>
+    <ClInclude Include="Channel.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -108,6 +123,18 @@
     <ClCompile Include="UdpReceiver.cpp">
       <Filter>02.Network\UDP</Filter>
     </ClCompile>
-    <ClCompile Include="UdpRouter.cpp" />
+    <ClCompile Include="UdpRouter.cpp">
+      <Filter>02.Network\UDP</Filter>
+    </ClCompile>
+    <ClCompile Include="BufferReader.cpp">
+      <Filter>03.Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="BufferWriter.cpp">
+      <Filter>03.Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="NetWorker.cpp">
+      <Filter>05</Filter>
+    </ClCompile>
+    <ClCompile Include="Channel.cpp" />
   </ItemGroup>
 </Project>

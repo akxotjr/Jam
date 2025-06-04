@@ -11,18 +11,21 @@ namespace jam::utils::thrd
 
 	public:
 		Worker();
-		~Worker() = default;
+		virtual ~Worker() = default;
 
+		void SetWork(Function work) { m_work = work; }
 		void						Execute();
-		job::JobQueue*				GetCurrentJobQueue() const { return m_jobQueue; }
+		job::JobQueue*				GetCurrentJobQueue() const { return m_currentJobQueue; }
 
 	private:
-		void Steal();
+		void						Steal();
 
 	private:
+		Function					m_work = nullptr;	// temp
+
 		Atomic<int32>				m_workCount = 0;
 		Wptr<ThreadPool>			m_owner;
-		job::JobQueue*				m_jobQueue = nullptr;
+		job::JobQueue*				m_currentJobQueue = nullptr;
 	};
 }
 

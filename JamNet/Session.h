@@ -4,6 +4,7 @@
 namespace jam::net
 {
 	class Service;
+	class NetAddress;
 
 	class Session : public IocpObject
 	{
@@ -27,13 +28,13 @@ namespace jam::net
 		bool									IsConnected() { return m_connected; }
 		Sptr<Session>							GetSessionRef() { return static_pointer_cast<Session>(shared_from_this()); }
 		uint32									GetId() { return m_id; }
-		void									SetId(uint32 id) { m_id = id; }
+		void									SetId(uint32 id) { m_id = id; };
 
 	protected:
-		virtual void							OnConnected() {}
-		virtual void							OnDisconnected() {}
-		virtual void							OnSend(int32 len) {}
-		virtual void							OnRecv(BYTE* buffer, int32 len) {}
+		virtual void							OnConnected() = 0;
+		virtual void							OnDisconnected() = 0;
+		virtual void							OnSend(int32 len) = 0;
+		virtual void							OnRecv(BYTE* buffer, int32 len) = 0;
 
 
 	protected:

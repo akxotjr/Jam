@@ -14,6 +14,7 @@
 #include <WinSock2.h>
 #include <mswsock.h>
 #include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
 
 /** JamNet **/
 #include "IocpCore.h"

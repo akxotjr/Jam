@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="01.Main">
+      <UniqueIdentifier>{1d31cab2-9e54-4be3-a0a3-8abd2ba00aea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="99.Header">
+      <UniqueIdentifier>{db0d3bef-e725-4b4f-8cc7-c050f27ffcce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="02.Network">
+      <UniqueIdentifier>{cc93b486-9cc5-46c9-bbb3-27e9e5438f02}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="server.cpp">
+      <Filter>01.Main</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>99.Header</Filter>
+    </ClCompile>
+    <ClCompile Include="GameUdpSession.cpp">
+      <Filter>02.Network</Filter>
+    </ClCompile>
+    <ClCompile Include="GameTcpSession.cpp">
+      <Filter>02.Network</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="GameUdpSession.h">
+      <Filter>02.Network</Filter>
+    </ClInclude>
+    <ClInclude Include="GameTcpSession.h">
+      <Filter>02.Network</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

@@ -30,6 +30,7 @@ int main()
 	if (session == nullptr)
 		return false;
 
+	service->AddHandshakingUdpSession(static_pointer_cast<UdpSession>(session));
 	ASSERT_CRASH(session->Connect())
 
 	while (true)
@@ -38,4 +39,6 @@ int main()
 
 		this_thread::sleep_for(1ms);
 	}
+
+	return 0;
 }

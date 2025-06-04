@@ -1,7 +1,11 @@
 #pragma once
+#include "Service.h"
 
 namespace jam::net
 {
+	class NetAddress;
+	
+
 	class SocketUtils
 	{
 	public:

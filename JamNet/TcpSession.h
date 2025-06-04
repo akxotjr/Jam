@@ -3,6 +3,12 @@
 
 namespace jam::net
 {
+	struct TcpPacketHeader
+	{
+		uint16 size;
+		uint16 id;
+	};
+
 	class TcpSession : public Session
 	{
 		enum { BUFFER_SIZE = 0x10000 }; // 64KB
@@ -13,7 +19,7 @@ namespace jam::net
 
 	public:
 		TcpSession();
-		virtual ~TcpSession();
+		virtual ~TcpSession() override;
 
 	public:
 		virtual bool							Connect() override;

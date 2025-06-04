@@ -114,7 +114,7 @@ namespace jam::net
 
 	void SendBufferManager::PushGlobal(SendBufferChunk* buffer)
 	{
-		SendBufferManager::Instance()->Push(Sptr<SendBufferChunk>(buffer, PushGlobal));
+		SendBufferManager::Instance().Push(Sptr<SendBufferChunk>(buffer, PushGlobal));
 	}
 
 }

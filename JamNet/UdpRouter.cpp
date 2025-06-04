@@ -3,7 +3,15 @@
 
 namespace jam::net
 {
-	bool UdpRouter::Start(Sptr<Service> service)
+    UdpRouter::UdpRouter() : m_recvBuffer(BUFFER_SIZE)
+    {
+    }
+
+    UdpRouter::~UdpRouter()
+    {
+    }
+
+    bool UdpRouter::Start(Sptr<Service> service)
 	{
         m_service = service;
         if (m_service.lock() == nullptr)
@@ -19,8 +27,16 @@ namespace jam::net
         if (SocketUtils::SetReuseAddress(m_socket, true) == false)
             return false;
 
-        if (SocketUtils::Bind(m_socket, m_service.lock()->GetLocalUdpNetAddress()) == false)
-            return false;
+        if (m_service.lock()->m_peer == EPeerType::Client)
+        {
+            if (SocketUtils::BindAnyAddress(m_socket, 0) == false)
+                return false;
+        }
+        else if (m_service.lock()->m_peer == EPeerType::Server)
+        {
+            if (SocketUtils::Bind(m_socket, m_service.lock()->GetLocalUdpNetAddress()) == false)
+                return false;
+        }
 
         m_sendEvent.Init();
         m_sendEvent.m_owner = shared_from_this();
@@ -46,6 +62,7 @@ namespace jam::net
 
         if (iocpEvent->m_eventType == EventType::Recv)
         {
+            cout << "Dispatch : Recv\n";
             ProcessRecv(numOfBytes);
         }
         else if (iocpEvent->m_eventType == EventType::Send)
@@ -60,6 +77,15 @@ namespace jam::net
         wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
         wsaBuf.len = static_cast<ULONG>(sendBuffer->WriteSize());
 
+        //debug
+       // cout << "[RegisterSend] to : " << remoteAddress.GetSockAddr().sin_family << " , " << remoteAddress.GetSockAddr().sin_addr.s_addr << ", " << remoteAddress.GetSockAddr().sin_port << endl;
+
+    	wstring ip = remoteAddress.GetIpAddress();
+        uint16 port = remoteAddress.GetPort();
+
+        //wcout << L"[UdpRouter::Register] from : " <<  << L" , " << port << endl;
+        wcout << L"[UdpRouter::Register] to : " << ip << L" , " << port << endl;
+
         DWORD numOfBytes = 0;
         SOCKADDR_IN remoteAddr = remoteAddress.GetSockAddr();
 
@@ -68,7 +94,7 @@ namespace jam::net
             const int32 errorCode = ::WSAGetLastError();
             if (errorCode != WSA_IO_PENDING)
             {
-               // HandleError(errorCode);
+				HandleError(errorCode);
                 m_sendEvent.sendBuffers.clear();
             }
         }
@@ -90,7 +116,7 @@ namespace jam::net
             const int errorCode = ::WSAGetLastError();
             if (errorCode != WSA_IO_PENDING)
             {
-                std::cout << "[UDP Receiver] RecvFrom failed : " << errorCode << std::endl;
+                HandleError(errorCode);
             }
         }
     }
@@ -111,6 +137,25 @@ namespace jam::net
     {
         NetAddress from(m_remoteSockAddr);
 
+        wstring ip = from.GetIpAddress();
+        uint16 port = from.GetPort();
+
+        wcout << L"[UdpRouter::ProcessRecv] from : " << ip << L" , " << port << endl;
+
         m_service.lock()->ProcessUdpSession(from, numOfBytes, m_recvBuffer);
+        RegisterRecv();
+    }
+
+    void UdpRouter::HandleError(int32 errorCode)
+    {
+        switch (errorCode)
+        {
+        case WSAECONNRESET:
+        case WSAECONNABORTED:
+            break;
+        default:
+            cout << "Handle Error : " << errorCode << '\n';
+            break;
+        }
     }
 }

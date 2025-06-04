@@ -11,14 +11,16 @@ namespace jam::utils::thrd
 
 	void Worker::Execute()
 	{
+		Work();
+
 		const double now = TimeManager::Instance().GetCurrentTime();
 		if (now >= tl_EndTime)
 		{
 			return;
 		}
 
-		if (m_jobQueue == nullptr)
-			m_jobQueue = m_owner.lock()->m_globalQueue->Pop().get();
+		if (m_currentJobQueue == nullptr)
+			m_currentJobQueue = m_owner.lock()->m_globalQueue->Pop().get();
 
 		while (true)
 		{
@@ -26,10 +28,10 @@ namespace jam::utils::thrd
 			if (nowInner >= tl_EndTime)
 				break;
 
-			m_jobQueue->ExecuteFront();
+			m_currentJobQueue->ExecuteFront();
 		}
 
-		m_jobQueue = nullptr;
+		m_currentJobQueue = nullptr;
 
 		Steal();
 	}
@@ -41,7 +43,7 @@ namespace jam::utils::thrd
 		if (now >= tl_EndTime)
 			return;
 
-		job::JobQueue* jobQueue = m_owner.lock()->GetJobQueueFromAnotherWokrer();
+		job::JobQueue* jobQueue = m_owner.lock()->GetJobQueueFromAnotherWorker();
 		jobQueue->ExecuteBack();
 	}
 }

@@ -48,7 +48,7 @@ namespace jam::utils::thrd
 	{
 	}
 
-	job::JobQueue* ThreadPool::GetJobQueueFromAnotherWokrer()
+	job::JobQueue* ThreadPool::GetJobQueueFromAnotherWorker()
 	{
 		for (auto& worker : m_workers)
 		{

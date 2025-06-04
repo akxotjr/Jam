@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "SocketUtils.h"
+#include "NetAddress.h"
 
 namespace jam::net
 {
@@ -38,9 +39,8 @@ namespace jam::net
 			return ::WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nullptr, 0, WSA_FLAG_OVERLAPPED);
 		case EProtocolType::UDP:
 			return ::WSASocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, nullptr, 0, WSA_FLAG_OVERLAPPED);
-		default:
-			return INVALID_SOCKET;
 		}
+		return INVALID_SOCKET;
 	}
 
 	bool SocketUtils::SetLinger(SOCKET socket, uint16 onoff, uint16 linger)
@@ -78,6 +78,8 @@ namespace jam::net
 
 	bool SocketUtils::Bind(SOCKET socket, NetAddress netAddr)
 	{
+		//cout << "Bind : " << netAddr.GetSockAddr().sin_family << " , " << netAddr.GetSockAddr().sin_addr.s_addr << ", " << netAddr.GetSockAddr().sin_port << endl;
+
 		return SOCKET_ERROR != ::bind(socket, reinterpret_cast<const SOCKADDR*>(&netAddr.GetSockAddr()), sizeof(SOCKADDR_IN));
 	}
 
@@ -87,6 +89,8 @@ namespace jam::net
 		myAddress.sin_family = AF_INET;
 		myAddress.sin_addr.s_addr = ::htonl(INADDR_ANY);
 		myAddress.sin_port = ::htons(port);
+
+		//cout << "BindAnyAddress : " << myAddress.sin_family << " , " << myAddress.sin_addr.s_addr << ", " << myAddress.sin_port << endl;
 
 		return SOCKET_ERROR != ::bind(socket, reinterpret_cast<const SOCKADDR*>(&myAddress), sizeof(myAddress));
 	}

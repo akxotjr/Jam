@@ -17,20 +17,20 @@ namespace jam::utils::thrd
 		ThreadPool(int32 numThreads, WorkerFactory factory);
 		~ThreadPool();
 
-		void Run();
-		void Join();
+		void				Run();
+		void				Join();
 
-		void Stop();
-		void Attach();
+		void				Stop();
+		void				Attach();
 
-		job::JobQueue* GetJobQueueFromAnotherWokrer();
+		job::JobQueue*		GetJobQueueFromAnotherWorker();
 
 	private:
-		void InitTLS();
-		void DestoryTLS();
+		void				InitTLS();
+		void				DestoryTLS();
 
-		void Execute();
-		void DistributeReservedJob();
+		void				Execute();
+		void				DistributeReservedJob();
 
 	private:
 		xlist<std::thread>					m_threads;

@@ -4,7 +4,7 @@
 namespace jam::net
 {
 
-	UdpSession::UdpSession()
+	UdpSession::UdpSession() : m_recvBuffer(BUFFER_SIZE)
 	{
 	}
 
@@ -12,9 +12,10 @@ namespace jam::net
 	{
 	}
 
-	void UdpSession::Connect()
+	bool UdpSession::Connect()
 	{
-		ProcessHandshake();
+		SendHandshakeSyn();
+		return true;
 	}
 
 	void UdpSession::Disconnect(const WCHAR* cause)
@@ -27,9 +28,6 @@ namespace jam::net
 
 	void UdpSession::Send(Sptr<SendBuffer> sendBuffer)
 	{
-		if (IsConnected() == false)
-			return;
-
 		RegisterSend(sendBuffer);
 	}
 
@@ -50,51 +48,17 @@ namespace jam::net
 		Send(sendBuffer);
 	}
 
-	//HANDLE UdpSession::GetHandle()
-	//{
-	//	return reinterpret_cast<HANDLE>(GetService()->GetUdpSocket());
-	//}
-
-	//void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
-	//{
-	//	if (iocpEvent->m_eventType != EventType::Send)
-	//		return;
-
-	//	ProcessSend(numOfBytes);
-	//}
-
 	void UdpSession::RegisterSend(Sptr<SendBuffer> sendBuffer)
 	{
-		//if (IsConnected() == false)
-		//	return;
-
-		//m_sendEvent.Init();
-		//m_sendEvent.m_owner = shared_from_this();
-
-		//WSABUF wsaBuf;
-		//wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
-		//wsaBuf.len = static_cast<ULONG>(sendBuffer->WriteSize());
-
-		//DWORD numOfBytes = 0;
-		//SOCKADDR_IN remoteAddr = GetRemoteNetAddress().GetSockAddr();
-
-		//if (SOCKET_ERROR == ::WSASendTo(GetService()->GetUdpSocket(), &wsaBuf, 1, OUT &numOfBytes, 0, reinterpret_cast<SOCKADDR*>(&remoteAddr), sizeof(SOCKADDR_IN), &m_sendEvent, nullptr))
-		//{
-		//	const int32 errorCode = ::WSAGetLastError();
-		//	if (errorCode != WSA_IO_PENDING)
-		//	{
-		//		cout << "Handle Error : " << errorCode << '\n';
-		//		HandleError(errorCode);
-		//		//_sendEvent.owner = nullptr;
-		//		m_sendEvent.sendBuffers.clear();
-		//	}
-		//}
+		wstring temp = GetRemoteNetAddress().GetIpAddress();
+		
 
 		GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
 	}
 
 	void UdpSession::RegisterRecv()
 	{
+
 	}
 
 	void UdpSession::ProcessConnect()
@@ -179,29 +143,53 @@ namespace jam::net
 		return processLen;
 	}
 
-	void UdpSession::ProcessHandshake()
+	void UdpSession::ProcessHandshake(int32 numOfBytes, RecvBuffer& recvBuffer)
 	{
 		if (IsConnected())
 			return;
 
-		if (m_handshakeStage == 1)
+		m_recvBuffer = recvBuffer;
+		if (m_recvBuffer.OnWrite(numOfBytes) == false)
+			return;
+
+		BYTE* buf = m_recvBuffer.ReadPos();
+		if (!buf)
 		{
-			m_state = EUdpSessionState::Handshaking;
-
-			SendHandshakePacket();
+			std::cout << "[ProcessRecv] buffer is null\n";
+			return;
 		}
-		else if (m_handshakeStage == 2)
+
+		int32 dataSize = m_recvBuffer.DataSize();
+		if (dataSize != sizeof(UdpPacketHeader))
+			return;
+
+		m_recvBuffer.OnRead(dataSize);
+
+		UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(buf);
+
+		cout << "pktid : " << header->id << endl;
+
+		switch (static_cast<HandshakePacketId>(header->id))
 		{
-			
+		case HandshakePacketId::C_HANDSHAKE_SYN:
+			OnRecvHandshakeSyn();
+			break;
+		case HandshakePacketId::S_HANDSHAKE_SYNACK:
+			OnRecvHandshakeSynAck();
+			break;
+		case HandshakePacketId::C_HANDSHAKE_ACK:
+			OnRecvHandshakeAck();
+			break;
+		default:
+			break;
 		}
-
-		
-
-
 	}
 
 	void UdpSession::Update(double serverTime)
 	{
+		if (!IsConnected())
+			CheckRetryHandshake();
+
 		xvector<uint16> resendList;
 
 		{
@@ -235,6 +223,39 @@ namespace jam::net
 			{
 				std::cout << "[ReliableUDP] Re-sending seq: " << seq << "\n";
 				SendReliable(it->second.buffer, serverTime);
+			}
+		}
+	}
+
+	void UdpSession::CheckRetryHandshake()
+	{
+		double now = utils::TimeManager::Instance().GetCurrentTime();
+
+		if (m_state == EUdpSessionState::SynSent)
+		{
+			if (now - m_lastHandshakeTime > HANDSHAKE_RETRY_INTERVAL)
+			{
+				if (m_handshakeRetryCount >= MAX_HANDSHAKE_RETRIES)
+				{
+					std::cout << "[Handshake] Timeout. Disconnecting.\n";
+					Disconnect(L"Handshake timeout");
+					return;
+				}
+
+				std::cout << "[Handshake] Retrying SYN...\n";
+				SendHandshakeSyn();
+				m_handshakeRetryCount++;
+				m_lastHandshakeTime = now;
+			}
+		}
+
+		if (m_state == EUdpSessionState::SynAckSent)
+		{
+			if (now - m_lastHandshakeTime > HANDSHAKE_RETRY_INTERVAL * MAX_HANDSHAKE_RETRIES)
+			{
+				std::cout << "[Server] Handshake ACK timeout. Releasing session.\n";
+				Disconnect(L"Handshake ACK timeout");
+				return;
 			}
 		}
 	}
@@ -289,6 +310,15 @@ namespace jam::net
 		return bitfield;
 	}
 
+	HANDLE UdpSession::GetHandle()
+	{
+		return HANDLE();
+	}
+
+	void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
+	{
+	}
+
 	void UdpSession::HandleError(int32 errorCode)
 	{
 		switch (errorCode)
@@ -301,5 +331,103 @@ namespace jam::net
 			cout << "Handle Error : " << errorCode << '\n';
 			break;
 		}
+	}
+
+
+
+
+
+
+
+
+	void UdpSession::SendHandshakeSyn()
+	{
+		cout << "UdpSession::SendHandshakeSyn()\n";
+		if (m_state != EUdpSessionState::Disconnected)
+			return;
+
+		m_state = EUdpSessionState::SynSent;
+
+		auto buf = MakeHandshakePkt(HandshakePacketId::C_HANDSHAKE_SYN);
+		Send(buf);
+	}
+
+	void UdpSession::OnRecvHandshakeSynAck()
+	{
+		cout << "UdpSession::OnRecvHandshakeSynAck()\n";
+		if (m_state != EUdpSessionState::SynSent)
+			return;
+
+		m_state = EUdpSessionState::SynAckReceived;
+		SendHandshakeAck();
+	}
+
+	void UdpSession::SendHandshakeAck()
+	{
+		cout << "UdpSession::SendHandshakeAck()\n";
+		if (m_state != EUdpSessionState::SynAckReceived)
+			return;
+
+		auto buf = MakeHandshakePkt(HandshakePacketId::C_HANDSHAKE_ACK);
+		Send(buf);
+
+		m_state = EUdpSessionState::Connected;
+		m_connected.store(true);
+		OnConnected();
+	}
+
+	//-------------------------------------------------------------------
+
+
+	void UdpSession::OnRecvHandshakeSyn()
+	{
+		cout << "UdpSession::OnRecvHandshakeSyn()\n";
+
+		if (m_state != EUdpSessionState::Disconnected)
+			return;
+
+		m_state = EUdpSessionState::SynReceived;
+		SendHandshakeSynAck();
+	}
+
+	void UdpSession::SendHandshakeSynAck()
+	{
+		cout << "UdpSession::SendHandshakeSynAck()\n";
+
+		if (m_state != EUdpSessionState::SynReceived)
+			return;
+
+		m_state = EUdpSessionState::SynAckSent;
+		
+		auto buf = MakeHandshakePkt(HandshakePacketId::S_HANDSHAKE_SYNACK);
+		Send(buf);
+	}
+
+	void UdpSession::OnRecvHandshakeAck()
+	{
+		cout << "UdpSession::OnRecvHandshakeAck()\n";
+
+		if (m_state != EUdpSessionState::SynAckSent)
+			return;
+
+		m_state = EUdpSessionState::Connected;
+		m_connected.store(true);
+		OnConnected();
+	}
+
+	Sptr<SendBuffer> UdpSession::MakeHandshakePkt(HandshakePacketId id)
+	{
+		const uint16 pktId = static_cast<uint16>(id);
+		const uint16 pktSize = static_cast<uint16>(sizeof(UdpPacketHeader));
+
+		Sptr<SendBuffer> sendBuffer = SendBufferManager::Instance().Open(pktSize);
+		UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
+
+		header->id = pktId;
+		header->size = pktSize;
+
+		sendBuffer->Close(pktSize);
+
+		return sendBuffer;
 	}
 }
