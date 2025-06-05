@@ -9,9 +9,15 @@ namespace jam::utils::thrd
 	{
 	}
 
+	void Worker::Work()
+	{
+		if (m_work)
+			m_work();
+	}
+
 	void Worker::Execute()
 	{
-		Work();
+
 
 		const double now = TimeManager::Instance().GetCurrentTime();
 		if (now >= tl_EndTime)

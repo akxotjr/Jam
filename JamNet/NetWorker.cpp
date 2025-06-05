@@ -9,8 +9,5 @@ namespace jam::net
 	NetWorker::~NetWorker()
 	{
 	}
-	void NetWorker::Work()
-	{
 
-	}
 }

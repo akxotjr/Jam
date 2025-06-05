@@ -33,7 +33,7 @@ namespace jam::net
 
 	void UdpSession::SendReliable(Sptr<SendBuffer> sendBuffer, double timestamp)
 	{
-		uint16 seq = _sendSeq++;
+		uint16 seq = m_sendSeq++;
 
 		UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
 		header->sequence = seq;
@@ -42,7 +42,7 @@ namespace jam::net
 
 		{
 			WRITE_LOCK
-			_pendingAckMap[seq] = pkt;
+			m_pendingAckMap[seq] = pkt;
 		}
 
 		Send(sendBuffer);
@@ -50,9 +50,6 @@ namespace jam::net
 
 	void UdpSession::RegisterSend(Sptr<SendBuffer> sendBuffer)
 	{
-		wstring temp = GetRemoteNetAddress().GetIpAddress();
-		
-
 		GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
 	}
 
@@ -113,7 +110,6 @@ namespace jam::net
 		}
 
 		m_recvBuffer.Clean();
-		RegisterRecv();
 	}
 
 	int32 UdpSession::IsParsingPacket(BYTE* buffer, const int32 len)
@@ -169,15 +165,15 @@ namespace jam::net
 
 		cout << "pktid : " << header->id << endl;
 
-		switch (static_cast<HandshakePacketId>(header->id))
+		switch (static_cast<ERudpPacketId>(header->id))
 		{
-		case HandshakePacketId::C_HANDSHAKE_SYN:
+		case ERudpPacketId::C_HANDSHAKE_SYN:
 			OnRecvHandshakeSyn();
 			break;
-		case HandshakePacketId::S_HANDSHAKE_SYNACK:
+		case ERudpPacketId::S_HANDSHAKE_SYNACK:
 			OnRecvHandshakeSynAck();
 			break;
-		case HandshakePacketId::C_HANDSHAKE_ACK:
+		case ERudpPacketId::C_HANDSHAKE_ACK:
 			OnRecvHandshakeAck();
 			break;
 		default:
@@ -195,11 +191,11 @@ namespace jam::net
 		{
 			WRITE_LOCK
 
-			for (auto& [seq, pkt] : _pendingAckMap)
+			for (auto& [seq, pkt] : m_pendingAckMap)
 			{
 				double elapsed = serverTime - pkt.timestamp;
 
-				if (elapsed >= _resendIntervalMs)
+				if (elapsed >= m_resendIntervalMs)
 				{
 					pkt.timestamp = serverTime;
 					pkt.retryCount++;
@@ -218,8 +214,8 @@ namespace jam::net
 
 		for (uint16 seq : resendList)
 		{
-			auto it = _pendingAckMap.find(seq);
-			if (it != _pendingAckMap.end())
+			auto it = m_pendingAckMap.find(seq);
+			if (it != m_pendingAckMap.end())
 			{
 				std::cout << "[ReliableUDP] Re-sending seq: " << seq << "\n";
 				SendReliable(it->second.buffer, serverTime);
@@ -270,10 +266,10 @@ namespace jam::net
 
 			if (i == 0 || (bitfield & (1 << (i - 1))))
 			{
-				auto it = _pendingAckMap.find(ackSeq);
-				if (it != _pendingAckMap.end())
+				auto it = m_pendingAckMap.find(ackSeq);
+				if (it != m_pendingAckMap.end())
 				{
-					_pendingAckMap.erase(it);
+					m_pendingAckMap.erase(it);
 				}
 			}
 		}
@@ -281,14 +277,14 @@ namespace jam::net
 
 	bool UdpSession::CheckAndRecordReceiveHistory(uint16 seq)
 	{
-		if (!IsSeqGreater(seq, _latestSeq - WINDOW_SIZE))
+		if (!IsSeqGreater(seq, m_latestSeq - WINDOW_SIZE))
 			return false;
 
-		if (_receiveHistory.test(seq % WINDOW_SIZE))
+		if (m_receiveHistory.test(seq % WINDOW_SIZE))
 			return false;
 
-		_receiveHistory.set(seq % WINDOW_SIZE);
-		_latestSeq = IsSeqGreater(seq, _latestSeq) ? seq : _latestSeq;
+		m_receiveHistory.set(seq % WINDOW_SIZE);
+		m_latestSeq = IsSeqGreater(seq, m_latestSeq) ? seq : m_latestSeq;
 		return true;
 	}
 
@@ -302,7 +298,7 @@ namespace jam::net
 			if (!IsSeqGreater(latestSeq, seq))
 				continue;
 
-			if (_receiveHistory.test(seq % WINDOW_SIZE))
+			if (m_receiveHistory.test(seq % WINDOW_SIZE))
 			{
 				bitfield |= (1 << (i - 1));
 			}
@@ -348,7 +344,7 @@ namespace jam::net
 
 		m_state = EUdpSessionState::SynSent;
 
-		auto buf = MakeHandshakePkt(HandshakePacketId::C_HANDSHAKE_SYN);
+		auto buf = MakeHandshakePkt(ERudpPacketId::C_HANDSHAKE_SYN);
 		Send(buf);
 	}
 
@@ -368,11 +364,14 @@ namespace jam::net
 		if (m_state != EUdpSessionState::SynAckReceived)
 			return;
 
-		auto buf = MakeHandshakePkt(HandshakePacketId::C_HANDSHAKE_ACK);
+		auto buf = MakeHandshakePkt(ERudpPacketId::C_HANDSHAKE_ACK);
 		Send(buf);
 
 		m_state = EUdpSessionState::Connected;
 		m_connected.store(true);
+
+		GetService()->CompleteUdpHandshake(GetRemoteNetAddress());
+
 		OnConnected();
 	}
 
@@ -399,7 +398,7 @@ namespace jam::net
 
 		m_state = EUdpSessionState::SynAckSent;
 		
-		auto buf = MakeHandshakePkt(HandshakePacketId::S_HANDSHAKE_SYNACK);
+		auto buf = MakeHandshakePkt(ERudpPacketId::S_HANDSHAKE_SYNACK);
 		Send(buf);
 	}
 
@@ -412,10 +411,13 @@ namespace jam::net
 
 		m_state = EUdpSessionState::Connected;
 		m_connected.store(true);
+
+		GetService()->CompleteUdpHandshake(GetRemoteNetAddress());
+
 		OnConnected();
 	}
 
-	Sptr<SendBuffer> UdpSession::MakeHandshakePkt(HandshakePacketId id)
+	Sptr<SendBuffer> UdpSession::MakeHandshakePkt(ERudpPacketId id)
 	{
 		const uint16 pktId = static_cast<uint16>(id);
 		const uint16 pktSize = static_cast<uint16>(sizeof(UdpPacketHeader));

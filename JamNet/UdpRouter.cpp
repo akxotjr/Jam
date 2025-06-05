@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "UdpRouter.h"
 
+#pragma warning(disable : 4996)
+
 namespace jam::net
 {
     UdpRouter::UdpRouter() : m_recvBuffer(BUFFER_SIZE)
@@ -88,6 +90,13 @@ namespace jam::net
 
         DWORD numOfBytes = 0;
         SOCKADDR_IN remoteAddr = remoteAddress.GetSockAddr();
+
+        cout << "WSABUF size: " << wsaBuf.len << endl;
+        cout << "WSABUF ptr : " << static_cast<void*>(wsaBuf.buf) << endl;
+        cout << "remoteAddr port: " << ntohs(remoteAddr.sin_port) << endl;
+        cout << "remoteAddr ip: " << inet_ntoa(remoteAddr.sin_addr) << endl;
+        cout << "m_socket: " << m_socket << endl;
+
 
         if (SOCKET_ERROR == ::WSASendTo(m_socket, &wsaBuf, 1, OUT &numOfBytes, 0, reinterpret_cast<SOCKADDR*>(&remoteAddr), sizeof(SOCKADDR_IN), &m_sendEvent, nullptr))
         {

@@ -81,6 +81,8 @@ namespace jam::utils::thrd
 	{
 		while (true)
 		{
+			tl_Worker->Work();
+
 			DistributeReservedJob();
 
 			while (true)

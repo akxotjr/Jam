@@ -44,16 +44,19 @@ namespace jam::net
 		Timeout,
 	};
 
-
-	enum class HandshakePacketId : uint16
+	enum class ERudpPacketId : uint8
 	{
 		C_HANDSHAKE_SYN = 1,
 		S_HANDSHAKE_SYN,
 		C_HANDSHAKE_SYNACK,
 		S_HANDSHAKE_SYNACK,
 		C_HANDSHAKE_ACK,
-		S_HANDSHAKE_ACK
+		S_HANDSHAKE_ACK,
+
+		C_ACK ,
+		S_ACK,
 	};
+
 
 	constexpr int32		WINDOW_SIZE = 1024;
 	constexpr int32		BITFIELD_SIZE = 32;
@@ -119,27 +122,27 @@ namespace jam::net
 		/** Client **/
 
 
-		void SendHandshakeSyn();
-		void OnRecvHandshakeSynAck();
-		void SendHandshakeAck();
+		void									SendHandshakeSyn();
+		void									OnRecvHandshakeSynAck();
+		void									SendHandshakeAck();
 
 		/** Server **/
-		void OnRecvHandshakeSyn();
-		void SendHandshakeSynAck();
-		void OnRecvHandshakeAck();
+		void									OnRecvHandshakeSyn();
+		void									SendHandshakeSynAck();
+		void									OnRecvHandshakeAck();
 
-		Sptr<SendBuffer> MakeHandshakePkt(HandshakePacketId id);
+		Sptr<SendBuffer>						MakeHandshakePkt(ERudpPacketId id);
 
 	private:
 		USE_LOCK
 
 	protected:
-		unordered_map<uint16, PendingPacket>	_pendingAckMap;
-		bitset<1024>							_receiveHistory;
+		unordered_map<uint16, PendingPacket>	m_pendingAckMap;
+		bitset<1024>							m_receiveHistory;
 
-		uint16									_latestSeq = 0;
-		uint16									_sendSeq = 1;			// 다음 보낼 sequence
-		float									_resendIntervalMs = 0.1f; // 재전송 대기 시간
+		uint16									m_latestSeq = 0;
+		uint16									m_sendSeq = 1;			// 다음 보낼 sequence
+		double									m_resendIntervalMs = 0.1; // 재전송 대기 시간
 
 	private:
 		EUdpSessionState						m_state = EUdpSessionState::Disconnected;
@@ -148,8 +151,6 @@ namespace jam::net
 
 		RecvBuffer								m_recvBuffer;
 
-
-		// UdpSession 멤버 변수
 		int32									m_handshakeRetryCount = 0;
 		double									m_lastHandshakeTime = 0.0;
 	};

@@ -13,7 +13,8 @@ namespace jam::utils::thrd
 		Worker();
 		virtual ~Worker() = default;
 
-		void SetWork(Function work) { m_work = work; }
+		void						SetWork(Function work) { m_work = work; }
+		void						Work();
 		void						Execute();
 		job::JobQueue*				GetCurrentJobQueue() const { return m_currentJobQueue; }
 

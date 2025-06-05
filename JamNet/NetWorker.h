@@ -9,8 +9,6 @@ namespace jam::net
 		NetWorker();
 		virtual ~NetWorker() override;
 
-		virtual void Work() override;
-
 	private:
 
 	};
