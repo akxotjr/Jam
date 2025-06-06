@@ -147,19 +147,27 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Collider.h" />
     <ClInclude Include="JamPxPCH.h" />
+    <ClInclude Include="JamSimulationCallback.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="PhysicsManager.h" />
     <ClInclude Include="PhysicsWorker.h" />
+    <ClInclude Include="PhysicsWorld.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Collider.cpp" />
     <ClCompile Include="JamPxPCH.cpp" />
+    <ClCompile Include="JamSimulationCallback.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="PhysicsManager.cpp" />
     <ClCompile Include="PhysicsWorker.cpp" />
+    <ClCompile Include="PhysicsWorld.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

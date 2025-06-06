@@ -19,24 +19,27 @@ namespace jam::net
         if (m_service.lock() == nullptr)
             return false;
 
+        auto ser = m_service.lock();
+        if (ser == nullptr) return false;
+
         m_socket = SocketUtils::CreateSocket(EProtocolType::UDP);
         if (m_socket == INVALID_SOCKET)
             return false;
 
-        if (m_service.lock()->GetIocpCore()->Register(shared_from_this()) == false)
+        if (ser->GetIocpCore()->Register(shared_from_this()) == false)
             return false;
 
         if (SocketUtils::SetReuseAddress(m_socket, true) == false)
             return false;
 
-        if (m_service.lock()->m_peer == EPeerType::Client)
+        if (ser->m_peer == EPeerType::Client)
         {
             if (SocketUtils::BindAnyAddress(m_socket, 0) == false)
                 return false;
         }
-        else if (m_service.lock()->m_peer == EPeerType::Server)
+        else if (ser->m_peer == EPeerType::Server)
         {
-            if (SocketUtils::Bind(m_socket, m_service.lock()->GetLocalUdpNetAddress()) == false)
+            if (SocketUtils::Bind(m_socket, ser->GetLocalUdpNetAddress()) == false)
                 return false;
         }
 
@@ -62,14 +65,22 @@ namespace jam::net
         if (numOfBytes == 0)
             return;
 
-        if (iocpEvent->m_eventType == EventType::Recv)
+        switch (iocpEvent->m_eventType)
         {
-            cout << "Dispatch : Recv\n";
-            ProcessRecv(numOfBytes);
+        case EventType::Recv:
+        {
+            RecvEvent* recvEvent = static_cast<RecvEvent*>(iocpEvent);
+            ProcessRecv(numOfBytes, recvEvent->remoteAddress);
+            break;
         }
-        else if (iocpEvent->m_eventType == EventType::Send)
+        case EventType::Send:
         {
-            ProcessSend(numOfBytes);
+            SendEvent* sendEvent = static_cast<SendEvent*>(iocpEvent);
+            ProcessSend(numOfBytes, sendEvent->remoteAddress);
+            break;
+        }
+        default:
+            break;
         }
     }
 
@@ -82,23 +93,25 @@ namespace jam::net
         //debug
        // cout << "[RegisterSend] to : " << remoteAddress.GetSockAddr().sin_family << " , " << remoteAddress.GetSockAddr().sin_addr.s_addr << ", " << remoteAddress.GetSockAddr().sin_port << endl;
 
-    	wstring ip = remoteAddress.GetIpAddress();
-        uint16 port = remoteAddress.GetPort();
+    	//wstring ip = remoteAddress.GetIpAddress();
+     //   uint16 port = remoteAddress.GetPort();
 
         //wcout << L"[UdpRouter::Register] from : " <<  << L" , " << port << endl;
-        wcout << L"[UdpRouter::Register] to : " << ip << L" , " << port << endl;
+        //wcout << L"[UdpRouter::Register] to : " << ip << L" , " << port << endl;
 
         DWORD numOfBytes = 0;
-        SOCKADDR_IN remoteAddr = remoteAddress.GetSockAddr();
+       // SOCKADDR_IN remoteAddr = remoteAddress.GetSockAddr();
 
-        cout << "WSABUF size: " << wsaBuf.len << endl;
-        cout << "WSABUF ptr : " << static_cast<void*>(wsaBuf.buf) << endl;
-        cout << "remoteAddr port: " << ntohs(remoteAddr.sin_port) << endl;
-        cout << "remoteAddr ip: " << inet_ntoa(remoteAddr.sin_addr) << endl;
-        cout << "m_socket: " << m_socket << endl;
+        m_sendEvent.remoteAddress = remoteAddress;
+
+        //cout << "WSABUF size: " << wsaBuf.len << endl;
+        //cout << "WSABUF ptr : " << static_cast<void*>(wsaBuf.buf) << endl;
+        //cout << "remoteAddr port: " << ntohs(remoteAddr.sin_port) << endl;
+        //cout << "remoteAddr ip: " << inet_ntoa(remoteAddr.sin_addr) << endl;
+        //cout << "m_socket: " << m_socket << endl;
 
 
-        if (SOCKET_ERROR == ::WSASendTo(m_socket, &wsaBuf, 1, OUT &numOfBytes, 0, reinterpret_cast<SOCKADDR*>(&remoteAddr), sizeof(SOCKADDR_IN), &m_sendEvent, nullptr))
+        if (SOCKET_ERROR == ::WSASendTo(m_socket, &wsaBuf, 1, OUT &numOfBytes, 0, reinterpret_cast<SOCKADDR*>(&m_sendEvent.remoteAddress), sizeof(SOCKADDR_IN), &m_sendEvent, nullptr))
         {
             const int32 errorCode = ::WSAGetLastError();
             if (errorCode != WSA_IO_PENDING)
@@ -111,16 +124,16 @@ namespace jam::net
 
     void UdpRouter::RegisterRecv()
     {
-        int32 fromLen = sizeof(m_remoteSockAddr);
+        int32 fromLen = sizeof(SOCKADDR_IN);
 
-        WSABUF wsaBuf = {};
+        WSABUF wsaBuf;
         wsaBuf.len = m_recvBuffer.FreeSize();
         wsaBuf.buf = reinterpret_cast<CHAR*>(m_recvBuffer.WritePos());
 
         DWORD numOfBytes = 0;
         DWORD flags = 0;
 
-        if (SOCKET_ERROR == ::WSARecvFrom(m_socket, &wsaBuf, 1, OUT &numOfBytes, OUT &flags, reinterpret_cast<SOCKADDR*>(&m_remoteSockAddr), OUT & fromLen, &m_recvEvent, nullptr))
+        if (SOCKET_ERROR == ::WSARecvFrom(m_socket, &wsaBuf, 1, OUT &numOfBytes, OUT &flags, reinterpret_cast<SOCKADDR*>(&m_recvEvent.remoteAddress.GetSockAddr()), OUT& fromLen, &m_recvEvent, nullptr))
         {
             const int errorCode = ::WSAGetLastError();
             if (errorCode != WSA_IO_PENDING)
@@ -130,28 +143,28 @@ namespace jam::net
         }
     }
 
-    void UdpRouter::ProcessSend(int32 numOfBytes)
+    void UdpRouter::ProcessSend(int32 numOfBytes, const NetAddress& remoteAddress)
     {
         if (numOfBytes == 0)    
-            return;     // todo
+            return;
 
-        auto udpSession = m_service.lock()->FindUpdSession(NetAddress(m_remoteSockAddr));
+        auto udpSession = m_service.lock()->FindSessionInConnected(remoteAddress);
         if (udpSession == nullptr)
             return;
 
         udpSession->ProcessSend(numOfBytes);
     }
 
-    void UdpRouter::ProcessRecv(int32 numOfBytes)
+    void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress)
     {
         NetAddress from(m_remoteSockAddr);
 
-        wstring ip = from.GetIpAddress();
-        uint16 port = from.GetPort();
+        //wstring ip = from.GetIpAddress();
+        //uint16 port = from.GetPort();
 
-        wcout << L"[UdpRouter::ProcessRecv] from : " << ip << L" , " << port << endl;
+        //wcout << L"[UdpRouter::ProcessRecv] from : " << ip << L" , " << port << endl;
 
-        m_service.lock()->ProcessUdpSession(from, numOfBytes, m_recvBuffer);
+        m_service.lock()->ProcessUdpSession(remoteAddress, numOfBytes, m_recvBuffer);
         RegisterRecv();
     }
 

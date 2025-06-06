@@ -63,7 +63,7 @@
     <ClCompile Include="JamUtilsPCH.cpp">
       <Filter>99.Header</Filter>
     </ClCompile>
-    <ClCompile Include="ThreadPool.cpp">
+    <ClCompile Include="WorkerPool.cpp">
       <Filter>02.Thread</Filter>
     </ClCompile>
     <ClCompile Include="LockDeque.cpp">
@@ -143,7 +143,7 @@
     <ClInclude Include="Values.h">
       <Filter>99.Header</Filter>
     </ClInclude>
-    <ClInclude Include="ThreadPool.h">
+    <ClInclude Include="WorkerPool.h">
       <Filter>02.Thread</Filter>
     </ClInclude>
     <ClInclude Include="LockDeque.h">

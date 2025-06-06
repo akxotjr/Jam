@@ -8,6 +8,9 @@
     <Filter Include="01">
       <UniqueIdentifier>{9b1d64c8-b41d-43c2-b059-ca7cfc6b92b3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Callback">
+      <UniqueIdentifier>{59b77410-e398-4b51-b69d-1167e049ba2f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -19,6 +22,18 @@
     <ClInclude Include="PhysicsWorker.h">
       <Filter>01</Filter>
     </ClInclude>
+    <ClInclude Include="PhysicsManager.h">
+      <Filter>01</Filter>
+    </ClInclude>
+    <ClInclude Include="JamSimulationCallback.h">
+      <Filter>Callback</Filter>
+    </ClInclude>
+    <ClInclude Include="Collider.h">
+      <Filter>01</Filter>
+    </ClInclude>
+    <ClInclude Include="PhysicsWorld.h">
+      <Filter>01</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -28,6 +43,18 @@
       <Filter>99.Header</Filter>
     </ClCompile>
     <ClCompile Include="PhysicsWorker.cpp">
+      <Filter>01</Filter>
+    </ClCompile>
+    <ClCompile Include="PhysicsManager.cpp">
+      <Filter>01</Filter>
+    </ClCompile>
+    <ClCompile Include="JamSimulationCallback.cpp">
+      <Filter>Callback</Filter>
+    </ClCompile>
+    <ClCompile Include="Collider.cpp">
+      <Filter>01</Filter>
+    </ClCompile>
+    <ClCompile Include="PhysicsWorld.cpp">
       <Filter>01</Filter>
     </ClCompile>
   </ItemGroup>

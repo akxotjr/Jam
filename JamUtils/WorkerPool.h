@@ -7,15 +7,15 @@ namespace jam::utils::thrd
 	class Worker;
 	class Scheduler;
 	
-	class ThreadPool
+	class WorkerPool
 	{
 		friend class Worker;
 
 		using WorkerFactory = std::function<Uptr<Worker>()>;
 
 	public:
-		ThreadPool(int32 numThreads, WorkerFactory factory);
-		~ThreadPool();
+		WorkerPool(int32 numThreads, WorkerFactory factory);
+		~WorkerPool();
 
 		void				Run();
 		void				Join();

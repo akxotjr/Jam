@@ -22,8 +22,8 @@ namespace jam::net
 		void					RegisterSend(Sptr<SendBuffer> sendBuffer, const NetAddress& remoteAddress);
 		void					RegisterRecv();
 
-		void					ProcessSend(int32 numOfBytes);
-		void					ProcessRecv(int32 numOfBytes);
+		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddress);
+		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress);
 
 		void					HandleError(int32 errorCode);
 

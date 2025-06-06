@@ -1,5 +1,6 @@
 #pragma once
 #include "IocpCore.h"
+#include "NetAddress.h"
 
 namespace jam::net
 {
@@ -28,8 +29,8 @@ namespace jam::net
 		void				Init();
 
 	public:
-		EventType			m_eventType;
-		Sptr<IocpObject>	m_owner;
+		EventType					m_eventType;
+		Sptr<IocpObject>			m_owner;
 	};
 
 	/*----------------
@@ -62,7 +63,7 @@ namespace jam::net
 		AcceptEvent() : IocpEvent(EventType::Accept) {}
 
 	public:
-		Sptr<TcpSession> session = nullptr;
+		Sptr<TcpSession>			session = nullptr;
 	};
 
 	/*----------------
@@ -73,6 +74,9 @@ namespace jam::net
 	{
 	public:
 		RecvEvent() : IocpEvent(EventType::Recv) {}
+
+	public:
+		NetAddress					remoteAddress;
 	};
 
 	/*----------------
@@ -85,7 +89,8 @@ namespace jam::net
 		SendEvent() : IocpEvent(EventType::Send) {}
 
 	public:
-		xvector<Sptr<SendBuffer>> sendBuffers;
+		xvector<Sptr<SendBuffer>>	sendBuffers;
+		NetAddress					remoteAddress;
 	};
 }
 

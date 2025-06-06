@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "UdpSession.h"
 
+#include "BufferReader.h"
+#include "BufferWriter.h"
+
 namespace jam::net
 {
 
@@ -28,7 +31,7 @@ namespace jam::net
 
 	void UdpSession::Send(Sptr<SendBuffer> sendBuffer)
 	{
-		RegisterSend(sendBuffer);
+		GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
 	}
 
 	void UdpSession::SendReliable(Sptr<SendBuffer> sendBuffer, double timestamp)
@@ -48,15 +51,15 @@ namespace jam::net
 		Send(sendBuffer);
 	}
 
-	void UdpSession::RegisterSend(Sptr<SendBuffer> sendBuffer)
-	{
-		GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
-	}
+	//void UdpSession::RegisterSend(Sptr<SendBuffer> sendBuffer)
+	//{
+	//	GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
+	//}
 
-	void UdpSession::RegisterRecv()
-	{
+	//void UdpSession::RegisterRecv()
+	//{
 
-	}
+	//}
 
 	void UdpSession::ProcessConnect()
 	{
@@ -86,29 +89,37 @@ namespace jam::net
 
 	void UdpSession::ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer)
 	{
+		//m_recvBuffer = recvBuffer;
+		//if (m_recvBuffer.OnWrite(numOfBytes) == false)
+		//{
+		//	std::cout << "[ProcessRecv] OnWrite failed! FreeSize: " << m_recvBuffer.FreeSize() << ", numOfBytes: " << numOfBytes << "\n";
+		//	return;
+		//}
+
+		//BYTE* buf = m_recvBuffer.ReadPos();
+		//if (!buf)
+		//{
+		//	std::cout << "[ProcessRecv] buffer is null\n";
+		//	return;
+		//}
+
+		//int32 dataSize = m_recvBuffer.DataSize();
+		//int32 processLen = IsParsingPacket(buf, dataSize);
+
+		//if (processLen < 0 || dataSize < processLen || m_recvBuffer.OnRead(processLen) == false)
+		//{
+		//	std::cout << "[ProcessRecv] Invalid processLen: " << processLen << ", dataSize: " << dataSize << "\n";
+		//	return;
+		//}
+
+		//m_recvBuffer.Clean();
+
 		m_recvBuffer = recvBuffer;
-		if (m_recvBuffer.OnWrite(numOfBytes) == false)
-		{
-			std::cout << "[ProcessRecv] OnWrite failed! FreeSize: " << m_recvBuffer.FreeSize() << ", numOfBytes: " << numOfBytes << "\n";
-			return;
-		}
-
+		if (!m_recvBuffer.OnWrite(numOfBytes)) return;
 		BYTE* buf = m_recvBuffer.ReadPos();
-		if (!buf)
-		{
-			std::cout << "[ProcessRecv] buffer is null\n";
-			return;
-		}
-
-		int32 dataSize = m_recvBuffer.DataSize();
-		int32 processLen = IsParsingPacket(buf, dataSize);
-
-		if (processLen < 0 || dataSize < processLen || m_recvBuffer.OnRead(processLen) == false)
-		{
-			std::cout << "[ProcessRecv] Invalid processLen: " << processLen << ", dataSize: " << dataSize << "\n";
-			return;
-		}
-
+		int32 totalSize = m_recvBuffer.DataSize();
+		int32 processed = ParseAndDispatchPackets(buf, totalSize);
+		if (processed < 0 || totalSize < processed || !m_recvBuffer.OnRead(processed)) return;
 		m_recvBuffer.Clean();
 	}
 
@@ -139,32 +150,49 @@ namespace jam::net
 		return processLen;
 	}
 
-	void UdpSession::ProcessHandshake(int32 numOfBytes, RecvBuffer& recvBuffer)
+	int32 UdpSession::ParseAndDispatchPackets(BYTE* buffer, int32 len)
 	{
-		if (IsConnected())
-			return;
-
-		m_recvBuffer = recvBuffer;
-		if (m_recvBuffer.OnWrite(numOfBytes) == false)
-			return;
-
-		BYTE* buf = m_recvBuffer.ReadPos();
-		if (!buf)
+		int32 processed = 0;
+		while (processed < len)
 		{
-			std::cout << "[ProcessRecv] buffer is null\n";
-			return;
+			int32 remain = len - processed;
+			if (remain < sizeof(UdpPacketHeader)) break;
+
+			UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(buffer + processed);
+			if (remain < header->size || header->size < sizeof(UdpPacketHeader)) break;
+
+			DispatchPacket(header, header->size);
+			processed += header->size;
 		}
+		return processed;
+	}
 
-		int32 dataSize = m_recvBuffer.DataSize();
-		if (dataSize != sizeof(UdpPacketHeader))
-			return;
+	void UdpSession::DispatchPacket(UdpPacketHeader* header, uint32 len)
+	{
+		switch (static_cast<ERudpPacketId>(header->id))
+		{
+		case ERudpPacketId::ACK:
+			OnRecvAck(reinterpret_cast<BYTE*>(header), len);
+			break;
+		case ERudpPacketId::C_HANDSHAKE_SYN:
+		case ERudpPacketId::S_HANDSHAKE_SYNACK:
+		case ERudpPacketId::C_HANDSHAKE_ACK:
+			ProcessHandshake(header);
+			break;
+		case ERudpPacketId::APP_DATA:
+			if (header->sequence > 0 && CheckAndRecordReceiveHistory(header->sequence))
+			{
+				SendAck(header->sequence);
+				OnRecvAppData(reinterpret_cast<BYTE*>(header), len);
+			}
+			break;
+		default:
+			break;
+		}
+	}
 
-		m_recvBuffer.OnRead(dataSize);
-
-		UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(buf);
-
-		cout << "pktid : " << header->id << endl;
-
+	void UdpSession::ProcessHandshake(UdpPacketHeader* header)
+	{
 		switch (static_cast<ERudpPacketId>(header->id))
 		{
 		case ERudpPacketId::C_HANDSHAKE_SYN:
@@ -179,6 +207,44 @@ namespace jam::net
 		default:
 			break;
 		}
+		//if (IsConnected())
+		//	return;
+
+		//m_recvBuffer = recvBuffer;
+		//if (m_recvBuffer.OnWrite(numOfBytes) == false)
+		//	return;
+
+		//BYTE* buf = m_recvBuffer.ReadPos();
+		//if (!buf)
+		//{
+		//	std::cout << "[ProcessRecv] buffer is null\n";
+		//	return;
+		//}
+
+		//int32 dataSize = m_recvBuffer.DataSize();
+		//if (dataSize != sizeof(UdpPacketHeader))
+		//	return;
+
+		//m_recvBuffer.OnRead(dataSize);
+
+		//UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(buf);
+
+		//cout << "pktid : " << header->id << endl;
+
+		//switch (static_cast<ERudpPacketId>(header->id))
+		//{
+		//case ERudpPacketId::C_HANDSHAKE_SYN:
+		//	OnRecvHandshakeSyn();
+		//	break;
+		//case ERudpPacketId::S_HANDSHAKE_SYNACK:
+		//	OnRecvHandshakeSynAck();
+		//	break;
+		//case ERudpPacketId::C_HANDSHAKE_ACK:
+		//	OnRecvHandshakeAck();
+		//	break;
+		//default:
+		//	break;
+		//}
 	}
 
 	void UdpSession::Update(double serverTime)
@@ -331,11 +397,6 @@ namespace jam::net
 
 
 
-
-
-
-
-
 	void UdpSession::SendHandshakeSyn()
 	{
 		cout << "UdpSession::SendHandshakeSyn()\n";
@@ -432,4 +493,51 @@ namespace jam::net
 
 		return sendBuffer;
 	}
+
+
+	Sptr<SendBuffer> UdpSession::MakeAckPkt(uint16 seq)
+	{
+		const uint16 pktSize = sizeof(UdpPacketHeader) + sizeof(AckPacket);
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(pktSize);
+		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		UdpPacketHeader* header = bw.Reserve<UdpPacketHeader>();
+		header->id = static_cast<uint16>(ERudpPacketId::ACK);
+		header->size = pktSize;
+		header->sequence = seq;
+
+		bw << seq << GenerateAckBitfield(seq);
+
+		buf->Close(bw.WriteSize());
+		return buf;
+	}
+
+	void UdpSession::SendAck(uint16 seq)
+	{
+		Send(MakeAckPkt(seq));
+	}
+
+
+	void UdpSession::OnRecvAck(BYTE* data, uint32 len)
+	{
+		BufferReader br(data, len);
+
+		UdpPacketHeader header;
+		br >> header;
+
+		uint16 latestSeq;
+		uint32 bitfield;
+		br >> latestSeq >> bitfield;
+
+		HandleAck(latestSeq, bitfield);
+	}
+
+
+	void UdpSession::OnRecvAppData(BYTE* data, uint32 len)
+	{
+		// 응용 계층 패킷 처리
+		OnRecv(data, len);
+	}
+
+
 }

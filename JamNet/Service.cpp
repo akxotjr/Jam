@@ -24,35 +24,25 @@ namespace jam::net
 		// TODO
 	}
 
-	//void Service::Broadcast(Sptr<SendBuffer> sendBuffer)
-	//{
-	//	//WRITE_LOCK;
-	//	//for (const auto& session : _sessions)
-	//	//{
-	//	//	session->Send(sendBuffer);
-	//	//}
-	//}
-
 	Sptr<Session> Service::CreateSession(EProtocolType protocol)
 	{
 		Sptr<Session> session = nullptr;
-		if (protocol == EProtocolType::TCP)
+
+		switch (protocol)
 		{
+		case EProtocolType::TCP:
 			session = m_tcpSessionFactory();
 			if (m_iocpCore->Register(session) == false)
 				return nullptr;
-		}
-		else if (protocol == EProtocolType::UDP)
-		{
+			session->SetRemoteNetAddress(GetRemoteTcpNetAddress());
+			break;
+		case EProtocolType::UDP:
 			session = m_udpSessionFactory();
+			session->SetRemoteNetAddress(GetRemoteUdpNetAddress());
+			break;
 		}
 
 		session->SetService(shared_from_this());
-
-		if (protocol == EProtocolType::TCP)
-			session->SetRemoteNetAddress(GetRemoteTcpNetAddress());
-		else if (protocol == EProtocolType::UDP)
-			session->SetRemoteNetAddress(GetRemoteUdpNetAddress());
 
 		return session;
 	}
@@ -60,6 +50,10 @@ namespace jam::net
 	void Service::AddTcpSession(Sptr<TcpSession> session)
 	{
 		WRITE_LOCK
+
+		auto addr = session->GetRemoteNetAddress();
+		if (m_tcpSessions.contains(addr))
+			return;
 
 		m_tcpSessionCount++;
 		m_tcpSessions[session->GetRemoteNetAddress()] = session;
@@ -77,8 +71,12 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
+		auto addr = session->GetRemoteNetAddress();
+		if (m_udpSessions.contains(addr))
+			return;
+
 		m_udpSessionCount++;
-		m_udpSessions[session->GetRemoteNetAddress()] = session;
+		m_udpSessions[addr] = session;
 	}
 
 	void Service::ReleaseUdpSession(Sptr<UdpSession> session)
@@ -96,28 +94,6 @@ namespace jam::net
 		m_handshakingUdpSessions[session->GetRemoteNetAddress()] = session;
 	}
 
-	//Sptr<UdpSession> Service::FindOrCreateUdpSession(const NetAddress& from)
-	//{
-	//	WRITE_LOCK
-
-	//	if (m_udpSessions.contains(from))
-	//		return m_udpSessions[from];
-
-	//	if (m_pendingUdpSessions.contains(from))
-	//		return m_pendingUdpSessions[from];
-
-	//	auto newSession = static_pointer_cast<UdpSession>(CreateSession(EProtocolType::UDP));
-	//	if (newSession == nullptr)
-	//		return nullptr;
-
-	//	newSession->SetRemoteNetAddress(from);
-
-	//	m_pendingUdpSessions[from] = newSession;
-
-	//	//newSession->ProcessConnect();
-
-	//	return newSession;
-	//}
 
 	void Service::CompleteUdpHandshake(const NetAddress& from)
 	{
@@ -131,7 +107,7 @@ namespace jam::net
 		}
 	}
 
-	Sptr<UdpSession> Service::FindUpdSession(const NetAddress& from)
+	Sptr<UdpSession> Service::FindSessionInConnected(const NetAddress& from)
 	{
 		if (m_udpSessions.contains(from))
 			return m_udpSessions[from];
@@ -139,25 +115,46 @@ namespace jam::net
 		return nullptr;
 	}
 
+	Sptr<UdpSession> Service::FindSessionInHandshaking(const NetAddress& from)
+	{
+		if (m_handshakingUdpSessions.contains(from))
+			return m_handshakingUdpSessions[from];
+
+		return nullptr;
+	}
+
+	Sptr<UdpSession> Service::CreateAndRegisterToHandshaking(const NetAddress& from)
+	{
+		Sptr<UdpSession> newSession = static_pointer_cast<UdpSession>(CreateSession(EProtocolType::UDP));
+		newSession->SetRemoteNetAddress(from);
+
+		m_handshakingUdpSessions[from] = newSession;
+
+		return newSession;
+	}
+
 	void Service::ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer recvBuffer)
 	{
-		if (m_udpSessions.contains(from))
+		Sptr<UdpSession> session = FindSessionInConnected(from);
+		if (!session)
 		{
-			m_udpSessions[from]->ProcessRecv(numOfBytes, recvBuffer);
-			return;
+			session = FindSessionInHandshaking(from);
+			if (!session)
+				session = CreateAndRegisterToHandshaking(from);
 		}
 
-		if (m_handshakingUdpSessions.contains(from))
-		{
-			m_handshakingUdpSessions[from]->ProcessHandshake(numOfBytes, recvBuffer);	// todo
-			return;
-		}
-
-		auto newSession = static_pointer_cast<UdpSession>(CreateSession(EProtocolType::UDP));
-		newSession->SetRemoteNetAddress(from);
-		m_handshakingUdpSessions[from] = newSession;
-		newSession->ProcessHandshake(numOfBytes, recvBuffer);
+		session->ProcessRecv(numOfBytes, recvBuffer);
 	}
+
+
+
+
+
+
+
+
+
+
 
 	ClientService::ClientService(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
 		: Service(config, maxTcpSessionCount, maxUdpSessionCount)
@@ -181,6 +178,12 @@ namespace jam::net
 
 		return true;
 	}
+
+
+
+
+
+
 
 	ServerService::ServerService(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
 		: Service(config, maxTcpSessionCount, maxUdpSessionCount)

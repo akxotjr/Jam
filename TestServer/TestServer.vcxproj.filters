@@ -10,6 +10,30 @@
     <Filter Include="02.Network">
       <UniqueIdentifier>{cc93b486-9cc5-46c9-bbb3-27e9e5438f02}</UniqueIdentifier>
     </Filter>
+    <Filter Include="03.Packet">
+      <UniqueIdentifier>{60925b85-349f-463f-9844-2d31a3d3aa6a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="03.Packet\Protobuf">
+      <UniqueIdentifier>{e16eea93-c5a0-4796-8c3c-6477dae78a72}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="05.Room">
+      <UniqueIdentifier>{051fef02-07d1-42e5-af19-386adba69d4a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="04.Actor">
+      <UniqueIdentifier>{8a159037-a21a-451a-b8c8-41819c601f34}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="06.Utils">
+      <UniqueIdentifier>{f1a42924-c66e-42e2-815f-8bb4e8b4e820}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="04.Actor\Components">
+      <UniqueIdentifier>{f3166182-0a5a-4536-b1c4-b7c7f2803df0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="04.Actor\Systems">
+      <UniqueIdentifier>{885c4eb3-c5af-413c-bcb9-6e47a53471b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="07.Physics">
+      <UniqueIdentifier>{4ee4b04f-2844-4df1-83e0-feef6e095988}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="server.cpp">
@@ -24,6 +48,16 @@
     <ClCompile Include="GameTcpSession.cpp">
       <Filter>02.Network</Filter>
     </ClCompile>
+    <ClCompile Include="Game.cpp">
+      <Filter>01.Main</Filter>
+    </ClCompile>
+    <ClCompile Include="SessionManager.cpp">
+      <Filter>02.Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Room.cpp" />
+    <ClCompile Include="PhysicsManager.cpp">
+      <Filter>07.Physics</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -34,6 +68,22 @@
     </ClInclude>
     <ClInclude Include="GameTcpSession.h">
       <Filter>02.Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Game.h">
+      <Filter>01.Main</Filter>
+    </ClInclude>
+    <ClInclude Include="SessionManager.h">
+      <Filter>02.Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Room.h" />
+    <ClInclude Include="Transform.h">
+      <Filter>04.Actor\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="TypeTag.h">
+      <Filter>04.Actor\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="PhysicsManager.h">
+      <Filter>07.Physics</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

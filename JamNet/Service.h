@@ -76,7 +76,11 @@ namespace jam::net
 		//Sptr<UdpSession>					FindOrCreateUdpSession(const NetAddress& from);
 		void								CompleteUdpHandshake(const NetAddress& from);
 
-		Sptr<UdpSession>					FindUpdSession(const NetAddress& from);
+		Sptr<UdpSession>					FindSessionInConnected(const NetAddress& from);
+		Sptr<UdpSession>					FindSessionInHandshaking(const NetAddress& from);
+
+		Sptr<UdpSession>					CreateAndRegisterToHandshaking(const NetAddress& from);
+
 		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer recvBuffer);
 
 	public:
@@ -94,9 +98,9 @@ namespace jam::net
 
 		Uptr<IocpCore>										m_iocpCore;
 
-		unordered_map<NetAddress, Sptr<TcpSession>>			m_tcpSessions;
-		unordered_map<NetAddress, Sptr<UdpSession>>			m_udpSessions;
-		unordered_map<NetAddress, Sptr<UdpSession>>			m_handshakingUdpSessions;
+		xumap<NetAddress, Sptr<TcpSession>>					m_tcpSessions;
+		xumap<NetAddress, Sptr<UdpSession>>					m_udpSessions;
+		xumap<NetAddress, Sptr<UdpSession>>					m_handshakingUdpSessions;
 
 
 		int32												m_sessionCount = 0;
@@ -111,14 +115,10 @@ namespace jam::net
 		SessionFactory										m_udpSessionFactory;
 
 		Sptr<TcpListener>									m_listener = nullptr;
-		//Sptr<UdpReceiver>									m_udpReceiver = nullptr;
-
 		Sptr<UdpRouter>										m_udpRouter = nullptr;
 
 		EPeerType											m_peer = EPeerType::None;
 	};
-
-
 
 	template<typename TCP, typename UDP>
 	inline bool Service::SetSessionFactory()

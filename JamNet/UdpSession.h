@@ -53,8 +53,14 @@ namespace jam::net
 		C_HANDSHAKE_ACK,
 		S_HANDSHAKE_ACK,
 
-		C_ACK ,
-		S_ACK,
+		ACK,
+		APP_DATA
+	};
+
+	struct AckPacket
+	{
+		uint16 latestSeq;
+		uint32 bitfield;
 	};
 
 
@@ -107,7 +113,11 @@ namespace jam::net
 		int32									IsParsingPacket(BYTE* buffer, const int32 len);
 
 
-		void									ProcessHandshake(int32 numOfBytes, RecvBuffer& recvBuffer);
+		int32 ParseAndDispatchPackets(BYTE* buffer, int32 len);
+
+		void DispatchPacket(UdpPacketHeader* header, uint32 len);
+
+		void									ProcessHandshake(UdpPacketHeader* header);
 
 
 		void									Update(double serverTime);
@@ -132,6 +142,14 @@ namespace jam::net
 		void									OnRecvHandshakeAck();
 
 		Sptr<SendBuffer>						MakeHandshakePkt(ERudpPacketId id);
+
+		Sptr<SendBuffer> MakeAckPkt(uint16 seq);
+
+		void SendAck(uint16 seq);
+
+		void OnRecvAck(BYTE* data, uint32 len);
+
+		void OnRecvAppData(BYTE* data, uint32 len);
 
 	private:
 		USE_LOCK

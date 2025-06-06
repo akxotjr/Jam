@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "Worker.h"
-#include "ThreadPool.h"
+#include "WorkerPool.h"
 #include "TimeManager.h"
 
 namespace jam::utils::thrd
@@ -9,16 +9,19 @@ namespace jam::utils::thrd
 	{
 	}
 
-	void Worker::Work()
+	void Worker::SetBaseJob(const job::Job& job)
 	{
-		if (m_work)
-			m_work();
+		m_baseJob = make_unique<job::Job>(job);
 	}
 
-	void Worker::Execute()
+	void Worker::DoBaseJob()
 	{
+		if (m_baseJob)
+			m_baseJob->Execute();
+	}
 
-
+	void Worker::DoJobs()
+	{
 		const double now = TimeManager::Instance().GetCurrentTime();
 		if (now >= tl_EndTime)
 		{
@@ -39,7 +42,8 @@ namespace jam::utils::thrd
 
 		m_currentJobQueue = nullptr;
 
-		Steal();
+		if (m_steal)
+			Steal();
 	}
 
 	void Worker::Steal()

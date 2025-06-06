@@ -1,10 +1,10 @@
 #include "pch.h"
-#include "ThreadPool.h"
+#include "WorkerPool.h"
 #include "TimeManager.h"
 
 namespace jam::utils::thrd
 {
-	ThreadPool::ThreadPool(int32 numThreads, WorkerFactory factory)
+	WorkerPool::WorkerPool(int32 numThreads, WorkerFactory factory)
 	{
 		m_numThreads.store(numThreads);
 
@@ -12,12 +12,12 @@ namespace jam::utils::thrd
 			m_workers.push_back(factory());
 	}
 
-	ThreadPool::~ThreadPool()
+	WorkerPool::~WorkerPool()
 	{
 	}
 
 
-	void ThreadPool::Run()
+	void WorkerPool::Run()
 	{
 		for (int32 i = 0; i < m_numThreads; i++)
 		{
@@ -30,7 +30,7 @@ namespace jam::utils::thrd
 		}
 	}
 
-	void ThreadPool::Join()
+	void WorkerPool::Join()
 	{
 		for (std::thread& t : m_threads)
 		{
@@ -40,15 +40,15 @@ namespace jam::utils::thrd
 		m_threads.clear();
 	}
 
-	void ThreadPool::Stop()
+	void WorkerPool::Stop()
 	{
 	}
 
-	void ThreadPool::Attach()
+	void WorkerPool::Attach()
 	{
 	}
 
-	job::JobQueue* ThreadPool::GetJobQueueFromAnotherWorker()
+	job::JobQueue* WorkerPool::GetJobQueueFromAnotherWorker()
 	{
 		for (auto& worker : m_workers)
 		{
@@ -62,7 +62,7 @@ namespace jam::utils::thrd
 	}
 
 
-	void ThreadPool::InitTLS()
+	void WorkerPool::InitTLS()
 	{
 		static Atomic<int16> s_threadId = 1;
 		tl_ThreadId = s_threadId.fetch_add(1);
@@ -73,15 +73,15 @@ namespace jam::utils::thrd
 		}
 	}
 
-	void ThreadPool::DestoryTLS()
+	void WorkerPool::DestoryTLS()
 	{
 	}
 
-	void ThreadPool::Execute()
+	void WorkerPool::Execute()
 	{
 		while (true)
 		{
-			tl_Worker->Work();
+			tl_Worker->DoBaseJob();
 
 			DistributeReservedJob();
 
@@ -91,7 +91,7 @@ namespace jam::utils::thrd
 				if (now >= tl_EndTime)
 					break;
 
-				tl_Worker->Execute();
+				tl_Worker->DoJobs();
 			}
 
 			int32 workCount = tl_Worker->m_workCount;
@@ -111,7 +111,7 @@ namespace jam::utils::thrd
 		}
 	}
 
-	void ThreadPool::DistributeReservedJob()
+	void WorkerPool::DistributeReservedJob()
 	{
 		const double now = TimeManager::Instance().GetCurrentTime();
 
