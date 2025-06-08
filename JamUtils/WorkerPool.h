@@ -14,27 +14,30 @@ namespace jam::utils::thrd
 		using WorkerFactory = std::function<Uptr<Worker>()>;
 
 	public:
-		WorkerPool(int32 numThreads, WorkerFactory factory);
+		WorkerPool(int32 numWorkers, WorkerFactory factory);
 		~WorkerPool();
 
-		void				Run();
-		void				Join();
+		void								Run();
+		void								Join();
 
-		void				Stop();
-		void				Attach();
+		void								Stop();
+		void								Attach();
 
-		job::JobQueue*		GetJobQueueFromAnotherWorker();
+		//void								SetGlobalQueue(Uptr<job::GlobalQueue> gq);
+		job::GlobalQueue*					GetGlobalQueue() { return m_globalQueue.get(); }
+
+		job::JobQueue*						GetJobQueueFromAnotherWorker();
 
 	private:
-		void				InitTLS();
-		void				DestoryTLS();
+		void								InitTLS();
+		void								DestoryTLS();
 
-		void				Execute();
-		void				DistributeReservedJob();
+		void								Execute();
+		void								DistributeReservedJob();
 
 	private:
 		xlist<std::thread>					m_threads;
-		Atomic<int32>						m_numThreads;
+		Atomic<int32>						m_numWorkers;
 
 		xvector<Uptr<Worker>>				m_workers;
 

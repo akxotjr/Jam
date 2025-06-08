@@ -4,8 +4,6 @@
 #include <atomic>
 #include <cstdint>
 
-#include "Macro.h"
-
 using BYTE = unsigned char;
 using int8 = int8_t;
 using int16 = int16_t;

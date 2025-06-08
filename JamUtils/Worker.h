@@ -3,6 +3,10 @@
 namespace jam::utils::thrd
 {
 	class WorkerPool;
+	class Fiber;
+	class FiberScheduler;
+
+	using FiberPool = ObjectPool<Fiber>;
 
 	class Worker
 	{
@@ -13,10 +17,18 @@ namespace jam::utils::thrd
 		Worker();
 		virtual ~Worker() = default;
 
+		void						Init();
+
+		void						Run();
+		void*						GetMainFiber() const { return m_mainFiber; }
+		FiberScheduler*				GetScheduler() const { return m_scheduler.get(); }
+
 		void						SetBaseJob(const job::Job& job);
 		void						DoBaseJob();
 		void						DoJobs();
 		job::JobQueue*				GetCurrentJobQueue() const { return m_currentJobQueue; }
+
+		void						AdjustSleepInterval();
 
 	private:
 		void						Steal();
@@ -29,6 +41,9 @@ namespace jam::utils::thrd
 		job::JobQueue*				m_currentJobQueue = nullptr;
 
 		bool						m_steal = false;
+
+		Uptr<FiberScheduler>		m_scheduler = nullptr;
+		void*						m_mainFiber = nullptr;
 	};
 }
 

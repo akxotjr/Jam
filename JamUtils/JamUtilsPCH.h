@@ -18,11 +18,10 @@
 
 /** JamUtils **/
 
-
-#include "Types.h"
-#include "Enums.h"
-#include "Values.h"
-#include "Macro.h"
+#include "JamTypes.h"
+#include "JamEnums.h"
+#include "JamValues.h"
+#include "JamMacro.h"
 
 /** jam::utils::memory **/
 #include "Containers.h"
@@ -36,6 +35,9 @@
 /** jam::utils::thread **/
 #include "TLS.h"
 #include "Lock.h"
+#include "DeadLockProfiler.h"
+#include "Worker.h"
+#include "WorkerPool.h"
 
 /** jam::utils::job **/
 #include "Job.h"

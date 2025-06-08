@@ -16,6 +16,15 @@
     <Filter Include="04.Utils">
       <UniqueIdentifier>{fbe92348-57ce-4621-a417-aeb31bc78800}</UniqueIdentifier>
     </Filter>
+    <Filter Include="02.Thread\Fiber">
+      <UniqueIdentifier>{78deb6e0-50e7-40e2-b3e6-b2ae64be95bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="02.Thread\Worker">
+      <UniqueIdentifier>{c5515faa-b608-4131-b8be-ddad6cfb46ae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="02.Thread\Lock">
+      <UniqueIdentifier>{217017b4-f819-4c1a-b515-29779c93a8a4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -36,15 +45,6 @@
     <ClCompile Include="MemoryManager.cpp">
       <Filter>01.Memory</Filter>
     </ClCompile>
-    <ClCompile Include="Lock.cpp">
-      <Filter>02.Thread</Filter>
-    </ClCompile>
-    <ClCompile Include="DeadLockProfiler.cpp">
-      <Filter>02.Thread</Filter>
-    </ClCompile>
-    <ClCompile Include="LockQueue.cpp">
-      <Filter>02.Thread</Filter>
-    </ClCompile>
     <ClCompile Include="Job.cpp">
       <Filter>03.Job</Filter>
     </ClCompile>
@@ -57,23 +57,38 @@
     <ClCompile Include="GlobalQueue.cpp">
       <Filter>03.Job</Filter>
     </ClCompile>
-    <ClCompile Include="TLS.cpp">
-      <Filter>02.Thread</Filter>
-    </ClCompile>
     <ClCompile Include="JamUtilsPCH.cpp">
       <Filter>99.Header</Filter>
     </ClCompile>
-    <ClCompile Include="WorkerPool.cpp">
-      <Filter>02.Thread</Filter>
+    <ClCompile Include="FiberScheduler.cpp">
+      <Filter>02.Thread\Fiber</Filter>
     </ClCompile>
-    <ClCompile Include="LockDeque.cpp">
-      <Filter>02.Thread</Filter>
+    <ClCompile Include="Fiber.cpp">
+      <Filter>02.Thread\Fiber</Filter>
+    </ClCompile>
+    <ClCompile Include="FiberPool.cpp">
+      <Filter>02.Thread\Fiber</Filter>
+    </ClCompile>
+    <ClCompile Include="WorkerPool.cpp">
+      <Filter>02.Thread\Worker</Filter>
     </ClCompile>
     <ClCompile Include="Worker.cpp">
-      <Filter>02.Thread</Filter>
+      <Filter>02.Thread\Worker</Filter>
     </ClCompile>
-    <ClCompile Include="Scheduler.cpp">
-      <Filter>02.Thread</Filter>
+    <ClCompile Include="TLS.cpp">
+      <Filter>02.Thread\Worker</Filter>
+    </ClCompile>
+    <ClCompile Include="DeadLockProfiler.cpp">
+      <Filter>02.Thread\Lock</Filter>
+    </ClCompile>
+    <ClCompile Include="Lock.cpp">
+      <Filter>02.Thread\Lock</Filter>
+    </ClCompile>
+    <ClCompile Include="LockDeque.cpp">
+      <Filter>02.Thread\Lock</Filter>
+    </ClCompile>
+    <ClCompile Include="LockQueue.cpp">
+      <Filter>02.Thread\Lock</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -104,15 +119,6 @@
     <ClInclude Include="Allocator.h">
       <Filter>01.Memory</Filter>
     </ClInclude>
-    <ClInclude Include="Lock.h">
-      <Filter>02.Thread</Filter>
-    </ClInclude>
-    <ClInclude Include="DeadLockProfiler.h">
-      <Filter>02.Thread</Filter>
-    </ClInclude>
-    <ClInclude Include="LockQueue.h">
-      <Filter>02.Thread</Filter>
-    </ClInclude>
     <ClInclude Include="Job.h">
       <Filter>03.Job</Filter>
     </ClInclude>
@@ -125,35 +131,50 @@
     <ClInclude Include="GlobalQueue.h">
       <Filter>03.Job</Filter>
     </ClInclude>
-    <ClInclude Include="TLS.h">
-      <Filter>02.Thread</Filter>
-    </ClInclude>
     <ClInclude Include="JamUtilsPCH.h">
       <Filter>99.Header</Filter>
     </ClInclude>
-    <ClInclude Include="Enums.h">
+    <ClInclude Include="JamEnums.h">
       <Filter>99.Header</Filter>
     </ClInclude>
-    <ClInclude Include="Macro.h">
+    <ClInclude Include="JamMacro.h">
       <Filter>99.Header</Filter>
     </ClInclude>
-    <ClInclude Include="Types.h">
+    <ClInclude Include="JamTypes.h">
       <Filter>99.Header</Filter>
     </ClInclude>
-    <ClInclude Include="Values.h">
+    <ClInclude Include="JamValues.h">
       <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="FiberScheduler.h">
+      <Filter>02.Thread\Fiber</Filter>
+    </ClInclude>
+    <ClInclude Include="Fiber.h">
+      <Filter>02.Thread\Fiber</Filter>
+    </ClInclude>
+    <ClInclude Include="FiberPool.h">
+      <Filter>02.Thread\Fiber</Filter>
     </ClInclude>
     <ClInclude Include="WorkerPool.h">
-      <Filter>02.Thread</Filter>
-    </ClInclude>
-    <ClInclude Include="LockDeque.h">
-      <Filter>02.Thread</Filter>
+      <Filter>02.Thread\Worker</Filter>
     </ClInclude>
     <ClInclude Include="Worker.h">
-      <Filter>02.Thread</Filter>
+      <Filter>02.Thread\Worker</Filter>
     </ClInclude>
-    <ClInclude Include="Scheduler.h">
-      <Filter>02.Thread</Filter>
+    <ClInclude Include="TLS.h">
+      <Filter>02.Thread\Worker</Filter>
+    </ClInclude>
+    <ClInclude Include="DeadLockProfiler.h">
+      <Filter>02.Thread\Lock</Filter>
+    </ClInclude>
+    <ClInclude Include="Lock.h">
+      <Filter>02.Thread\Lock</Filter>
+    </ClInclude>
+    <ClInclude Include="LockDeque.h">
+      <Filter>02.Thread\Lock</Filter>
+    </ClInclude>
+    <ClInclude Include="LockQueue.h">
+      <Filter>02.Thread\Lock</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

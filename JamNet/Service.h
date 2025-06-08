@@ -53,8 +53,6 @@ namespace jam::net
 		template<typename TCP, typename UDP>
 		bool								SetSessionFactory();
 
-
-		//void								Broadcast(Sptr<SendBuffer> sendBuffer);
 		Sptr<Session>						CreateSession(EProtocolType protocol);
 
 		void								AddTcpSession(Sptr<TcpSession> session);
@@ -118,6 +116,8 @@ namespace jam::net
 		Sptr<UdpRouter>										m_udpRouter = nullptr;
 
 		EPeerType											m_peer = EPeerType::None;
+
+		Uptr<utils::thrd::WorkerPool>						m_workerPool;
 	};
 
 	template<typename TCP, typename UDP>

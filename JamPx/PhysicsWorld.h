@@ -11,8 +11,6 @@ namespace jam::px
 
         void                    Simulation(float dt);
 
-        PxActor*                CreateRigidActor();
-
         void                    AddActor(PxActor* actor);
         void                    RemoveActor(PxActor* actor);
 

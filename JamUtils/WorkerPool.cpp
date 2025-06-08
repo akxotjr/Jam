@@ -4,11 +4,11 @@
 
 namespace jam::utils::thrd
 {
-	WorkerPool::WorkerPool(int32 numThreads, WorkerFactory factory)
+	WorkerPool::WorkerPool(int32 numWorkers, WorkerFactory factory)
 	{
-		m_numThreads.store(numThreads);
+		m_numWorkers.store(numWorkers);
 
-		for (int32 i = 0; i < numThreads; i++)
+		for (int32 i = 0; i < numWorkers; i++)
 			m_workers.push_back(factory());
 	}
 
@@ -19,7 +19,7 @@ namespace jam::utils::thrd
 
 	void WorkerPool::Run()
 	{
-		for (int32 i = 0; i < m_numThreads; i++)
+		for (int32 i = 0; i < m_numWorkers; i++)
 		{
 			m_threads.push_back(std::thread([this]()
 				{
@@ -47,6 +47,11 @@ namespace jam::utils::thrd
 	void WorkerPool::Attach()
 	{
 	}
+
+	//void WorkerPool::SetGlobalQueue(Uptr<job::GlobalQueue> gq)
+	//{
+	//	m_globalQueue = std::move(gq);
+	//}
 
 	job::JobQueue* WorkerPool::GetJobQueueFromAnotherWorker()
 	{
@@ -79,36 +84,39 @@ namespace jam::utils::thrd
 
 	void WorkerPool::Execute()
 	{
-		while (true)
-		{
-			tl_Worker->DoBaseJob();
+		tl_Worker->Init();
+		tl_Worker->Run();
 
-			DistributeReservedJob();
+		//while (true)
+		//{
+		//	tl_Worker->DoBaseJob();
 
-			while (true)
-			{
-				double now = TimeManager::Instance().GetCurrentTime();
-				if (now >= tl_EndTime)
-					break;
+		//	DistributeReservedJob();
 
-				tl_Worker->DoJobs();
-			}
+		//	while (true)
+		//	{
+		//		double now = TimeManager::Instance().GetCurrentTime();
+		//		if (now >= tl_EndTime)
+		//			break;
 
-			int32 workCount = tl_Worker->m_workCount;
-			tl_Worker->m_workCount.store(0);
+		//		tl_Worker->DoJobs();
+		//	}
 
-			double nextTime = 0.0;
+		//	int32 workCount = tl_Worker->m_workCount;
+		//	tl_Worker->m_workCount.store(0);
 
-			if (workCount == 0)
-				nextTime = 0.01;
-			else if (workCount < 5)
-				nextTime = 0.005;
-			else
-				nextTime = 0.001;
+		//	double nextTime = 0.0;
 
-			tl_EndTime = TimeManager::Instance().GetCurrentTime() + nextTime;
-			std::this_thread::yield();	// opt
-		}
+		//	if (workCount == 0)
+		//		nextTime = 0.01;
+		//	else if (workCount < 5)
+		//		nextTime = 0.005;
+		//	else
+		//		nextTime = 0.001;
+
+		//	tl_EndTime = TimeManager::Instance().GetCurrentTime() + nextTime;
+		//	std::this_thread::yield();	// opt
+		//}
 	}
 
 	void WorkerPool::DistributeReservedJob()

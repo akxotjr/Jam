@@ -154,7 +154,10 @@
     <ClInclude Include="Allocator.h" />
     <ClInclude Include="Containers.h" />
     <ClInclude Include="DeadLockProfiler.h" />
-    <ClInclude Include="Enums.h" />
+    <ClInclude Include="Fiber.h" />
+    <ClInclude Include="FiberPool.h" />
+    <ClInclude Include="FiberScheduler.h" />
+    <ClInclude Include="JamEnums.h" />
     <ClInclude Include="GlobalQueue.h" />
     <ClInclude Include="JamUtilsPCH.h" />
     <ClInclude Include="Job.h" />
@@ -164,23 +167,25 @@
     <ClInclude Include="LockDeque.h" />
     <ClInclude Include="LockQueue.h" />
     <ClInclude Include="Logger.h" />
-    <ClInclude Include="Macro.h" />
+    <ClInclude Include="JamMacro.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MemoryPool.h" />
     <ClInclude Include="ObjectPool.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Scheduler.h" />
     <ClInclude Include="WorkerPool.h" />
     <ClInclude Include="TimeManager.h" />
     <ClInclude Include="TLS.h" />
     <ClInclude Include="TypeCast.h" />
-    <ClInclude Include="Types.h" />
-    <ClInclude Include="Values.h" />
+    <ClInclude Include="JamTypes.h" />
+    <ClInclude Include="JamValues.h" />
     <ClInclude Include="Worker.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Allocator.cpp" />
     <ClCompile Include="DeadLockProfiler.cpp" />
+    <ClCompile Include="Fiber.cpp" />
+    <ClCompile Include="FiberPool.cpp" />
+    <ClCompile Include="FiberScheduler.cpp" />
     <ClCompile Include="GlobalQueue.cpp" />
     <ClCompile Include="JamUtilsPCH.cpp" />
     <ClCompile Include="Job.cpp" />
@@ -198,7 +203,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="WorkerPool.cpp" />
     <ClCompile Include="TimeManager.cpp" />
     <ClCompile Include="TLS.cpp" />

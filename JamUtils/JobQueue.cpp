@@ -3,6 +3,8 @@
 #include "GlobalQueue.h"
 #include "TimeManager.h"
 #include "Worker.h"
+#include "Fiber.h"
+#include "FiberScheduler.h"
 
 namespace jam::utils::job
 {
@@ -31,13 +33,33 @@ namespace jam::utils::job
 
 	void JobQueue::ExecuteFront()
 	{
+		//while (true)
+		//{
+		//	Sptr<Job> job = m_jobs.PopFront();
+		//	if (job == nullptr)
+		//		break;
+
+		//	job->Execute();
+		//	thrd::tl_Worker->m_workCount.fetch_add(1);
+
+		//	const double now = TimeManager::Instance().GetCurrentTime();
+		//	if (now >= thrd::tl_EndTime)
+		//	{
+		//		m_owner.lock()->Push(shared_from_this());
+		//		break;
+		//	}
+		//}
+
 		while (true)
 		{
 			Sptr<Job> job = m_jobs.PopFront();
 			if (job == nullptr)
 				break;
 
-			job->Execute();
+			auto fiber = ObjectPool<thrd::Fiber>::MakeShared();
+			fiber->BindJob(job, thrd::tl_Worker->GetMainFiber());
+			thrd::tl_Worker->GetScheduler()->AddFiber(fiber);
+
 			thrd::tl_Worker->m_workCount.fetch_add(1);
 
 			const double now = TimeManager::Instance().GetCurrentTime();
@@ -51,13 +73,34 @@ namespace jam::utils::job
 
 	void JobQueue::ExecuteBack()
 	{
+		//while (true)
+		//{
+		//	Sptr<Job> job = m_jobs.PopBack();
+		//	if (job == nullptr)
+		//		break;
+
+		//	job->Execute();
+		//	thrd::tl_Worker->m_workCount.fetch_add(1);
+
+		//	const double now = TimeManager::Instance().GetCurrentTime();
+		//	if (now >= thrd::tl_EndTime)
+		//	{
+		//		m_owner.lock()->Push(shared_from_this());
+		//		break;
+		//	}
+		//}
+
+
 		while (true)
 		{
 			Sptr<Job> job = m_jobs.PopBack();
 			if (job == nullptr)
 				break;
 
-			job->Execute();
+			auto fiber = ObjectPool<thrd::Fiber>::MakeShared();
+			fiber->BindJob(job, thrd::tl_Worker->GetMainFiber());
+			thrd::tl_Worker->GetScheduler()->AddFiber(fiber);
+
 			thrd::tl_Worker->m_workCount.fetch_add(1);
 
 			const double now = TimeManager::Instance().GetCurrentTime();

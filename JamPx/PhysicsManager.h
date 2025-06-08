@@ -63,11 +63,11 @@ namespace jam::px
 		PxScene*							CreateDefaultScene();
 		PxScene*							CreateScene(const PxSceneDesc& sceneDesc);
 
-		PxMaterial*							CreateDefaultMaterial();
+		PxMaterial*							GetDefaultMaterial();
 		PxMaterial*							CreateMaterial(PxReal staticFriction, PxReal dynamicFriction, PxReal restitution);
 
 
-		PxShape*							CreateShape();
+		PxShape*							CreateShape(const ColliderInfo& info);
 
 
 		PxRigidStatic*						CreateRigidStatic(const PxVec3& position, const PxQuat& rotation);
@@ -80,6 +80,8 @@ namespace jam::px
 		PxDefaultErrorCallback				m_errorCallback;
 
 		PxPhysics*							m_pxPhysics = nullptr;
+
+		PxMaterial*							m_defaultMaterial = nullptr;
 	};
 }
 
