@@ -155,7 +155,6 @@
     <ClInclude Include="Containers.h" />
     <ClInclude Include="DeadLockProfiler.h" />
     <ClInclude Include="Fiber.h" />
-    <ClInclude Include="FiberPool.h" />
     <ClInclude Include="FiberScheduler.h" />
     <ClInclude Include="JamEnums.h" />
     <ClInclude Include="GlobalQueue.h" />
@@ -184,7 +183,6 @@
     <ClCompile Include="Allocator.cpp" />
     <ClCompile Include="DeadLockProfiler.cpp" />
     <ClCompile Include="Fiber.cpp" />
-    <ClCompile Include="FiberPool.cpp" />
     <ClCompile Include="FiberScheduler.cpp" />
     <ClCompile Include="GlobalQueue.cpp" />
     <ClCompile Include="JamUtilsPCH.cpp" />

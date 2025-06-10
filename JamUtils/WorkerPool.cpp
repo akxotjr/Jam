@@ -10,6 +10,8 @@ namespace jam::utils::thrd
 
 		for (int32 i = 0; i < numWorkers; i++)
 			m_workers.push_back(factory());
+
+		m_globalQueue = make_unique<job::GlobalQueue>();
 	}
 
 	WorkerPool::~WorkerPool()

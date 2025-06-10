@@ -69,9 +69,6 @@ namespace jam::net
 		int32								GetCurrentUdpSessionCount() const { return m_udpSessionCount; }
 		int32								GetMaxUdpSessionCount() const { return m_maxUdpSessionCount; }
 
-		//SOCKET								GetUdpSocket() const { return m_udpReceiver->GetSocket(); }
-
-		//Sptr<UdpSession>					FindOrCreateUdpSession(const NetAddress& from);
 		void								CompleteUdpHandshake(const NetAddress& from);
 
 		Sptr<UdpSession>					FindSessionInConnected(const NetAddress& from);

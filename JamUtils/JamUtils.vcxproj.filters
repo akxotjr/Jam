@@ -66,9 +66,6 @@
     <ClCompile Include="Fiber.cpp">
       <Filter>02.Thread\Fiber</Filter>
     </ClCompile>
-    <ClCompile Include="FiberPool.cpp">
-      <Filter>02.Thread\Fiber</Filter>
-    </ClCompile>
     <ClCompile Include="WorkerPool.cpp">
       <Filter>02.Thread\Worker</Filter>
     </ClCompile>
@@ -150,9 +147,6 @@
       <Filter>02.Thread\Fiber</Filter>
     </ClInclude>
     <ClInclude Include="Fiber.h">
-      <Filter>02.Thread\Fiber</Filter>
-    </ClInclude>
-    <ClInclude Include="FiberPool.h">
       <Filter>02.Thread\Fiber</Filter>
     </ClInclude>
     <ClInclude Include="WorkerPool.h">
