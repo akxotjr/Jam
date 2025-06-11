@@ -23,8 +23,7 @@ namespace jam::utils::thrd
 		void								Stop();
 		void								Attach();
 
-		//void								SetGlobalQueue(Uptr<job::GlobalQueue> gq);
-		job::GlobalQueue*					GetGlobalQueue() { return m_globalQueue.get(); }
+		Sptr<job::GlobalQueue>				GetGlobalQueue() { return m_globalQueue; }
 
 		job::JobQueue*						GetJobQueueFromAnotherWorker();
 
@@ -41,7 +40,7 @@ namespace jam::utils::thrd
 
 		xvector<Uptr<Worker>>				m_workers;
 
-		Uptr<job::GlobalQueue>				m_globalQueue;
+		Sptr<job::GlobalQueue>				m_globalQueue;
 	};
 }
 

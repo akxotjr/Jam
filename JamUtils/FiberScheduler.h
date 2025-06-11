@@ -7,8 +7,8 @@ namespace jam::utils::thrd
 	class FiberScheduler
 	{
 	public:
-		FiberScheduler();
-		~FiberScheduler();
+		FiberScheduler() = default;
+		~FiberScheduler() = default;
 
         void AddFiber(Sptr<Fiber> fiber)
         {
@@ -36,6 +36,6 @@ namespace jam::utils::thrd
 	private:
         USE_LOCK
 
-		xqueue<Sptr<Fiber>> m_readyQueue;
+		std::queue<Sptr<Fiber>> m_readyQueue;
 	};
 }
