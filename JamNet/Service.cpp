@@ -24,19 +24,19 @@ namespace jam::net
 		// TODO
 	}
 
-	Sptr<Session> Service::CreateSession(EProtocolType protocol)
+	Sptr<Session> Service::CreateSession(eProtocolType protocol)
 	{
 		Sptr<Session> session = nullptr;
 
 		switch (protocol)
 		{
-		case EProtocolType::TCP:
+		case eProtocolType::TCP:
 			session = m_tcpSessionFactory();
 			if (m_iocpCore->Register(session) == false)
 				return nullptr;
 			session->SetRemoteNetAddress(GetRemoteTcpNetAddress());
 			break;
-		case EProtocolType::UDP:
+		case eProtocolType::UDP:
 			session = m_udpSessionFactory();
 			session->SetRemoteNetAddress(GetRemoteUdpNetAddress());
 			break;
@@ -125,7 +125,7 @@ namespace jam::net
 
 	Sptr<UdpSession> Service::CreateAndRegisterToHandshaking(const NetAddress& from)
 	{
-		Sptr<UdpSession> newSession = static_pointer_cast<UdpSession>(CreateSession(EProtocolType::UDP));
+		Sptr<UdpSession> newSession = static_pointer_cast<UdpSession>(CreateSession(eProtocolType::UDP));
 		newSession->SetRemoteNetAddress(from);
 
 		m_handshakingUdpSessions[from] = newSession;
@@ -159,7 +159,7 @@ namespace jam::net
 	ClientService::ClientService(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
 		: Service(config, maxTcpSessionCount, maxUdpSessionCount)
 	{
-		m_peer = EPeerType::Client;
+		m_peer = ePeerType::Client;
 	}
 
 	ClientService::~ClientService()
@@ -188,7 +188,7 @@ namespace jam::net
 	ServerService::ServerService(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
 		: Service(config, maxTcpSessionCount, maxUdpSessionCount)
 	{
-		m_peer = EPeerType::Server;
+		m_peer = ePeerType::Server;
 	}
 
 	ServerService::~ServerService()

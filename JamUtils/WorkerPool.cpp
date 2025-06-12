@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "WorkerPool.h"
-#include "TimeManager.h"
 
 namespace jam::utils::thrd
 {
@@ -50,11 +49,6 @@ namespace jam::utils::thrd
 	{
 	}
 
-	//void WorkerPool::SetGlobalQueue(Uptr<job::GlobalQueue> gq)
-	//{
-	//	m_globalQueue = std::move(gq);
-	//}
-
 	job::JobQueue* WorkerPool::GetJobQueueFromAnotherWorker()
 	{
 		for (auto& worker : m_workers)
@@ -88,42 +82,11 @@ namespace jam::utils::thrd
 	{
 		tl_Worker->Init();
 		tl_Worker->Run();
-
-		//while (true)
-		//{
-		//	tl_Worker->DoBaseJob();
-
-		//	DistributeReservedJob();
-
-		//	while (true)
-		//	{
-		//		double now = TimeManager::Instance().GetCurrentTime();
-		//		if (now >= tl_EndTime)
-		//			break;
-
-		//		tl_Worker->DoJobs();
-		//	}
-
-		//	int32 workCount = tl_Worker->m_workCount;
-		//	tl_Worker->m_workCount.store(0);
-
-		//	double nextTime = 0.0;
-
-		//	if (workCount == 0)
-		//		nextTime = 0.01;
-		//	else if (workCount < 5)
-		//		nextTime = 0.005;
-		//	else
-		//		nextTime = 0.001;
-
-		//	tl_EndTime = TimeManager::Instance().GetCurrentTime() + nextTime;
-		//	std::this_thread::yield();	// opt
-		//}
 	}
 
 	void WorkerPool::DistributeReservedJob()
 	{
-		const double now = TimeManager::Instance().GetCurrentTime();
+		const uint64 now = ::GetTickCount64();
 
 		m_globalQueue->GetJobTimer()->Distribute(now);
 	}

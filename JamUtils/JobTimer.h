@@ -9,10 +9,10 @@ namespace jam::utils::job
 
 	struct JobData
 	{
-		JobData(Wptr<JobQueue> owner, JobRef job) : owner(owner), job(job) {}
+		JobData(Wptr<JobQueue> owner, Sptr<Job> job) : owner(owner), job(job) {}
 
 		Wptr<JobQueue>					owner;
-		JobRef							job;
+		Sptr<Job>						job;
 	};
 
 	struct TimerItem
@@ -22,7 +22,7 @@ namespace jam::utils::job
 			return executeTime > other.executeTime;
 		}
 
-		double							executeTime = 0;
+		uint64							executeTime = 0;
 		JobData*						jobData = nullptr;
 	};
 
@@ -30,8 +30,8 @@ namespace jam::utils::job
 	class JobTimer
 	{
 	public:
-		void							Reserve(double afterTime, Wptr<JobQueue> owner, JobRef job);
-		void							Distribute(double now);
+		void							Reserve(std::chrono::duration<uint64> after, Wptr<JobQueue> owner, Sptr<Job> job);
+		void							Distribute(uint64 now);
 		void							Clear();
 
 	private:

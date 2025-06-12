@@ -7,16 +7,13 @@
 
 namespace jam::net
 {
-	class TcpSession;
-	class UdpSession;
-
-	enum class EProtocolType : uint8
+	enum class eProtocolType : uint8
 	{
 		TCP,
 		UDP
 	};
 
-	enum class EPeerType
+	enum class ePeerType
 	{
 		Client,
 		Server,
@@ -53,7 +50,7 @@ namespace jam::net
 		template<typename TCP, typename UDP>
 		bool								SetSessionFactory();
 
-		Sptr<Session>						CreateSession(EProtocolType protocol);
+		Sptr<Session>						CreateSession(eProtocolType protocol);
 
 		void								AddTcpSession(Sptr<TcpSession> session);
 		void								ReleaseTcpSession(Sptr<TcpSession> session);
@@ -112,9 +109,7 @@ namespace jam::net
 		Sptr<TcpListener>									m_listener = nullptr;
 		Sptr<UdpRouter>										m_udpRouter = nullptr;
 
-		EPeerType											m_peer = EPeerType::None;
-
-		Uptr<utils::thrd::WorkerPool>						m_workerPool;
+		ePeerType											m_peer = ePeerType::None;
 	};
 
 	template<typename TCP, typename UDP>

@@ -18,7 +18,7 @@ namespace jam::net
 		static void					Clear();
 
 		static bool					BindWindowsFunction(SOCKET socket, GUID guid, LPVOID* fn);
-		static SOCKET				CreateSocket(EProtocolType protocol);
+		static SOCKET				CreateSocket(eProtocolType protocol);
 
 		static bool					SetLinger(SOCKET socket, uint16 onoff, uint16 linger);
 		static bool					SetReuseAddress(SOCKET socket, bool flag);

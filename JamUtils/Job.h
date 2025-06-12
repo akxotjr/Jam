@@ -5,8 +5,6 @@ namespace jam::utils::job
 {
 	using CallbackType = function<void()>;
 
-	USING_SHARED_PTR(Job)
-
 	class Job
 	{
 	public:

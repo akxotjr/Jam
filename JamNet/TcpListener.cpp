@@ -24,7 +24,7 @@ namespace jam::net
 			return false;
 
 
-		m_socket = SocketUtils::CreateSocket(EProtocolType::TCP);
+		m_socket = SocketUtils::CreateSocket(eProtocolType::TCP);
 		if (m_socket == INVALID_SOCKET)
 			return false;
 
@@ -74,7 +74,7 @@ namespace jam::net
 
 	void TcpListener::RegisterAccept(AcceptEvent* acceptEvent)
 	{
-		Sptr<TcpSession> session = static_pointer_cast<TcpSession>(m_service.lock()->CreateSession(EProtocolType::TCP));
+		Sptr<TcpSession> session = static_pointer_cast<TcpSession>(m_service.lock()->CreateSession(eProtocolType::TCP));
 
 		acceptEvent->Init();
 		acceptEvent->session = session;

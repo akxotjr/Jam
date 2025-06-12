@@ -14,7 +14,7 @@ namespace jam::net
         if (m_service.lock() == nullptr)
             return false;
 
-        m_socket = SocketUtils::CreateSocket(EProtocolType::UDP);
+        m_socket = SocketUtils::CreateSocket(eProtocolType::UDP);
         if (m_socket == INVALID_SOCKET)
             return false;
 

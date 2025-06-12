@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "JobQueue.h"
 #include "GlobalQueue.h"
-#include "TimeManager.h"
 #include "Worker.h"
 #include "Fiber.h"
 #include "FiberScheduler.h"
@@ -13,7 +12,7 @@ namespace jam::utils::job
 		m_owner = owner;
 	}
 
-	void JobQueue::Push(JobRef job, bool pushOnly)
+	void JobQueue::Push(Sptr<Job> job, bool pushOnly)
 	{
 		const int32 prevCount = m_jobCount.fetch_add(1);
 		m_jobs.PushBack(job);
@@ -33,23 +32,6 @@ namespace jam::utils::job
 
 	void JobQueue::ExecuteFront()
 	{
-		//while (true)
-		//{
-		//	Sptr<Job> job = m_jobs.PopFront();
-		//	if (job == nullptr)
-		//		break;
-
-		//	job->Execute();
-		//	thrd::tl_Worker->m_workCount.fetch_add(1);
-
-		//	const double now = TimeManager::Instance().GetCurrentTime();
-		//	if (now >= thrd::tl_EndTime)
-		//	{
-		//		m_owner.lock()->Push(shared_from_this());
-		//		break;
-		//	}
-		//}
-
 		while (true)
 		{
 			Sptr<Job> job = m_jobs.PopFront();
@@ -62,7 +44,7 @@ namespace jam::utils::job
 
 			thrd::tl_Worker->m_workCount.fetch_add(1);
 
-			const double now = TimeManager::Instance().GetCurrentTime();
+			const uint64 now = ::GetTickCount64();
 			if (now >= thrd::tl_EndTime)
 			{
 				m_owner.lock()->Push(shared_from_this());
@@ -73,24 +55,6 @@ namespace jam::utils::job
 
 	void JobQueue::ExecuteBack()
 	{
-		//while (true)
-		//{
-		//	Sptr<Job> job = m_jobs.PopBack();
-		//	if (job == nullptr)
-		//		break;
-
-		//	job->Execute();
-		//	thrd::tl_Worker->m_workCount.fetch_add(1);
-
-		//	const double now = TimeManager::Instance().GetCurrentTime();
-		//	if (now >= thrd::tl_EndTime)
-		//	{
-		//		m_owner.lock()->Push(shared_from_this());
-		//		break;
-		//	}
-		//}
-
-
 		while (true)
 		{
 			Sptr<Job> job = m_jobs.PopBack();
@@ -103,7 +67,7 @@ namespace jam::utils::job
 
 			thrd::tl_Worker->m_workCount.fetch_add(1);
 
-			const double now = TimeManager::Instance().GetCurrentTime();
+			const uint64 now = ::GetTickCount64();
 			if (now >= thrd::tl_EndTime)
 			{
 				m_owner.lock()->Push(shared_from_this());

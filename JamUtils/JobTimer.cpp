@@ -1,12 +1,11 @@
 #include "pch.h"
 #include "JobTimer.h"
-#include "TimeManager.h"
 
 namespace jam::utils::job
 {
-	void JobTimer::Reserve(double afterTime, Wptr<JobQueue> owner, JobRef job)
+	void JobTimer::Reserve(std::chrono::duration<uint64> after, Wptr<JobQueue> owner, Sptr<Job> job)
 	{
-		const double executeTime = TimeManager::Instance().GetCurrentTime() + afterTime;
+		const uint64 executeTime = ::GetTickCount64() + std::chrono::duration_cast<std::chrono::milliseconds>(after).count();
 		JobData* jobData = memory::ObjectPool<JobData>::Pop(owner, job);
 
 		WRITE_LOCK
@@ -15,7 +14,7 @@ namespace jam::utils::job
 	}
 
 
-	void JobTimer::Distribute(double now)
+	void JobTimer::Distribute(uint64 now)
 	{
 		if (m_distributing.exchange(true) == true)
 			return;
@@ -38,7 +37,7 @@ namespace jam::utils::job
 
 		for (TimerItem& item : items)
 		{
-			if (JobQueueRef owner = item.jobData->owner.lock())
+			if (Sptr<JobQueue> owner = item.jobData->owner.lock())
 				owner->Push(item.jobData->job);
 
 			memory::ObjectPool<JobData>::Push(item.jobData);

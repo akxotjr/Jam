@@ -18,14 +18,11 @@ namespace jam::net
 	{
 		Sptr<SendBuffer>	buffer;
 		uint16				sequence;
-		double				timestamp;
+		uint64				timestamp;
 		uint32				retryCount = 0;
 	};
 
-
-
-
-	enum class EUdpSessionState : uint8
+	enum class eUdpSessionState : uint8
 	{
 		Connected,
 		Disconnected,
@@ -44,7 +41,7 @@ namespace jam::net
 		Timeout,
 	};
 
-	enum class ERudpPacketId : uint8
+	enum class eRudpPacketId : uint8
 	{
 		C_HANDSHAKE_SYN = 1,
 		S_HANDSHAKE_SYN,
@@ -86,7 +83,7 @@ namespace jam::net
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(Sptr<SendBuffer> sendBuffer) override;
-		virtual void							SendReliable(Sptr<SendBuffer> sendBuffer, double timestamp);
+		virtual void							SendReliable(Sptr<SendBuffer> sendBuffer);
 
 		virtual bool							IsTcp() const override { return false; }
 		virtual bool							IsUdp() const override { return true; }
@@ -101,8 +98,6 @@ namespace jam::net
 		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 	public:
-		void									RegisterSend(Sptr<SendBuffer> sendbuffer);
-		void									RegisterRecv();
 
 		void									ProcessConnect();
 		void									ProcessDisconnect();
@@ -120,8 +115,9 @@ namespace jam::net
 		void									ProcessHandshake(UdpPacketHeader* header);
 
 
-		void									Update(double serverTime);
-		void									CheckRetryHandshake();
+		void									UpdateRetry();
+		void									CheckRetryHandshake(uint64 now);
+		void									CheckRetrySend(uint64 now);
 
 
 		bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }
@@ -141,7 +137,7 @@ namespace jam::net
 		void									SendHandshakeSynAck();
 		void									OnRecvHandshakeAck();
 
-		Sptr<SendBuffer>						MakeHandshakePkt(ERudpPacketId id);
+		Sptr<SendBuffer>						MakeHandshakePkt(eRudpPacketId id);
 
 		Sptr<SendBuffer> MakeAckPkt(uint16 seq);
 
@@ -160,17 +156,15 @@ namespace jam::net
 
 		uint16									m_latestSeq = 0;
 		uint16									m_sendSeq = 1;			// 다음 보낼 sequence
-		double									m_resendIntervalMs = 0.1; // 재전송 대기 시간
+		uint64									m_resendIntervalMs = 1; // 재전송 대기 시간
 
 	private:
-		EUdpSessionState						m_state = EUdpSessionState::Disconnected;
-
-		//SendEvent								m_sendEvent;
+		eUdpSessionState						m_state = eUdpSessionState::Disconnected;
 
 		RecvBuffer								m_recvBuffer;
 
 		int32									m_handshakeRetryCount = 0;
-		double									m_lastHandshakeTime = 0.0;
+		uint64									m_lastHandshakeTime = 0;
 	};
 
 }

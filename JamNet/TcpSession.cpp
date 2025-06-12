@@ -9,7 +9,7 @@ namespace jam::net
 
 	TcpSession::TcpSession() : m_recvBuffer(BUFFER_SIZE)
 	{
-		m_socket = SocketUtils::CreateSocket(EProtocolType::TCP);
+		m_socket = SocketUtils::CreateSocket(eProtocolType::TCP);
 	}
 
 	TcpSession::~TcpSession()

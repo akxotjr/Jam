@@ -22,7 +22,7 @@ namespace jam::net
         auto ser = m_service.lock();
         if (ser == nullptr) return false;
 
-        m_socket = SocketUtils::CreateSocket(EProtocolType::UDP);
+        m_socket = SocketUtils::CreateSocket(eProtocolType::UDP);
         if (m_socket == INVALID_SOCKET)
             return false;
 
@@ -32,12 +32,12 @@ namespace jam::net
         if (SocketUtils::SetReuseAddress(m_socket, true) == false)
             return false;
 
-        if (ser->m_peer == EPeerType::Client)
+        if (ser->m_peer == ePeerType::Client)
         {
             if (SocketUtils::BindAnyAddress(m_socket, 0) == false)
                 return false;
         }
-        else if (ser->m_peer == EPeerType::Server)
+        else if (ser->m_peer == ePeerType::Server)
         {
             if (SocketUtils::Bind(m_socket, ser->GetLocalUdpNetAddress()) == false)
                 return false;

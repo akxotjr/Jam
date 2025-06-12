@@ -172,7 +172,6 @@
     <ClInclude Include="ObjectPool.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="WorkerPool.h" />
-    <ClInclude Include="TimeManager.h" />
     <ClInclude Include="TLS.h" />
     <ClInclude Include="TypeCast.h" />
     <ClInclude Include="JamTypes.h" />
@@ -202,7 +201,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="WorkerPool.cpp" />
-    <ClCompile Include="TimeManager.cpp" />
     <ClCompile Include="TLS.cpp" />
     <ClCompile Include="Worker.cpp" />
   </ItemGroup>

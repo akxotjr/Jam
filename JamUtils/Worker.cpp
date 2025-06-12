@@ -3,7 +3,6 @@
 #include "Fiber.h"
 #include "FiberScheduler.h"
 #include "WorkerPool.h"
-#include "TimeManager.h"
 
 namespace jam::utils::thrd
 {
@@ -49,7 +48,7 @@ namespace jam::utils::thrd
 
 	void Worker::DoJobs()
 	{
-		const double now = TimeManager::Instance().GetCurrentTime();
+		const uint64 now = ::GetTickCount64();
 		if (now >= tl_EndTime)
 		{
 			return;
@@ -60,7 +59,7 @@ namespace jam::utils::thrd
 
 		while (true)
 		{
-			double nowInner = TimeManager::Instance().GetCurrentTime();
+			uint64 nowInner = ::GetTickCount64();
 			if (nowInner >= tl_EndTime)
 				break;
 
@@ -78,20 +77,20 @@ namespace jam::utils::thrd
 		int32 workCount = m_workCount;
 		m_workCount.store(0);
 
-		double delay = 0.0;
+		uint64 delay = 0;
 		if (workCount == 0)
-			delay = 0.01;
+			delay = 10;
 		else if (workCount < 5)
-			delay = 0.005;
+			delay = 5;
 		else
-			delay = 0.001;
+			delay = 1;
 
-		tl_EndTime = TimeManager::Instance().GetCurrentTime() + delay;
+		tl_EndTime = ::GetTickCount64(); + delay;
 	}
 
 	void Worker::Steal()
 	{
-		const double now = TimeManager::Instance().GetCurrentTime();
+		const uint64 now = ::GetTickCount64();
 
 		if (now >= tl_EndTime)
 			return;
