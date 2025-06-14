@@ -1,10 +1,12 @@
 #pragma once
+#include "JobQueue.h"
 
 namespace jam::utils::thrd
 {
 	class WorkerPool;
 	class Fiber;
 	class FiberScheduler;
+	class job::JobQueue;
 
 	using FiberPool = ObjectPool<Fiber>;
 

@@ -1,7 +1,5 @@
 #pragma once
 #include <stack>
-
-#include "JobQueue.h"
 #include "Worker.h"
 
 namespace jam::utils::thrd

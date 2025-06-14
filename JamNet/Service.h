@@ -81,6 +81,11 @@ namespace jam::net
 		const NetAddress&					GetRemoteTcpNetAddress() const { return m_config.remoteTcpAddress; }
 		const NetAddress&					GetRemoteUdpNetAddress() const { return m_config.remoteUdpAddress; }
 
+		void								SetLocalTcpNetAddress(const NetAddress& addr) { m_config.localTcpAddress = addr; }
+		void								SetlocalUdpNetAddress(const NetAddress& addr) { m_config.localUdpAddress = addr; }
+		void								SetRemoteTcpNetAddress(const NetAddress& addr) { m_config.remoteTcpAddress = addr; }
+		void								SetRemoteUdpNetAddress(const NetAddress& addr) { m_config.remoteUdpAddress = addr; }
+
 		IocpCore*							GetIocpCore() { return m_iocpCore.get(); }
 
 	protected:

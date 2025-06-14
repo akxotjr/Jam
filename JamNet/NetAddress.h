@@ -7,17 +7,17 @@ namespace jam::net
 	public:
 		NetAddress() = default;
 		NetAddress(SOCKADDR_IN sockAddr);
-		NetAddress(wstring ip, uint16 port);
+		NetAddress(string ip, uint16 port);
 
 		SOCKADDR_IN&		GetSockAddr() { return m_sockAddr; }
 		const SOCKADDR_IN&	GetSockAddr() const { return m_sockAddr; }
-		wstring				GetIpAddress() const;
+		string				GetIpAddress() const;
 		uint16				GetPort() const { return ::ntohs(m_sockAddr.sin_port); }
 
 		bool				IsValid() const;
 
 	public:
-		static IN_ADDR		Ip2Address(const WCHAR* ip);
+		static IN_ADDR		Ip2Address(const CHAR* ip);
 
 		bool				operator==(const NetAddress& other) const
 		{

@@ -28,6 +28,7 @@
 #include "TypeCast.h"
 #include "MemoryPool.h"
 #include "MemoryManager.h"
+#include "ObjectPool.h"
 
 #include "Logger.h"
 
