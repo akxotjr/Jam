@@ -70,7 +70,7 @@ namespace jam::utils::thrd
 
 		if (tl_Worker == nullptr)
 		{
-			tl_Worker = m_workers[tl_ThreadId].get();	// todo
+			tl_Worker = m_workers[tl_ThreadId % m_numWorkers].get();	// todo
 		}
 	}
 

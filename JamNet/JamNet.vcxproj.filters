@@ -60,9 +60,6 @@
     <ClInclude Include="UdpSession.h">
       <Filter>02.Network\UDP</Filter>
     </ClInclude>
-    <ClInclude Include="UdpReceiver.h">
-      <Filter>02.Network\UDP</Filter>
-    </ClInclude>
     <ClInclude Include="UdpRouter.h">
       <Filter>02.Network\UDP</Filter>
     </ClInclude>
@@ -72,6 +69,7 @@
     <ClInclude Include="BufferReader.h">
       <Filter>03.Utils</Filter>
     </ClInclude>
+    <ClInclude Include="NetworkSystem.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -113,9 +111,6 @@
     <ClCompile Include="UdpSession.cpp">
       <Filter>02.Network\UDP</Filter>
     </ClCompile>
-    <ClCompile Include="UdpReceiver.cpp">
-      <Filter>02.Network\UDP</Filter>
-    </ClCompile>
     <ClCompile Include="UdpRouter.cpp">
       <Filter>02.Network\UDP</Filter>
     </ClCompile>
@@ -125,5 +120,6 @@
     <ClCompile Include="BufferWriter.cpp">
       <Filter>03.Utils</Filter>
     </ClCompile>
+    <ClCompile Include="NetworkSystem.cpp" />
   </ItemGroup>
 </Project>

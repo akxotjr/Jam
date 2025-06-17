@@ -2,7 +2,6 @@
 #include "NetAddress.h"
 #include "Session.h"
 #include "TcpListener.h"
-#include "UdpReceiver.h"
 #include "UdpRouter.h"
 
 namespace jam::net

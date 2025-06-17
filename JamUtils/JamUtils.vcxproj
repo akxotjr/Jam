@@ -72,8 +72,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>libjamutils</TargetName>
-    <OutDir>$(SolutionDir)Binaries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
-    <IntDir>$(SolutionDir)Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
+    <OutDir>C:\Users\matae\GameWorkSpace\Jam\Libraries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
+    <IntDir>C:\Users\matae\GameWorkSpace\Jam\Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
     <IncludePath>$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>

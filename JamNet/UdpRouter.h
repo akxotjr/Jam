@@ -1,5 +1,6 @@
 #pragma once
 #include "IocpCore.h"
+#include "RecvBuffer.h"
 
 namespace jam::net
 {

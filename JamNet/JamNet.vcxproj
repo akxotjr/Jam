@@ -71,11 +71,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)Binaries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
-    <IntDir>$(SolutionDir)Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
+    <OutDir>C:\Users\matae\GameWorkSpace\Jam\Libraries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
+    <IntDir>C:\Users\matae\GameWorkSpace\Jam\Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
     <TargetName>libjamnet</TargetName>
-    <IncludePath>$(SolutionDir)JamUtils;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)Binaries\$(Platform)\$(Configuration);$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\matae\GameWorkSpace\Jam\JamUtils\;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\matae\GameWorkSpace\Jam\Libraries;$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -153,6 +153,7 @@
     <ClInclude Include="IocpEvent.h" />
     <ClInclude Include="IocpCore.h" />
     <ClInclude Include="JamNetPCH.h" />
+    <ClInclude Include="NetworkSystem.h" />
     <ClInclude Include="TcpListener.h" />
     <ClInclude Include="NetAddress.h" />
     <ClInclude Include="pch.h" />
@@ -162,7 +163,6 @@
     <ClInclude Include="Session.h" />
     <ClInclude Include="SocketUtils.h" />
     <ClInclude Include="TcpSession.h" />
-    <ClInclude Include="UdpReceiver.h" />
     <ClInclude Include="UdpRouter.h" />
     <ClInclude Include="UdpSession.h" />
   </ItemGroup>
@@ -172,6 +172,7 @@
     <ClCompile Include="IocpEvent.cpp" />
     <ClCompile Include="IocpCore.cpp" />
     <ClCompile Include="JamNetPCH.cpp" />
+    <ClCompile Include="NetworkSystem.cpp" />
     <ClCompile Include="TcpListener.cpp" />
     <ClCompile Include="NetAddress.cpp" />
     <ClCompile Include="pch.cpp">
@@ -186,7 +187,6 @@
     <ClCompile Include="Session.cpp" />
     <ClCompile Include="SocketUtils.cpp" />
     <ClCompile Include="TcpSession.cpp" />
-    <ClCompile Include="UdpReceiver.cpp" />
     <ClCompile Include="UdpRouter.cpp" />
     <ClCompile Include="UdpSession.cpp" />
   </ItemGroup>

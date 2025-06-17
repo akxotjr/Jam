@@ -138,14 +138,16 @@ namespace jam::net
 		case eRudpPacketId::C_HANDSHAKE_ACK:
 			ProcessHandshake(header);
 			break;
-		case eRudpPacketId::APP_DATA:
+		default:
 			if (header->sequence > 0 && CheckAndRecordReceiveHistory(header->sequence))
 			{
 				SendAck(header->sequence);
 				OnRecvAppData(reinterpret_cast<BYTE*>(header), len);
 			}
-			break;
-		default:
+			else
+			{
+				OnRecvAppData(reinterpret_cast<BYTE*>(header), len);
+			}
 			break;
 		}
 	}
