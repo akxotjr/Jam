@@ -6,6 +6,40 @@ namespace jam::net
 	class Service;
 	class NetAddress;
 
+	// Session ID
+	using SessionId = uint16;
+	// Mask & Shift
+	constexpr uint16	PROTOCOL_MASK = 0x8000;			// 1000 0000 0000 0000
+	constexpr uint16	ID_MASK = 0x7FFF;				// 0111 1111 1111 1111
+
+	constexpr int32		PROTOCOL_SHIFT = 15;
+
+
+	inline uint16 GenerateSID(eProtocolType protocol)
+	{
+		static Atomic<uint16> idGenerator = 1;
+		return (static_cast<uint16>(protocol) << PROTOCOL_SHIFT) | (idGenerator.fetch_add(1) & ID_MASK);
+	}
+
+	inline eProtocolType ExtractProtocol(SessionId sid)
+	{
+		return static_cast<eProtocolType>((sid & PROTOCOL_MASK) >> PROTOCOL_SHIFT);
+	}
+
+	inline uint32 ExtractId(SessionId sid)
+	{
+		return sid & ID_MASK;
+	}
+
+
+
+	enum class eSessionState : uint8
+	{
+		CONNECTED = 0,
+		DISCONNECTED,
+		HANDSHAKING
+	};
+
 	class Session : public IocpObject
 	{
 	public:
@@ -14,21 +48,21 @@ namespace jam::net
 
 		virtual bool							Connect() = 0;
 		virtual void							Disconnect(const WCHAR* cause) = 0;
-		virtual void							Send(Sptr<SendBuffer> sendBuffer) = 0;
+		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) = 0;
 
-		virtual bool							IsTcp() const = 0;
-		virtual bool							IsUdp() const = 0;
+		bool									IsTcp() { return ExtractProtocol(m_sid) == eProtocolType::TCP; }
+		bool									IsUdp() { return ExtractProtocol(m_sid) == eProtocolType::UDP; }
+		bool									IsConnected() { return m_state == eSessionState::CONNECTED; }
 
 		Sptr<Service>							GetService() { return m_service.lock(); }
-		void									SetService(Sptr<Service> service) { m_service = service; }
+		void									SetService(const Sptr<Service>& service) { m_service = service; }
 
 		NetAddress&								GetRemoteNetAddress() { return m_remoteAddress; }
-		void									SetRemoteNetAddress(NetAddress address) { m_remoteAddress = address; }
+		void									SetRemoteNetAddress(const NetAddress& address) { m_remoteAddress = address; }
 		SOCKET									GetSocket() { return m_socket; }
-		bool									IsConnected() { return m_connected; }
-		Sptr<Session>							GetSessionRef() { return static_pointer_cast<Session>(shared_from_this()); }
-		uint32									GetId() { return m_id; }
-		void									SetId(uint32 id) { m_id = id; };
+
+		Sptr<Session>							GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
+		eSessionState							GetState() { return m_state; }
 
 	protected:
 		virtual void							OnConnected() = 0;
@@ -36,14 +70,12 @@ namespace jam::net
 		virtual void							OnSend(int32 len) = 0;
 		virtual void							OnRecv(BYTE* buffer, int32 len) = 0;
 
-
 	protected:
 		SOCKET									m_socket = INVALID_SOCKET;
-		Atomic<bool>							m_connected = false;
-
-	private:
 		Wptr<Service>							m_service;
 		NetAddress								m_remoteAddress = {};
-		uint32									m_id = 0;
+
+		SessionId								m_sid;
+		eSessionState							m_state = eSessionState::DISCONNECTED; 
 	};
 }

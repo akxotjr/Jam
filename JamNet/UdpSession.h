@@ -2,6 +2,9 @@
 #include "Session.h"
 #include <bitset>
 
+#include "CongestionController.h"
+#include "NetStat.h"
+
 namespace jam::net
 {
 	/*--------------------------
@@ -22,23 +25,17 @@ namespace jam::net
 		uint32				retryCount = 0;
 	};
 
-	enum class eUdpSessionState : uint8
+	enum class eHandshakeState : uint8
 	{
-		Connected,
-		Disconnected,
-
-		// client
-		SynSent,			// 1
-		SynAckReceived,		// 3
-		AckSent,			// 5
-
-		// server
-		SynReceived,		// 2
-		SynAckSent,			// 4
-		AckReceived,		// 6
-
-
-		Timeout,
+		NONE,
+		SYN_SENT,
+		SYN_RECV,
+		SYNACK_SENT,
+		SYNACK_RECV,
+		ACK_SENT,
+		ACK_RECV,
+		COMPLETE,
+		TIMEOUT
 	};
 
 	enum class eRudpPacketId : uint8
@@ -51,6 +48,10 @@ namespace jam::net
 		S_HANDSHAKE_ACK,
 
 		ACK,
+
+		C_PING,
+		S_PONG,
+
 		APP_DATA
 	};
 
@@ -82,11 +83,8 @@ namespace jam::net
 	public:
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
-		virtual void							Send(Sptr<SendBuffer> sendBuffer) override;
-		virtual void							SendReliable(Sptr<SendBuffer> sendBuffer);
-
-		virtual bool							IsTcp() const override { return false; }
-		virtual bool							IsUdp() const override { return true; }
+		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
+		virtual void							SendReliable(const Sptr<SendBuffer>& sendBuffer);
 
 		void									HandleAck(uint16 latestSeq, uint32 bitfield);
 		bool									CheckAndRecordReceiveHistory(uint16 seq);
@@ -105,7 +103,7 @@ namespace jam::net
 		void									ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
 
 
-		int32									IsParsingPacket(BYTE* buffer, const int32 len);
+		//int32									IsParsingPacket(BYTE* buffer, const int32 len);
 
 
 		int32 ParseAndDispatchPackets(BYTE* buffer, int32 len);
@@ -147,6 +145,14 @@ namespace jam::net
 
 		void OnRecvAppData(BYTE* data, uint32 len);
 
+
+
+
+		void SendPing();
+		void SendPong(uint64 clientSendTick);
+		void OnRecvPing(BYTE* data, uint32 len);
+		void OnRecvPong(BYTE* data, uint32 len);
+
 	private:
 		USE_LOCK
 
@@ -159,12 +165,16 @@ namespace jam::net
 		uint64									m_resendIntervalMs = 1; // 재전송 대기 시간
 
 	private:
-		eUdpSessionState						m_state = eUdpSessionState::Disconnected;
+		eHandshakeState							m_handshakeState = eHandshakeState::NONE;
 
 		RecvBuffer								m_recvBuffer;
 
 		int32									m_handshakeRetryCount = 0;
 		uint64									m_lastHandshakeTime = 0;
+
+
+		Uptr<NetStatTracker>					m_netStatTracker = nullptr;
+		Uptr<CongestionController>				m_congestionController = nullptr;
 	};
 
 }

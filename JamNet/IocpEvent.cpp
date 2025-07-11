@@ -3,7 +3,7 @@
 
 namespace jam::net
 {
-	IocpEvent::IocpEvent(EventType type) : m_eventType(type)
+	IocpEvent::IocpEvent(eEventType type) : m_eventType(type)
 	{
 		Init();
 	}

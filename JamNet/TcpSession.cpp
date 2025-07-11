@@ -10,6 +10,7 @@ namespace jam::net
 	TcpSession::TcpSession() : m_recvBuffer(BUFFER_SIZE)
 	{
 		m_socket = SocketUtils::CreateSocket(eProtocolType::TCP);
+		m_sid = GenerateSID(eProtocolType::TCP);
 	}
 
 	TcpSession::~TcpSession()
@@ -30,7 +31,7 @@ namespace jam::net
 		RegisterDisconnect();
 	}
 
-	void TcpSession::Send(Sptr<SendBuffer> sendBuffer)
+	void TcpSession::Send(const Sptr<SendBuffer>& sendBuffer)
 	{
 		if (IsConnected() == false)
 			return;
@@ -58,16 +59,16 @@ namespace jam::net
 	{
 		switch (iocpEvent->m_eventType)
 		{
-		case EventType::Connect:
+		case eEventType::Connect:
 			ProcessConnect();
 			break;
-		case EventType::Disconnect:
+		case eEventType::Disconnect:
 			ProcessDisconnect();
 			break;
-		case EventType::Recv:
+		case eEventType::Recv:
 			ProcessRecv(numOfBytes);
 			break;
-		case EventType::Send:
+		case eEventType::Send:
 			ProcessSend(numOfBytes);
 			break;
 		}
@@ -194,7 +195,7 @@ namespace jam::net
 		m_connectEvent.m_owner = nullptr;
 		m_connected.store(true);
 
-		GetService()->AddTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
+		GetService()->RegisterTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
 		OnConnected();
 		RegisterRecv();
 	}

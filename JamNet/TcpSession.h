@@ -24,10 +24,7 @@ namespace jam::net
 	public:
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
-		virtual void							Send(Sptr<SendBuffer> sendBuffer) override;
-
-		virtual bool							IsTcp() const override { return true; }
-		virtual bool							IsUdp() const override { return false; }
+		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
 
 	private:
 		/** Iocp Object impl **/

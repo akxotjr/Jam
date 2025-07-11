@@ -16,6 +16,12 @@
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 
+
+#include "JamNetEnums.h"
+
+#include "ipzip.h"
+#include "lz4.h"
+
 /** JamNet **/
 #include "IocpCore.h"
 #include "IocpEvent.h"

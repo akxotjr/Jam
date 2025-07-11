@@ -6,26 +6,14 @@
 
 namespace jam::net
 {
-	enum class eProtocolType : uint8
-	{
-		TCP,
-		UDP
-	};
-
-	enum class ePeerType
-	{
-		Client,
-		Server,
-
-		None
-	};
-
 	struct TransportConfig
 	{
-		NetAddress localTcpAddress = {};
-		NetAddress localUdpAddress = {};
-		NetAddress remoteTcpAddress = {};
-		NetAddress remoteUdpAddress = {};
+		NetAddress	localTcpAddress = {};
+		NetAddress	localUdpAddress = {};
+		NetAddress	remoteTcpAddress = {};
+		NetAddress	remoteUdpAddress = {};
+		int32		maxTcpSessionCount = 1;
+		int32		maxUdpSessionCount = 1;
 	};
 
 	class Service : public enable_shared_from_this<Service>
@@ -38,7 +26,7 @@ namespace jam::net
 		friend class UdpRouter;
 
 	public:
-		Service(TransportConfig config, int32 maxTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
+		Service(TransportConfig config);
 		virtual ~Service();
 
 		virtual bool						Start() = 0;
@@ -51,10 +39,10 @@ namespace jam::net
 
 		Sptr<Session>						CreateSession(eProtocolType protocol);
 
-		void								AddTcpSession(Sptr<TcpSession> session);
+		void								RegisterTcpSession(Sptr<TcpSession> session);
 		void								ReleaseTcpSession(Sptr<TcpSession> session);
 
-		void								AddUdpSession(Sptr<UdpSession> session);
+		void								RegisterUdpSession(Sptr<UdpSession> session);
 		void								ReleaseUdpSession(Sptr<UdpSession> session);
 
 		void								AddHandshakingUdpSession(Sptr<UdpSession> session);
@@ -140,7 +128,7 @@ namespace jam::net
 	class ClientService : public Service
 	{
 	public:
-		ClientService(TransportConfig config, int32 maxTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
+		ClientService(TransportConfig config);
 		~ClientService() override;
 
 		bool Start() override;
@@ -151,7 +139,7 @@ namespace jam::net
 	class ServerService : public Service
 	{
 	public:
-		ServerService(TransportConfig config, int32 maxTcpSessionCount = 1, int32 maxUdpSessionCount = 1);
+		ServerService(TransportConfig config);
 		~ServerService() override;
 
 		bool Start() override;

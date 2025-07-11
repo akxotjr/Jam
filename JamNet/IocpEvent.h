@@ -8,7 +8,7 @@ namespace jam::net
 	class TcpSession;
 	class SendBuffer;
 
-	enum class EventType : uint8
+	enum class eEventType : uint8
 	{
 		Connect,
 		Disconnect,
@@ -24,12 +24,12 @@ namespace jam::net
 	class IocpEvent : public OVERLAPPED
 	{
 	public:
-		IocpEvent(EventType type);
+		IocpEvent(eEventType type);
 
 		void				Init();
 
 	public:
-		EventType					m_eventType;
+		eEventType					m_eventType;
 		Sptr<IocpObject>			m_owner;
 	};
 
@@ -40,7 +40,7 @@ namespace jam::net
 	class ConnectEvent : public IocpEvent
 	{
 	public:
-		ConnectEvent() : IocpEvent(EventType::Connect) {}
+		ConnectEvent() : IocpEvent(eEventType::Connect) {}
 	};
 
 	/*----------------
@@ -50,7 +50,7 @@ namespace jam::net
 	class DisconnectEvent : public IocpEvent
 	{
 	public:
-		DisconnectEvent() : IocpEvent(EventType::Disconnect) {}
+		DisconnectEvent() : IocpEvent(eEventType::Disconnect) {}
 	};
 
 	/*----------------
@@ -60,7 +60,7 @@ namespace jam::net
 	class AcceptEvent : public IocpEvent
 	{
 	public:
-		AcceptEvent() : IocpEvent(EventType::Accept) {}
+		AcceptEvent() : IocpEvent(eEventType::Accept) {}
 
 	public:
 		Sptr<TcpSession>			session = nullptr;
@@ -73,7 +73,7 @@ namespace jam::net
 	class RecvEvent : public IocpEvent
 	{
 	public:
-		RecvEvent() : IocpEvent(EventType::Recv) {}
+		RecvEvent() : IocpEvent(eEventType::Recv) {}
 
 	public:
 		NetAddress					remoteAddress;
@@ -86,11 +86,10 @@ namespace jam::net
 	class SendEvent : public IocpEvent
 	{
 	public:
-		SendEvent() : IocpEvent(EventType::Send) {}
+		SendEvent() : IocpEvent(eEventType::Send) {}
 
 	public:
 		xvector<Sptr<SendBuffer>>	sendBuffers;
 		NetAddress					remoteAddress;
 	};
 }
-

@@ -7,8 +7,7 @@ namespace jam::net
 		 Service
 		---------------*/
 
-	Service::Service(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
-		: m_config(config), m_maxTcpSessionCount(maxTcpSessionCount), m_maxUdpSessionCount(maxUdpSessionCount)
+	Service::Service(TransportConfig config) : m_config(config)
 	{
 		m_iocpCore = std::make_unique<IocpCore>();
 	}
@@ -47,7 +46,7 @@ namespace jam::net
 		return session;
 	}
 
-	void Service::AddTcpSession(Sptr<TcpSession> session)
+	void Service::RegisterTcpSession(Sptr<TcpSession> session)
 	{
 		WRITE_LOCK
 
@@ -67,7 +66,7 @@ namespace jam::net
 		m_tcpSessionCount--;
 	}
 
-	void Service::AddUdpSession(Sptr<UdpSession> session)
+	void Service::RegisterUdpSession(Sptr<UdpSession> session)
 	{
 		WRITE_LOCK
 
@@ -102,7 +101,7 @@ namespace jam::net
 		auto it = m_handshakingUdpSessions.find(from);
 		if (it != m_handshakingUdpSessions.end())
 		{
-			AddUdpSession(it->second);
+			RegisterUdpSession(it->second);
 			m_handshakingUdpSessions.erase(it);
 		}
 	}
@@ -156,8 +155,7 @@ namespace jam::net
 
 
 
-	ClientService::ClientService(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
-		: Service(config, maxTcpSessionCount, maxUdpSessionCount)
+	ClientService::ClientService(TransportConfig config) : Service(config)
 	{
 		m_peer = ePeerType::Client;
 	}
@@ -181,12 +179,7 @@ namespace jam::net
 
 
 
-
-
-
-
-	ServerService::ServerService(TransportConfig config, int32 maxTcpSessionCount, int32 maxUdpSessionCount)
-		: Service(config, maxTcpSessionCount, maxUdpSessionCount)
+	ServerService::ServerService(TransportConfig config) : Service(config)
 	{
 		m_peer = ePeerType::Server;
 	}

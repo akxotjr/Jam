@@ -67,13 +67,13 @@ namespace jam::net
 
         switch (iocpEvent->m_eventType)
         {
-        case EventType::Recv:
+        case eEventType::Recv:
         {
             RecvEvent* recvEvent = static_cast<RecvEvent*>(iocpEvent);
             ProcessRecv(numOfBytes, recvEvent->remoteAddress);
             break;
         }
-        case EventType::Send:
+        case eEventType::Send:
         {
             SendEvent* sendEvent = static_cast<SendEvent*>(iocpEvent);
             ProcessSend(numOfBytes, sendEvent->remoteAddress);
@@ -90,26 +90,9 @@ namespace jam::net
         wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
         wsaBuf.len = static_cast<ULONG>(sendBuffer->WriteSize());
 
-        //debug
-       // cout << "[RegisterSend] to : " << remoteAddress.GetSockAddr().sin_family << " , " << remoteAddress.GetSockAddr().sin_addr.s_addr << ", " << remoteAddress.GetSockAddr().sin_port << endl;
-
-    	//wstring ip = remoteAddress.GetIpAddress();
-     //   uint16 port = remoteAddress.GetPort();
-
-        //wcout << L"[UdpRouter::Register] from : " <<  << L" , " << port << endl;
-        //wcout << L"[UdpRouter::Register] to : " << ip << L" , " << port << endl;
-
         DWORD numOfBytes = 0;
-       // SOCKADDR_IN remoteAddr = remoteAddress.GetSockAddr();
 
         m_sendEvent.remoteAddress = remoteAddress;
-
-        //cout << "WSABUF size: " << wsaBuf.len << endl;
-        //cout << "WSABUF ptr : " << static_cast<void*>(wsaBuf.buf) << endl;
-        //cout << "remoteAddr port: " << ntohs(remoteAddr.sin_port) << endl;
-        //cout << "remoteAddr ip: " << inet_ntoa(remoteAddr.sin_addr) << endl;
-        //cout << "m_socket: " << m_socket << endl;
-
 
         if (SOCKET_ERROR == ::WSASendTo(m_socket, &wsaBuf, 1, OUT &numOfBytes, 0, reinterpret_cast<SOCKADDR*>(&m_sendEvent.remoteAddress), sizeof(SOCKADDR_IN), &m_sendEvent, nullptr))
         {
@@ -158,11 +141,6 @@ namespace jam::net
     void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress)
     {
         NetAddress from(m_remoteSockAddr);
-
-        //wstring ip = from.GetIpAddress();
-        //uint16 port = from.GetPort();
-
-        //wcout << L"[UdpRouter::ProcessRecv] from : " << ip << L" , " << port << endl;
 
         m_service.lock()->ProcessUdpSession(remoteAddress, numOfBytes, m_recvBuffer);
         RegisterRecv();
