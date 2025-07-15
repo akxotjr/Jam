@@ -19,6 +19,15 @@
     <Filter Include="02.Network\TCP">
       <UniqueIdentifier>{90c880e0-3ca4-4c45-a817-d983f4a04d74}</UniqueIdentifier>
     </Filter>
+    <Filter Include="04.Packet">
+      <UniqueIdentifier>{71a9e715-7728-4bd3-acad-b78f0319baa2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="99.Header\ipzip">
+      <UniqueIdentifier>{a5807528-cf7c-4f72-b856-2750952c3b9b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="00.Main">
+      <UniqueIdentifier>{c325bb1f-6016-4874-addb-dd3e7e68785b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetAddress.h">
@@ -69,7 +78,24 @@
     <ClInclude Include="BufferReader.h">
       <Filter>03.Utils</Filter>
     </ClInclude>
-    <ClInclude Include="NetworkSystem.h" />
+    <ClInclude Include="ipzip.h">
+      <Filter>99.Header\ipzip</Filter>
+    </ClInclude>
+    <ClInclude Include="ipzip_lz4_impl.h">
+      <Filter>99.Header\ipzip</Filter>
+    </ClInclude>
+    <ClInclude Include="PacketCompressor.h">
+      <Filter>04.Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="JamNetEnums.h">
+      <Filter>99.Header</Filter>
+    </ClInclude>
+    <ClInclude Include="NetStat.h" />
+    <ClInclude Include="NetworkLayer.h" />
+    <ClInclude Include="CongestionController.h" />
+    <ClInclude Include="FragmentHandler.h" />
+    <ClInclude Include="Clock.h" />
+    <ClInclude Include="RpcManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -120,6 +146,17 @@
     <ClCompile Include="BufferWriter.cpp">
       <Filter>03.Utils</Filter>
     </ClCompile>
-    <ClCompile Include="NetworkSystem.cpp" />
+    <ClCompile Include="ipzip.c">
+      <Filter>99.Header\ipzip</Filter>
+    </ClCompile>
+    <ClCompile Include="PacketCompressor.cpp">
+      <Filter>04.Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="NetStat.cpp" />
+    <ClCompile Include="NetworkLayer.cpp" />
+    <ClCompile Include="CongestionController.cpp" />
+    <ClCompile Include="FragmentHandler.cpp" />
+    <ClCompile Include="Clock.cpp" />
+    <ClCompile Include="RpcManager.cpp" />
   </ItemGroup>
 </Project>

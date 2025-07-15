@@ -71,11 +71,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>C:\Users\matae\GameWorkSpace\Jam\Libraries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
-    <IntDir>C:\Users\matae\GameWorkSpace\Jam\Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
+    <OutDir>C:\Users\akxotjr\GameWorkSpace\Jam\Libraries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
+    <IntDir>C:\Users\akxotjr\GameWorkSpace\Jam\Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
     <TargetName>libjamnet</TargetName>
-    <IncludePath>C:\Users\matae\GameWorkSpace\Jam\JamUtils\;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\matae\GameWorkSpace\Jam\Libraries;$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\akxotjr\GameWorkSpace\Jam\JamUtils\;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\akxotjr\GameWorkSpace\Jam\Libraries;$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -150,10 +150,19 @@
   <ItemGroup>
     <ClInclude Include="BufferReader.h" />
     <ClInclude Include="BufferWriter.h" />
+    <ClInclude Include="Clock.h" />
+    <ClInclude Include="CongestionController.h" />
+    <ClInclude Include="FragmentHandler.h" />
     <ClInclude Include="IocpEvent.h" />
     <ClInclude Include="IocpCore.h" />
+    <ClInclude Include="ipzip.h" />
+    <ClInclude Include="ipzip_lz4_impl.h" />
+    <ClInclude Include="JamNetEnums.h" />
     <ClInclude Include="JamNetPCH.h" />
-    <ClInclude Include="NetworkSystem.h" />
+    <ClInclude Include="NetStat.h" />
+    <ClInclude Include="NetworkLayer.h" />
+    <ClInclude Include="PacketCompressor.h" />
+    <ClInclude Include="RpcManager.h" />
     <ClInclude Include="TcpListener.h" />
     <ClInclude Include="NetAddress.h" />
     <ClInclude Include="pch.h" />
@@ -169,10 +178,19 @@
   <ItemGroup>
     <ClCompile Include="BufferReader.cpp" />
     <ClCompile Include="BufferWriter.cpp" />
+    <ClCompile Include="Clock.cpp" />
+    <ClCompile Include="CongestionController.cpp" />
+    <ClCompile Include="FragmentHandler.cpp" />
     <ClCompile Include="IocpEvent.cpp" />
     <ClCompile Include="IocpCore.cpp" />
+    <ClCompile Include="ipzip.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="JamNetPCH.cpp" />
-    <ClCompile Include="NetworkSystem.cpp" />
+    <ClCompile Include="NetStat.cpp" />
+    <ClCompile Include="NetworkLayer.cpp" />
+    <ClCompile Include="PacketCompressor.cpp" />
+    <ClCompile Include="RpcManager.cpp" />
     <ClCompile Include="TcpListener.cpp" />
     <ClCompile Include="NetAddress.cpp" />
     <ClCompile Include="pch.cpp">
