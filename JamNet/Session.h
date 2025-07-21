@@ -35,10 +35,77 @@ namespace jam::net
 
 	enum class eSessionState : uint8
 	{
-		CONNECTED = 0,
-		DISCONNECTED,
-		HANDSHAKING
+		CONNECTED		= 0,
+		DISCONNECTED	= 1,
+		HANDSHAKING		= 2
 	};
+
+
+	//----------------------------------------------------------------------------------//
+
+
+#pragma pack(push, 1)
+	struct PacketHeader
+	{
+		uint16 sizeAndflags;    // [4-bit flags][12-bit size]   total packet size and flags
+		uint8  type;			// packet type (System, RPC, Ack, Custom)
+	};
+#pragma pack(pop)
+
+	enum class ePacketType : uint8
+	{
+		SYSTEM		= 0,
+		RPC			= 1,
+		ACK			= 2,
+		CUSTOM		= 3
+	};
+
+	enum class ePacketFlag : uint8
+	{
+		HAS_RUDP		= 0,
+		IS_COMPRESSED	= 1,
+		IS_ENCRYPTED	= 2,
+		//...
+	};
+
+	constexpr uint16 PACKET_FLAG_MASK = 0xF000;
+	constexpr uint16 PACKET_SIZE_MASK = 0x0FFF;
+	constexpr uint16 PACKET_FLAG_SHIFT = 12;
+
+	inline uint16 GetPacketSize(uint16 sizeAndFlags)
+	{
+		return sizeAndFlags & PACKET_SIZE_MASK;
+	}
+
+	inline uint8 GetPacketFlags(uint16 sizeAndFlags)
+	{
+		return static_cast<uint8>((sizeAndFlags & PACKET_FLAG_MASK) >> PACKET_FLAG_SHIFT);
+	}
+
+	inline uint16 MakeSizeAndFlags(uint16 size, uint8 flags)
+	{
+		return ((flags & 0x0F) << PACKET_FLAG_SHIFT) | (size & PACKET_SIZE_MASK);
+	}
+
+	//----------------------------------------------------------------------------------//
+
+
+
+
+	//----------------------------------------------------------------------------------//
+
+
+#pragma pack(push, 1)
+	struct RpcHeader
+	{
+		uint16 rpcId;        // 어떤 RPC인지
+		uint32 requestId;    // 응답 매칭용
+		uint8  flags;        // 예: isResponse, isReliable, isCompressed 등
+	};
+#pragma pack(pop)
+
+
+
 
 	class Session : public IocpObject
 	{

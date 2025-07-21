@@ -39,6 +39,5 @@ namespace jam::net
 
 		Wptr<Service>			m_service;
 	};
-
 }
 

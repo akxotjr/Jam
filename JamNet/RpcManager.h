@@ -12,7 +12,7 @@ namespace jam::net
 		template<typename T>
 		void Call(Sptr<Session> session, const T& message, bool reliable = true);
 
-		void Dispatch(Sptr<Session> session, uint16 rpcId, const char* data, size_t len);
+		void Dispatch(Sptr<Session> session, uint16 rpcId, uint32 requestId, uint8 flags, BYTE* payload, uint32 payloadLen);
 
 
 	private:
@@ -35,7 +35,7 @@ namespace jam::net
 	{
 	}
 
-	inline void RpcManager::Dispatch(Sptr<Session> session, uint16 rpcId, const char* data, size_t len)
+	inline void RpcManager::Dispatch(Sptr<Session> session, uint16 rpcId, uint32 requestId, uint8 flags, BYTE* payload, uint32 payloadLen)
 	{
 	}
 }

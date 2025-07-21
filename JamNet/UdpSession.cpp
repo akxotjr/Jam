@@ -3,7 +3,7 @@
 #include "BufferReader.h"
 #include "BufferWriter.h"
 #include "Clock.h"
-
+#include "RpcManager.h"
 
 
 namespace jam::net
@@ -91,10 +91,101 @@ namespace jam::net
 		if (!m_recvBuffer.OnWrite(numOfBytes)) return;
 		BYTE* buf = m_recvBuffer.ReadPos();
 		int32 totalSize = m_recvBuffer.DataSize();
-		int32 processed = ParseAndDispatchPackets(buf, totalSize);
-		if (processed < 0 || totalSize < processed || !m_recvBuffer.OnRead(processed)) return;
+		//int32 processed = ParseAndDispatchPackets(buf, totalSize);
+		int32 processLen = ParsePacket(buf, totalSize);
+		if (processLen < 0 || totalSize < processLen || !m_recvBuffer.OnRead(processLen)) return;
 		m_recvBuffer.Clean();
 	}
+
+	int32 UdpSession::ParsePacket(BYTE* buffer, int32 len)
+	{
+		if (len < static_cast<int32>(sizeof(PacketHeader)))
+			return 0;
+
+		PacketHeader* header = reinterpret_cast<PacketHeader*>(buffer);
+		if (len < header->size || header->size < sizeof(UdpPacketHeader))
+			return 0;
+
+
+		switch (header->type)
+		{
+		case ePacketType::SYSTEM:
+			{
+				SysHeader* sys = reinterpret_cast<SysHeader*>(header + sizeof(PacketHeader));
+				BYTE* payload = reinterpret_cast<BYTE*>(sys + 1);
+				uint32 payloadLen = len - sizeof(PacketHeader) - sizeof(SysHeader);
+				HandleSystemPacket(sys, payload, payloadLen);
+				break;
+			}
+		case ePacketType::RPC:
+			{
+				RpcHeader* rpc = reinterpret_cast<RpcHeader*>(header + sizeof(PacketHeader));
+				BYTE* payload = reinterpret_cast<BYTE*>(rpc + 1);
+				uint32 payloadLen = len - sizeof(PacketHeader) - sizeof(RpcHeader);
+				HandleRpcPacket(rpc, payload, payloadLen);
+				break;
+			}
+		case ePacketType::ACK:
+			{
+				AckHeader* ack = reinterpret_cast<AckHeader*>(header + sizeof(PacketHeader));
+				HandleAckPacket(ack);
+				break;
+			}
+		case ePacketType::CUSTOM:
+			{
+				BYTE* data = reinterpret_cast<BYTE*>(header + sizeof(PacketHeader));
+				uint32 length = len - sizeof(PacketHeader);
+				HandleCustomPacket(data, length);
+				break;
+			}
+		default:
+			return 0;
+		}
+
+		return header->size;
+	}
+
+	void UdpSession::HandleSystemPacket(SysHeader* sys, BYTE* payload, uint32 payloadLen)
+	{
+		switch (sys->sysId)
+		{
+		case eSysPacketId::C_HANDSHAKE_SYN:
+			OnRecvHandshakeSyn();
+			break;
+		case eSysPacketId::S_HANDSHAKE_SYNACK:
+			OnRecvHandshakeSynAck();
+			break;
+		case eSysPacketId::C_HANDSHAKE_ACK:
+			OnRecvHandshakeAck();
+			break;
+		case eSysPacketId::C_PING:
+			OnRecvPing(payload, payloadLen);
+			break;
+		case eSysPacketId::S_PONG:
+			OnRecvPong(payload, payloadLen);
+			break;
+		default:
+			break;
+		}
+	}
+
+	void UdpSession::HandleRpcPacket(RpcHeader* rpc, BYTE* payload, uint32 payloadLen)
+	{
+		RpcManager::Instance().Dispatch(GetSession(), rpc->rpcId, rpc->requestId, rpc->flags, payload, payloadLen);
+	}
+
+	void UdpSession::HandleAckPacket(AckHeader* ack)
+	{
+		const uint16 latestSeq = ack->latestSeq;
+		const uint32 bitfield = ack->bitfield;
+
+		HandleAck(latestSeq, bitfield);
+	}
+
+	void UdpSession::HandleCustomPacket(BYTE* data, uint32 len)
+	{
+	}
+
 
 	//int32 UdpSession::IsParsingPacket(BYTE* buffer, const int32 len)
 	//{
@@ -123,72 +214,72 @@ namespace jam::net
 	//	return processLen;
 	//}
 
-	int32 UdpSession::ParseAndDispatchPackets(BYTE* buffer, int32 len)
-	{
-		int32 processed = 0;
-		while (processed < len)
-		{
-			int32 remain = len - processed;
-			if (remain < sizeof(UdpPacketHeader)) break;
+	//int32 UdpSession::ParseAndDispatchPackets(BYTE* buffer, int32 len)
+	//{
+	//	int32 processed = 0;
+	//	while (processed < len)
+	//	{
+	//		int32 remain = len - processed;
+	//		if (remain < sizeof(UdpPacketHeader)) break;
 
-			UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(buffer + processed);
-			if (remain < header->size || header->size < sizeof(UdpPacketHeader)) break;
+	//		UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(buffer + processed);
+	//		if (remain < header->size || header->size < sizeof(UdpPacketHeader)) break;
 
-			DispatchPacket(header, header->size);
-			processed += header->size;
-		}
-		return processed;
-	}
+	//		DispatchPacket(header, header->size);
+	//		processed += header->size;
+	//	}
+	//	return processed;
+	//}
 
-	void UdpSession::DispatchPacket(UdpPacketHeader* header, uint32 len)
-	{
-		switch (static_cast<eRudpPacketId>(header->id))
-		{
-		case eRudpPacketId::ACK:
-			OnRecvAck(reinterpret_cast<BYTE*>(header), len);
-			break;
-		case eRudpPacketId::C_HANDSHAKE_SYN:
-		case eRudpPacketId::S_HANDSHAKE_SYNACK:
-		case eRudpPacketId::C_HANDSHAKE_ACK:
-			ProcessHandshake(header);
-			break;
-		case eRudpPacketId::C_PING:
-			OnRecvPing(reinterpret_cast<BYTE*>(header), len);
-			break;
-		case eRudpPacketId::S_PONG:
-			OnRecvPong(reinterpret_cast<BYTE*>(header), len);
-			break;
-		default:
-			if (header->sequence > 0 && CheckAndRecordReceiveHistory(header->sequence))
-			{
-				SendAck(header->sequence);
-				OnRecvAppData(reinterpret_cast<BYTE*>(header), len);
-			}
-			else
-			{
-				OnRecvAppData(reinterpret_cast<BYTE*>(header), len);
-			}
-			break;
-		}
-	}
+	//void UdpSession::DispatchPacket(UdpPacketHeader* header, uint32 len)
+	//{
+	//	switch (static_cast<eRudpPacketId>(header->id))
+	//	{
+	//	case eRudpPacketId::ACK:
+	//		OnRecvAck(reinterpret_cast<BYTE*>(header), len);
+	//		break;
+	//	case eRudpPacketId::C_HANDSHAKE_SYN:
+	//	case eRudpPacketId::S_HANDSHAKE_SYNACK:
+	//	case eRudpPacketId::C_HANDSHAKE_ACK:
+	//		ProcessHandshake(header);
+	//		break;
+	//	case eRudpPacketId::C_PING:
+	//		OnRecvPing(reinterpret_cast<BYTE*>(header), len);
+	//		break;
+	//	case eRudpPacketId::S_PONG:
+	//		OnRecvPong(reinterpret_cast<BYTE*>(header), len);
+	//		break;
+	//	default:
+	//		if (header->sequence > 0 && CheckAndRecordReceiveHistory(header->sequence))
+	//		{
+	//			SendAck(header->sequence);
+	//			OnRecvAppData(reinterpret_cast<BYTE*>(header), len);
+	//		}
+	//		else
+	//		{
+	//			OnRecvAppData(reinterpret_cast<BYTE*>(header), len);
+	//		}
+	//		break;
+	//	}
+	//}
 
-	void UdpSession::ProcessHandshake(UdpPacketHeader* header)
-	{
-		switch (static_cast<eRudpPacketId>(header->id))
-		{
-		case eRudpPacketId::C_HANDSHAKE_SYN:
-			OnRecvHandshakeSyn();
-			break;
-		case eRudpPacketId::S_HANDSHAKE_SYNACK:
-			OnRecvHandshakeSynAck();
-			break;
-		case eRudpPacketId::C_HANDSHAKE_ACK:
-			OnRecvHandshakeAck();
-			break;
-		default:
-			break;
-		}
-	}
+	//void UdpSession::ProcessHandshake(UdpPacketHeader* header)
+	//{
+	//	switch (static_cast<eRudpPacketId>(header->id))
+	//	{
+	//	case eRudpPacketId::C_HANDSHAKE_SYN:
+	//		OnRecvHandshakeSyn();
+	//		break;
+	//	case eRudpPacketId::S_HANDSHAKE_SYNACK:
+	//		OnRecvHandshakeSynAck();
+	//		break;
+	//	case eRudpPacketId::C_HANDSHAKE_ACK:
+	//		OnRecvHandshakeAck();
+	//		break;
+	//	default:
+	//		break;
+	//	}
+	//}
 
 	void UdpSession::UpdateRetry()
 	{
@@ -285,7 +376,7 @@ namespace jam::net
 		//WRITE_LOCK
 		const uint64 now = Clock::Instance().GetCurrentTick();
 
-		for (int32 i = 0; i <= BITFIELD_SIZE; ++i)
+		for (uint16 i = 0; i <= BITFIELD_SIZE; ++i)
 		{
 			uint16 ackSeq = latestSeq - i;
 			if (i == 0 || (bitfield & (1 << (i - 1))))
@@ -323,7 +414,7 @@ namespace jam::net
 	uint32 UdpSession::GenerateAckBitfield(uint16 latestSeq)
 	{
 		uint32 bitfield = 0;
-		for (int32 i = 1; i <= BITFIELD_SIZE; ++i)
+		for (uint16 i = 1; i <= BITFIELD_SIZE; ++i)
 		{
 			uint16 seq = latestSeq - i;
 
@@ -544,11 +635,9 @@ namespace jam::net
 		Send(buf);
 	}
 
-	void UdpSession::OnRecvPing(BYTE* data, uint32 len)
+	void UdpSession::OnRecvPing(BYTE* payload, uint32 payloadLen)
 	{
-		BufferReader br(data, len);
-		UdpPacketHeader header;
-		br >> header;
+		BufferReader br(payload, payloadLen);
 
 		uint64 clientSendTick;
 		br >> clientSendTick;
@@ -559,11 +648,9 @@ namespace jam::net
 		SendPong(clientSendTick);
 	}
 
-	void UdpSession::OnRecvPong(BYTE* data, uint32 len)
+	void UdpSession::OnRecvPong(BYTE* payload, uint32 payloadLen)
 	{
-		BufferReader br(data, len);
-		UdpPacketHeader header;
-		br >> header;
+		BufferReader br(payload, payloadLen);
 
 		uint64 clientSendTick;
 		uint64 serverTick;

@@ -140,7 +140,7 @@ namespace jam::net
 
     void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress)
     {
-        NetAddress from(m_remoteSockAddr);
+        NetAddress from(m_remoteSockAddr);  // ?
 
         m_service.lock()->ProcessUdpSession(remoteAddress, numOfBytes, m_recvBuffer);
         RegisterRecv();
