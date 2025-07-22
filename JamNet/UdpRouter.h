@@ -11,7 +11,7 @@ namespace jam::net
 
 	public:
 		UdpRouter();
-		~UdpRouter();
+		virtual ~UdpRouter();
 
 		bool                    Start(Sptr<Service> service);
 

@@ -103,7 +103,8 @@ namespace jam::net
 			return 0;
 
 		PacketHeader* header = reinterpret_cast<PacketHeader*>(buffer);
-		if (len < header->size || header->size < sizeof(UdpPacketHeader))
+		int32 size = GetPacketSize(header->sizeAndflags);
+		if (len < size || size < sizeof(PacketHeader))
 			return 0;
 
 
@@ -142,7 +143,7 @@ namespace jam::net
 			return 0;
 		}
 
-		return header->size;
+		return size;
 	}
 
 	void UdpSession::HandleSystemPacket(SysHeader* sys, BYTE* payload, uint32 payloadLen)
@@ -463,7 +464,7 @@ namespace jam::net
 		m_state = eSessionState::HANDSHAKING;
 		m_handshakeState = eHandshakeState::SYN_SENT;
 
-		auto buf = MakeHandshakePkt(eRudpPacketId::C_HANDSHAKE_SYN);
+		auto buf = MakeHandshakePkt(eSysPacketId::C_HANDSHAKE_SYN);
 		Send(buf);
 	}
 
@@ -483,7 +484,7 @@ namespace jam::net
 		if (m_state != eSessionState::HANDSHAKING || m_handshakeState != eHandshakeState::SYNACK_RECV)
 			return;
 
-		auto buf = MakeHandshakePkt(eRudpPacketId::C_HANDSHAKE_ACK);
+		auto buf = MakeHandshakePkt(eSysPacketId::C_HANDSHAKE_ACK);
 		Send(buf);
 
 		m_handshakeState = eHandshakeState::COMPLETE;
@@ -517,7 +518,7 @@ namespace jam::net
 
 		m_handshakeState = eHandshakeState::SYNACK_SENT;
 		
-		auto buf = MakeHandshakePkt(eRudpPacketId::S_HANDSHAKE_SYNACK);
+		auto buf = MakeHandshakePkt(eSysPacketId::S_HANDSHAKE_SYNACK);
 		Send(buf);
 	}
 
@@ -535,38 +536,71 @@ namespace jam::net
 		OnConnected();
 	}
 
-	Sptr<SendBuffer> UdpSession::MakeHandshakePkt(eRudpPacketId id)
+	Sptr<SendBuffer> UdpSession::MakeHandshakePkt(eSysPacketId id)
 	{
-		const uint16 pktId = static_cast<uint16>(id);
-		const uint16 pktSize = static_cast<uint16>(sizeof(UdpPacketHeader));
+		constexpr uint16 size = sizeof(PacketHeader) + sizeof(SysHeader);
 
-		Sptr<SendBuffer> sendBuffer = SendBufferManager::Instance().Open(pktSize);
-		UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
 
-		header->id = pktId;
-		header->size = pktSize;
+		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+		PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
+		pktHeader->sizeAndflags = MakeSizeAndFlags(size, 0);	// temp : flag
+		pktHeader->type = static_cast<uint8>(ePacketType::SYSTEM);
 
-		sendBuffer->Close(pktSize);
+		SysHeader* sysHeader = bw.Reserve<SysHeader>();
+		sysHeader->sysId = static_cast<uint8>(id);
 
-		return sendBuffer;
+		buf->Close(size);
+
+		return buf;
+
+		//const uint16 pktId = static_cast<uint16>(id);
+		//const uint16 pktSize = static_cast<uint16>(sizeof(UdpPacketHeader));
+
+		//Sptr<SendBuffer> sendBuffer = SendBufferManager::Instance().Open(pktSize);
+		//UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
+
+		//header->id = pktId;
+		//header->size = pktSize;
+
+		//sendBuffer->Close(pktSize);
+
+		//return sendBuffer;
 	}
 
 
 	Sptr<SendBuffer> UdpSession::MakeAckPkt(uint16 seq)
 	{
-		constexpr uint16 pktSize = sizeof(UdpPacketHeader) + sizeof(AckPacket);
-		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(pktSize);
+		constexpr uint16 size = sizeof(PacketHeader) + sizeof(AckHeader);
+
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
 		BufferWriter bw(buf->Buffer(), buf->AllocSize());
 
-		UdpPacketHeader* header = bw.Reserve<UdpPacketHeader>();
-		header->id = static_cast<uint16>(eRudpPacketId::ACK);
-		header->size = pktSize;
-		header->sequence = seq;
+		PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
+		pktHeader->sizeAndflags = MakeSizeAndFlags(size, 0);	// temp : flag
+		pktHeader->type = static_cast<uint8>(ePacketType::ACK);
 
-		bw << seq << GenerateAckBitfield(seq);
+		AckHeader* ackHeader = bw.Reserve<AckHeader>();
+		ackHeader->latestSeq = seq;
+		ackHeader->bitfield = GenerateAckBitfield(seq);
 
-		buf->Close(bw.WriteSize());
+		buf->Close(size);
+
 		return buf;
+
+		//constexpr uint16 pktSize = sizeof(UdpPacketHeader) + sizeof(AckPacket);
+		//Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(pktSize);
+		//BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		//UdpPacketHeader* header = bw.Reserve<UdpPacketHeader>();
+		//header->id = static_cast<uint16>(eRudpPacketId::ACK);
+		//header->size = pktSize;
+		//header->sequence = seq;
+
+		//bw << seq << GenerateAckBitfield(seq);
+
+		//buf->Close(bw.WriteSize());
+		//return buf;
 	}
 
 	void UdpSession::SendAck(uint16 seq)
@@ -575,18 +609,18 @@ namespace jam::net
 	}
 
 
-	void UdpSession::OnRecvAck(BYTE* data, uint32 len)
-	{
-		BufferReader br(data, len);
-		UdpPacketHeader header;
-		br >> header;
+	//void UdpSession::OnRecvAck(BYTE* data, uint32 len)
+	//{
+	//	BufferReader br(data, len);
+	//	UdpPacketHeader header;
+	//	br >> header;
 
-		uint16 latestSeq;
-		uint32 bitfield;
-		br >> latestSeq >> bitfield;
+	//	uint16 latestSeq;
+	//	uint32 bitfield;
+	//	br >> latestSeq >> bitfield;
 
-		HandleAck(latestSeq, bitfield);
-	}
+	//	HandleAck(latestSeq, bitfield);
+	//}
 
 
 	void UdpSession::OnRecvAppData(BYTE* data, uint32 len)
@@ -597,42 +631,78 @@ namespace jam::net
 
 	void UdpSession::SendPing()
 	{
-		constexpr uint16 pktSize = sizeof(UdpPacketHeader) + sizeof(uint64);
-		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(pktSize);
+		constexpr uint16 size = sizeof(PacketHeader) + sizeof(C_PING);
+
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
 
 		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+		PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
+		pktHeader->sizeAndflags = MakeSizeAndFlags(size, 0);	// temp : flag
+		pktHeader->type = static_cast<uint8>(ePacketType::SYSTEM);
 
-		UdpPacketHeader* header = bw.Reserve<UdpPacketHeader>();
-		header->id = static_cast<uint16>(eRudpPacketId::C_PING);
-		header->size = pktSize;
-		header->sequence = m_sendSeq;
+		SysHeader* sysHeader = bw.Reserve<SysHeader>();
+		sysHeader->sysId = static_cast<uint8>(eSysPacketId::C_PING);
 
 		const uint64 clientSendTick = Clock::Instance().GetCurrentTick();
 		bw << clientSendTick;
-		buf->Close(bw.WriteSize());
 
+		buf->Close(bw.WriteSize());
 		Send(buf);
+
+		//constexpr uint16 pktSize = sizeof(UdpPacketHeader) + sizeof(uint64);
+		//Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(pktSize);
+
+		//BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		//UdpPacketHeader* header = bw.Reserve<UdpPacketHeader>();
+		//header->id = static_cast<uint16>(eRudpPacketId::C_PING);
+		//header->size = pktSize;
+		//header->sequence = m_sendSeq;
+
+		//const uint64 clientSendTick = Clock::Instance().GetCurrentTick();
+		//bw << clientSendTick;
+		//buf->Close(bw.WriteSize());
+
+		//Send(buf);
 	}
 
 	void UdpSession::SendPong(uint64 clientSendTick)
 	{
-		constexpr uint16 pktSize = sizeof(UdpPacketHeader) + sizeof(uint64) + sizeof(uint64);
-		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(pktSize);
+		constexpr uint16 size = sizeof(PacketHeader) + sizeof(S_PONG);
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
 
 		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+		PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
+		pktHeader->sizeAndflags = MakeSizeAndFlags(size, 0);	// temp : flag
+		pktHeader->type = static_cast<uint8>(ePacketType::SYSTEM);
 
-		UdpPacketHeader* header = bw.Reserve<UdpPacketHeader>();
-		header->id = static_cast<uint16>(eRudpPacketId::S_PONG);
-		header->size = pktSize;
-		header->sequence = m_sendSeq;
+		SysHeader* sysHeader = bw.Reserve<SysHeader>();
+		sysHeader->sysId = static_cast<uint8>(eSysPacketId::S_PONG);
 
-		const uint64 serverTick = Clock::Instance().GetCurrentTick();
+		const uint64 serverSendTick = Clock::Instance().GetCurrentTick();
 
-		bw << clientSendTick << serverTick;
-
+		bw << clientSendTick << serverSendTick;
 		buf->Close(bw.WriteSize());
 
 		Send(buf);
+
+		//constexpr uint16 pktSize = sizeof(UdpPacketHeader) + sizeof(uint64) + sizeof(uint64);
+		//Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(pktSize);
+
+		//BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		//UdpPacketHeader* header = bw.Reserve<UdpPacketHeader>();
+		//header->id = static_cast<uint16>(eRudpPacketId::S_PONG);
+		//header->size = pktSize;
+		//header->sequence = m_sendSeq;
+
+		//const uint64 serverTick = Clock::Instance().GetCurrentTick();
+
+		//bw << clientSendTick << serverTick;
+
+		//buf->Close(bw.WriteSize());
+
+		//Send(buf);
 	}
 
 	void UdpSession::OnRecvPing(BYTE* payload, uint32 payloadLen)
@@ -653,11 +723,11 @@ namespace jam::net
 		BufferReader br(payload, payloadLen);
 
 		uint64 clientSendTick;
-		uint64 serverTick;
-		br >> clientSendTick >> serverTick;
+		uint64 serverSendTick;
+		br >> clientSendTick >> serverSendTick;
 
 		const uint64 clientRecvTick = Clock::Instance().GetCurrentTick();
 
-		m_netStatTracker->OnRecvPong(clientSendTick, clientRecvTick, serverTick);
+		m_netStatTracker->OnRecvPong(clientSendTick, clientRecvTick, serverSendTick);
 	}
 }

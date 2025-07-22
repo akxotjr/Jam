@@ -60,17 +60,15 @@ namespace jam::net
 		CUSTOM		= 3
 	};
 
-	enum class ePacketFlag : uint8
-	{
-		HAS_RUDP		= 0,
-		IS_COMPRESSED	= 1,
-		IS_ENCRYPTED	= 2,
-		//...
-	};
-
+	// mask & shift
 	constexpr uint16 PACKET_FLAG_MASK = 0xF000;
 	constexpr uint16 PACKET_SIZE_MASK = 0x0FFF;
 	constexpr uint16 PACKET_FLAG_SHIFT = 12;
+
+	// flags
+	constexpr uint16 hasRudpHeader = 0x1000;
+	constexpr uint16 isCompressed = 0x2000;
+	constexpr uint16 isEncrypted = 0x3000;
 
 	inline uint16 GetPacketSize(uint16 sizeAndFlags)
 	{

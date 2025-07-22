@@ -9,10 +9,10 @@ namespace jam::net
 		BufferReader(BYTE* buffer, uint32 size, uint32 pos = 0);
 		~BufferReader() = default;
 
-		BYTE*			Buffer() { return _buffer; }
-		uint32			Size() { return _size; }
-		uint32			ReadSize() { return _pos; }
-		uint32			FreeSize() { return _size - _pos; }
+		BYTE*			Buffer() { return m_buffer; }
+		uint32			Size() { return m_size; }
+		uint32			ReadSize() { return m_pos; }
+		uint32			FreeSize() { return m_size - m_pos; }
 
 
 		template<typename T>
@@ -28,17 +28,17 @@ namespace jam::net
 
 
 	private:
-		BYTE*			_buffer = nullptr;
-		uint32			_size = 0;
-		uint32			_pos = 0;
+		BYTE*			m_buffer = nullptr;
+		uint32			m_size = 0;
+		uint32			m_pos = 0;
 
 	};
 
 	template<typename T>
 	inline BufferReader& BufferReader::operator>>(OUT T& dest)
 	{
-		dest = *reinterpret_cast<T*>(&_buffer[_pos]);
-		_pos += sizeof(T);
+		dest = *reinterpret_cast<T*>(&m_buffer[m_pos]);
+		m_pos += sizeof(T);
 		return *this;
 	}
 

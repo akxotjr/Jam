@@ -3,16 +3,8 @@
 
 namespace jam::net
 {
-	BufferWriter::BufferWriter()
-	{
-	}
-
 	BufferWriter::BufferWriter(BYTE* buffer, uint32 size, uint32 pos)
-		: _buffer(buffer), _size(size), _pos(pos)
-	{
-	}
-
-	BufferWriter::~BufferWriter()
+		: m_buffer(buffer), m_size(size), m_pos(pos)
 	{
 	}
 
@@ -21,8 +13,8 @@ namespace jam::net
 		if (FreeSize() < len)
 			return false;
 
-		::memcpy(&_buffer[_pos], src, len);
-		_pos += len;
+		::memcpy(&m_buffer[m_pos], src, len);
+		m_pos += len;
 		return true;
 	}
 }

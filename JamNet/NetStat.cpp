@@ -5,18 +5,18 @@
 
 namespace jam::net
 {
-	void NetStatTracker::OnRecvPing(uint64 clientSendTick, uint64 serverTick)
+	void NetStatTracker::OnRecvPing(uint64 clientSendTick, uint64 serverSendTick)
 	{
-		m_netStat.tickOffset = static_cast<int64_t>(serverTick) - static_cast<int64_t>(clientSendTick);
+		m_netStat.tickOffset = static_cast<int64_t>(serverSendTick) - static_cast<int64_t>(clientSendTick);
 	}
 
-	void NetStatTracker::OnRecvPong(uint64 clientSendTick, uint64 clientRecvTick, uint64 serverTick)
+	void NetStatTracker::OnRecvPong(uint64 clientSendTick, uint64 clientRecvTick, uint64 serverSendTick)
 	{
 		uint64_t rttTicks = clientRecvTick - clientSendTick;
 		m_netStat.rtt = EWMA(m_netStat.rtt, static_cast<double>(rttTicks), 0.1);
 		m_netStat.jitter = EWMA(m_netStat.jitter, std::abs(static_cast<double>(rttTicks) - m_netStat.rtt), 0.1);
 		
-		m_netStat.tickOffset = static_cast<int64_t>(serverTick) - static_cast<int64_t>(clientSendTick + rttTicks / 2);
+		m_netStat.tickOffset = static_cast<int64_t>(serverSendTick) - static_cast<int64_t>(clientSendTick + rttTicks / 2);
 	}
 
 	void NetStatTracker::OnSend(uint32 size)

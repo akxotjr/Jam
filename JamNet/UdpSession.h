@@ -56,12 +56,12 @@ namespace jam::net
 	//------------------------------------------------------------------------//
 
 
-	struct UdpPacketHeader
-	{
-		uint16 size;
-		uint16 id;
-		uint16 sequence = 0;
-	};
+	//struct UdpPacketHeader
+	//{
+	//	uint16 size;
+	//	uint16 id;
+	//	uint16 sequence = 0;
+	//};
 
 	struct PendingPacket
 	{
@@ -107,6 +107,17 @@ namespace jam::net
 	//	uint32 bitfield;
 	//};
 
+	struct C_PING
+	{
+		uint64 clientSendTick;
+	};
+
+	struct S_PONG
+	{
+		uint64 clientSendTick;
+		uint64 serverSendTick;
+	};
+
 
 	constexpr int32		WINDOW_SIZE = 1024;
 	constexpr int32		BITFIELD_SIZE = 32;
@@ -143,7 +154,7 @@ namespace jam::net
 
 	public:
 
-		void									ProcessConnect();
+		//void									ProcessConnect();
 		void									ProcessDisconnect();
 		void									ProcessSend(int32 numOfBytes);
 		void									ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
@@ -186,13 +197,19 @@ namespace jam::net
 		void									SendHandshakeSynAck();
 		void									OnRecvHandshakeAck();
 
-		Sptr<SendBuffer>						MakeHandshakePkt(eRudpPacketId id);
 
+		Sptr<SendBuffer> MakeSystemSendBuffer();
+		Sptr<SendBuffer> MakeRpcSendBuffer();
+		Sptr<SendBuffer> MakeAckSendBuffer();
+		Sptr<SendBuffer> MakeCustomSendBuffer();
+
+
+		Sptr<SendBuffer>						MakeHandshakePkt(eSysPacketId id);
 		Sptr<SendBuffer> MakeAckPkt(uint16 seq);
 
 		void SendAck(uint16 seq);
 
-		void OnRecvAck(BYTE* data, uint32 len);
+		//void OnRecvAck(BYTE* data, uint32 len);
 
 		void OnRecvAppData(BYTE* data, uint32 len);
 

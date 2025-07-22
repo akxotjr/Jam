@@ -5,7 +5,7 @@ namespace jam::net
 {
 
 	BufferReader::BufferReader(BYTE* buffer, uint32 size, uint32 pos)
-		: _buffer(buffer), _size(size), _pos(pos)
+		: m_buffer(buffer), m_size(size), m_pos(pos)
 	{
 	}
 
@@ -15,7 +15,7 @@ namespace jam::net
 		if (FreeSize() < len)
 			return false;
 
-		::memcpy(dest, &_buffer[_pos], len);
+		::memcpy(dest, &m_buffer[m_pos], len);
 		return true;
 	}
 
@@ -24,7 +24,7 @@ namespace jam::net
 		if (Peek(dest, len) == false)
 			return false;
 
-		_pos += len;
+		m_pos += len;
 		return true;
 	}
 

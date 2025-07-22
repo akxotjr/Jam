@@ -5,14 +5,14 @@ namespace jam::net
 	class BufferWriter
 	{
 	public:
-		BufferWriter();
+		BufferWriter() = default;
 		BufferWriter(BYTE* buffer, uint32 size, uint32 pos = 0);
-		~BufferWriter();
+		~BufferWriter() = default;
 
-		BYTE* Buffer() { return _buffer; }
-		uint32			Size() { return _size; }
-		uint32			WriteSize() { return _pos; }
-		uint32			FreeSize() { return _size - _pos; }
+		BYTE*			Buffer() { return m_buffer; }
+		uint32			Size() { return m_size; }
+		uint32			WriteSize() { return m_pos; }
+		uint32			FreeSize() { return m_size - m_pos; }
 
 
 		template<typename T>
@@ -20,17 +20,17 @@ namespace jam::net
 		bool			Write(void* src, uint32 len);
 
 		template<typename T>
-		T* Reserve();
+		T*				Reserve();
 
 
 		template<typename T>
-		BufferWriter& operator<<(T&& src);
+		BufferWriter&	operator<<(T&& src);
 
 
 	private:
-		BYTE* _buffer = nullptr;
-		uint32			_size = 0;
-		uint32			_pos = 0;
+		BYTE*			m_buffer = nullptr;
+		uint32			m_size = 0;
+		uint32			m_pos = 0;
 	};
 
 	template<typename T>
@@ -39,8 +39,8 @@ namespace jam::net
 		if (FreeSize() < sizeof(T))
 			return nullptr;
 
-		T* ret = reinterpret_cast<T*>(&_buffer[_pos]);
-		_pos += sizeof(T);
+		T* ret = reinterpret_cast<T*>(&m_buffer[m_pos]);
+		m_pos += sizeof(T);
 
 		return ret;
 	}
@@ -49,8 +49,8 @@ namespace jam::net
 	BufferWriter& BufferWriter::operator<<(T&& src)
 	{
 		using DataType = std::remove_reference_t<T>;
-		*reinterpret_cast<DataType*>(&_buffer[_pos]) = std::forward<DataType>(src);
-		_pos += sizeof(T);
+		*reinterpret_cast<DataType*>(&m_buffer[m_pos]) = std::forward<DataType>(src);
+		m_pos += sizeof(T);
 		return *this;
 	}
 }
