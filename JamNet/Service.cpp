@@ -10,6 +10,17 @@ namespace jam::net
 	Service::Service(TransportConfig config) : m_config(config)
 	{
 		m_iocpCore = std::make_unique<IocpCore>();
+		m_workerPool = std::make_unique<utils::thrd::WorkerPool>(4,
+			[this]() -> Uptr<utils::thrd::Worker>
+			{
+				auto worker = std::make_unique<utils::thrd::Worker>();
+				worker->SetBaseJob(utils::job::Job([this]()
+					{
+						GetIocpCore()->Dispatch(10);
+					}));
+				return worker;
+			});
+		m_rpcManager = std::make_unique<RpcManager>(shared_from_this());
 	}
 
 	Service::~Service()

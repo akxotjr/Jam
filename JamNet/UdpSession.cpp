@@ -42,28 +42,45 @@ namespace jam::net
 		GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
 	}
 
-	void UdpSession::SendReliable(const Sptr<SendBuffer>& sendBuffer)
+	void UdpSession::SendReliable(const Sptr<SendBuffer>& buf)
 	{
-		size_t inFlightBytes = m_pendingAckMap.size() * sendBuffer->WriteSize();
-		if (!m_congestionController->CanSend(inFlightBytes))
-			return;
+		auto* pktHeader = reinterpret_cast<PacketHeader*>(buf->Buffer());
 
-		uint16 seq = m_sendSeq++;
+		if (!(GetPacketFlags(pktHeader->sizeAndflags) & FLAG_HAS_RUDP))
+			CRASH("SendReliable called on packet without RudpHeader!");
 
-		UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
-		header->sequence = seq;
+		auto* rudpHeader = reinterpret_cast<RudpHeader*>(buf->Buffer() + sizeof(PacketHeader));
+		uint16 seq = rudpHeader->sequence;
 
 		uint64 timestamp = Clock::Instance().GetCurrentTick();
 
-		PendingPacket pkt = { .buffer = sendBuffer, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
-
+		PendingPacket pkt = { .buffer = buf, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
 		{
 			WRITE_LOCK
 			m_pendingAckMap[seq] = pkt;
 		}
 
-		m_netStatTracker->OnSend(sendBuffer->WriteSize());
-		Send(sendBuffer);
+		Send(buf);
+		//size_t inFlightBytes = m_pendingAckMap.size() * sendBuffer->WriteSize();
+		//if (!m_congestionController->CanSend(inFlightBytes))
+		//	return;
+
+		//uint16 seq = m_sendSeq++;
+
+		//UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
+		//header->sequence = seq;
+
+		//uint64 timestamp = Clock::Instance().GetCurrentTick();
+
+		//PendingPacket pkt = { .buffer = sendBuffer, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
+
+		//{
+		//	WRITE_LOCK
+		//	m_pendingAckMap[seq] = pkt;
+		//}
+
+		//m_netStatTracker->OnSend(sendBuffer->WriteSize());
+		//Send(sendBuffer);
 	}
 
 
@@ -107,6 +124,7 @@ namespace jam::net
 		if (len < size || size < sizeof(PacketHeader))
 			return 0;
 
+		uint8 flags = GetPacketFlags(header->sizeAndflags);	// todo
 
 		switch (header->type)
 		{
@@ -185,8 +203,8 @@ namespace jam::net
 
 	void UdpSession::HandleCustomPacket(BYTE* data, uint32 len)
 	{
+		//todo
 	}
-
 
 	//int32 UdpSession::IsParsingPacket(BYTE* buffer, const int32 len)
 	//{

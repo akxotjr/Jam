@@ -107,6 +107,7 @@ namespace jam::net
 	//	uint32 bitfield;
 	//};
 
+
 	struct C_PING
 	{
 		uint64 clientSendTick;
@@ -141,7 +142,7 @@ namespace jam::net
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
-		virtual void							SendReliable(const Sptr<SendBuffer>& sendBuffer);
+		virtual void							SendReliable(const Sptr<SendBuffer>& buf);
 
 		void									HandleAck(uint16 latestSeq, uint32 bitfield);
 		bool									CheckAndRecordReceiveHistory(uint16 seq);
@@ -167,6 +168,10 @@ namespace jam::net
 		void HandleAckPacket(AckHeader* ack);
 		void HandleCustomPacket(BYTE* data, uint32 len);
 
+		Sptr<SendBuffer> MakeSystemPacket(eSysPacketId sysId, BYTE* payload, bool reliable);
+		Sptr<SendBuffer> MakeRpcPacket();
+		Sptr<SendBuffer> MakeAckPacket();
+		Sptr<SendBuffer> MakeCustomPacket();
 
 		//int32 ParseAndDispatchPackets(BYTE* buffer, int32 len);
 
@@ -197,11 +202,6 @@ namespace jam::net
 		void									SendHandshakeSynAck();
 		void									OnRecvHandshakeAck();
 
-
-		Sptr<SendBuffer> MakeSystemSendBuffer();
-		Sptr<SendBuffer> MakeRpcSendBuffer();
-		Sptr<SendBuffer> MakeAckSendBuffer();
-		Sptr<SendBuffer> MakeCustomSendBuffer();
 
 
 		Sptr<SendBuffer>						MakeHandshakePkt(eSysPacketId id);

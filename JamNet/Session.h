@@ -66,9 +66,9 @@ namespace jam::net
 	constexpr uint16 PACKET_FLAG_SHIFT = 12;
 
 	// flags
-	constexpr uint16 hasRudpHeader = 0x1000;
-	constexpr uint16 isCompressed = 0x2000;
-	constexpr uint16 isEncrypted = 0x3000;
+	constexpr uint16 FLAG_HAS_RUDP = 0x1000;
+	constexpr uint16 FLAG_IS_COMPRESSED = 0x2000;
+	constexpr uint16 FLAG_IS_ENCRYPTED = 0x3000;
 
 	inline uint16 GetPacketSize(uint16 sizeAndFlags)
 	{

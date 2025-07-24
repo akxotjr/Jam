@@ -1,5 +1,6 @@
 #pragma once
 #include "NetAddress.h"
+#include "RpcManager.h"
 #include "Session.h"
 #include "TcpListener.h"
 #include "UdpRouter.h"
@@ -102,6 +103,10 @@ namespace jam::net
 		Sptr<UdpRouter>										m_udpRouter = nullptr;
 
 		ePeerType											m_peer = ePeerType::None;
+
+		
+		Uptr<utils::thrd::WorkerPool>						m_workerPool;
+		Uptr<RpcManager>									m_rpcManager;
 	};
 
 	template<typename TCP, typename UDP>
@@ -129,7 +134,7 @@ namespace jam::net
 	{
 	public:
 		ClientService(TransportConfig config);
-		~ClientService() override;
+		virtual ~ClientService() override;
 
 		bool Start() override;
 	};
@@ -140,7 +145,7 @@ namespace jam::net
 	{
 	public:
 		ServerService(TransportConfig config);
-		~ServerService() override;
+		virtual ~ServerService() override;
 
 		bool Start() override;
 	};

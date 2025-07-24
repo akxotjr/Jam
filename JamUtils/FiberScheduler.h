@@ -33,9 +33,14 @@ namespace jam::utils::thrd
             return m_readyQueue.empty();
         }
 
+        Fiber*  GetCurrentFiber() { return m_currentFiber; }
+        void    SetCurrentFiber(Fiber* fiber) { m_currentFiber = fiber; }
+
+
 	private:
         USE_LOCK
 
 		std::queue<Sptr<Fiber>> m_readyQueue;
+        Fiber*                  m_currentFiber = nullptr;
 	};
 }
