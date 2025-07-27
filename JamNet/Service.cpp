@@ -20,7 +20,7 @@ namespace jam::net
 					}));
 				return worker;
 			});
-		m_rpcManager = std::make_unique<RpcManager>(shared_from_this());
+		//m_rpcManager = std::make_unique<RpcManager>(shared_from_this());
 	}
 
 	Service::~Service()
@@ -97,12 +97,12 @@ namespace jam::net
 		m_udpSessionCount--;
 	}
 
-	void Service::AddHandshakingUdpSession(Sptr<UdpSession> session)
-	{
-		WRITE_LOCK
+	//void Service::AddHandshakingUdpSession(Sptr<UdpSession> session)
+	//{
+	//	WRITE_LOCK
 
-		m_handshakingUdpSessions[session->GetRemoteNetAddress()] = session;
-	}
+	//	m_handshakingUdpSessions[session->GetRemoteNetAddress()] = session;
+	//}
 
 
 	void Service::CompleteUdpHandshake(const NetAddress& from)

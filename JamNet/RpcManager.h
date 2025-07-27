@@ -1,7 +1,7 @@
 #pragma once
-#include "RpcHandler.h"
 #include "Session.h"
 #include "BufferWriter.h"
+#include "Fiber.h"
 #include "SendBuffer.h"
 #include "UdpSession.h"
 
@@ -24,10 +24,10 @@ namespace jam::net
 		template<typename T>
 		void RegisterResHandler(std::function<void(const T&, uint32)> handler);
 
-		template<typename T>
-		void Call(Sptr<Session> session, const T& msg, bool reliable = true);
+		template<typename Req>
+		void Call(Sptr<Session> session, const Req& req, bool reliable = true);
 		template<typename Req, typename Res>
-		Res CallWithResponse(Sptr<Session> session, const Req& req);
+		Res CallWithResponse(Sptr<Session> session, const Req& req, bool reliable = true);
 
 		void Dispatch(Sptr<Session> session, uint16 rpcId, uint32 requestId, uint8 flags, BYTE* payload, uint32 payloadLen);
 
@@ -38,23 +38,14 @@ namespace jam::net
 	private:
 		USE_LOCK
 
-		xumap<uint16, RequestHandler> m_reqHandlers;
-		xumap<uint16, ResponseHandler> m_resHandlers;
+		xumap<uint16, RequestHandler>	m_reqHandlers;	// key : rpcId
+		xumap<uint16, ResponseHandler>	m_resHandlers;	// key : rpcId
 
-		xumap<uint32, AwaitCallback> m_callbacks;	// key : requestId
+		xumap<uint32, AwaitCallback>	m_callbacks;	// key : requestId
 
-		Atomic<uint32> m_requestIdGen = 1;
+		Atomic<uint32>					m_requestIdGen = 1;
 	};
 
-
-
-//#define REGISTER_RPC_HANDLER(MsgType, Fn) \
-//		RpcManager::Instance().Register<MsgType>(Fn);
-//
-//#define DECLARE_RPC_HANDLER(MsgType, ClassType, Method) \
-//		RpcManager::Instance().Register<MsgType>([](Sptr<Session> session, const MsgType& msg) { \
-//			ClassType::Instance().Method(session, msg); \
-//		});
 
 	template<typename T>
 	inline void RpcManager::RegisterReqHandler(std::function<void(Sptr<Session>, const T&, uint32)> handler)
@@ -83,14 +74,14 @@ namespace jam::net
 			};
 	}
 
-	template<typename T>
-	inline void RpcManager::Call(Sptr<Session> session, const T& msg, bool reliable)
+	template<typename Req>
+	inline void RpcManager::Call(Sptr<Session> session, const Req& req, bool reliable)
 	{
 		flatbuffers::FlatBufferBuilder fbb;
-		auto offset = T::Pack(fbb, &msg);
-		T::Finish(fbb, offset);
+		auto offset = Req::Pack(fbb, &req);
+		Req::Finish(fbb, offset);
 
-		uint16 rpcId = T::identifier;
+		uint16 rpcId = Req::identifier;
 		uint32 requestId = 0;
 
 		uint16 totalSize = sizeof(PacketHeader) + sizeof(RpcHeader) + fbb.GetSize();
@@ -121,7 +112,7 @@ namespace jam::net
 	}
 
 	template<typename Req, typename Res>
-	inline Res RpcManager::CallWithResponse(Sptr<Session> session, const Req& req)
+	inline Res RpcManager::CallWithResponse(Sptr<Session> session, const Req& req, bool reliable)
 	{
 		flatbuffers::FlatBufferBuilder fbb;
 		auto offset = Req::Pack(fbb, &req);
@@ -149,24 +140,40 @@ namespace jam::net
 
 		Res result;
 
-		Fiber* currentFiber = tl_Worker->GetScheduler()->CurrentFiber();
+		utils::thrd::Fiber* currentFiber = utils::thrd::tl_Worker->GetScheduler()->GetCurrentFiber();
 
 		RegisterAwait(requestId, [currentFiber, &result](const char* data, size_t len) {
-			const Res* res = flatbuffers::GetRoot<Res>(data);
-			result = *res;
+				const Res* res = flatbuffers::GetRoot<Res>(data);
+				result = *res;
 
-			JobRef job = Job::Make([currentFiber]() {
-				currentFiber->SwitchTo();
-				});
-			tl_Worker->GetJobQueue()->Push(job);
+				Sptr<utils::job::Job> job = utils::memory::MakeShared<utils::job::Job>([currentFiber]()
+					{
+						currentFiber->SwitchTo();
+					});
+				utils::thrd::tl_Worker->GetCurrentJobQueue()->Push(job);
 			});
 
-		session->SendReliable(buffer);
-		Fiber::Yield();
+		if (reliable)
+		{
+			auto rudpSession = static_pointer_cast<UdpSession>(session);
+			rudpSession->SendReliable(buf);
+		}
+		else
+		{
+			session->Send(buf);
+		}
+
+		currentFiber->YieldJob();
+
 		return result;
 	}
-
-
-
 }
+
+
+#define REGISTER_RPC_REQUEST(TYPE, FUNC) \
+    jam::net::RpcManager::Instance().RegisterRequestHandler<TYPE>(FUNC)
+
+#define REGISTER_RPC_RESPONSE(TYPE, FUNC) \
+    jam::net::RpcManager::Instance().RegisterResponseHandler<TYPE>(FUNC)
+
 

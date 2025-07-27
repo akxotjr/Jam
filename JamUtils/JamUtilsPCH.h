@@ -38,6 +38,8 @@
 #include "DeadLockProfiler.h"
 #include "Worker.h"
 #include "WorkerPool.h"
+#include "Fiber.h"
+#include "FiberScheduler.h"
 
 /** jam::utils::job **/
 #include "Job.h"

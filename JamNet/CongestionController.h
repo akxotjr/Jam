@@ -2,7 +2,7 @@
 
 namespace jam::net
 {
-	constexpr float MTU = 1024;	// 1024 bytes
+	constexpr uint32 MTU = 1024;	// 1024 bytes
 
 	class CongestionController
 	{

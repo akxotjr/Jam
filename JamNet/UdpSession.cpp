@@ -14,6 +14,7 @@ namespace jam::net
 
 		m_netStatTracker = std::make_unique<NetStatTracker>();
 		m_congestionController = std::make_unique<CongestionController>();
+		m_fragmentHandler = std::make_unique<FragmentHandler>();
 	}
 
 	UdpSession::~UdpSession()

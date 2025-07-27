@@ -26,4 +26,9 @@ namespace jam::utils::thrd
 		tl_Worker->GetScheduler()->SetCurrentFiber(this);
 		::SwitchToFiber(m_fiber);
 	}
+
+	void Fiber::YieldJob()
+	{
+		::SwitchToFiber(m_mainFiber);
+	}
 }

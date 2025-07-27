@@ -1,7 +1,7 @@
 #pragma once
 #include "Session.h"
 #include <bitset>
-
+#include "RecvBuffer.h"
 #include "CongestionController.h"
 #include "NetStat.h"
 
@@ -168,10 +168,6 @@ namespace jam::net
 		void HandleAckPacket(AckHeader* ack);
 		void HandleCustomPacket(BYTE* data, uint32 len);
 
-		Sptr<SendBuffer> MakeSystemPacket(eSysPacketId sysId, BYTE* payload, bool reliable);
-		Sptr<SendBuffer> MakeRpcPacket();
-		Sptr<SendBuffer> MakeAckPacket();
-		Sptr<SendBuffer> MakeCustomPacket();
 
 		//int32 ParseAndDispatchPackets(BYTE* buffer, int32 len);
 
@@ -243,6 +239,7 @@ namespace jam::net
 
 		Uptr<NetStatTracker>					m_netStatTracker = nullptr;
 		Uptr<CongestionController>				m_congestionController = nullptr;
+		Uptr<FragmentHandler>					m_fragmentHandler = nullptr;
 	};
 
 }

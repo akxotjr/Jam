@@ -96,6 +96,12 @@
     <ClInclude Include="FragmentHandler.h" />
     <ClInclude Include="Clock.h" />
     <ClInclude Include="RpcManager.h" />
+    <ClInclude Include="PacketBuilder.h">
+      <Filter>04.Packet</Filter>
+    </ClInclude>
+    <ClInclude Include="PacketEncryptor.h">
+      <Filter>04.Packet</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -158,5 +164,11 @@
     <ClCompile Include="FragmentHandler.cpp" />
     <ClCompile Include="Clock.cpp" />
     <ClCompile Include="RpcManager.cpp" />
+    <ClCompile Include="PacketBuilder.cpp">
+      <Filter>04.Packet</Filter>
+    </ClCompile>
+    <ClCompile Include="PacketEncryptor.cpp">
+      <Filter>04.Packet</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

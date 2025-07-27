@@ -108,7 +108,7 @@ namespace jam::net
 	class Session : public IocpObject
 	{
 	public:
-		Session() = default;
+		Session();
 		virtual ~Session() = default;
 
 		virtual bool							Connect() = 0;
@@ -141,6 +141,9 @@ namespace jam::net
 		NetAddress								m_remoteAddress = {};
 
 		SessionId								m_sid;
-		eSessionState							m_state = eSessionState::DISCONNECTED; 
+		eSessionState							m_state = eSessionState::DISCONNECTED;
+
+		Uptr<RpcManager> m_rpcManager;
+		Uptr<PacketHandler> m_packetHandler;
 	};
 }

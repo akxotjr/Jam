@@ -30,7 +30,7 @@
 #include "lz4.h"
 
 /** Flatbuffer **/
-
+#include "flatbuffers/flatbuffers.h"
 
 /** JamNet Core **/
 #include "IocpCore.h"
