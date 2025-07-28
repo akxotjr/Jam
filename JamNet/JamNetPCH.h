@@ -22,6 +22,8 @@
 #include "ipzip.h"
 #include "lz4.h"
 
+#include <typeinfo>
+
 /** JamNet **/
 #include "IocpCore.h"
 #include "IocpEvent.h"
