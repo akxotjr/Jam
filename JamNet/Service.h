@@ -45,8 +45,6 @@ namespace jam::net
 
 		void								RegisterUdpSession(Sptr<UdpSession> session);
 		void								ReleaseUdpSession(Sptr<UdpSession> session);
-		
-		//void								AddHandshakingUdpSession(Sptr<UdpSession> session);
 
 		void								CompleteUdpHandshake(const NetAddress& from);
 
@@ -104,7 +102,6 @@ namespace jam::net
 
 		
 		Uptr<utils::thrd::WorkerPool>						m_workerPool;
-		//Uptr<RpcManager>									m_rpcManager;
 	};
 
 	template<typename TCP, typename UDP>

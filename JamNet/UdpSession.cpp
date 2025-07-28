@@ -47,7 +47,7 @@ namespace jam::net
 	{
 		auto* pktHeader = reinterpret_cast<PacketHeader*>(buf->Buffer());
 
-		if (!(GetPacketFlags(pktHeader->sizeAndflags) & FLAG_HAS_RUDP))
+		if (!(GetPacketFlags(pktHeader->sizeAndflags) & FLAG_RELIABLE))
 			CRASH("SendReliable called on packet without RudpHeader!");
 
 		auto* rudpHeader = reinterpret_cast<RudpHeader*>(buf->Buffer() + sizeof(PacketHeader));

@@ -30,7 +30,7 @@ namespace jam::net
 
 	struct FragmentHeader
 	{
-		uint32	packetId;
+		uint32	packetId; 
 		uint8	totalCount;
 		uint8	fragmentIndex;
 		uint16	totalSize;

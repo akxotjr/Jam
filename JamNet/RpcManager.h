@@ -4,10 +4,22 @@
 #include "Fiber.h"
 #include "SendBuffer.h"
 #include "UdpSession.h"
+#include "PacketBuilder.h"
 
 namespace jam::net
 {
 	class Service;
+
+#pragma pack(push, 1)
+	struct RpcHeader
+	{
+		uint16 rpcId;        // 어떤 RPC인지
+		uint32 requestId;    // 응답 매칭용
+		uint8  flags;        // 예: isResponse, isReliable, isCompressed 등
+	};
+#pragma pack(pop)
+
+
 
 	class RpcManager
 	{
@@ -85,20 +97,47 @@ namespace jam::net
 		uint32 requestId = 0;
 
 		uint16 totalSize = sizeof(PacketHeader) + sizeof(RpcHeader) + fbb.GetSize();
-		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(totalSize);
-		BufferWriter bw(buf->Buffer(), buf->AllocSize());
 
-		PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
-		pktHeader->sizeAndflags = MakeSizeAndFlags(totalSize, 0);
-		pktHeader->type = static_cast<uint8>(ePacketType::RPC);
+		PacketHeader pktHeader = {
+			.sizeAndflags = MakeSizeAndFlags(totalSize, 0),
+			.type = static_cast<uint8>(ePacketType::RPC)
+		};
 
-		RpcHeader* rpcHeader = bw.Reserve<RpcHeader>();
-		rpcHeader->rpcId = rpcId;
-		rpcHeader->requestId = requestId;
-		rpcHeader->flags = 0;
-		bw.Write(fbb.GetBufferPointer(), fbb.GetSize());
+		RpcHeader rpcHeader = {
+			.rpcId = rpcId,
+			.requestId = requestId,
+			.flags = 0
+		};
 
-		buf->Close(totalSize);
+
+
+		auto pb = session->GetPacketBuilder();
+		pb->BeginWrite(totalSize);
+		pb->AttachPacketHeader();
+
+		if (reliable)
+			pb->AttachRudpheader();
+
+		pb->AttachRpcHeader(	);
+		pb->AttachPayload(fbb.GetBufferPointer(), fbb.GetSize());
+
+		pb->Finalize();
+
+
+		//Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(totalSize);
+		//BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		//PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
+		//pktHeader->sizeAndflags = MakeSizeAndFlags(totalSize, 0);
+		//pktHeader->type = static_cast<uint8>(ePacketType::RPC);
+
+		//RpcHeader* rpcHeader = bw.Reserve<RpcHeader>();
+		//rpcHeader->rpcId = rpcId;
+		//rpcHeader->requestId = requestId;
+		//rpcHeader->flags = 0;
+		//bw.Write(fbb.GetBufferPointer(), fbb.GetSize());
+
+		//buf->Close(totalSize);
 
 		if (reliable)
 		{

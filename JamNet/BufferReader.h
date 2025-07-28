@@ -142,4 +142,3 @@ namespace jam::net
 	//	return *this;
 	//}
 
-}

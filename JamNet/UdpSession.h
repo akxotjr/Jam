@@ -27,15 +27,12 @@ namespace jam::net
 
 	enum class eSysPacketId : uint8
 	{
-		C_HANDSHAKE_SYN = 0,
-		S_HANDSHAKE_SYN = 1,
-		C_HANDSHAKE_SYNACK = 2,
-		S_HANDSHAKE_SYNACK = 3,
-		C_HANDSHAKE_ACK = 4,
-		S_HANDSHAKE_ACK = 5,
-
-		//ACK = 6,
-
+		C_HANDSHAKE_SYN = 1,
+		S_HANDSHAKE_SYN = 2,
+		C_HANDSHAKE_SYNACK = 3,
+		S_HANDSHAKE_SYNACK = 4,
+		C_HANDSHAKE_ACK = 5,
+		S_HANDSHAKE_ACK = 6,
 		C_PING = 7,
 		S_PONG = 8,
 

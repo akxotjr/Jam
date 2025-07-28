@@ -148,4 +148,4 @@ namespace jam::net
 	//	m_pos += sizeof(T);
 	//	return *this;
 	//}
-}
+

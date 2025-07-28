@@ -1,5 +1,7 @@
 #pragma once
 #include "IocpCore.h"
+#include "RpcManager.h"
+#include "PacketBuilder.h"
 
 namespace jam::net
 {
@@ -42,8 +44,6 @@ namespace jam::net
 
 
 	//----------------------------------------------------------------------------------//
-
-
 #pragma pack(push, 1)
 	struct PacketHeader
 	{
@@ -54,10 +54,10 @@ namespace jam::net
 
 	enum class ePacketType : uint8
 	{
-		SYSTEM		= 0,
-		RPC			= 1,
-		ACK			= 2,
-		CUSTOM		= 3
+		SYSTEM = 0,
+		RPC = 1,
+		ACK = 2,
+		CUSTOM = 3
 	};
 
 	// mask & shift
@@ -66,9 +66,9 @@ namespace jam::net
 	constexpr uint16 PACKET_FLAG_SHIFT = 12;
 
 	// flags
-	constexpr uint16 FLAG_HAS_RUDP = 0x1000;
-	constexpr uint16 FLAG_IS_COMPRESSED = 0x2000;
-	constexpr uint16 FLAG_IS_ENCRYPTED = 0x3000;
+	constexpr uint16 FLAG_RELIABLE = 0x1000;
+	constexpr uint16 FLAG_COMPRESSED = 0x2000;
+	constexpr uint16 FLAG_ENCRYPTED = 0x3000;
 
 	inline uint16 GetPacketSize(uint16 sizeAndFlags)
 	{
@@ -85,22 +85,11 @@ namespace jam::net
 		return ((flags & 0x0F) << PACKET_FLAG_SHIFT) | (size & PACKET_SIZE_MASK);
 	}
 
-	//----------------------------------------------------------------------------------//
-
-
-
 
 	//----------------------------------------------------------------------------------//
 
 
-#pragma pack(push, 1)
-	struct RpcHeader
-	{
-		uint16 rpcId;        // 어떤 RPC인지
-		uint32 requestId;    // 응답 매칭용
-		uint8  flags;        // 예: isResponse, isReliable, isCompressed 등
-	};
-#pragma pack(pop)
+
 
 
 
@@ -129,6 +118,8 @@ namespace jam::net
 		Sptr<Session>							GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
 		eSessionState							GetState() { return m_state; }
 
+		PacketBuilder*							GetPacketBuilder() { return m_packetBuilder.get(); }
+
 	protected:
 		virtual void							OnConnected() = 0;
 		virtual void							OnDisconnected() = 0;
@@ -143,7 +134,7 @@ namespace jam::net
 		SessionId								m_sid;
 		eSessionState							m_state = eSessionState::DISCONNECTED;
 
-		Uptr<RpcManager> m_rpcManager;
-		Uptr<PacketHandler> m_packetHandler;
+		Uptr<RpcManager>						m_rpcManager;
+		Uptr<PacketBuilder>						m_packetBuilder;
 	};
 }
