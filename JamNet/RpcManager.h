@@ -1,93 +1,218 @@
 #pragma once
+#include "Session.h"
+#include "BufferWriter.h"
+#include "Fiber.h"
+#include "SendBuffer.h"
+#include "UdpSession.h"
+#include "PacketBuilder.h"
 
 namespace jam::net
 {
+	class Service;
 
+#pragma pack(push, 1)
+	struct RpcHeader
+	{
+		uint16 rpcId;        // 어떤 RPC인지
+		uint32 requestId;    // 응답 매칭용
+		uint8  flags;        // 예: isResponse, isReliable, isCompressed 등
+	};
+#pragma pack(pop)
 
 
 
 	class RpcManager
 	{
-		DECLARE_SINGLETON(RpcManager)
+		using RequestHandler = std::function<void(Sptr<Session>, const BYTE*, size_t, uint32)>;
+		using ResponseHandler = std::function<void(const BYTE*, size_t, uint32)>;
+		using AwaitCallback = std::function<void(const BYTE*, size_t)>;
+
 	public:
-		template<typename T>
-		void Register(std::function<void(Sptr<Session>, const T&)> handler);
+		RpcManager() = default;
+		~RpcManager() = default;
 
 		template<typename T>
-		void Call(Sptr<Session> session, const T& message, bool reliable = true);
-
-		void Dispatch(Sptr<Session> session, uint16 rpcId, const char* data, size_t len);
-
+		void RegisterReqHandler(std::function<void(Sptr<Session>, const T&, uint32)> handler);
 		template<typename T>
-		uint16 GetRpcId();
+		void RegisterResHandler(std::function<void(const T&, uint32)> handler);
 
+		template<typename Req>
+		void Call(Sptr<Session> session, const Req& req, bool reliable = true);
+		template<typename Req, typename Res>
+		Res CallWithResponse(Sptr<Session> session, const Req& req, bool reliable = true);
+
+		void Dispatch(Sptr<Session> session, uint16 rpcId, uint32 requestId, uint8 flags, BYTE* payload, uint32 payloadLen);
 
 	private:
-		xumap<uint16, std::function<void(Sptr<Session>, const char*, size_t)>> m_handlers;
+		void RegisterAwait(uint32 requestId, AwaitCallback callback);
+		void ResumeAwait(uint32 requestId, const BYTE* payload, uint32 len);
+
+	private:
+		USE_LOCK
+
+		xumap<uint16, RequestHandler>	m_reqHandlers;	// key : rpcId
+		xumap<uint16, ResponseHandler>	m_resHandlers;	// key : rpcId
+
+		xumap<uint32, AwaitCallback>	m_callbacks;	// key : requestId
+
+		Atomic<uint32>					m_requestIdGen = 1;
 	};
 
 
-
-
-
-
-	template <typename T>
-	void RpcManager::Register(std::function<void(Sptr<Session>, const T&)> handler)
+	template<typename T>
+	inline void RpcManager::RegisterReqHandler(std::function<void(Sptr<Session>, const T&, uint32)> handler)
 	{
-		uint16 rpcId = GetRpcId<T>();
-		m_handlers[rpcId] = [handler](Sptr<Session> session, const char* data, size_t len)
-			{
-				T msg;
-				if (!msg.ParseFromArray(data, static_cast<int>(len)))
-				{
-					std::cout << "Failed to parse RPC message : " << typeid(T).name() << '\n';
+		uint16 rpcId = T::identifier;
+
+		m_reqHandlers[rpcId] = [handler](Sptr<Session> session, const char* data, size_t len, uint32 requestId) {
+				flatbuffers::Verifier verifier(reinterpret_cast<const uint8_t*>(data), len);
+				if (!verifier.VerifyBuffer<T>(nullptr)) 
 					return;
-				}
-				handler(session, msg);
+				const T* msg = flatbuffers::GetRoot<T>(data);
+				handler(session, *msg, requestId);
 			};
 	}
 
-	template <typename T>
-	void RpcManager::Call(Sptr<Session> session, const T& message, bool reliable)
+	template<typename T>
+	inline void RpcManager::RegisterResHandler(std::function<void(const T&, uint32)> handler)
 	{
-		uint16 rpcId = GetRpcId<T>();
+		uint16 rpcId = T::identifier;
 
-		std::string serialized;
-		message.SerializeToString(&serialized);
+		m_resHandlers[rpcId] = [handler](const char* data, size_t len, uint32 requestId) {
+				flatbuffers::Verifier verifier(reinterpret_cast<const uint8*>(data), len);
+				if (!verifier.VerifyBuffer<T>(nullptr)) return;
+				const T* msg = flatbuffers::GetRoot<T>(data);
+				handler(*msg, requestId);
+			};
+	}
 
-		// 패킷 구성
-		RpcPacketHeader header;
-		header.id = rpcId;
-		header.size = sizeof(header) + serialized.size();
+	template<typename Req>
+	inline void RpcManager::Call(Sptr<Session> session, const Req& req, bool reliable)
+	{
+		flatbuffers::FlatBufferBuilder fbb;
+		auto offset = Req::Pack(fbb, &req);
+		Req::Finish(fbb, offset);
 
-		auto sendBuffer = SendBufferManager::Instance().Open(header.size);
-		memcpy(sendBuffer->Buffer(), &header, sizeof(header));
-		memcpy(sendBuffer->Buffer() + sizeof(header), serialized.data(), serialized.size());
-		sendBuffer->Close(header.size);
+		uint16 rpcId = Req::identifier;
+		uint32 requestId = 0;
+
+		uint16 totalSize = sizeof(PacketHeader) + sizeof(RpcHeader) + fbb.GetSize();
+
+		PacketHeader pktHeader = {
+			.sizeAndflags = MakeSizeAndFlags(totalSize, 0),
+			.type = static_cast<uint8>(ePacketType::RPC)
+		};
+
+		RpcHeader rpcHeader = {
+			.rpcId = rpcId,
+			.requestId = requestId,
+			.flags = 0
+		};
+
+
+
+		auto pb = session->GetPacketBuilder();
+		pb->BeginWrite(totalSize);
+		pb->AttachPacketHeader();
 
 		if (reliable)
-			session->SendReliable(sendBuffer);
-		else
-			session->Send(sendBuffer);
-	}
+			pb->AttachRudpheader();
 
-	template <typename T>
-	uint16 RpcManager::GetRpcId()
-	{
-		static const uint16 id = static_cast<uint16>(std::hash<std::string>{}(typeid(T).name()) % 0xFFFF);
-		return id;
-	}
+		pb->AttachRpcHeader(	);
+		pb->AttachPayload(fbb.GetBufferPointer(), fbb.GetSize());
 
-	inline void RpcManager::Dispatch(Sptr<Session> session, uint16 rpcId, const char* data, size_t len)
-	{
-		auto it = m_handlers.find(rpcId);
-		if (it == m_handlers.end()) 
+		pb->Finalize();
+
+
+		//Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(totalSize);
+		//BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		//PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
+		//pktHeader->sizeAndflags = MakeSizeAndFlags(totalSize, 0);
+		//pktHeader->type = static_cast<uint8>(ePacketType::RPC);
+
+		//RpcHeader* rpcHeader = bw.Reserve<RpcHeader>();
+		//rpcHeader->rpcId = rpcId;
+		//rpcHeader->requestId = requestId;
+		//rpcHeader->flags = 0;
+		//bw.Write(fbb.GetBufferPointer(), fbb.GetSize());
+
+		//buf->Close(totalSize);
+
+		if (reliable)
 		{
-			std::cout << "Unhandled RPC id: " << rpcId << '\n';
-			return;
+			auto rudpSession = static_pointer_cast<UdpSession>(session);
+			rudpSession->SendReliable(buf);
+		}
+		else
+		{
+			session->Send(buf);
+		}
+	}
+
+	template<typename Req, typename Res>
+	inline Res RpcManager::CallWithResponse(Sptr<Session> session, const Req& req, bool reliable)
+	{
+		flatbuffers::FlatBufferBuilder fbb;
+		auto offset = Req::Pack(fbb, &req);
+		Req::Finish(fbb, offset);
+
+		uint16 rpcId = Req::identifier;
+		uint32 requestId = m_requestIdGen.fetch_add(1);
+
+		uint16 totalSize = sizeof(PacketHeader) + sizeof(RpcHeader) + fbb.GetSize();
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(totalSize);
+		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		PacketHeader* pktHeader = bw.Reserve<PacketHeader>();
+		pktHeader->sizeAndflags = MakeSizeAndFlags(totalSize, 0);
+		pktHeader->type = static_cast<uint8>(ePacketType::RPC);
+
+		RpcHeader* rpcHeader = bw.Reserve<RpcHeader>();
+		rpcHeader->rpcId = rpcId;
+		rpcHeader->requestId = requestId;
+		rpcHeader->flags = 0;
+
+		bw.Write(fbb.GetBufferPointer(), fbb.GetSize());
+
+		buf->Close(totalSize);
+
+		Res result;
+
+		utils::thrd::Fiber* currentFiber = utils::thrd::tl_Worker->GetScheduler()->GetCurrentFiber();
+
+		RegisterAwait(requestId, [currentFiber, &result](const char* data, size_t len) {
+				const Res* res = flatbuffers::GetRoot<Res>(data);
+				result = *res;
+
+				Sptr<utils::job::Job> job = utils::memory::MakeShared<utils::job::Job>([currentFiber]()
+					{
+						currentFiber->SwitchTo();
+					});
+				utils::thrd::tl_Worker->GetCurrentJobQueue()->Push(job);
+			});
+
+		if (reliable)
+		{
+			auto rudpSession = static_pointer_cast<UdpSession>(session);
+			rudpSession->SendReliable(buf);
+		}
+		else
+		{
+			session->Send(buf);
 		}
 
-		it->second(session, data, len);
+		currentFiber->YieldJob();
+
+		return result;
 	}
 }
+
+
+#define REGISTER_RPC_REQUEST(TYPE, FUNC) \
+    jam::net::RpcManager::Instance().RegisterRequestHandler<TYPE>(FUNC)
+
+#define REGISTER_RPC_RESPONSE(TYPE, FUNC) \
+    jam::net::RpcManager::Instance().RegisterResponseHandler<TYPE>(FUNC)
+
 

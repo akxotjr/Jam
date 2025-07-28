@@ -1,5 +1,7 @@
 #pragma once
 #include "IocpCore.h"
+#include "RpcManager.h"
+#include "PacketBuilder.h"
 
 namespace jam::net
 {
@@ -31,19 +33,24 @@ namespace jam::net
 		return sid & ID_MASK;
 	}
 
+
+
 	enum class eSessionState : uint8
 	{
-		CONNECTED = 0,
-		DISCONNECTED,
-		HANDSHAKING
+		CONNECTED		= 0,
+		DISCONNECTED	= 1,
+		HANDSHAKING		= 2
 	};
 
 
-
-
-
-	//-----------------------------------------------------------------------------------------------//
-
+	//----------------------------------------------------------------------------------//
+#pragma pack(push, 1)
+	struct PacketHeader
+	{
+		uint16 sizeAndflags;    // [4-bit flags][12-bit size]   total packet size and flags
+		uint8  type;			// packet type (System, RPC, Ack, Custom)
+	};
+#pragma pack(pop)
 
 	enum class ePacketType : uint8
 	{
@@ -52,36 +59,35 @@ namespace jam::net
 		ACK = 2,
 		CUSTOM = 3
 	};
-	
-#pragma pack(push, 1)
-	struct PacketHeader
+
+	// mask & shift
+	constexpr uint16 PACKET_FLAG_MASK = 0xF000;
+	constexpr uint16 PACKET_SIZE_MASK = 0x0FFF;
+	constexpr uint16 PACKET_FLAG_SHIFT = 12;
+
+	// flags
+	constexpr uint16 FLAG_RELIABLE = 0x1000;
+	constexpr uint16 FLAG_COMPRESSED = 0x2000;
+	constexpr uint16 FLAG_ENCRYPTED = 0x3000;
+
+	inline uint16 GetPacketSize(uint16 sizeAndFlags)
 	{
-		uint16	size;
-		uint8	type;
-	};
-#pragma pack(pop)
+		return sizeAndFlags & PACKET_SIZE_MASK;
+	}
 
-	constexpr uint8 RESPONSE_MASK = 0x00;
-	constexpr uint8 RELIABLE_MASK = 0x01;
-	constexpr uint8 COMPRESSED_MASK = 0x02;
-	// ....
-
-	enum class eRpcHeaderFlag : uint8
+	inline uint8 GetPacketFlags(uint16 sizeAndFlags)
 	{
-		RESPONSE = 0,
-		RELIABLE = 1,
-		COMPRESSED = 2,
+		return static_cast<uint8>((sizeAndFlags & PACKET_FLAG_MASK) >> PACKET_FLAG_SHIFT);
+	}
 
-	};
-
-#pragma pack(push, 1)
-	struct RpcHeader
+	inline uint16 MakeSizeAndFlags(uint16 size, uint8 flags)
 	{
-		uint16	rpcId;
-		uint32	requestid;
-		uint8	flags;
-	};
-#pragma pack(pop)
+		return ((flags & 0x0F) << PACKET_FLAG_SHIFT) | (size & PACKET_SIZE_MASK);
+	}
+
+
+	//----------------------------------------------------------------------------------//
+
 
 
 
@@ -91,26 +97,28 @@ namespace jam::net
 	class Session : public IocpObject
 	{
 	public:
-		Session() = default;
+		Session();
 		virtual ~Session() = default;
 
 		virtual bool							Connect() = 0;
 		virtual void							Disconnect(const WCHAR* cause) = 0;
 		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) = 0;
 
-		bool									IsTcp() const { return ExtractProtocol(m_sid) == eProtocolType::TCP; }
-		bool									IsUdp() const { return ExtractProtocol(m_sid) == eProtocolType::UDP; }
-		bool									IsConnected() const { return m_state == eSessionState::CONNECTED; }
+		bool									IsTcp() { return ExtractProtocol(m_sid) == eProtocolType::TCP; }
+		bool									IsUdp() { return ExtractProtocol(m_sid) == eProtocolType::UDP; }
+		bool									IsConnected() { return m_state == eSessionState::CONNECTED; }
 
-		Sptr<Service>							GetService() const { return m_service.lock(); }
+		Sptr<Service>							GetService() { return m_service.lock(); }
 		void									SetService(const Sptr<Service>& service) { m_service = service; }
 
 		NetAddress&								GetRemoteNetAddress() { return m_remoteAddress; }
 		void									SetRemoteNetAddress(const NetAddress& address) { m_remoteAddress = address; }
-		SOCKET									GetSocket() const { return m_socket; }
+		SOCKET									GetSocket() { return m_socket; }
 
 		Sptr<Session>							GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
-		eSessionState							GetState() const { return m_state; }
+		eSessionState							GetState() { return m_state; }
+
+		PacketBuilder*							GetPacketBuilder() { return m_packetBuilder.get(); }
 
 	protected:
 		virtual void							OnConnected() = 0;
@@ -124,6 +132,9 @@ namespace jam::net
 		NetAddress								m_remoteAddress = {};
 
 		SessionId								m_sid;
-		eSessionState							m_state = eSessionState::DISCONNECTED; 
+		eSessionState							m_state = eSessionState::DISCONNECTED;
+
+		Uptr<RpcManager>						m_rpcManager;
+		Uptr<PacketBuilder>						m_packetBuilder;
 	};
 }

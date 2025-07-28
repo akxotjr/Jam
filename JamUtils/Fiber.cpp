@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Fiber.h"
+#include "FiberScheduler.h"
 
 namespace jam::utils::thrd
 {
@@ -22,6 +23,12 @@ namespace jam::utils::thrd
 
 	void Fiber::SwitchTo()
 	{
-		SwitchToFiber(m_fiber);
+		tl_Worker->GetScheduler()->SetCurrentFiber(this);
+		::SwitchToFiber(m_fiber);
+	}
+
+	void Fiber::YieldJob()
+	{
+		::SwitchToFiber(m_mainFiber);
 	}
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "NetAddress.h"
+#include "RpcManager.h"
 #include "Session.h"
 #include "TcpListener.h"
 #include "UdpRouter.h"
@@ -45,14 +46,6 @@ namespace jam::net
 		void								RegisterUdpSession(Sptr<UdpSession> session);
 		void								ReleaseUdpSession(Sptr<UdpSession> session);
 
-		void								AddHandshakingUdpSession(Sptr<UdpSession> session);
-
-
-		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount; }
-		int32								GetMaxTcpSessionCount() const { return m_maxTcpSessionCount; }
-		int32								GetCurrentUdpSessionCount() const { return m_udpSessionCount; }
-		int32								GetMaxUdpSessionCount() const { return m_maxUdpSessionCount; }
-
 		void								CompleteUdpHandshake(const NetAddress& from);
 
 		Sptr<UdpSession>					FindSessionInConnected(const NetAddress& from);
@@ -62,7 +55,11 @@ namespace jam::net
 
 		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer recvBuffer);
 
-	public:
+		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount; }
+		int32								GetMaxTcpSessionCount() const { return m_maxTcpSessionCount; }
+		int32								GetCurrentUdpSessionCount() const { return m_udpSessionCount; }
+		int32								GetMaxUdpSessionCount() const { return m_maxUdpSessionCount; }
+
 		const NetAddress&					GetLocalTcpNetAddress() const { return m_config.localTcpAddress; }
 		const NetAddress&					GetLocalUdpNetAddress() const { return m_config.localUdpAddress; }
 		const NetAddress&					GetRemoteTcpNetAddress() const { return m_config.remoteTcpAddress; }
@@ -73,6 +70,7 @@ namespace jam::net
 		void								SetRemoteTcpNetAddress(const NetAddress& addr) { m_config.remoteTcpAddress = addr; }
 		void								SetRemoteUdpNetAddress(const NetAddress& addr) { m_config.remoteUdpAddress = addr; }
 
+	private:
 		IocpCore*							GetIocpCore() { return m_iocpCore.get(); }
 
 	protected:
@@ -89,7 +87,6 @@ namespace jam::net
 
 		int32												m_sessionCount = 0;
 		int32												m_maxSessionCount = 0;
-
 		int32												m_tcpSessionCount = 0;
 		int32												m_maxTcpSessionCount = 0;
 		int32												m_udpSessionCount = 0;
@@ -102,6 +99,9 @@ namespace jam::net
 		Sptr<UdpRouter>										m_udpRouter = nullptr;
 
 		ePeerType											m_peer = ePeerType::None;
+
+		
+		Uptr<utils::thrd::WorkerPool>						m_workerPool;
 	};
 
 	template<typename TCP, typename UDP>
@@ -129,7 +129,7 @@ namespace jam::net
 	{
 	public:
 		ClientService(TransportConfig config);
-		~ClientService() override;
+		virtual ~ClientService() override;
 
 		bool Start() override;
 	};
@@ -140,7 +140,7 @@ namespace jam::net
 	{
 	public:
 		ServerService(TransportConfig config);
-		~ServerService() override;
+		virtual ~ServerService() override;
 
 		bool Start() override;
 	};

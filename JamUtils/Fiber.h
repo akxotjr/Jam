@@ -13,6 +13,7 @@ namespace jam::utils::thrd
 
 		void		BindJob(Sptr<job::Job> job, void* mainFiber);
 		void		SwitchTo();
+		void		YieldJob();
 
 	private:
 		static void WINAPI FiberProc(void* param)

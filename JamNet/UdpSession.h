@@ -1,7 +1,7 @@
 #pragma once
 #include "Session.h"
 #include <bitset>
-
+#include "RecvBuffer.h"
 #include "CongestionController.h"
 #include "NetStat.h"
 
@@ -10,12 +10,55 @@ namespace jam::net
 	/*--------------------------
 		 ReliableUdpSession
 	---------------------------*/
-	struct UdpPacketHeader
+	
+	//------------------------------------------------------------------------//
+
+	struct RudpHeader
 	{
-		uint16 size;
-		uint16 id;
 		uint16 sequence = 0;
 	};
+
+	//------------------------------------------------------------------------//
+
+	struct SysHeader
+	{
+		uint8 sysId;
+	};
+
+	enum class eSysPacketId : uint8
+	{
+		C_HANDSHAKE_SYN = 1,
+		S_HANDSHAKE_SYN = 2,
+		C_HANDSHAKE_SYNACK = 3,
+		S_HANDSHAKE_SYNACK = 4,
+		C_HANDSHAKE_ACK = 5,
+		S_HANDSHAKE_ACK = 6,
+		C_PING = 7,
+		S_PONG = 8,
+
+		//APP_DATA = 9
+	};
+
+
+	//------------------------------------------------------------------------//
+
+#pragma pack(push, 1)
+	struct AckHeader
+	{
+		uint16 latestSeq = 0;
+		uint32 bitfield;
+	};
+#pragma pack(pop)
+	
+	//------------------------------------------------------------------------//
+
+
+	//struct UdpPacketHeader
+	//{
+	//	uint16 size;
+	//	uint16 id;
+	//	uint16 sequence = 0;
+	//};
 
 	struct PendingPacket
 	{
@@ -38,27 +81,39 @@ namespace jam::net
 		TIMEOUT
 	};
 
-	enum class eRudpPacketId : uint8
+	//enum class eRudpPacketId : uint8
+	//{
+	//	C_HANDSHAKE_SYN = 1,
+	//	S_HANDSHAKE_SYN,
+	//	C_HANDSHAKE_SYNACK,
+	//	S_HANDSHAKE_SYNACK,
+	//	C_HANDSHAKE_ACK,
+	//	S_HANDSHAKE_ACK,
+
+	//	ACK,
+
+	//	C_PING,
+	//	S_PONG,
+
+	//	APP_DATA
+	//};
+
+	//struct AckPacket
+	//{
+	//	uint16 latestSeq;
+	//	uint32 bitfield;
+	//};
+
+
+	struct C_PING
 	{
-		C_HANDSHAKE_SYN = 1,
-		S_HANDSHAKE_SYN,
-		C_HANDSHAKE_SYNACK,
-		S_HANDSHAKE_SYNACK,
-		C_HANDSHAKE_ACK,
-		S_HANDSHAKE_ACK,
-
-		ACK,
-
-		C_PING,
-		S_PONG,
-
-		APP_DATA
+		uint64 clientSendTick;
 	};
 
-	struct AckPacket
+	struct S_PONG
 	{
-		uint16 latestSeq;
-		uint32 bitfield;
+		uint64 clientSendTick;
+		uint64 serverSendTick;
 	};
 
 
@@ -84,7 +139,7 @@ namespace jam::net
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
-		virtual void							SendReliable(const Sptr<SendBuffer>& sendBuffer);
+		virtual void							SendReliable(const Sptr<SendBuffer>& buf);
 
 		void									HandleAck(uint16 latestSeq, uint32 bitfield);
 		bool									CheckAndRecordReceiveHistory(uint16 seq);
@@ -97,20 +152,25 @@ namespace jam::net
 
 	public:
 
-		void									ProcessConnect();
+		//void									ProcessConnect();
 		void									ProcessDisconnect();
 		void									ProcessSend(int32 numOfBytes);
 		void									ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
 
 
 		//int32									IsParsingPacket(BYTE* buffer, const int32 len);
+		int32 ParsePacket(BYTE* buffer, int32 len);
+		void HandleSystemPacket(SysHeader* sys, BYTE* payload, uint32 payloadLen);
+		void HandleRpcPacket(RpcHeader* rpc, BYTE* payload, uint32 payloadLen);
+		void HandleAckPacket(AckHeader* ack);
+		void HandleCustomPacket(BYTE* data, uint32 len);
 
 
-		int32 ParseAndDispatchPackets(BYTE* buffer, int32 len);
+		//int32 ParseAndDispatchPackets(BYTE* buffer, int32 len);
 
-		void DispatchPacket(UdpPacketHeader* header, uint32 len);
+		//void DispatchPacket(UdpPacketHeader* header, uint32 len);
 
-		void									ProcessHandshake(UdpPacketHeader* header);
+		//void									ProcessHandshake(UdpPacketHeader* header);
 
 
 		void									UpdateRetry();
@@ -135,13 +195,14 @@ namespace jam::net
 		void									SendHandshakeSynAck();
 		void									OnRecvHandshakeAck();
 
-		Sptr<SendBuffer>						MakeHandshakePkt(eRudpPacketId id);
 
+
+		Sptr<SendBuffer>						MakeHandshakePkt(eSysPacketId id);
 		Sptr<SendBuffer> MakeAckPkt(uint16 seq);
 
 		void SendAck(uint16 seq);
 
-		void OnRecvAck(BYTE* data, uint32 len);
+		//void OnRecvAck(BYTE* data, uint32 len);
 
 		void OnRecvAppData(BYTE* data, uint32 len);
 
@@ -150,8 +211,8 @@ namespace jam::net
 
 		void SendPing();
 		void SendPong(uint64 clientSendTick);
-		void OnRecvPing(BYTE* data, uint32 len);
-		void OnRecvPong(BYTE* data, uint32 len);
+		void OnRecvPing(BYTE* payload, uint32 payloadLen);
+		void OnRecvPong(BYTE* payload, uint32 payloadLen);
 
 	private:
 		USE_LOCK
@@ -175,6 +236,7 @@ namespace jam::net
 
 		Uptr<NetStatTracker>					m_netStatTracker = nullptr;
 		Uptr<CongestionController>				m_congestionController = nullptr;
+		Uptr<FragmentHandler>					m_fragmentHandler = nullptr;
 	};
 
 }

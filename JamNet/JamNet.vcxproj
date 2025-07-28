@@ -162,6 +162,8 @@
     <ClInclude Include="NetStat.h" />
     <ClInclude Include="NetworkLayer.h" />
     <ClInclude Include="PacketCompressor.h" />
+    <ClInclude Include="PacketBuilder.h" />
+    <ClInclude Include="PacketEncryptor.h" />
     <ClInclude Include="RpcManager.h" />
     <ClInclude Include="TcpListener.h" />
     <ClInclude Include="NetAddress.h" />
@@ -190,6 +192,8 @@
     <ClCompile Include="NetStat.cpp" />
     <ClCompile Include="NetworkLayer.cpp" />
     <ClCompile Include="PacketCompressor.cpp" />
+    <ClCompile Include="PacketBuilder.cpp" />
+    <ClCompile Include="PacketEncryptor.cpp" />
     <ClCompile Include="RpcManager.cpp" />
     <ClCompile Include="TcpListener.cpp" />
     <ClCompile Include="NetAddress.cpp" />

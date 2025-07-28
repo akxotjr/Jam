@@ -28,10 +28,10 @@ namespace jam::net
         ~NetStatTracker() = default;
 
         // Server side
-        void            OnRecvPing(uint64 clientSendTick, uint64 serverTick);
+        void            OnRecvPing(uint64 clientSendTick, uint64 serverSendTick);
 
     	// Client side
-    	void            OnRecvPong(uint64 clientSendTick, uint64 clientRecvTick, uint64 serverTick);
+    	void            OnRecvPong(uint64 clientSendTick, uint64 clientRecvTick, uint64 serverSendTick);
 
 
         void            OnSend(uint32 size);

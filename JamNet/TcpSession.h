@@ -3,11 +3,11 @@
 
 namespace jam::net
 {
-	struct TcpPacketHeader
-	{
-		uint16 size;
-		uint16 id;
-	};
+	//struct TcpPacketHeader
+	//{
+	//	uint16 size;
+	//	uint16 id;
+	//};
 
 	class TcpSession : public Session
 	{
