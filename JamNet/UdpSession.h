@@ -7,6 +7,9 @@
 
 namespace jam::net
 {
+	class FragmentHandler;
+
+
 	/*--------------------------
 		 ReliableUdpSession
 	---------------------------*/
@@ -117,8 +120,8 @@ namespace jam::net
 	};
 
 
-	constexpr int32		WINDOW_SIZE = 1024;
-	constexpr int32		BITFIELD_SIZE = 32;
+	//constexpr int32		WINDOW_SIZE = 1024;
+	//constexpr int32		BITFIELD_SIZE = 32;
 
 	constexpr int32		MAX_HANDSHAKE_RETRIES = 5;
 	constexpr double	HANDSHAKE_RETRY_INTERVAL = 0.5; 
@@ -131,6 +134,9 @@ namespace jam::net
 		friend class IocpCore;
 		friend class Service;
 
+		friend class CongestionController;
+		friend class NetStatTracker;
+
 	public:
 		UdpSession();
 		virtual ~UdpSession() override;
@@ -139,7 +145,7 @@ namespace jam::net
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
-		virtual void							SendReliable(const Sptr<SendBuffer>& buf);
+		//virtual void							SendReliable(const Sptr<SendBuffer>& buf);
 
 		void									HandleAck(uint16 latestSeq, uint32 bitfield);
 		bool									CheckAndRecordReceiveHistory(uint16 seq);
@@ -152,26 +158,16 @@ namespace jam::net
 
 	public:
 
-		//void									ProcessConnect();
 		void									ProcessDisconnect();
 		void									ProcessSend(int32 numOfBytes);
 		void									ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
 
 
-		//int32									IsParsingPacket(BYTE* buffer, const int32 len);
-		int32 ParsePacket(BYTE* buffer, int32 len);
-		void HandleSystemPacket(SysHeader* sys, BYTE* payload, uint32 payloadLen);
-		void HandleRpcPacket(RpcHeader* rpc, BYTE* payload, uint32 payloadLen);
-		void HandleAckPacket(AckHeader* ack);
-		void HandleCustomPacket(BYTE* data, uint32 len);
-
-
-		//int32 ParseAndDispatchPackets(BYTE* buffer, int32 len);
-
-		//void DispatchPacket(UdpPacketHeader* header, uint32 len);
-
-		//void									ProcessHandshake(UdpPacketHeader* header);
-
+		int32									ParsePacket(BYTE* buffer, int32 len);
+		void									HandleSystemPacket(BYTE* buffer, uint32 size, PacketBuilder& pb);
+		void									HandleRpcPacket(BYTE* buffer, uint32 size, PacketBuilder& pb);
+		void									HandleAckPacket(BYTE* buffer, uint32 size, PacketBuilder& pb);
+		void									HandleCustomPacket(BYTE* data, uint32 len);
 
 		void									UpdateRetry();
 		void									CheckRetryHandshake(uint64 now);
@@ -198,21 +194,26 @@ namespace jam::net
 
 
 		Sptr<SendBuffer>						MakeHandshakePkt(eSysPacketId id);
-		Sptr<SendBuffer> MakeAckPkt(uint16 seq);
+		Sptr<SendBuffer>						MakeAckPkt(uint16 seq);
 
 		void SendAck(uint16 seq);
-
-		//void OnRecvAck(BYTE* data, uint32 len);
 
 		void OnRecvAppData(BYTE* data, uint32 len);
 
 
 
 
-		void SendPing();
-		void SendPong(uint64 clientSendTick);
-		void OnRecvPing(BYTE* payload, uint32 payloadLen);
-		void OnRecvPong(BYTE* payload, uint32 payloadLen);
+		void									SendPing();
+		void									SendPong(uint64 clientSendTick);
+		void									OnRecvPing(C_PING ping);
+		void									OnRecvPong(S_PONG pong);
+
+	private:
+		void ProcessReliableSend(const Sptr<SendBuffer>& buf);
+
+		CongestionController*					GetCongestionController() { return m_congestionController.get(); }
+		NetStatTracker*							GetNetStatTracker() { return m_netStatTracker.get(); }
+
 
 	private:
 		USE_LOCK
@@ -238,6 +239,5 @@ namespace jam::net
 		Uptr<CongestionController>				m_congestionController = nullptr;
 		Uptr<FragmentHandler>					m_fragmentHandler = nullptr;
 	};
-
 }
 

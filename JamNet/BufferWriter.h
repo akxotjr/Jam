@@ -29,7 +29,7 @@ namespace jam::net
 			return true;
 		}
 
-		bool WriteBytes(const void* data, uint32_t len)
+		bool WriteBytes(const void* data, uint32 len)
 		{
 			if (FreeSize() < len)
 				return false;

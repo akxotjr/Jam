@@ -3,11 +3,8 @@
 
 namespace jam::net
 {
-    void CongestionController::OnRecvAck(float rtt)
+    void CongestionController::OnRecvAck()
     {
-        m_latestRTT = rtt;
-        m_smoothedRTT = 0.875f * m_smoothedRTT + 0.125f * rtt;
-
         if (m_cwnd < m_ssthresh) 
         {
             m_cwnd += MTU; // Slow Start
@@ -24,8 +21,8 @@ namespace jam::net
         m_cwnd = MTU; // Fast Retransmit or Timeout
     }
 
-    bool CongestionController::CanSend(size_t inFlightBytes) const
+    bool CongestionController::CanSend(uint32 inFlightSize) const
     {
-    	return inFlightBytes < m_cwnd;
+    	return inFlightSize < m_cwnd;
     }
 }

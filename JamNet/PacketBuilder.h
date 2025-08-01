@@ -28,7 +28,7 @@ namespace jam::net
 
 		void AttachPayload(const void* data, uint32 size) { m_bufferWriter->WriteBytes(data, size); }
 
-		void BeginRead();
+		void BeginRead(BYTE* buffer, uint32 size);
 		void EndRead();
 
 		template<typename... Headers>
@@ -39,6 +39,8 @@ namespace jam::net
 		void DetachPayload(OUT void* data, uint32 size) { m_bufferReader->ReadBytes(data, size); }
 
 		void Finalize() { m_bufferWriter->Close(); }
+
+		Sptr<SendBuffer> GetSendBuffer() const { return m_sendBuffer; }
 
 	private:
 		Sptr<SendBuffer>	m_sendBuffer;

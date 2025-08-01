@@ -104,6 +104,7 @@
     <ClInclude Include="NetworkLayer.h">
       <Filter>00.Main</Filter>
     </ClInclude>
+    <ClInclude Include="ReliableTransportManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -174,5 +175,6 @@
     <ClCompile Include="NetworkLayer.cpp">
       <Filter>00.Main</Filter>
     </ClCompile>
+    <ClCompile Include="ReliableTransportManager.cpp" />
   </ItemGroup>
 </Project>

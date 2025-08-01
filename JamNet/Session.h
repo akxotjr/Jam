@@ -1,12 +1,12 @@
 #pragma once
 #include "IocpCore.h"
-#include "RpcManager.h"
-#include "PacketBuilder.h"
 
 namespace jam::net
 {
 	class Service;
 	class NetAddress;
+	class RpcManager;
+	class PacketBuilder;
 
 	// Session ID
 	using SessionId = uint16;

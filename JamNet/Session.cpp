@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "Session.h"
+#include "RpcManager.h"
+#include "PacketBuilder.h"
 
 namespace jam::net
 {
