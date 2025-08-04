@@ -5,18 +5,14 @@
 
 namespace jam::net
 {
-	void NetStatTracker::OnRecvPing(uint64 clientSendTick, uint64 serverSendTick)
+	void NetStatTracker::OnRecvPing(uint64 clientSendTick, uint64 serverRecvTick)
 	{
-		m_netStat.tickOffset = static_cast<int64_t>(serverSendTick) - static_cast<int64_t>(clientSendTick);
+		m_netStat.tickOffset = static_cast<int64>(serverRecvTick) - static_cast<int64>(clientSendTick);
 	}
 
 	void NetStatTracker::OnRecvPong(uint64 clientSendTick, uint64 clientRecvTick, uint64 serverSendTick)
 	{
-		uint64_t rttTicks = clientRecvTick - clientSendTick;
-		m_netStat.rtt = EWMA(m_netStat.rtt, static_cast<double>(rttTicks), 0.1);
-		m_netStat.jitter = EWMA(m_netStat.jitter, std::abs(static_cast<double>(rttTicks) - m_netStat.rtt), 0.1);
-		
-		m_netStat.tickOffset = static_cast<int64_t>(serverSendTick) - static_cast<int64_t>(clientSendTick + rttTicks / 2);
+		m_netStat.tickOffset = static_cast<int64>(serverSendTick) - static_cast<int64>(clientSendTick + (clientRecvTick - clientSendTick) / 2);
 	}
 
 	void NetStatTracker::OnSend(uint32 size)
@@ -31,9 +27,18 @@ namespace jam::net
 		m_netStat.bandwidthRecv += size;
 	}
 
-	void NetStatTracker::OnRecvAck(uint64 sequence)
+	void NetStatTracker::OnSendAck()
 	{
-		m_netStat.lastAckedTime = Clock::Instance().GetCurrentTick();	// tick or time ? 
+		m_prevTick = Clock::Instance().GetCurrentTick();
+	}
+
+	void NetStatTracker::OnRecvAck(uint16 sequence)
+	{
+		uint64 now = Clock::Instance().GetCurrentTick();
+
+		uint64 rtt = now - m_prevTick;
+		m_netStat.rtt = EWMA(m_netStat.rtt, static_cast<double>(rtt), 0.1);
+		m_netStat.jitter = EWMA(m_netStat.jitter, std::abs(static_cast<double>(rtt) - m_netStat.rtt), 0.1);
 
 		if (m_netStat.rtt > 0)
 		{

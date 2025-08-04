@@ -164,6 +164,7 @@
     <ClInclude Include="PacketCompressor.h" />
     <ClInclude Include="PacketBuilder.h" />
     <ClInclude Include="PacketEncryptor.h" />
+    <ClInclude Include="ReliableTransportManager.h" />
     <ClInclude Include="RpcManager.h" />
     <ClInclude Include="TcpListener.h" />
     <ClInclude Include="NetAddress.h" />
@@ -194,6 +195,7 @@
     <ClCompile Include="PacketCompressor.cpp" />
     <ClCompile Include="PacketBuilder.cpp" />
     <ClCompile Include="PacketEncryptor.cpp" />
+    <ClCompile Include="ReliableTransportManager.cpp" />
     <ClCompile Include="RpcManager.cpp" />
     <ClCompile Include="TcpListener.cpp" />
     <ClCompile Include="NetAddress.cpp" />

@@ -2,7 +2,10 @@
 
 namespace jam::net
 {
-	constexpr uint32 MTU = 1024;	// 1024 bytes
+	class UdpSession;
+
+
+	constexpr uint32 MTU = 1024;		// Maximum Transmission Unit for UDP
 
 	class CongestionController
 	{
@@ -10,18 +13,18 @@ namespace jam::net
 		CongestionController() = default;
 		~CongestionController() = default;
 
-
-		void OnRecvAck(float rtt);
-
+		// Congestion Control Algorithm
+		void OnRecvAck();
 		void OnPacketLoss();
+		bool CanSend(uint32 inFlightSize) const;
+		uint32 GetCwnd() const { return m_cwnd; }
 
-		bool CanSend(size_t inFlightBytes) const;
 
 	private:
-		float m_cwnd = 4 * MTU;
-		float m_ssthresh = 32 * MTU;
-		float m_smoothedRTT = 100.f;
-		float m_latestRTT = 100.f;
+		Wptr<UdpSession> m_session; // Weak pointer to the session
+
+		uint32 m_cwnd = 4 * MTU;
+		uint32 m_ssthresh = 32 * MTU;
 	};
 }
 

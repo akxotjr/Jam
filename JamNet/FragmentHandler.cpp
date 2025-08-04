@@ -44,7 +44,7 @@ namespace jam::net
 
             Sptr<SendBuffer> buffer = SendBufferManager::Instance().Open(totalFragmentSize);
             BufferWriter bw(buffer->Buffer(), buffer->AllocSize());
-
+ 
             // 조각 헤더 작성
             FragmentHeader* header = bw.Reserve<FragmentHeader>();
             header->packetId = packetId;
