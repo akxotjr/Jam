@@ -19,6 +19,12 @@ namespace jam::net
         uint64      totalSent = 0;
         uint64      totalRecv = 0;
         uint64      totalLost = 0;
+        uint64      totalAcksSend = 0;
+        uint64      totalAcksRecv = 0;
+        uint64      piggybackAcks = 0;
+        uint64      immediateAcks = 0;
+        uint64      delayedAcks = 0;
+		float       ackEfficiency = 0.0f; // ACK 효율성 (송신된 ACK / 총 송신량)
 	};
 
 
@@ -37,11 +43,19 @@ namespace jam::net
 
         void            OnSend(uint32 size);
         void            OnRecv(uint32 size);
-        void            OnSendAck(); 
+
+        void            OnSendReliablePacket(); 
         void            OnRecvAck(uint16 sequence);
+
         void            OnPacketLoss(uint32 count = 1);
 
+        void OnSendPiggybackAck();
+        void OnSendImmediateAck();
+        void OnSendDelayedAck();
+
+
         void            UpdateBandwidth(double deltaTime);
+        void UpdateAckEfficiency();
 
 
         double          GetRTT() { return m_netStat.rtt; }
@@ -53,6 +67,9 @@ namespace jam::net
         uint64          GetEstimatedClientTick(uint64 serverTick);
         uint64          GetEstimatedServerTick(uint64 clientTick);
         double          GetInterpolationDelayTick();
+
+
+
 
     private:
         double          EWMA(double prev, double cur, double alpha) const;
@@ -68,6 +85,8 @@ namespace jam::net
         uint64              m_expectedRecvPackets = 0;
         uint64              m_highestSeqSeen = 0;
         uint64              m_lastAckedSeq = 0;
+
+		uint64 m_ackSendAccum = 0; // ACK 송신량 누적
     };
 }
 

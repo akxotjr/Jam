@@ -3,7 +3,11 @@
 #include "Clock.h"
 #include "RpcManager.h"
 #include "FragmentHandler.h"
+#include "CongestionController.h"
+#include "NetStat.h"
+#include "PacketBuilder.h"
 #include "ReliableTransportManager.h"
+
 
 
 namespace jam::net
@@ -15,7 +19,7 @@ namespace jam::net
 		m_netStatTracker = std::make_unique<NetStatTracker>();
 		m_congestionController = std::make_unique<CongestionController>();
 		m_fragmentHandler = std::make_unique<FragmentHandler>();
-		m_transportManager = std::make_unique<ReliableTransportManager>();
+		m_reliableTransportManager = std::make_unique<ReliableTransportManager>();
 	}
 
 	UdpSession::~UdpSession()
@@ -37,53 +41,26 @@ namespace jam::net
 			return;
 
 		ProcessDisconnect();
+
+
+		
 	}
 
-	void UdpSession::Send(const Sptr<SendBuffer>& sendBuffer)
+	void UdpSession::Send(const Sptr<SendBuffer>& buf)
 	{
-		GetService()->m_udpRouter->RegisterSend(sendBuffer, GetRemoteNetAddress());
+		if (!m_reliableTransportManager->TryAttachPiggybackAck(buf))
+		{
+			uint64 now = Clock::Instance().GetCurrentTick();
+			if (m_reliableTransportManager->ShouldSendImmediateAck(now))
+			{
+				SendAck();
+				m_reliableTransportManager->ClearPendingAck();
+			}
+			// else ?
+		}
+
+		SendDirect(buf);
 	}
-
-	//void UdpSession::SendReliable(const Sptr<SendBuffer>& buf)
-	//{
-	//	auto* pktHeader = reinterpret_cast<PacketHeader*>(buf->Buffer());
-
-	//	if (!(GetPacketFlags(pktHeader->sizeAndflags) & FLAG_RELIABLE))
-	//		CRASH("SendReliable called on packet without RudpHeader!");
-
-	//	auto* rudpHeader = reinterpret_cast<RudpHeader*>(buf->Buffer() + sizeof(PacketHeader));
-	//	uint16 seq = rudpHeader->sequence;
-
-	//	uint64 timestamp = Clock::Instance().GetCurrentTick();
-
-	//	PendingPacket pkt = { .buffer = buf, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
-	//	{
-	//		WRITE_LOCK
-	//		m_pendingAckMap[seq] = pkt;
-	//	}
-
-	//	Send(buf);
-	//	//size_t inFlightBytes = m_pendingAckMap.size() * sendBuffer->WriteSize();
-	//	//if (!m_congestionController->CanSend(inFlightBytes))
-	//	//	return;
-
-	//	//uint16 seq = m_sendSeq++;
-
-	//	//UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
-	//	//header->sequence = seq;
-
-	//	//uint64 timestamp = Clock::Instance().GetCurrentTick();
-
-	//	//PendingPacket pkt = { .buffer = sendBuffer, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
-
-	//	//{
-	//	//	WRITE_LOCK
-	//	//	m_pendingAckMap[seq] = pkt;
-	//	//}
-
-	//	//m_netStatTracker->OnSend(sendBuffer->WriteSize());
-	//	//Send(sendBuffer);
-	//}
 
 	void UdpSession::ProcessDisconnect()
 	{
@@ -124,6 +101,19 @@ namespace jam::net
 			return 0;
 
 		uint8 flags = GetPacketFlags(pktHeader.sizeAndflags);
+
+		// Check if the packet is a reliable packet
+		if (flags & FLAG_RELIABLE)
+		{
+			RudpHeader rudpHeader;
+			pb.DetachHeaders(rudpHeader);
+			if (!m_reliableTransportManager->IsSeqReceived(rudpHeader.sequence))
+			{
+				m_reliableTransportManager->AddPendingPacket(rudpHeader.sequence, pb.GetSendBuffer(), Clock::Instance().GetCurrentTick());
+				SendAck(rudpHeader.sequence);
+			}
+		}
+
 
 		switch (pktHeader.type)
 		{
@@ -207,13 +197,8 @@ namespace jam::net
 		AckHeader ackHeader;
 		pb.DetachHeaders(ackHeader);
 
-		const uint16 latestSeq = ackHeader.latestSeq;
-		const uint32 bitfield = ackHeader.bitfield;
-
-		uint64 now = Clock::Instance().GetCurrentTick();
-
-
-		//HandleAck(latestSeq, bitfield);
+		m_reliableTransportManager->OnRecvAck(ackHeader.latestSeq, ackHeader.bitfield);
+		m_netStatTracker->OnRecvAck(ackHeader.latestSeq);
 	}
 
 	void UdpSession::HandleCustomPacket(BYTE* data, uint32 len)
@@ -228,7 +213,7 @@ namespace jam::net
 		if (!IsConnected())
 			CheckRetryHandshake(now);
 
-		//CheckRetrySend(now);
+	//	CheckRetrySend(now);
 	}
 
 
@@ -263,53 +248,53 @@ namespace jam::net
 		}
 	}
 
-	/*void UdpSession::CheckRetrySend(uint64 now)
-	{
-		xvector<uint16> resendList;
-		int32 lostPackets = 0;
+	//void UdpSession::CheckRetrySend(uint64 now)
+	//{
+	//	xvector<uint16> resendList;
+	//	int32 lostPackets = 0;
 
-		{
-			WRITE_LOCK
+	//	{
+	//		WRITE_LOCK
 
-			for (auto& [seq, pkt] : m_pendingAckMap)
-			{
-				uint64 elapsed = now - pkt.timestamp;
+	//		for (auto& [seq, pkt] : m_pendingAckMap)
+	//		{
+	//			uint64 elapsed = now - pkt.timestamp;
 
-				if (elapsed >= m_resendIntervalMs)
-				{
-					pkt.timestamp = now;
-					pkt.retryCount++;
+	//			if (elapsed >= m_resendIntervalMs)
+	//			{
+	//				pkt.timestamp = now;
+	//				pkt.retryCount++;
 
-					resendList.push_back(seq);
-					lostPackets++;
-				}
+	//				resendList.push_back(seq);
+	//				lostPackets++;
+	//			}
 
-				if (pkt.retryCount > 5)
-				{
-					std::cout << "[ReliableUDP] Max retry reached. Disconnecting.\n";
-					m_congestionController->OnPacketLoss();
-					m_netStatTracker->OnPacketLoss();
-					Disconnect(L"Too many retries");
-					continue;
-				}
-			}
-		}
+	//			if (pkt.retryCount > 5)
+	//			{
+	//				std::cout << "[ReliableUDP] Max retry reached. Disconnecting.\n";
+	//				m_congestionController->OnPacketLoss();
+	//				m_netStatTracker->OnPacketLoss();
+	//				Disconnect(L"Too many retries");
+	//				continue;
+	//			}
+	//		}
+	//	}
 
-		if (lostPackets > 0)
-		{
-			m_netStatTracker->OnPacketLoss(lostPackets);
-		}
+	//	if (lostPackets > 0)
+	//	{
+	//		m_netStatTracker->OnPacketLoss(lostPackets);
+	//	}
 
-		for (uint16 seq : resendList)
-		{
-			auto it = m_pendingAckMap.find(seq);
-			if (it != m_pendingAckMap.end())
-			{
-				std::cout << "[ReliableUDP] Re-sending seq: " << seq << "\n";
-				SendReliable(it->second.buffer);
-			}
-		}
-	}*/
+	//	for (uint16 seq : resendList)
+	//	{
+	//		auto it = m_pendingAckMap.find(seq);
+	//		if (it != m_pendingAckMap.end())
+	//		{
+	//			std::cout << "[ReliableUDP] Re-sending seq: " << seq << "\n";
+	//			SendReliable(it->second.buffer);
+	//		}
+	//	}
+	//}
 
 	//void UdpSession::HandleAck(uint16 latestSeq, uint32 bitfield)
 	//{
@@ -404,7 +389,7 @@ namespace jam::net
 		m_handshakeState = eHandshakeState::SYN_SENT;
 
 		auto buf = MakeHandshakePkt(eSysPacketId::C_HANDSHAKE_SYN);
-		Send(buf);
+		SendDirect(buf);
 	}
 
 	void UdpSession::OnRecvHandshakeSynAck()
@@ -424,7 +409,7 @@ namespace jam::net
 			return;
 
 		auto buf = MakeHandshakePkt(eSysPacketId::C_HANDSHAKE_ACK);
-		Send(buf);
+		SendDirect(buf);
 
 		m_handshakeState = eHandshakeState::COMPLETE;
 		m_state = eSessionState::CONNECTED;
@@ -458,7 +443,7 @@ namespace jam::net
 		m_handshakeState = eHandshakeState::SYNACK_SENT;
 		
 		auto buf = MakeHandshakePkt(eSysPacketId::S_HANDSHAKE_SYNACK);
-		Send(buf);
+		SendDirect(buf);
 	}
 
 	void UdpSession::OnRecvHandshakeAck()
@@ -490,14 +475,14 @@ namespace jam::net
 		SysHeader sysHeader = { .sysId = static_cast<uint8>(id) };
 
 		pb.AttachHeaders(pktHeader, sysHeader);
-		pb.Finalize();
+		//pb.Finalize();
 		pb.EndWrite();
 
 		return pb.GetSendBuffer();
 	}
 
 
-	Sptr<SendBuffer> UdpSession::MakeAckPkt(uint16 seq)
+	Sptr<SendBuffer> UdpSession::MakeAckPkt()
 	{
 		constexpr uint16 size = sizeof(PacketHeader) + sizeof(AckHeader);
 
@@ -510,22 +495,27 @@ namespace jam::net
 			.type = static_cast<uint8>(ePacketType::SYSTEM)
 		};
 
+		uint16 seq = m_reliableTransportManager->GetPendigAckSeq();
+		uint32 bitfield = m_reliableTransportManager->GetPendingAckBitfield();
+
 		AckHeader ackHeader = {
 			.latestSeq = seq,
-			.bitfield = m_transportManager->GenerateAckBitfield(seq)
+			.bitfield = bitfield
 		};
 
 		pb.AttachHeaders(pktHeader, ackHeader);
-		pb.Finalize();
 		pb.EndWrite();
 
 		return pb.GetSendBuffer();
 	}
 
-	//void UdpSession::SendAck(uint16 seq)
-	//{
-	//	//Send(MakeAckPkt(seq));
-	//}
+	void UdpSession::SendAck()
+	{
+		auto buf = MakeAckPkt();
+
+		m_netStatTracker->OnSendReliablePacket();
+		SendDirect(buf);
+	}
 
 
 	void UdpSession::OnRecvAppData(BYTE* data, uint32 len)
@@ -547,7 +537,7 @@ namespace jam::net
 		};
 
 		RudpHeader rudpHeader = {
-			.sequence = m_transportManager->GetNextSendSeq()
+			.sequence = m_reliableTransportManager->GetNextSendSeq(),
 		};
 
 		SysHeader sysHeader = {
@@ -560,10 +550,10 @@ namespace jam::net
 
 		pb.AttachHeaders(pktHeader, rudpHeader, sysHeader);
 		pb.AttachPayload(&payload, sizeof(C_PING));
-		pb.Finalize();
+		//pb.Finalize();
 		pb.EndWrite();
 		
-		Send(pb.GetSendBuffer());
+		SendDirect(pb.GetSendBuffer());
 	}
 
 	void UdpSession::SendPong(uint64 clientSendTick)
@@ -579,7 +569,7 @@ namespace jam::net
 		};
 
 		RudpHeader rudpHeader = {
-			.sequence = m_transportManager->GetNextSendSeq()
+			.sequence = m_reliableTransportManager->GetNextSendSeq(),
 		};
 
 		SysHeader sysHeader = {
@@ -594,10 +584,10 @@ namespace jam::net
 		pb.AttachHeaders(pktHeader, rudpHeader, sysHeader);
 		pb.AttachPayload(&payload, sizeof(S_PONG));
 
-		pb.Finalize();
+		//pb.Finalize();
 		pb.EndWrite();
 
-		Send(pb.GetSendBuffer());
+		SendDirect(pb.GetSendBuffer());
 	}
 
 	void UdpSession::OnRecvPing(C_PING ping)
@@ -615,37 +605,8 @@ namespace jam::net
 		m_netStatTracker->OnRecvPong(pong.clientSendTick, clientRecvTick, pong.serverSendTick);
 	}
 
-
-//	void UdpSession::ProcessReliableSend(const Sptr<SendBuffer>& buf)
-//	{
-//		PendingPacket pkt = {
-//			.buffer = buf,
-//			.sequence = m_sendSeq++,
-//			.timestamp = Clock::Instance().GetCurrentTick(),
-//			.retryCount = 0
-//		};
-//
-//		{
-//			WRITE_LOCK
-//			m_pendingAckMap[pkt.sequence] = pkt;
-//		}
-//
-//		m_netStatTracker->OnSend(buf->WriteSize());
-//		//	//size_t inFlightBytes = m_pendingAckMap.size() * sendBuffer->WriteSize();
-//	//if (!m_congestionController->CanSend(inFlightBytes))
-//	//	return;
-//
-//	//uint16 seq = m_sendSeq++;
-//
-//	//UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
-//	//header->sequence = seq;
-//
-//	//uint64 timestamp = Clock::Instance().GetCurrentTick();
-//	//PendingPacket pkt = { .buffer = sendBuffer, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
-//	//{ //	//	WRITE_LOCK
-//	//	m_pendingAckMap[seq] = pkt; //	//}
-//
-//	//m_netStatTracker->OnSend(sendBuffer->WriteSize());
-//	//Send(sendBuffer);
-//	}
+	void UdpSession::SendDirect(const Sptr<SendBuffer>& buf)
+	{
+		GetService()->m_udpRouter->RegisterSend(buf, GetRemoteNetAddress());
+	}
 }

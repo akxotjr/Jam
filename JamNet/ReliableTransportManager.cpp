@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "ReliableTransportManager.h"
+#include "Clock.h"
 
 namespace jam::net
 {
@@ -37,6 +38,10 @@ namespace jam::net
 
 		m_receiveHistory.set(seq % WINDOW_SIZE);
 		m_latestSeq = IsSeqGreator(seq, m_latestSeq) ? seq : m_latestSeq;
+
+
+		SetPendingAck(seq);
+
 		return true;
 	}
 
@@ -68,5 +73,70 @@ namespace jam::net
 				}
 			}
 		}
+	}
+
+	void ReliableTransportManager::SetPendingAck(uint16 seq)
+	{
+		uint64 now = Clock::Instance().GetCurrentTick();
+
+		if (!m_hasPendingAck)
+		{
+			m_hasPendingAck = true;
+			m_pendingAckSeq = seq;
+			m_firstPendingAckTick = now;
+		}
+		else
+		{
+			if (IsSeqGreator(seq, m_pendingAckSeq))
+			{
+				m_pendingAckSeq = seq;
+			}
+		}
+
+		m_pendingAckBitfield = GenerateAckBitfield(m_pendingAckSeq);
+	}
+
+	void ReliableTransportManager::ClearPendingAck()
+	{
+		m_hasPendingAck = false;
+		m_pendingAckSeq = 0;
+		m_pendingAckBitfield = 0;
+		m_firstPendingAckTick = 0;
+	}
+
+	bool ReliableTransportManager::ShouldSendImmediateAck(uint64 currentTick)
+	{
+		return m_hasPendingAck && (currentTick - m_firstPendingAckTick) >= MAX_DELAY_TICK_PIGGYBACK_ACK;
+	}
+
+	bool ReliableTransportManager::TryAttachPiggybackAck(const Sptr<SendBuffer>& buf)
+	{
+		if (!m_hasPendingAck)
+			return false;
+
+		if (!buf || !buf->Buffer())
+			return false;
+
+		PacketHeader* pktHeader = reinterpret_cast<PacketHeader*>(buf->Buffer());
+		uint16 currentSize = GetPacketSize(pktHeader->sizeAndflags);
+		uint32 remainingSpace = buf->AllocSize() - currentSize;
+
+		if (remainingSpace < sizeof(AckHeader))
+			return false;
+
+		AckHeader* ackHeader = reinterpret_cast<AckHeader*>(buf->Buffer() + currentSize);
+		ackHeader->latestSeq = m_pendingAckSeq;
+		ackHeader->bitfield = m_pendingAckBitfield;
+
+
+		uint16 newSize = currentSize + sizeof(AckHeader);
+		uint8 flags = GetPacketFlags(pktHeader->sizeAndflags) | FLAG_PIGGYBACK_ACK;
+		pktHeader->sizeAndflags = MakeSizeAndFlags(newSize, flags);
+
+		buf->Close(newSize);
+
+		ClearPendingAck();
+
+		return true;
 	}
 }

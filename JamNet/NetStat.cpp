@@ -27,7 +27,7 @@ namespace jam::net
 		m_netStat.bandwidthRecv += size;
 	}
 
-	void NetStatTracker::OnSendAck()
+	void NetStatTracker::OnSendReliablePacket()
 	{
 		m_prevTick = Clock::Instance().GetCurrentTick();
 	}
@@ -48,18 +48,36 @@ namespace jam::net
 
 		m_prevRtt = m_netStat.rtt;
 
-
 		m_lastAckedSeq = sequence;
 		if (sequence > m_highestSeqSeen)
 		{
 			m_expectedRecvPackets += (sequence - m_highestSeqSeen);
 			m_highestSeqSeen = sequence;
 		}
+
+		m_netStat.totalAcksRecv++;
 	}
 
 	void NetStatTracker::OnPacketLoss(uint32 count)
 	{
 		m_netStat.totalLost += count;
+	}
+
+	void NetStatTracker::OnSendPiggybackAck()
+	{
+		m_netStat.piggybackAcks++;
+		m_netStat.totalAcksSend++;
+	}
+
+	void NetStatTracker::OnSendImmediateAck()
+	{
+		m_netStat.immediateAcks++;
+		m_netStat.totalAcksSend++;
+	}
+
+	void NetStatTracker::OnSendDelayedAck()
+	{
+		m_netStat.delayedAcks++;
 	}
 
 
@@ -95,6 +113,8 @@ namespace jam::net
 		ss << "Total Sent: " << m_netStat.totalSent << ", ";
 		ss << "Total Recv: " << m_netStat.totalRecv << ", ";
 		ss << "Total Lost: " << m_netStat.totalLost;
+		ss << "ACK Efficiency: " << m_netStat.ackEfficiency * 100.0f << "%, ";
+		ss << "Total ACKs: " << m_netStat.totalAcksSend << " / " << m_netStat.totalAcksRecv;
 
 		return ss.str();
 	}
