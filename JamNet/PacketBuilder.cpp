@@ -5,9 +5,23 @@
 
 namespace jam::net
 {
-	void PacketBuilder::BeginWrite(uint32 allocSize)
+	void PacketBuilder::BeginWrite(ePacketMode mode, uint32 allocSize)
 	{
-		m_sendBuffer = SendBufferManager::Instance().Open(allocSize);
+		m_mode = mode;
+
+		switch (mode)
+		{
+		case ePacketMode::SMALL_PKT:
+			m_sendBuffer = SendBufferManager::Instance().Open(allocSize);
+			break;
+		case ePacketMode::GAME_PKT:
+			m_sendBuffer = SendBufferManager::Instance().Open(MTU);
+			break;
+		case ePacketMode::LARGE_PKT:
+			// todo : fragment
+			break;
+		}
+
 		m_bufferWriter = std::make_unique<BufferWriter>(m_sendBuffer->Buffer(), m_sendBuffer->AllocSize());	// todo : change to object pool
 	}
 
@@ -15,8 +29,7 @@ namespace jam::net
 	{
 		if (m_bufferWriter)
 		{
-			uint32 writeSize = m_bufferWriter->WriteSize();
-			m_sendBuffer->Close(writeSize);
+			m_sendBuffer->Close(m_bufferWriter->WriteSize());
 			m_bufferWriter.reset();
 		}
 	}

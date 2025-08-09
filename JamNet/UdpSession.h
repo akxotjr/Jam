@@ -1,14 +1,16 @@
 #pragma once
 #include "Session.h"
-#include <bitset>
 #include "RecvBuffer.h"
-#include "CongestionController.h"
-#include "NetStat.h"
+
+
 
 namespace jam::net
 {
+	class CongestionController;
+	class ReliableTransportManager;
 	class FragmentHandler;
-
+	class NetStatTracker;
+	
 
 	/*--------------------------
 		 ReliableUdpSession
@@ -56,13 +58,6 @@ namespace jam::net
 	//------------------------------------------------------------------------//
 
 
-	//struct UdpPacketHeader
-	//{
-	//	uint16 size;
-	//	uint16 id;
-	//	uint16 sequence = 0;
-	//};
-
 	struct PendingPacket
 	{
 		Sptr<SendBuffer>	buffer;
@@ -84,30 +79,6 @@ namespace jam::net
 		TIMEOUT
 	};
 
-	//enum class eRudpPacketId : uint8
-	//{
-	//	C_HANDSHAKE_SYN = 1,
-	//	S_HANDSHAKE_SYN,
-	//	C_HANDSHAKE_SYNACK,
-	//	S_HANDSHAKE_SYNACK,
-	//	C_HANDSHAKE_ACK,
-	//	S_HANDSHAKE_ACK,
-
-	//	ACK,
-
-	//	C_PING,
-	//	S_PONG,
-
-	//	APP_DATA
-	//};
-
-	//struct AckPacket
-	//{
-	//	uint16 latestSeq;
-	//	uint32 bitfield;
-	//};
-
-
 	struct C_PING
 	{
 		uint64 clientSendTick;
@@ -118,10 +89,6 @@ namespace jam::net
 		uint64 clientSendTick;
 		uint64 serverSendTick;
 	};
-
-
-	//constexpr int32		WINDOW_SIZE = 1024;
-	//constexpr int32		BITFIELD_SIZE = 32;
 
 	constexpr int32		MAX_HANDSHAKE_RETRIES = 5;
 	constexpr double	HANDSHAKE_RETRY_INTERVAL = 0.5; 
@@ -144,12 +111,12 @@ namespace jam::net
 	public:
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
-		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
+		virtual void							Send(const Sptr<SendBuffer>& buf) override;
 		//virtual void							SendReliable(const Sptr<SendBuffer>& buf);
 
-		void									HandleAck(uint16 latestSeq, uint32 bitfield);
-		bool									CheckAndRecordReceiveHistory(uint16 seq);
-		uint32									GenerateAckBitfield(uint16 latestSeq);
+		//void									HandleAck(uint16 latestSeq, uint32 bitfield);
+		//bool									CheckAndRecordReceiveHistory(uint16 seq);
+		//uint32									GenerateAckBitfield(uint16 latestSeq);
 
 	private:
 		/* Iocp Object impl */
@@ -171,7 +138,7 @@ namespace jam::net
 
 		void									UpdateRetry();
 		void									CheckRetryHandshake(uint64 now);
-		void									CheckRetrySend(uint64 now);
+		//void									CheckRetrySend(uint64 now);
 
 
 		bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }
@@ -194,9 +161,9 @@ namespace jam::net
 
 
 		Sptr<SendBuffer>						MakeHandshakePkt(eSysPacketId id);
-		Sptr<SendBuffer>						MakeAckPkt(uint16 seq);
+		Sptr<SendBuffer>						MakeAckPkt();
 
-		void SendAck(uint16 seq);
+		void									SendAck();
 
 		void OnRecvAppData(BYTE* data, uint32 len);
 
@@ -209,7 +176,10 @@ namespace jam::net
 		void									OnRecvPong(S_PONG pong);
 
 	private:
-		void ProcessReliableSend(const Sptr<SendBuffer>& buf);
+		void SendDirect(const Sptr<SendBuffer>& buf);
+
+
+		//void ProcessReliableSend(const Sptr<SendBuffer>& buf);
 
 		CongestionController*					GetCongestionController() { return m_congestionController.get(); }
 		NetStatTracker*							GetNetStatTracker() { return m_netStatTracker.get(); }
@@ -218,13 +188,13 @@ namespace jam::net
 	private:
 		USE_LOCK
 
-	protected:
-		unordered_map<uint16, PendingPacket>	m_pendingAckMap;
-		bitset<1024>							m_receiveHistory;
+	//protected:
+	//	unordered_map<uint16, PendingPacket>	m_pendingAckMap;
+	//	bitset<1024>							m_receiveHistory;
 
-		uint16									m_latestSeq = 0;
-		uint16									m_sendSeq = 1;			// 다음 보낼 sequence
-		uint64									m_resendIntervalMs = 1; // 재전송 대기 시간
+	//	uint16									m_latestSeq = 0;
+	//	uint16									m_sendSeq = 1;			// 다음 보낼 sequence
+	//	uint64									m_resendIntervalMs = 1; // 재전송 대기 시간
 
 	private:
 		eHandshakeState							m_handshakeState = eHandshakeState::NONE;
@@ -238,6 +208,7 @@ namespace jam::net
 		Uptr<NetStatTracker>					m_netStatTracker = nullptr;
 		Uptr<CongestionController>				m_congestionController = nullptr;
 		Uptr<FragmentHandler>					m_fragmentHandler = nullptr;
+		Uptr<ReliableTransportManager> 			m_reliableTransportManager = nullptr;
 	};
 }
 

@@ -69,6 +69,8 @@ namespace jam::net
 	constexpr uint16 FLAG_RELIABLE = 0x1000;
 	constexpr uint16 FLAG_COMPRESSED = 0x2000;
 	constexpr uint16 FLAG_ENCRYPTED = 0x3000;
+	constexpr uint16 FLAG_FRAGMENTED = 0x4000;
+	constexpr uint16 FLAG_PIGGYBACK_ACK = 0x5000;
 
 	inline uint16 GetPacketSize(uint16 sizeAndFlags)
 	{
@@ -126,7 +128,7 @@ namespace jam::net
 		virtual void							OnSend(int32 len) = 0;
 		virtual void							OnRecv(BYTE* buffer, int32 len) = 0;
 
-	protected:
+	protected:   
 		SOCKET									m_socket = INVALID_SOCKET;
 		Wptr<Service>							m_service;
 		NetAddress								m_remoteAddress = {};
