@@ -42,15 +42,15 @@ namespace jam::net
 
 	xvector<uint16> ReliableTransportManager::GetPendingPacketsToRetransmit(uint64 currentTick) const
 	{
-		xvector<uint16> resendList;
+		xvector<uint16> retransmitList;
 		for (const auto& [seq, pktInfo] : m_pendingPackets)
 		{
 			if (pktInfo.retryCount < MAX_RETRY_COUNT && currentTick - pktInfo.timestamp >= RETRANSMIT_INTERVAL)
 			{
-				resendList.push_back(seq);
+				retransmitList.push_back(seq);
 			}
 		}
-		return resendList;
+		return retransmitList;
 	}
 
 	void ReliableTransportManager::OnRecvAck(uint16 latestSeq, uint32 bitfield)

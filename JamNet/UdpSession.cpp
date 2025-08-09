@@ -1,10 +1,9 @@
 #include "pch.h"
 #include "UdpSession.h"
-#include "BufferReader.h"
-#include "BufferWriter.h"
 #include "Clock.h"
 #include "RpcManager.h"
 #include "FragmentHandler.h"
+#include "ReliableTransportManager.h"
 
 
 namespace jam::net
@@ -16,6 +15,7 @@ namespace jam::net
 		m_netStatTracker = std::make_unique<NetStatTracker>();
 		m_congestionController = std::make_unique<CongestionController>();
 		m_fragmentHandler = std::make_unique<FragmentHandler>();
+		m_transportManager = std::make_unique<ReliableTransportManager>();
 	}
 
 	UdpSession::~UdpSession()
@@ -212,7 +212,6 @@ namespace jam::net
 
 		uint64 now = Clock::Instance().GetCurrentTick();
 
-		m_congestionController->ProcessReliableRecv();
 
 		//HandleAck(latestSeq, bitfield);
 	}
@@ -229,7 +228,7 @@ namespace jam::net
 		if (!IsConnected())
 			CheckRetryHandshake(now);
 
-		CheckRetrySend(now);
+		//CheckRetrySend(now);
 	}
 
 
@@ -264,7 +263,7 @@ namespace jam::net
 		}
 	}
 
-	void UdpSession::CheckRetrySend(uint64 now)
+	/*void UdpSession::CheckRetrySend(uint64 now)
 	{
 		xvector<uint16> resendList;
 		int32 lostPackets = 0;
@@ -310,65 +309,65 @@ namespace jam::net
 				SendReliable(it->second.buffer);
 			}
 		}
-	}
+	}*/
 
-	void UdpSession::HandleAck(uint16 latestSeq, uint32 bitfield)
-	{
-		//WRITE_LOCK
-		const uint64 now = Clock::Instance().GetCurrentTick();
+	//void UdpSession::HandleAck(uint16 latestSeq, uint32 bitfield)
+	//{
+	//	//WRITE_LOCK
+	//	const uint64 now = Clock::Instance().GetCurrentTick();
 
-		for (uint16 i = 0; i <= BITFIELD_SIZE; ++i)
-		{
-			uint16 ackSeq = latestSeq - i;
-			if (i == 0 || (bitfield & (1 << (i - 1))))
-			{
-				auto it = m_pendingAckMap.find(ackSeq);
-				if (it != m_pendingAckMap.end())
-				{
-					uint64 sendTick = it->second.timestamp;
-					float rtt = static_cast<float>(now - sendTick);
+	//	for (uint16 i = 0; i <= BITFIELD_SIZE; ++i)
+	//	{
+	//		uint16 ackSeq = latestSeq - i;
+	//		if (i == 0 || (bitfield & (1 << (i - 1))))
+	//		{
+	//			auto it = m_pendingAckMap.find(ackSeq);
+	//			if (it != m_pendingAckMap.end())
+	//			{
+	//				uint64 sendTick = it->second.timestamp;
+	//				float rtt = static_cast<float>(now - sendTick);
 
-					m_congestionController->OnRecvAck(rtt);
-					m_netStatTracker->OnRecvAck(ackSeq);
+	//				m_congestionController->OnRecvAck(rtt);
+	//				m_netStatTracker->OnRecvAck(ackSeq);
 
 
-					WRITE_LOCK
-					m_pendingAckMap.erase(it);
-				}
-			}
-		}
-	}
+	//				WRITE_LOCK
+	//				m_pendingAckMap.erase(it);
+	//			}
+	//		}
+	//	}
+	//}
 
-	bool UdpSession::CheckAndRecordReceiveHistory(uint16 seq)
-	{
-		if (!IsSeqGreater(seq, m_latestSeq - WINDOW_SIZE))
-			return false;
+	//bool UdpSession::CheckAndRecordReceiveHistory(uint16 seq)
+	//{
+	//	if (!IsSeqGreater(seq, m_latestSeq - WINDOW_SIZE))
+	//		return false;
 
-		if (m_receiveHistory.test(seq % WINDOW_SIZE))
-			return false;
+	//	if (m_receiveHistory.test(seq % WINDOW_SIZE))
+	//		return false;
 
-		m_receiveHistory.set(seq % WINDOW_SIZE);
-		m_latestSeq = IsSeqGreater(seq, m_latestSeq) ? seq : m_latestSeq;
-		return true;
-	}
+	//	m_receiveHistory.set(seq % WINDOW_SIZE);
+	//	m_latestSeq = IsSeqGreater(seq, m_latestSeq) ? seq : m_latestSeq;
+	//	return true;
+	//}
 
-	uint32 UdpSession::GenerateAckBitfield(uint16 latestSeq)
-	{
-		uint32 bitfield = 0;
-		for (uint16 i = 1; i <= BITFIELD_SIZE; ++i)
-		{
-			uint16 seq = latestSeq - i;
+	//uint32 UdpSession::GenerateAckBitfield(uint16 latestSeq)
+	//{
+	//	uint32 bitfield = 0;
+	//	for (uint16 i = 1; i <= BITFIELD_SIZE; ++i)
+	//	{
+	//		uint16 seq = latestSeq - i;
 
-			if (!IsSeqGreater(latestSeq, seq))
-				continue;
+	//		if (!IsSeqGreater(latestSeq, seq))
+	//			continue;
 
-			if (m_receiveHistory.test(seq % WINDOW_SIZE))
-			{
-				bitfield |= (1 << (i - 1));
-			}
-		}
-		return bitfield;
-	}
+	//		if (m_receiveHistory.test(seq % WINDOW_SIZE))
+	//		{
+	//			bitfield |= (1 << (i - 1));
+	//		}
+	//	}
+	//	return bitfield;
+	//}
 
 	HANDLE UdpSession::GetHandle()
 	{
@@ -513,7 +512,7 @@ namespace jam::net
 
 		AckHeader ackHeader = {
 			.latestSeq = seq,
-			.bitfield = GenerateAckBitfield(seq)
+			.bitfield = m_transportManager->GenerateAckBitfield(seq)
 		};
 
 		pb.AttachHeaders(pktHeader, ackHeader);
@@ -523,10 +522,10 @@ namespace jam::net
 		return pb.GetSendBuffer();
 	}
 
-	void UdpSession::SendAck(uint16 seq)
-	{
-		Send(MakeAckPkt(seq));
-	}
+	//void UdpSession::SendAck(uint16 seq)
+	//{
+	//	//Send(MakeAckPkt(seq));
+	//}
 
 
 	void UdpSession::OnRecvAppData(BYTE* data, uint32 len)
@@ -548,7 +547,7 @@ namespace jam::net
 		};
 
 		RudpHeader rudpHeader = {
-			.sequence = m_sendSeq++,
+			.sequence = m_transportManager->GetNextSendSeq()
 		};
 
 		SysHeader sysHeader = {
@@ -569,7 +568,7 @@ namespace jam::net
 
 	void UdpSession::SendPong(uint64 clientSendTick)
 	{
-		constexpr uint16 size = sizeof(PacketHeader) + sizeof(S_PONG) + sizeof(S_PONG);
+		constexpr uint16 size = sizeof(PacketHeader) + sizeof(RudpHeader) + sizeof(SysHeader) + sizeof(S_PONG);
 
 		PacketBuilder pb;
 		pb.BeginWrite(size);
@@ -577,6 +576,10 @@ namespace jam::net
 		PacketHeader pktHeader = {
 			.sizeAndflags = MakeSizeAndFlags(size, 0),
 			.type = static_cast<uint8>(ePacketType::SYSTEM)
+		};
+
+		RudpHeader rudpHeader = {
+			.sequence = m_transportManager->GetNextSendSeq()
 		};
 
 		SysHeader sysHeader = {
@@ -588,7 +591,7 @@ namespace jam::net
 			.serverSendTick = Clock::Instance().GetCurrentTick()
 		};
 
-		pb.AttachHeaders(pktHeader, sysHeader);
+		pb.AttachHeaders(pktHeader, rudpHeader, sysHeader);
 		pb.AttachPayload(&payload, sizeof(S_PONG));
 
 		pb.Finalize();
@@ -613,40 +616,36 @@ namespace jam::net
 	}
 
 
-	void UdpSession::ProcessReliableSend(const Sptr<SendBuffer>& buf)
-	{
-		PendingPacket pkt = {
-			.buffer = buf,
-			.sequence = m_sendSeq++,
-			.timestamp = Clock::Instance().GetCurrentTick(),
-			.retryCount = 0
-		};
-
-		{
-			WRITE_LOCK
-			m_pendingAckMap[pkt.sequence] = pkt;
-		}
-
-		m_netStatTracker->OnSend(buf->WriteSize());
-		//	//size_t inFlightBytes = m_pendingAckMap.size() * sendBuffer->WriteSize();
+//	void UdpSession::ProcessReliableSend(const Sptr<SendBuffer>& buf)
+//	{
+//		PendingPacket pkt = {
+//			.buffer = buf,
+//			.sequence = m_sendSeq++,
+//			.timestamp = Clock::Instance().GetCurrentTick(),
+//			.retryCount = 0
+//		};
+//
+//		{
+//			WRITE_LOCK
+//			m_pendingAckMap[pkt.sequence] = pkt;
+//		}
+//
+//		m_netStatTracker->OnSend(buf->WriteSize());
+//		//	//size_t inFlightBytes = m_pendingAckMap.size() * sendBuffer->WriteSize();
 //	//if (!m_congestionController->CanSend(inFlightBytes))
 //	//	return;
-
+//
 //	//uint16 seq = m_sendSeq++;
-
+//
 //	//UdpPacketHeader* header = reinterpret_cast<UdpPacketHeader*>(sendBuffer->Buffer());
 //	//header->sequence = seq;
-
+//
 //	//uint64 timestamp = Clock::Instance().GetCurrentTick();
-
 //	//PendingPacket pkt = { .buffer = sendBuffer, .sequence = seq, .timestamp = timestamp, .retryCount = 0 };
-
-//	//{
-//	//	WRITE_LOCK
-//	//	m_pendingAckMap[seq] = pkt;
-//	//}
-
+//	//{ //	//	WRITE_LOCK
+//	//	m_pendingAckMap[seq] = pkt; //	//}
+//
 //	//m_netStatTracker->OnSend(sendBuffer->WriteSize());
 //	//Send(sendBuffer);
-	}
+//	}
 }

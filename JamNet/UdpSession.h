@@ -7,6 +7,11 @@
 
 namespace jam::net
 {
+	class ReliableTransportManager;
+}
+
+namespace jam::net
+{
 	class FragmentHandler;
 
 
@@ -147,9 +152,9 @@ namespace jam::net
 		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
 		//virtual void							SendReliable(const Sptr<SendBuffer>& buf);
 
-		void									HandleAck(uint16 latestSeq, uint32 bitfield);
-		bool									CheckAndRecordReceiveHistory(uint16 seq);
-		uint32									GenerateAckBitfield(uint16 latestSeq);
+		//void									HandleAck(uint16 latestSeq, uint32 bitfield);
+		//bool									CheckAndRecordReceiveHistory(uint16 seq);
+		//uint32									GenerateAckBitfield(uint16 latestSeq);
 
 	private:
 		/* Iocp Object impl */
@@ -171,10 +176,10 @@ namespace jam::net
 
 		void									UpdateRetry();
 		void									CheckRetryHandshake(uint64 now);
-		void									CheckRetrySend(uint64 now);
+		//void									CheckRetrySend(uint64 now);
 
 
-		bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }
+		//bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }
 
 		void									HandleError(int32 errorCode);
 
@@ -209,7 +214,7 @@ namespace jam::net
 		void									OnRecvPong(S_PONG pong);
 
 	private:
-		void ProcessReliableSend(const Sptr<SendBuffer>& buf);
+		//void ProcessReliableSend(const Sptr<SendBuffer>& buf);
 
 		CongestionController*					GetCongestionController() { return m_congestionController.get(); }
 		NetStatTracker*							GetNetStatTracker() { return m_netStatTracker.get(); }
@@ -238,6 +243,7 @@ namespace jam::net
 		Uptr<NetStatTracker>					m_netStatTracker = nullptr;
 		Uptr<CongestionController>				m_congestionController = nullptr;
 		Uptr<FragmentHandler>					m_fragmentHandler = nullptr;
+		Uptr<ReliableTransportManager>			m_transportManager = nullptr;
 	};
 }
 
