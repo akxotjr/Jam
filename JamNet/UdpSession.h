@@ -66,18 +66,18 @@ namespace jam::net
 		uint32				retryCount = 0;
 	};
 
-	enum class eHandshakeState : uint8
-	{
-		NONE,
-		SYN_SENT,
-		SYN_RECV,
-		SYNACK_SENT,
-		SYNACK_RECV,
-		ACK_SENT,
-		ACK_RECV,
-		COMPLETE,
-		TIMEOUT
-	};
+	//enum class eHandshakeState : uint8
+	//{
+	//	NONE,
+	//	SYN_SENT,
+	//	SYN_RECV,
+	//	SYNACK_SENT,
+	//	SYNACK_RECV,
+	//	ACK_SENT,
+	//	ACK_RECV,
+	//	COMPLETE,
+	//	TIMEOUT
+	//};
 
 	struct C_PING
 	{
