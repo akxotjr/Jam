@@ -1,46 +1,119 @@
 #include "pch.h"
 #include "PacketBuilder.h"
 
-#include "FragmentHandler.h"
+#include "Clock.h"
+
 
 namespace jam::net
 {
-	void PacketBuilder::BeginWrite(ePacketMode mode, uint32 allocSize)
+	Sptr<SendBuffer> PacketBuilder::CreateHandshakePacket(eHandshakePacketId id)
 	{
-		m_mode = mode;
+		constexpr uint32 size = sizeof(PacketHeader) + sizeof(SysHeader);
 
-		switch (mode)
-		{
-		case ePacketMode::SMALL_PKT:
-			m_sendBuffer = SendBufferManager::Instance().Open(allocSize);
-			break;
-		case ePacketMode::GAME_PKT:
-			m_sendBuffer = SendBufferManager::Instance().Open(MTU);
-			break;
-		case ePacketMode::LARGE_PKT:
-			// todo : fragment
-			break;
-		}
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
+		BufferWriter bw(buf->Buffer(), buf->AllocSize());
 
-		m_bufferWriter = std::make_unique<BufferWriter>(m_sendBuffer->Buffer(), m_sendBuffer->AllocSize());	// todo : change to object pool
+		PacketHeader pkt = {
+			.sizeAndflags = MakeSizeAndFlags(size, 0),
+			.type = static_cast<uint8>(ePacketType::SYSTEM)
+		};
+
+		SysHeader sys = {
+			.sysId = static_cast<uint8>(id)
+		};
+
+		bw << pkt << sys;
+		buf->Close(bw.WriteSize());
+
+		return buf;
 	}
 
-	void PacketBuilder::EndWrite()
+	Sptr<SendBuffer> PacketBuilder::CreatePingPacket(uint16 seq)
 	{
-		if (m_bufferWriter)
-		{
-			m_sendBuffer->Close(m_bufferWriter->WriteSize());
-			m_bufferWriter.reset();
-		}
+		constexpr uint32 size = sizeof(PacketHeader) + sizeof(RudpHeader) + sizeof(SysHeader) + sizeof(PING);
+
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
+		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		PacketHeader pkt = {
+			.sizeAndflags = MakeSizeAndFlags(size, 0),
+			.type = static_cast<uint8>(ePacketType::SYSTEM)
+		};
+
+		RudpHeader rudp = {
+			.sequence = seq
+		};
+
+		SysHeader sys = {
+			.sysId = static_cast<uint8>(eSysPacketId::C_PING)
+		};
+
+		PING payload = {
+			.clientSendTick = Clock::Instance().GetCurrentTick()
+		};
+
+		bw << pkt << rudp << sys << payload;
+		buf->Close(bw.WriteSize());
+
+		return buf;
 	}
 
-	void PacketBuilder::BeginRead(BYTE* buffer, uint32 size)
+	Sptr<SendBuffer> PacketBuilder::CreatePongPacket(uint16 seq, uint64 clientSendTick)
 	{
-		m_bufferReader = std::make_unique<BufferReader>(buffer, size);
+		constexpr uint32 size = sizeof(PacketHeader) + sizeof(RudpHeader) + sizeof(SysHeader) + sizeof(PONG);
+
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
+		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		PacketHeader pkt = {
+			.sizeAndflags = MakeSizeAndFlags(size, 0),
+			.type = static_cast<uint8>(ePacketType::SYSTEM)
+		};
+
+		RudpHeader rudp = {
+			.sequence = seq
+		};
+
+		SysHeader sys = {
+			.sysId = static_cast<uint8>(eSysPacketId::S_PONG)
+		};
+
+		PONG payload = {
+			.clientSendTick = clientSendTick,
+			.serverSendTick = Clock::Instance().GetCurrentTick()
+		};
+
+		bw << pkt << rudp << sys << payload;
+		buf->Close(bw.WriteSize());
+
+		return buf;
 	}
 
-	void PacketBuilder::EndRead()
+	Sptr<SendBuffer> PacketBuilder::CreateAckPacket(uint16 seq, uint32 bitfield)
 	{
-		m_bufferReader.reset();
+		constexpr uint32 size = sizeof(PacketHeader) + sizeof(AckHeader);
+
+		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
+		BufferWriter bw(buf->Buffer(), buf->AllocSize());
+
+		PacketHeader pkt = {
+			.sizeAndflags = MakeSizeAndFlags(size, 0),
+			.type = static_cast<uint8>(ePacketType::ACK)
+		};
+
+		AckHeader ack = {
+			.latestSeq = seq,
+			.bitfield = bitfield
+		};
+
+		bw << pkt << ack;
+		buf->Close(bw.WriteSize());
+
+		return buf;
 	}
+
+
+
+
+
 }

@@ -10,7 +10,7 @@ namespace jam::net
 	class ReliableTransportManager;
 	class FragmentHandler;
 	class NetStatTracker;
-	
+	class HandshakeManager;
 
 	/*--------------------------
 		 ReliableUdpSession
@@ -66,25 +66,13 @@ namespace jam::net
 		uint32				retryCount = 0;
 	};
 
-	//enum class eHandshakeState : uint8
-	//{
-	//	NONE,
-	//	SYN_SENT,
-	//	SYN_RECV,
-	//	SYNACK_SENT,
-	//	SYNACK_RECV,
-	//	ACK_SENT,
-	//	ACK_RECV,
-	//	COMPLETE,
-	//	TIMEOUT
-	//};
 
-	struct C_PING
+	struct PING
 	{
 		uint64 clientSendTick;
 	};
 
-	struct S_PONG
+	struct PONG
 	{
 		uint64 clientSendTick;
 		uint64 serverSendTick;
@@ -103,6 +91,7 @@ namespace jam::net
 
 		friend class CongestionController;
 		friend class NetStatTracker;
+		friend class HandshakeManager;
 
 	public:
 		UdpSession();
@@ -172,8 +161,8 @@ namespace jam::net
 
 		void									SendPing();
 		void									SendPong(uint64 clientSendTick);
-		void									OnRecvPing(C_PING ping);
-		void									OnRecvPong(S_PONG pong);
+		void									OnRecvPing(PING ping);
+		void									OnRecvPong(PONG pong);
 
 	private:
 		void SendDirect(const Sptr<SendBuffer>& buf);

@@ -56,19 +56,19 @@ namespace jam::net
 	private:
 
 		// Connection handshake methods
-		void SendConnectSyn();
+		void SendConnectSyn() const;
 		void OnReceiveConnectSyn();
-		void SendConnectSynAck();
+		void SendConnectSynAck() const;
 		void OnReceiveConnectSynAck();
-		void SendConnectAck();
+		void SendConnectAck() const;
 		void OnReceiveConnectAck();
 
 		// Disconnection handshake methods
-		void SendDisconnectFin();
+		void SendDisconnectFin() const;
 		void OnReceiveDisconnectFin();
-		void SendDisconnectFinAck();
+		void SendDisconnectFinAck() const;
 		void OnReceiveDisconnectFinAck();
-		void SendDisconnectAck();
+		void SendDisconnectAck() const;
 		void OnReceiveDisconnectAck();
 
 
@@ -83,7 +83,6 @@ namespace jam::net
 		static constexpr uint32 MAX_RETRY_COUNT = 5;
 		static constexpr uint64 TIMEOUT_INTERVAL = 5000; 
 		static constexpr uint64 DEFAULT_TIMEOUT = 5000;
-
 	};
 }
 
