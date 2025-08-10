@@ -5,8 +5,6 @@ namespace jam::net
 	class UdpSession;
 
 
-	constexpr uint32 MTU = 1024;		// Maximum Transmission Unit for UDP
-
 	class CongestionController
 	{
 	public:
@@ -25,6 +23,8 @@ namespace jam::net
 
 		uint32 m_cwnd = 4 * MTU;
 		uint32 m_ssthresh = 32 * MTU;
+
+		static constexpr uint32 MTU = 1024; // Maximum Transmission Unit for UDP
 	};
 }
 

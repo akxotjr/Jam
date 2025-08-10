@@ -105,6 +105,7 @@
       <Filter>00.Main</Filter>
     </ClInclude>
     <ClInclude Include="ReliableTransportManager.h" />
+    <ClInclude Include="HandshakeManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -176,5 +177,6 @@
       <Filter>00.Main</Filter>
     </ClCompile>
     <ClCompile Include="ReliableTransportManager.cpp" />
+    <ClCompile Include="HandshakeManager.cpp" />
   </ItemGroup>
 </Project>
