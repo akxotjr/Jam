@@ -44,3 +44,12 @@ private:                                                        \
 
 
 #define USING_SHARED_PTR(name) using name##Ref = std::shared_ptr<class name>;
+
+
+#define DEFINE_ENUM_CAST_FUNCS(EnumType)                            \
+    inline constexpr auto from_e(EnumType e) {                      \
+        return static_cast<std::underlying_type_t<EnumType>>(e);    \
+    }                                                               \
+    inline constexpr EnumType to_e(auto v) {                        \
+        return static_cast<EnumType>(v);                            \
+    }

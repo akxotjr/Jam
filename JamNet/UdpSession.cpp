@@ -7,7 +7,8 @@
 #include "NetStat.h"
 #include "PacketBuilder.h"
 #include "ReliableTransportManager.h"
-
+#include "HandshakeManager.h"
+#include "PacketBuilder.h"
 
 
 namespace jam::net
@@ -16,15 +17,13 @@ namespace jam::net
 	{
 		m_sid = GenerateSID(eProtocolType::UDP);
 
+		m_handshakeManager = std::make_unique<HandshakeManager>(this);
 		m_netStatTracker = std::make_unique<NetStatTracker>();
 		m_congestionController = std::make_unique<CongestionController>();
 		m_fragmentHandler = std::make_unique<FragmentHandler>();
 		m_reliableTransportManager = std::make_unique<ReliableTransportManager>();
 	}
 
-	UdpSession::~UdpSession()
-	{
-	}
 
 	bool UdpSession::Connect()
 	{
@@ -161,7 +160,7 @@ namespace jam::net
 			break;
 		case eSysPacketId::C_PING:
 			{
-			C_PING payload;
+			PING payload;
 			uint32 payloadSize;
 			pb.DetachPayload(&payload, payloadSize);
 			OnRecvPing(payload);
@@ -169,7 +168,7 @@ namespace jam::net
 			}
 		case eSysPacketId::S_PONG:
 			{
-			S_PONG payload;
+			PONG payload;
 			uint32 payloadSize;
 			pb.DetachPayload(&payload, payloadSize);
 			OnRecvPong(payload);
@@ -217,143 +216,6 @@ namespace jam::net
 	}
 
 
-	void UdpSession::CheckRetryHandshake(uint64 now)
-	{
-		if (m_handshakeState == eHandshakeState::SYN_SENT)
-		{
-			if (now - m_lastHandshakeTime > HANDSHAKE_RETRY_INTERVAL)
-			{
-				if (m_handshakeRetryCount >= MAX_HANDSHAKE_RETRIES)
-				{
-					std::cout << "[Handshake] Timeout. Disconnecting.\n";
-					Disconnect(L"Handshake timeout");
-					return;
-				}
-
-				std::cout << "[Handshake] Retrying SYN...\n";
-				SendHandshakeSyn();
-				m_handshakeRetryCount++;
-				m_lastHandshakeTime = now;
-			}
-		}
-
-		if (m_handshakeState == eHandshakeState::SYNACK_SENT)
-		{
-			if (now - m_lastHandshakeTime > HANDSHAKE_RETRY_INTERVAL * MAX_HANDSHAKE_RETRIES)
-			{
-				std::cout << "[Server] Handshake ACK timeout. Releasing session.\n";
-				Disconnect(L"Handshake ACK timeout");
-				return;
-			}
-		}
-	}
-
-	//void UdpSession::CheckRetrySend(uint64 now)
-	//{
-	//	xvector<uint16> resendList;
-	//	int32 lostPackets = 0;
-
-	//	{
-	//		WRITE_LOCK
-
-	//		for (auto& [seq, pkt] : m_pendingAckMap)
-	//		{
-	//			uint64 elapsed = now - pkt.timestamp;
-
-	//			if (elapsed >= m_resendIntervalMs)
-	//			{
-	//				pkt.timestamp = now;
-	//				pkt.retryCount++;
-
-	//				resendList.push_back(seq);
-	//				lostPackets++;
-	//			}
-
-	//			if (pkt.retryCount > 5)
-	//			{
-	//				std::cout << "[ReliableUDP] Max retry reached. Disconnecting.\n";
-	//				m_congestionController->OnPacketLoss();
-	//				m_netStatTracker->OnPacketLoss();
-	//				Disconnect(L"Too many retries");
-	//				continue;
-	//			}
-	//		}
-	//	}
-
-	//	if (lostPackets > 0)
-	//	{
-	//		m_netStatTracker->OnPacketLoss(lostPackets);
-	//	}
-
-	//	for (uint16 seq : resendList)
-	//	{
-	//		auto it = m_pendingAckMap.find(seq);
-	//		if (it != m_pendingAckMap.end())
-	//		{
-	//			std::cout << "[ReliableUDP] Re-sending seq: " << seq << "\n";
-	//			SendReliable(it->second.buffer);
-	//		}
-	//	}
-	//}
-
-	//void UdpSession::HandleAck(uint16 latestSeq, uint32 bitfield)
-	//{
-	//	//WRITE_LOCK
-	//	const uint64 now = Clock::Instance().GetCurrentTick();
-
-	//	for (uint16 i = 0; i <= BITFIELD_SIZE; ++i)
-	//	{
-	//		uint16 ackSeq = latestSeq - i;
-	//		if (i == 0 || (bitfield & (1 << (i - 1))))
-	//		{
-	//			auto it = m_pendingAckMap.find(ackSeq);
-	//			if (it != m_pendingAckMap.end())
-	//			{
-	//				uint64 sendTick = it->second.timestamp;
-	//				float rtt = static_cast<float>(now - sendTick);
-
-	//				m_congestionController->OnRecvAck(rtt);
-	//				m_netStatTracker->OnRecvAck(ackSeq);
-
-
-	//				WRITE_LOCK
-	//				m_pendingAckMap.erase(it);
-	//			}
-	//		}
-	//	}
-	//}
-
-	//bool UdpSession::CheckAndRecordReceiveHistory(uint16 seq)
-	//{
-	//	if (!IsSeqGreater(seq, m_latestSeq - WINDOW_SIZE))
-	//		return false;
-
-	//	if (m_receiveHistory.test(seq % WINDOW_SIZE))
-	//		return false;
-
-	//	m_receiveHistory.set(seq % WINDOW_SIZE);
-	//	m_latestSeq = IsSeqGreater(seq, m_latestSeq) ? seq : m_latestSeq;
-	//	return true;
-	//}
-
-	//uint32 UdpSession::GenerateAckBitfield(uint16 latestSeq)
-	//{
-	//	uint32 bitfield = 0;
-	//	for (uint16 i = 1; i <= BITFIELD_SIZE; ++i)
-	//	{
-	//		uint16 seq = latestSeq - i;
-
-	//		if (!IsSeqGreater(latestSeq, seq))
-	//			continue;
-
-	//		if (m_receiveHistory.test(seq % WINDOW_SIZE))
-	//		{
-	//			bitfield |= (1 << (i - 1));
-	//		}
-	//	}
-	//	return bitfield;
-	//}
-
 	HANDLE UdpSession::GetHandle()
 	{
 		return HANDLE();
@@ -377,233 +239,6 @@ namespace jam::net
 		}
 	}
 
-
-
-	void UdpSession::SendHandshakeSyn()
-	{
-		cout << "UdpSession::SendHandshakeSyn()\n";
-		if (m_state != eSessionState::DISCONNECTED || m_handshakeState != eHandshakeState::NONE)
-			return;
-
-		m_state = eSessionState::HANDSHAKING;
-		m_handshakeState = eHandshakeState::SYN_SENT;
-
-		auto buf = MakeHandshakePkt(eSysPacketId::C_HANDSHAKE_SYN);
-		SendDirect(buf);
-	}
-
-	void UdpSession::OnRecvHandshakeSynAck()
-	{
-		cout << "UdpSession::OnRecvHandshakeSynAck()\n";
-		if (m_state != eSessionState::HANDSHAKING || m_handshakeState != eHandshakeState::SYN_SENT)
-			return;
-
-		m_handshakeState = eHandshakeState::SYNACK_RECV;
-		SendHandshakeAck();
-	}
-
-	void UdpSession::SendHandshakeAck()
-	{
-		cout << "UdpSession::SendHandshakeAck()\n";
-		if (m_state != eSessionState::HANDSHAKING || m_handshakeState != eHandshakeState::SYNACK_RECV)
-			return;
-
-		auto buf = MakeHandshakePkt(eSysPacketId::C_HANDSHAKE_ACK);
-		SendDirect(buf);
-
-		m_handshakeState = eHandshakeState::COMPLETE;
-		m_state = eSessionState::CONNECTED;
-
-		GetService()->CompleteUdpHandshake(GetRemoteNetAddress());
-		OnConnected();
-	}
-
-	//-------------------------------------------------------------------
-
-
-	void UdpSession::OnRecvHandshakeSyn()
-	{
-		cout << "UdpSession::OnRecvHandshakeSyn()\n";
-
-		if (m_state != eSessionState::DISCONNECTED || m_handshakeState != eHandshakeState::NONE)
-			return;
-
-		m_state = eSessionState::HANDSHAKING;
-		m_handshakeState = eHandshakeState::SYN_RECV;
-
-		SendHandshakeSynAck();
-	}
-
-	void UdpSession::SendHandshakeSynAck()
-	{
-		cout << "UdpSession::SendHandshakeSynAck()\n";
-		if (m_state != eSessionState::HANDSHAKING || m_handshakeState != eHandshakeState::SYN_RECV)
-			return;
-
-		m_handshakeState = eHandshakeState::SYNACK_SENT;
-		
-		auto buf = MakeHandshakePkt(eSysPacketId::S_HANDSHAKE_SYNACK);
-		SendDirect(buf);
-	}
-
-	void UdpSession::OnRecvHandshakeAck()
-	{
-		cout << "UdpSession::OnRecvHandshakeAck()\n";
-
-		if (m_state != eSessionState::HANDSHAKING || m_handshakeState != eHandshakeState::SYNACK_SENT)
-			return;
-
-		m_handshakeState = eHandshakeState::COMPLETE;
-		m_state = eSessionState::CONNECTED;
-
-		GetService()->CompleteUdpHandshake(GetRemoteNetAddress());
-		OnConnected();
-	}
-
-	Sptr<SendBuffer> UdpSession::MakeHandshakePkt(eSysPacketId id)
-	{
-		constexpr uint16 size = sizeof(PacketHeader) + sizeof(SysHeader);
-
-		PacketBuilder pb;
-		pb.BeginWrite(size);
-
-		PacketHeader pktHeader = {
-			.sizeAndflags = MakeSizeAndFlags(size, 0),
-			.type = static_cast<uint8>(ePacketType::SYSTEM)
-		};
-
-		SysHeader sysHeader = { .sysId = static_cast<uint8>(id) };
-
-		pb.AttachHeaders(pktHeader, sysHeader);
-		//pb.Finalize();
-		pb.EndWrite();
-
-		return pb.GetSendBuffer();
-	}
-
-
-	Sptr<SendBuffer> UdpSession::MakeAckPkt()
-	{
-		constexpr uint16 size = sizeof(PacketHeader) + sizeof(AckHeader);
-
-		PacketBuilder pb;
-
-		pb.BeginWrite(size);
-
-		PacketHeader pktHeader = {
-			.sizeAndflags = MakeSizeAndFlags(size, 0),
-			.type = static_cast<uint8>(ePacketType::SYSTEM)
-		};
-
-		uint16 seq = m_reliableTransportManager->GetPendigAckSeq();
-		uint32 bitfield = m_reliableTransportManager->GetPendingAckBitfield();
-
-		AckHeader ackHeader = {
-			.latestSeq = seq,
-			.bitfield = bitfield
-		};
-
-		pb.AttachHeaders(pktHeader, ackHeader);
-		pb.EndWrite();
-
-		return pb.GetSendBuffer();
-	}
-
-	void UdpSession::SendAck()
-	{
-		auto buf = MakeAckPkt();
-
-		m_netStatTracker->OnSendReliablePacket();
-		SendDirect(buf);
-	}
-
-
-	void UdpSession::OnRecvAppData(BYTE* data, uint32 len)
-	{
-		m_netStatTracker->OnRecv(len);
-		OnRecv(data, len);
-	}
-
-	void UdpSession::SendPing()
-	{
-		constexpr uint16 size = sizeof(PacketHeader) + sizeof(RudpHeader) + sizeof(SysHeader) + sizeof(C_PING);
-
-		PacketBuilder pb;
-		pb.BeginWrite(size);
-
-		PacketHeader pktHeader = {
-			.sizeAndflags = MakeSizeAndFlags(size, 0),
-			.type = static_cast<uint8>(ePacketType::SYSTEM)
-		};
-
-		RudpHeader rudpHeader = {
-			.sequence = m_reliableTransportManager->GetNextSendSeq(),
-		};
-
-		SysHeader sysHeader = {
-			.sysId = static_cast<uint8>(eSysPacketId::C_PING)
-		};
-
-		C_PING payload = {
-			.clientSendTick = Clock::Instance().GetCurrentTick()
-		};
-
-		pb.AttachHeaders(pktHeader, rudpHeader, sysHeader);
-		pb.AttachPayload(&payload, sizeof(C_PING));
-		//pb.Finalize();
-		pb.EndWrite();
-		
-		SendDirect(pb.GetSendBuffer());
-	}
-
-	void UdpSession::SendPong(uint64 clientSendTick)
-	{
-		constexpr uint16 size = sizeof(PacketHeader) + sizeof(RudpHeader) + sizeof(SysHeader) + sizeof(S_PONG);
-
-		PacketBuilder pb;
-		pb.BeginWrite(size);
-
-		PacketHeader pktHeader = {
-			.sizeAndflags = MakeSizeAndFlags(size, 0),
-			.type = static_cast<uint8>(ePacketType::SYSTEM)
-		};
-
-		RudpHeader rudpHeader = {
-			.sequence = m_reliableTransportManager->GetNextSendSeq(),
-		};
-
-		SysHeader sysHeader = {
-			.sysId = static_cast<uint8>(eSysPacketId::S_PONG)
-		};
-
-		S_PONG payload = {
-			.clientSendTick = clientSendTick,
-			.serverSendTick = Clock::Instance().GetCurrentTick()
-		};
-
-		pb.AttachHeaders(pktHeader, rudpHeader, sysHeader);
-		pb.AttachPayload(&payload, sizeof(S_PONG));
-
-		//pb.Finalize();
-		pb.EndWrite();
-
-		SendDirect(pb.GetSendBuffer());
-	}
-
-	void UdpSession::OnRecvPing(C_PING ping)
-	{
-		const uint64 serverRecvTick = Clock::Instance().GetCurrentTick();
-		m_netStatTracker->OnRecvPing(ping.clientSendTick, serverRecvTick);
-
-		SendPong(ping.clientSendTick);
-	}
-
-	void UdpSession::OnRecvPong(S_PONG pong)
-	{
-		const uint64 clientRecvTick = Clock::Instance().GetCurrentTick();
-
-		m_netStatTracker->OnRecvPong(pong.clientSendTick, clientRecvTick, pong.serverSendTick);
-	}
 
 	void UdpSession::SendDirect(const Sptr<SendBuffer>& buf)
 	{

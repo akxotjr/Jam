@@ -10,6 +10,7 @@ namespace jam::net
 	class ReliableTransportManager;
 	class FragmentHandler;
 	class NetStatTracker;
+	class HandshakeManager;
 	
 
 	/*--------------------------
@@ -25,24 +26,6 @@ namespace jam::net
 
 	//------------------------------------------------------------------------//
 
-	struct SysHeader
-	{
-		uint8 sysId;
-	};
-
-	enum class eSysPacketId : uint8
-	{
-		C_HANDSHAKE_SYN = 1,
-		S_HANDSHAKE_SYN = 2,
-		C_HANDSHAKE_SYNACK = 3,
-		S_HANDSHAKE_SYNACK = 4,
-		C_HANDSHAKE_ACK = 5,
-		S_HANDSHAKE_ACK = 6,
-		C_PING = 7,
-		S_PONG = 8,
-
-		//APP_DATA = 9
-	};
 
 
 	//------------------------------------------------------------------------//
@@ -66,25 +49,12 @@ namespace jam::net
 		uint32				retryCount = 0;
 	};
 
-	//enum class eHandshakeState : uint8
-	//{
-	//	NONE,
-	//	SYN_SENT,
-	//	SYN_RECV,
-	//	SYNACK_SENT,
-	//	SYNACK_RECV,
-	//	ACK_SENT,
-	//	ACK_RECV,
-	//	COMPLETE,
-	//	TIMEOUT
-	//};
-
-	struct C_PING
+	struct PING
 	{
 		uint64 clientSendTick;
 	};
 
-	struct S_PONG
+	struct PONG
 	{
 		uint64 clientSendTick;
 		uint64 serverSendTick;
@@ -103,20 +73,15 @@ namespace jam::net
 
 		friend class CongestionController;
 		friend class NetStatTracker;
+		friend class HandshakeManager;
 
 	public:
 		UdpSession();
-		virtual ~UdpSession() override;
+		virtual ~UdpSession() override = default;
 
-	public:
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(const Sptr<SendBuffer>& buf) override;
-		//virtual void							SendReliable(const Sptr<SendBuffer>& buf);
-
-		//void									HandleAck(uint16 latestSeq, uint32 bitfield);
-		//bool									CheckAndRecordReceiveHistory(uint16 seq);
-		//uint32									GenerateAckBitfield(uint16 latestSeq);
 
 	private:
 		/* Iocp Object impl */
@@ -137,49 +102,12 @@ namespace jam::net
 		void									HandleCustomPacket(BYTE* data, uint32 len);
 
 		void									UpdateRetry();
-		void									CheckRetryHandshake(uint64 now);
-		//void									CheckRetrySend(uint64 now);
-
-
-		bool									IsSeqGreater(uint16 a, uint16 b) { return static_cast<int16>(a - b) > 0; }
 
 		void									HandleError(int32 errorCode);
 
-		/** 3-Handshake **/
-		/** Client **/
-
-
-		void									SendHandshakeSyn();
-		void									OnRecvHandshakeSynAck();
-		void									SendHandshakeAck();
-
-		/** Server **/
-		void									OnRecvHandshakeSyn();
-		void									SendHandshakeSynAck();
-		void									OnRecvHandshakeAck();
-
-
-
-		Sptr<SendBuffer>						MakeHandshakePkt(eSysPacketId id);
-		Sptr<SendBuffer>						MakeAckPkt();
-
-		void									SendAck();
-
-		void OnRecvAppData(BYTE* data, uint32 len);
-
-
-
-
-		void									SendPing();
-		void									SendPong(uint64 clientSendTick);
-		void									OnRecvPing(C_PING ping);
-		void									OnRecvPong(S_PONG pong);
 
 	private:
-		void SendDirect(const Sptr<SendBuffer>& buf);
-
-
-		//void ProcessReliableSend(const Sptr<SendBuffer>& buf);
+		void									SendDirect(const Sptr<SendBuffer>& buf);
 
 		CongestionController*					GetCongestionController() { return m_congestionController.get(); }
 		NetStatTracker*							GetNetStatTracker() { return m_netStatTracker.get(); }
@@ -188,23 +116,9 @@ namespace jam::net
 	private:
 		USE_LOCK
 
-	//protected:
-	//	unordered_map<uint16, PendingPacket>	m_pendingAckMap;
-	//	bitset<1024>							m_receiveHistory;
-
-	//	uint16									m_latestSeq = 0;
-	//	uint16									m_sendSeq = 1;			// 다음 보낼 sequence
-	//	uint64									m_resendIntervalMs = 1; // 재전송 대기 시간
-
-	private:
-		eHandshakeState							m_handshakeState = eHandshakeState::NONE;
-
 		RecvBuffer								m_recvBuffer;
 
-		int32									m_handshakeRetryCount = 0;
-		uint64									m_lastHandshakeTime = 0;
-
-
+		Uptr<HandshakeManager>					m_handshakeManager = nullptr;
 		Uptr<NetStatTracker>					m_netStatTracker = nullptr;
 		Uptr<CongestionController>				m_congestionController = nullptr;
 		Uptr<FragmentHandler>					m_fragmentHandler = nullptr;
