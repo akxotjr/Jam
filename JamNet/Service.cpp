@@ -1,6 +1,10 @@
 #include "pch.h"
 #include "Service.h"
 
+#include <ranges>
+
+#include "Clock.h"
+
 namespace jam::net
 {
 	/*--------------
@@ -17,6 +21,11 @@ namespace jam::net
 				worker->SetBaseJob(utils::job::Job([this]()
 					{
 						GetIocpCore()->Dispatch(10);
+
+						if (m_running.load())
+						{
+							Update();
+						}
 					}));
 				return worker;
 			});
@@ -24,7 +33,7 @@ namespace jam::net
 
 	Service::~Service()
 	{
-		CloseService();
+		//CloseService();
 	}
 
 
@@ -32,6 +41,62 @@ namespace jam::net
 	{
 		// TODO
 	}
+
+
+	void Service::StartUpdateLoop()
+	{
+		m_running.store(true);
+		m_lastUpdateTick = Clock::Instance().GetCurrentTick();
+	}
+
+	void Service::Update()
+	{
+		if (!m_running.load())
+			return;
+
+		uint64 currentTick = Clock::Instance().GetCurrentTick();
+
+		if (currentTick - m_lastUpdateTick < UPDATE_INTERVAL_MS)
+			return;
+
+		m_lastUpdateTick = currentTick;
+
+		{
+			READ_LOCK
+			for (auto& session : m_tcpSessions | views::values)
+			{
+				if (session && session->IsConnected())
+				{
+					session->Update();
+				}
+			}
+		}
+
+		{
+			READ_LOCK
+			for (auto& session : m_udpSessions | views::values)
+			{
+				if (session && session->IsConnected())
+				{
+					auto udpSession = static_pointer_cast<UdpSession>(session);
+					udpSession->Update();
+				}
+			}
+		}
+
+		{
+			READ_LOCK
+			for (auto& session : m_handshakingUdpSessions | views::values)
+			{
+				if (session)
+				{
+					auto udpSession = static_pointer_cast<UdpSession>(session);
+					udpSession->Update();
+				}
+			}
+		}
+	}
+
 
 	Sptr<Session> Service::CreateSession(eProtocolType protocol)
 	{
@@ -56,7 +121,7 @@ namespace jam::net
 		return session;
 	}
 
-	void Service::RegisterTcpSession(Sptr<TcpSession> session)
+	void Service::RegisterTcpSession(const Sptr<TcpSession>& session)
 	{
 		WRITE_LOCK
 
@@ -68,7 +133,7 @@ namespace jam::net
 		m_tcpSessions[session->GetRemoteNetAddress()] = session;
 	}
 
-	void Service::ReleaseTcpSession(Sptr<TcpSession> session)
+	void Service::ReleaseTcpSession(const Sptr<TcpSession>& session)
 	{
 		WRITE_LOCK
 
@@ -76,7 +141,7 @@ namespace jam::net
 		m_tcpSessionCount--;
 	}
 
-	void Service::RegisterUdpSession(Sptr<UdpSession> session)
+	void Service::RegisterUdpSession(const Sptr<UdpSession>& session)
 	{
 		WRITE_LOCK
 
@@ -88,7 +153,7 @@ namespace jam::net
 		m_udpSessions[addr] = session;
 	}
 
-	void Service::ReleaseUdpSession(Sptr<UdpSession> session)
+	void Service::ReleaseUdpSession(const Sptr<UdpSession>& session)
 	{
 		WRITE_LOCK
 
@@ -176,6 +241,9 @@ namespace jam::net
 		if (m_udpRouter->Start(shared_from_this()) == false)
 			return false;
 
+		m_workerPool->Run();
+		StartUpdateLoop();
+
 		return true;
 	}
 
@@ -203,6 +271,9 @@ namespace jam::net
 
 		if (m_udpRouter->Start(shared_from_this()) == false)
 			return false;
+
+		m_workerPool->Run();
+		StartUpdateLoop();
 
 		return true;
 	}

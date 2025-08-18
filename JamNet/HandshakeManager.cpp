@@ -61,12 +61,14 @@ namespace jam::net
 	}
 
 
-	void HandshakeManager::Update(uint64 currentTick)
+	void HandshakeManager::Update()
 	{
+		uint64 now = Clock::Instance().GetCurrentTick();
+
 		switch (m_state)
 		{
 		case eHandshakeState::TIME_WAIT:
-			if (IsTimeWaitExpired(currentTick))
+			if (IsTimeWaitExpired(now))
 			{
 				HandleTimeWaitTimeout();
 			}
@@ -75,7 +77,7 @@ namespace jam::net
 		case eHandshakeState::CONNECT_SYNACK_SENT:
 		case eHandshakeState::DISCONNECT_FIN_SENT:
 		case eHandshakeState::DISCONNECT_FINACK_SENT:
-			CheckTimeout(currentTick);
+			CheckTimeout(now);
 			break;
 		default:
 			break;
@@ -97,19 +99,19 @@ namespace jam::net
 		switch (newState)
 		{
 		case eHandshakeState::CONNECTED:
-			m_ownerSession->OnHandshakeCompleted(true);
+			m_owner->OnLinkEstablished();
 			m_retryCount.store(0);
 			break;
 		case eHandshakeState::DISCONNECTED:
 			if (oldState != eHandshakeState::TIME_WAIT)	// TIME_WAIT 에서 전환되지 않은 경우에만 콜백 호출
 			{
-				m_ownerSession->OnHandshakeCompleted(false);
+				m_owner->OnLinkTerminated();
 			}
 			m_retryCount.store(0);
 			break;
 		case eHandshakeState::TIME_OUT:
 		case eHandshakeState::ERROR_STATE:
-			m_ownerSession->OnHandshakeCompleted(false);
+			m_owner->OnLinkTerminated();
 			break;
 		default:
 			break;
@@ -174,7 +176,7 @@ namespace jam::net
 			return;
 
 		auto buf = PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_SYN);
-		m_ownerSession->SendDirect(buf);
+		m_owner->SendDirect(buf);
 		if (state == eHandshakeState::DISCONNECTED)
 		{
 			TransitionToState(eHandshakeState::CONNECT_SYN_SENT);
@@ -200,7 +202,7 @@ namespace jam::net
 			return;
 
 		auto buf = PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_SYNACK);
-		m_ownerSession->SendDirect(buf);
+		m_owner->SendDirect(buf);
 		if (state == eHandshakeState::CONNECT_SYN_RECEIVED)
 		{
 			TransitionToState(eHandshakeState::CONNECT_SYNACK_SENT);
@@ -226,10 +228,12 @@ namespace jam::net
 			return;
 
 		auto buf = PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_ACK);
-		m_ownerSession->SendDirect(buf);
+		m_owner->SendDirect(buf);
 		TransitionToState(eHandshakeState::CONNECTED);
 
 		m_lastHandshakeTime.store(Clock::Instance().GetCurrentTick());
+
+		m_owner->OnLinkEstablished();
 	}
 
 	void HandshakeManager::OnReceiveConnectAck()
@@ -239,6 +243,8 @@ namespace jam::net
 			return;
 
 		TransitionToState(eHandshakeState::CONNECTED);
+
+		m_owner->OnLinkEstablished();
 	}
 
 
@@ -250,7 +256,7 @@ namespace jam::net
 			return;
 
 		auto buf = PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_FIN);
-		m_ownerSession->SendDirect(buf);
+		m_owner->SendDirect(buf);
 		if (state == eHandshakeState::CONNECTED)
 		{
 			TransitionToState(eHandshakeState::DISCONNECT_FIN_SENT);
@@ -286,7 +292,7 @@ namespace jam::net
 			return;
 
 		auto buf = PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_FINACK);
-		m_ownerSession->SendDirect(buf);
+		m_owner->SendDirect(buf);
 
 		if (state == eHandshakeState::DISCONNECT_FIN_RECEIVED)
 		{
@@ -320,7 +326,7 @@ namespace jam::net
 			return;
 
 		auto buf = PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_ACK);
-		m_ownerSession->SendDirect(buf);
+		m_owner->SendDirect(buf);
 
 		if (state == eHandshakeState::DISCONNECT_FINACK_RECEIVED)
 		{
@@ -337,7 +343,7 @@ namespace jam::net
 		case eHandshakeState::DISCONNECT_FINACK_SENT:
 			// 수동 종료측에서 ACK 수신 - 즉시 종료
 			TransitionToState(eHandshakeState::DISCONNECTED);
-			m_ownerSession->OnHandshakeCompleted(false); // 연결 종료 완료
+			m_owner->OnLinkTerminated(); // 연결 종료 완료
 			break;
 
 		case eHandshakeState::TIME_WAIT:
@@ -346,6 +352,8 @@ namespace jam::net
 		default:
 			break;
 		}
+
+		//m_ownerSession->OnLinkTerminated();
 	}
 
 	void HandshakeManager::EnterTimeWait()
@@ -357,7 +365,7 @@ namespace jam::net
 	void HandshakeManager::HandleTimeWaitTimeout()
 	{
 		TransitionToState(eHandshakeState::DISCONNECTED);
-		m_ownerSession->OnHandshakeCompleted(false); // 연결 종료 완료
+		m_owner->OnLinkTerminated(); // 연결 종료 완료
 	}
 
 	bool HandshakeManager::IsTimeWaitExpired(uint64 currentTick) const

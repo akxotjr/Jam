@@ -6,29 +6,17 @@
 
 namespace jam::net
 {
+	struct PacketAnalysis;
 	class CongestionController;
 	class ReliableTransportManager;
-	class FragmentHandler;
-	class NetStatTracker;
+	class FragmentManager;
+	class NetStatManager;
 	class HandshakeManager;
 	
 
 	/*--------------------------
 		 ReliableUdpSession
 	---------------------------*/
-	
-	//------------------------------------------------------------------------//
-
-	struct RudpHeader
-	{
-		uint16 sequence = 0;
-	};
-
-	//------------------------------------------------------------------------//
-
-
-
-	//------------------------------------------------------------------------//
 
 #pragma pack(push, 1)
 	struct AckHeader
@@ -37,17 +25,7 @@ namespace jam::net
 		uint32 bitfield;
 	};
 #pragma pack(pop)
-	
-	//------------------------------------------------------------------------//
 
-
-	struct PendingPacket
-	{
-		Sptr<SendBuffer>	buffer;
-		uint16				sequence;
-		uint64				timestamp;
-		uint32				retryCount = 0;
-	};
 
 	struct PING
 	{
@@ -72,8 +50,9 @@ namespace jam::net
 		friend class Service;
 
 		friend class CongestionController;
-		friend class NetStatTracker;
+		friend class NetStatManager;
 		friend class HandshakeManager;
+		friend class ReliableTransportManager;
 
 	public:
 		UdpSession();
@@ -84,45 +63,56 @@ namespace jam::net
 		virtual void							Send(const Sptr<SendBuffer>& buf) override;
 
 	private:
-		/* Iocp Object impl */
-		virtual HANDLE							GetHandle() override;
-		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
+		void OnLinkEstablished();
+		void OnLinkTerminated();
+
+	private:
+		/* Iocp Object impl */ 
+		virtual HANDLE							GetHandle() override { return HANDLE(); };
+		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override {};
 
 	public:
-
-		void									ProcessDisconnect();
 		void									ProcessSend(int32 numOfBytes);
 		void									ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
 
 
-		int32									ParsePacket(BYTE* buffer, int32 len);
-		void									HandleSystemPacket(BYTE* buffer, uint32 size, PacketBuilder& pb);
-		void									HandleRpcPacket(BYTE* buffer, uint32 size, PacketBuilder& pb);
-		void									HandleAckPacket(BYTE* buffer, uint32 size, PacketBuilder& pb);
-		void									HandleCustomPacket(BYTE* data, uint32 len);
-
-		void									UpdateRetry();
+		uint32									ParsePacket(BYTE* buf, uint32 size);
+		void									HandleSystemPacket(uint8 id, BYTE* payload, uint32 payloadSize);
+		void									HandleRpcPacket(uint8 id, BYTE* payload, uint32 payloadSize);
+		void									HandleAckPacket(uint8 id, BYTE* payload, uint32 payloadSize);
+		void									HandleCustomPacket(uint8 id, BYTE* payload, uint32 payloadSize);
 
 		void									HandleError(int32 errorCode);
 
 
+		void									Update();
+
 	private:
 		void									SendDirect(const Sptr<SendBuffer>& buf);
+		void									SendSinglePacket(const Sptr<SendBuffer>& buf);
+		void									SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments);
+
+		void ProcessSend(const Sptr<SendBuffer>& buf);
+		void ProcessQueuedSendBuffer();
 
 		CongestionController*					GetCongestionController() { return m_congestionController.get(); }
-		NetStatTracker*							GetNetStatTracker() { return m_netStatTracker.get(); }
+		NetStatManager*							GetNetStatTracker() { return m_netStatTracker.get(); }
 
-
+		void ProcessReassembledPayload(const xvector<BYTE>& payload, const PacketAnalysis& firstFragmentAnalysis);
 	private:
 		USE_LOCK
 
 		RecvBuffer								m_recvBuffer;
 
+		xqueue<Sptr<SendBuffer>>				m_sendQueue;
+		static constexpr uint32 MAX_SENDQUEUE_SIZE = 100;
+
 		Uptr<HandshakeManager>					m_handshakeManager = nullptr;
-		Uptr<NetStatTracker>					m_netStatTracker = nullptr;
+		Uptr<NetStatManager>					m_netStatTracker = nullptr;
 		Uptr<CongestionController>				m_congestionController = nullptr;
-		Uptr<FragmentHandler>					m_fragmentHandler = nullptr;
+		Uptr<FragmentManager>					m_fragmentManager = nullptr;
 		Uptr<ReliableTransportManager> 			m_reliableTransportManager = nullptr;
 	};
+
 }
 

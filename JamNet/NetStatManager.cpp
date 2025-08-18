@@ -1,38 +1,37 @@
 #include "pch.h"
-#include "NetStat.h"
-
+#include "NetStatManager.h"
 #include "Clock.h"
 
 namespace jam::net
 {
-	void NetStatTracker::OnRecvPing(uint64 clientSendTick, uint64 serverRecvTick)
+	void NetStatManager::OnRecvPing(uint64 clientSendTick, uint64 serverRecvTick)
 	{
 		m_netStat.tickOffset = static_cast<int64>(serverRecvTick) - static_cast<int64>(clientSendTick);
 	}
 
-	void NetStatTracker::OnRecvPong(uint64 clientSendTick, uint64 clientRecvTick, uint64 serverSendTick)
+	void NetStatManager::OnRecvPong(uint64 clientSendTick, uint64 clientRecvTick, uint64 serverSendTick)
 	{
 		m_netStat.tickOffset = static_cast<int64>(serverSendTick) - static_cast<int64>(clientSendTick + (clientRecvTick - clientSendTick) / 2);
 	}
 
-	void NetStatTracker::OnSend(uint32 size)
+	void NetStatManager::OnSend(uint32 size)
 	{
 		m_netStat.totalSent++;
 		m_netStat.bandwidthSend += size;
 	}
 
-	void NetStatTracker::OnRecv(uint32 size)
+	void NetStatManager::OnRecv(uint32 size)
 	{
 		m_netStat.totalRecv++;
 		m_netStat.bandwidthRecv += size;
 	}
 
-	void NetStatTracker::OnSendReliablePacket()
+	void NetStatManager::OnSendReliablePacket()
 	{
 		m_prevTick = Clock::Instance().GetCurrentTick();
 	}
 
-	void NetStatTracker::OnRecvAck(uint16 sequence)
+	void NetStatManager::OnRecvAck(uint16 sequence)
 	{
 		uint64 now = Clock::Instance().GetCurrentTick();
 
@@ -58,36 +57,43 @@ namespace jam::net
 		m_netStat.totalAcksRecv++;
 	}
 
-	void NetStatTracker::OnPacketLoss(uint32 count)
+	void NetStatManager::OnPacketLoss(uint32 count)
 	{
 		m_netStat.totalLost += count;
 	}
 
-	void NetStatTracker::OnSendPiggybackAck()
+	void NetStatManager::OnSendPiggybackAck()
 	{
 		m_netStat.piggybackAcks++;
 		m_netStat.totalAcksSend++;
+		m_ackSendAccum += sizeof(AckHeader);
 	}
 
-	void NetStatTracker::OnSendImmediateAck()
+	void NetStatManager::OnSendImmediateAck()
 	{
 		m_netStat.immediateAcks++;
 		m_netStat.totalAcksSend++;
+		m_ackSendAccum += sizeof(PacketHeader) + sizeof(AckHeader);
 	}
 
-	void NetStatTracker::OnSendDelayedAck()
+	void NetStatManager::OnSendDelayedAck()
 	{
 		m_netStat.delayedAcks++;
 	}
 
-
-	void NetStatTracker::UpdateBandwidth(double deltaTime)
+	void NetStatManager::OnRetransmit()
 	{
-		if (deltaTime <= 0.0)
-			return;
+		m_netStat.totalLost++;
+	}
 
-		m_netStat.bandwidthSend = static_cast<float>(m_bandwidthSendAccum / deltaTime);
-		m_netStat.bandwidthRecv = static_cast<float>(m_bandwidthRecvAccum / deltaTime);
+
+	void NetStatManager::UpdateBandwidth()
+	{
+		m_netStat.bandwidthSend = static_cast<float>(m_bandwidthSendAccum / TICK_INTERVAL);
+		m_netStat.bandwidthRecv = static_cast<float>(m_bandwidthRecvAccum / TICK_INTERVAL);
+
+		m_bandwidthSendAccum = 0;
+		m_bandwidthRecvAccum = 0;
 
 		if (m_netStat.totalSent > 0)
 		{
@@ -97,11 +103,26 @@ namespace jam::net
 		if (m_expectedRecvPackets > 0 && m_netStat.totalRecv > 0) 
 		{
 			m_netStat.packetLossRecv = static_cast<float>(m_expectedRecvPackets - m_netStat.totalRecv) / m_expectedRecvPackets * 100.0f;
-			m_netStat.packetLossRecv = std::max(0.0f, std::min(100.0f, m_netStat.packetLossRecv));
+			m_netStat.packetLossRecv = max(0.0f, min(100.0f, m_netStat.packetLossRecv));
 		}
 	}
 
-	std::string NetStatTracker::GetNetStatString() const
+	void NetStatManager::UpdateAckEfficiency()
+	{
+		if (m_bandwidthSendAccum > 0)
+		{
+			float  ackBandwidth = static_cast<float>(m_ackSendAccum / TICK_INTERVAL);
+			m_netStat.ackEfficiency = ackBandwidth / m_netStat.bandwidthSend;
+		}
+		else
+		{
+			m_netStat.ackEfficiency = 0.0f;
+		}
+
+		m_ackSendAccum = 0;
+	}
+
+	std::string NetStatManager::GetNetStatString() const
 	{
 		std::stringstream ss;
 		ss << "RTT: " << m_netStat.rtt << "ms, ";
@@ -119,22 +140,30 @@ namespace jam::net
 		return ss.str();
 	}
 
-	uint64 NetStatTracker::GetEstimatedClientTick(uint64 serverTick)
+	uint64 NetStatManager::GetEstimatedClientTick(uint64 serverTick)
 	{
 		return serverTick + m_netStat.tickOffset;
 	}
 
-	uint64 NetStatTracker::GetEstimatedServerTick(uint64 clientTick)
+	uint64 NetStatManager::GetEstimatedServerTick(uint64 clientTick)
 	{
 		return clientTick + m_netStat.tickOffset;
 	}
 
-	double NetStatTracker::GetInterpolationDelayTick()
+	double NetStatManager::GetInterpolationDelayTick()
 	{
 		return 1.0 + m_netStat.rtt * 0.5 + m_netStat.jitter + m_netStat.margin;
 	}
 
-	double NetStatTracker::EWMA(double prev, double cur, double alpha) const
+
+	void NetStatManager::Update()
+	{
+		UpdateBandwidth();
+		UpdateAckEfficiency();
+	}
+
+
+	double NetStatManager::EWMA(double prev, double cur, double alpha) const
 	{
 		return alpha * cur + (1 - alpha) * prev;
 	}

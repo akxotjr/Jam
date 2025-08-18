@@ -152,7 +152,7 @@
     <ClInclude Include="BufferWriter.h" />
     <ClInclude Include="Clock.h" />
     <ClInclude Include="CongestionController.h" />
-    <ClInclude Include="FragmentHandler.h" />
+    <ClInclude Include="FragmentManager.h" />
     <ClInclude Include="HandshakeManager.h" />
     <ClInclude Include="IocpEvent.h" />
     <ClInclude Include="IocpCore.h" />
@@ -160,13 +160,14 @@
     <ClInclude Include="ipzip_lz4_impl.h" />
     <ClInclude Include="JamNetEnums.h" />
     <ClInclude Include="JamNetPCH.h" />
-    <ClInclude Include="NetStat.h" />
+    <ClInclude Include="NetStatManager.h" />
     <ClInclude Include="NetworkLayer.h" />
     <ClInclude Include="PacketCompressor.h" />
     <ClInclude Include="PacketBuilder.h" />
     <ClInclude Include="PacketEncryptor.h" />
     <ClInclude Include="ReliableTransportManager.h" />
     <ClInclude Include="RpcManager.h" />
+    <ClInclude Include="Serializer.h" />
     <ClInclude Include="TcpListener.h" />
     <ClInclude Include="NetAddress.h" />
     <ClInclude Include="pch.h" />
@@ -184,7 +185,7 @@
     <ClCompile Include="BufferWriter.cpp" />
     <ClCompile Include="Clock.cpp" />
     <ClCompile Include="CongestionController.cpp" />
-    <ClCompile Include="FragmentHandler.cpp" />
+    <ClCompile Include="FragmentManager.cpp" />
     <ClCompile Include="HandshakeManager.cpp" />
     <ClCompile Include="IocpEvent.cpp" />
     <ClCompile Include="IocpCore.cpp" />
@@ -192,13 +193,14 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="JamNetPCH.cpp" />
-    <ClCompile Include="NetStat.cpp" />
+    <ClCompile Include="NetStatManager.cpp" />
     <ClCompile Include="NetworkLayer.cpp" />
     <ClCompile Include="PacketCompressor.cpp" />
     <ClCompile Include="PacketBuilder.cpp" />
     <ClCompile Include="PacketEncryptor.cpp" />
     <ClCompile Include="ReliableTransportManager.cpp" />
     <ClCompile Include="RpcManager.cpp" />
+    <ClCompile Include="Serializer.cpp" />
     <ClCompile Include="TcpListener.cpp" />
     <ClCompile Include="NetAddress.cpp" />
     <ClCompile Include="pch.cpp">

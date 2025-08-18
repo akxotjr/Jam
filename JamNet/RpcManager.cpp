@@ -7,24 +7,37 @@ namespace jam::net
 {
 	void RpcManager::Dispatch(Sptr<Session> session, uint16 rpcId, uint32 requestId, uint8 flags, BYTE* payload, uint32 payloadLen)
 	{
-        if (requestId != 0) 
-        {
-            auto it = m_resHandlers.find(rpcId);
-            if (it != m_resHandlers.end()) 
-            {
-                it->second(payload, payloadLen, requestId);
-            }
-            else 
-            {
-                ResumeAwait(requestId, payload, payloadLen);
-            }
-            return;
-        }
+        //if (requestId != 0) 
+        //{
+        //    auto it = m_resHandlers.find(rpcId);
+        //    if (it != m_resHandlers.end()) 
+        //    {
+        //        it->second(payload, payloadLen, requestId);
+        //    }
+        //    else 
+        //    {
+        //        ResumeAwait(requestId, payload, payloadLen);
+        //    }
+        //    return;
+        //}
 
-        auto it = m_reqHandlers.find(rpcId);
-        if (it != m_reqHandlers.end()) 
+        //auto it = m_reqHandlers.find(rpcId);
+        //if (it != m_reqHandlers.end()) 
+        //{
+        //    it->second(session, payload, payloadLen, requestId);
+        //}
+
+        if (flags == RpcFlags::RESPONSE) 
         {
-            it->second(session, payload, payloadLen, requestId);
+            ResumeAwait(requestId, payload, payloadLen);
+        }
+        else if (flags == RpcFlags::REQUEST) 
+        {
+            auto it = m_reqHandlers.find(rpcId);
+            if (it != m_reqHandlers.end()) 
+            {
+                it->second(session, payload, payloadLen, requestId);
+            }
         }
 	}
 
@@ -36,7 +49,7 @@ namespace jam::net
 
     void RpcManager::ResumeAwait(uint32 requestId, const BYTE* payload, uint32 len)
     {
-        AwaitCallback cb;
+        AwaitCallback callback;
         {
             WRITE_LOCK
 
@@ -44,9 +57,11 @@ namespace jam::net
             if (it == m_callbacks.end()) 
                 return;
 
-            cb = std::move(it->second);
+            callback = std::move(it->second);
             m_callbacks.erase(it);
         }
-        cb(payload, len);
+
+        if (callback)
+            callback(payload, len);
     }
 }

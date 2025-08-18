@@ -35,16 +35,19 @@ namespace jam::net
 
 		virtual void						CloseService();
 
+		void								StartUpdateLoop();
+		void								Update();
+
 		template<typename TCP, typename UDP>
 		bool								SetSessionFactory();
 
 		Sptr<Session>						CreateSession(eProtocolType protocol);
 
-		void								RegisterTcpSession(Sptr<TcpSession> session);
-		void								ReleaseTcpSession(Sptr<TcpSession> session);
+		void								RegisterTcpSession(const Sptr<TcpSession>& session);
+		void								ReleaseTcpSession(const Sptr<TcpSession>& session);
 
-		void								RegisterUdpSession(Sptr<UdpSession> session);
-		void								ReleaseUdpSession(Sptr<UdpSession> session);
+		void								RegisterUdpSession(const Sptr<UdpSession>& session);
+		void								ReleaseUdpSession(const Sptr<UdpSession>& session);
 
 		void								CompleteUdpHandshake(const NetAddress& from);
 
@@ -100,7 +103,8 @@ namespace jam::net
 
 		ePeerType											m_peer = ePeerType::None;
 
-		
+		Atomic<bool>										m_running{ false };
+		uint64												m_lastUpdateTick = 0;
 		Uptr<utils::thrd::WorkerPool>						m_workerPool;
 	};
 

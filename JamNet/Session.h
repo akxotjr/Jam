@@ -120,7 +120,7 @@ namespace jam::net
 		Sptr<Session>							GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
 		eSessionState							GetState() { return m_state; }
 
-		PacketBuilder*							GetPacketBuilder() { return m_packetBuilder.get(); }
+	
 
 	protected:
 		virtual void							OnConnected() = 0;
@@ -137,6 +137,5 @@ namespace jam::net
 		eSessionState							m_state = eSessionState::DISCONNECTED;
 
 		Uptr<RpcManager>						m_rpcManager;
-		Uptr<PacketBuilder>						m_packetBuilder;
 	};
 }

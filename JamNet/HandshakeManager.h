@@ -40,7 +40,7 @@ namespace jam::net
 	class HandshakeManager
 	{
 	public:
-		HandshakeManager(UdpSession* ownerSession) : m_ownerSession(ownerSession) {}
+		HandshakeManager(UdpSession* owner) : m_owner(owner) {}
 		~HandshakeManager() = default;
 
 		// Connection Handshake : 3-way
@@ -61,7 +61,7 @@ namespace jam::net
 		void						RetryCurrentHandshake();
 
 		// Time Wait
-		void						Update(uint64 currentTick);
+		void						Update();
 		bool						IsInTimeWait() const { return m_state == eHandshakeState::TIME_WAIT; }
 		bool						CanAcceptNewConnection() const;
  
@@ -90,7 +90,7 @@ namespace jam::net
 
 
 	private:
-		UdpSession*					m_ownerSession;
+		UdpSession*					m_owner;
 
 		Atomic<eHandshakeState>		m_state{ eHandshakeState::DISCONNECTED };
 		Atomic<uint64>				m_lastHandshakeTime{ 0 };

@@ -1,9 +1,67 @@
 #include "pch.h"
 #include "ReliableTransportManager.h"
+#include "NetStatManager.h"
 #include "Clock.h"
 
 namespace jam::net
 {
+	void ReliableTransportManager::Update()
+	{
+		uint64 now = Clock::Instance().GetCurrentTick();
+
+		if (m_pendingPackets.empty())
+		{
+			if (ShouldSendImmediateAck(now))
+			{
+				SendAck();
+				ClearPendingAck();
+			}
+			return;
+		}
+
+		xvector<uint16> toRemove;
+		xvector<uint16> toRetransmit;
+
+		for (auto& [seq, pktInfo] : m_pendingPackets)
+		{
+			uint64 elapsed = now - pktInfo.timestamp;
+
+			if (elapsed >= RETRANSMIT_TIMEOUT || pktInfo.retryCount >= MAX_RETRY_COUNT)
+			{
+				toRemove.push_back(seq);
+				m_owner->GetNetStatTracker()->OnPacketLoss();
+			}
+			else if (elapsed >= RETRANSMIT_INTERVAL)
+			{
+				toRetransmit.push_back(seq);
+			}
+		}
+
+		for (uint16 seq : toRemove)
+		{
+			auto it = m_pendingPackets.find(seq);
+			if (it != m_pendingPackets.end())
+			{
+				m_inFlightSize -= it->second.size;
+				m_pendingPackets.erase(it);
+			}
+		}
+
+		// Retransmit
+		for (uint16 seq : toRetransmit)
+		{
+			auto it = m_pendingPackets.find(seq);
+			if (it != m_pendingPackets.end())
+			{
+				m_owner->SendDirect(it->second.buffer);
+				it->second.retryCount++;
+				it->second.timestamp = now;
+
+				m_owner->GetNetStatTracker()->OnRetransmit();
+			}
+		}
+	}
+
 	void ReliableTransportManager::AddPendingPacket(uint16 seq, const Sptr<SendBuffer>& buf, uint64 timestamp)
 	{
 		m_pendingPackets[seq] = { buf, buf->WriteSize(), timestamp, 0 };
@@ -45,17 +103,10 @@ namespace jam::net
 		return true;
 	}
 
-	xvector<uint16> ReliableTransportManager::GetPendingPacketsToRetransmit(uint64 currentTick) const
+	void ReliableTransportManager::SendAck()
 	{
-		xvector<uint16> resendList;
-		for (const auto& [seq, pktInfo] : m_pendingPackets)
-		{
-			if (pktInfo.retryCount < MAX_RETRY_COUNT && currentTick - pktInfo.timestamp >= RETRANSMIT_INTERVAL)
-			{
-				resendList.push_back(seq);
-			}
-		}
-		return resendList;
+		auto buf = PacketBuilder::CreateReliabilityAckPacket(m_pendingAckSeq, m_pendingAckBitfield);
+		m_owner->SendDirect(buf);
 	}
 
 	void ReliableTransportManager::OnRecvAck(uint16 latestSeq, uint32 bitfield)
@@ -118,7 +169,7 @@ namespace jam::net
 			return false;
 
 		PacketHeader* pktHeader = reinterpret_cast<PacketHeader*>(buf->Buffer());
-		uint16 currentSize = GetPacketSize(pktHeader->sizeAndflags);
+		uint16 currentSize = pktHeader->GetSize();
 		uint32 remainingSpace = buf->AllocSize() - currentSize;
 
 		if (remainingSpace < sizeof(AckHeader))
@@ -128,15 +179,23 @@ namespace jam::net
 		ackHeader->latestSeq = m_pendingAckSeq;
 		ackHeader->bitfield = m_pendingAckBitfield;
 
-
 		uint16 newSize = currentSize + sizeof(AckHeader);
-		uint8 flags = GetPacketFlags(pktHeader->sizeAndflags) | FLAG_PIGGYBACK_ACK;
-		pktHeader->sizeAndflags = MakeSizeAndFlags(newSize, flags);
+		uint8 newFlags = pktHeader->GetFlags() | PacketFlags::PIGGYBACK_ACK;
+		pktHeader->SetSize(newSize);
+		pktHeader->SetFlags(newFlags);
 
 		buf->Close(newSize);
-
 		ClearPendingAck();
-
 		return true;
+	}
+	 
+	void ReliableTransportManager::FailedAttachPiggybackAck()
+	{
+		uint64 now = Clock::Instance().GetCurrentTick();
+		if (ShouldSendImmediateAck(now))
+		{
+			SendAck();
+			ClearPendingAck();
+		}
 	}
 }

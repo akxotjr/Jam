@@ -28,6 +28,9 @@
     <Filter Include="00.Main">
       <UniqueIdentifier>{c325bb1f-6016-4874-addb-dd3e7e68785b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="02.Network\UDP\RUDP">
+      <UniqueIdentifier>{c90f0d6a-a760-4d84-a2ef-cbfc03fc438b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetAddress.h">
@@ -90,11 +93,6 @@
     <ClInclude Include="JamNetEnums.h">
       <Filter>99.Header</Filter>
     </ClInclude>
-    <ClInclude Include="NetStat.h" />
-    <ClInclude Include="CongestionController.h" />
-    <ClInclude Include="FragmentHandler.h" />
-    <ClInclude Include="Clock.h" />
-    <ClInclude Include="RpcManager.h" />
     <ClInclude Include="PacketBuilder.h">
       <Filter>04.Packet</Filter>
     </ClInclude>
@@ -104,8 +102,30 @@
     <ClInclude Include="NetworkLayer.h">
       <Filter>00.Main</Filter>
     </ClInclude>
-    <ClInclude Include="ReliableTransportManager.h" />
-    <ClInclude Include="HandshakeManager.h" />
+    <ClInclude Include="CongestionController.h">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClInclude>
+    <ClInclude Include="FragmentManager.h">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClInclude>
+    <ClInclude Include="HandshakeManager.h">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClInclude>
+    <ClInclude Include="ReliableTransportManager.h">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClInclude>
+    <ClInclude Include="NetStatManager.h">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClInclude>
+    <ClInclude Include="Clock.h">
+      <Filter>03.Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="RpcManager.h">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClInclude>
+    <ClInclude Include="Serializer.h">
+      <Filter>03.Utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -162,11 +182,6 @@
     <ClCompile Include="PacketCompressor.cpp">
       <Filter>04.Packet</Filter>
     </ClCompile>
-    <ClCompile Include="NetStat.cpp" />
-    <ClCompile Include="CongestionController.cpp" />
-    <ClCompile Include="FragmentHandler.cpp" />
-    <ClCompile Include="Clock.cpp" />
-    <ClCompile Include="RpcManager.cpp" />
     <ClCompile Include="PacketBuilder.cpp">
       <Filter>04.Packet</Filter>
     </ClCompile>
@@ -176,7 +191,29 @@
     <ClCompile Include="NetworkLayer.cpp">
       <Filter>00.Main</Filter>
     </ClCompile>
-    <ClCompile Include="ReliableTransportManager.cpp" />
-    <ClCompile Include="HandshakeManager.cpp" />
+    <ClCompile Include="CongestionController.cpp">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClCompile>
+    <ClCompile Include="FragmentManager.cpp">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClCompile>
+    <ClCompile Include="HandshakeManager.cpp">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClCompile>
+    <ClCompile Include="ReliableTransportManager.cpp">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClCompile>
+    <ClCompile Include="NetStatManager.cpp">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClCompile>
+    <ClCompile Include="Clock.cpp">
+      <Filter>03.Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="RpcManager.cpp">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClCompile>
+    <ClCompile Include="Serializer.cpp">
+      <Filter>03.Utils</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -28,11 +28,11 @@ namespace jam::net
 	};
 
 
-    class NetStatTracker
+    class NetStatManager
     {
     public:
-        NetStatTracker() = default;
-        ~NetStatTracker() = default;
+        NetStatManager() = default;
+        ~NetStatManager() = default;
 
         // Server side
         void            OnRecvPing(uint64 clientSendTick, uint64 serverRecvTick);
@@ -49,13 +49,16 @@ namespace jam::net
 
         void            OnPacketLoss(uint32 count = 1);
 
-        void OnSendPiggybackAck();
-        void OnSendImmediateAck();
-        void OnSendDelayedAck();
+        void            OnSendPiggybackAck();
+        void            OnSendImmediateAck();
+        void            OnSendDelayedAck();
 
 
-        void            UpdateBandwidth(double deltaTime);
-        void UpdateAckEfficiency();
+        void            OnRetransmit();
+
+
+        void            UpdateBandwidth();
+        void            UpdateAckEfficiency();
 
 
         double          GetRTT() { return m_netStat.rtt; }
@@ -68,7 +71,7 @@ namespace jam::net
         uint64          GetEstimatedServerTick(uint64 clientTick);
         double          GetInterpolationDelayTick();
 
-
+        void            Update();
 
 
     private:
@@ -86,7 +89,7 @@ namespace jam::net
         uint64              m_highestSeqSeen = 0;
         uint64              m_lastAckedSeq = 0;
 
-		uint64 m_ackSendAccum = 0; // ACK 송신량 누적
+		uint64              m_ackSendAccum = 0; // ACK 송신량 누적
     };
 }
 

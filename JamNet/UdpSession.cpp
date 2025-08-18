@@ -2,13 +2,12 @@
 #include "UdpSession.h"
 #include "Clock.h"
 #include "RpcManager.h"
-#include "FragmentHandler.h"
+#include "FragmentManager.h"
 #include "CongestionController.h"
-#include "NetStat.h"
+#include "NetStatManager.h"
 #include "PacketBuilder.h"
 #include "ReliableTransportManager.h"
 #include "HandshakeManager.h"
-#include "PacketBuilder.h"
 
 
 namespace jam::net
@@ -18,10 +17,10 @@ namespace jam::net
 		m_sid = GenerateSID(eProtocolType::UDP);
 
 		m_handshakeManager = std::make_unique<HandshakeManager>(this);
-		m_netStatTracker = std::make_unique<NetStatTracker>();
-		m_congestionController = std::make_unique<CongestionController>();
-		m_fragmentHandler = std::make_unique<FragmentHandler>();
-		m_reliableTransportManager = std::make_unique<ReliableTransportManager>();
+		m_netStatTracker = std::make_unique<NetStatManager>();
+		m_congestionController = std::make_unique<CongestionController>(this);
+		m_fragmentManager = std::make_unique<FragmentManager>(this);
+		m_reliableTransportManager = std::make_unique<ReliableTransportManager>(this);
 	}
 
 
@@ -30,7 +29,8 @@ namespace jam::net
 		if (IsConnected())
 			return false;
 
-		SendHandshakeSyn();
+		m_state = eSessionState::HANDSHAKING;
+		m_handshakeManager->InitiateConnection();
 		return true;
 	}
 
@@ -39,33 +39,44 @@ namespace jam::net
 		if (IsConnected() == false)
 			return;
 
-		ProcessDisconnect();
-
-
-		
+		m_state = eSessionState::HANDSHAKING;
+		m_handshakeManager->InitiateDisconnection();
 	}
 
 	void UdpSession::Send(const Sptr<SendBuffer>& buf)
 	{
-		if (!m_reliableTransportManager->TryAttachPiggybackAck(buf))
+		if (!buf || !buf->Buffer())
+			return;
+
+		const uint32 inFlightSize = m_reliableTransportManager->GetInFlightSize();
+		if (!m_congestionController->CanSend(inFlightSize))
 		{
-			uint64 now = Clock::Instance().GetCurrentTick();
-			if (m_reliableTransportManager->ShouldSendImmediateAck(now))
+			if (m_sendQueue.size() <= MAX_SENDQUEUE_SIZE)
 			{
-				SendAck();
-				m_reliableTransportManager->ClearPendingAck();
+				m_sendQueue.push(buf);
 			}
-			// else ?
+			return;
 		}
 
-		SendDirect(buf);
+		ProcessSend(buf);
 	}
 
-	void UdpSession::ProcessDisconnect()
+	void UdpSession::OnLinkEstablished()
 	{
+		m_state = eSessionState::CONNECTED;
+
+		GetService()->CompleteUdpHandshake(m_remoteAddress);
+		OnConnected();
+	}
+
+	void UdpSession::OnLinkTerminated()
+	{
+		m_state = eSessionState::DISCONNECTED;
+
 		OnDisconnected();
 		GetService()->ReleaseUdpSession(static_pointer_cast<UdpSession>(shared_from_this()));
 	}
+
 
 	void UdpSession::ProcessSend(int32 numOfBytes)
 	{
@@ -79,151 +90,159 @@ namespace jam::net
 		BYTE* buf = m_recvBuffer.ReadPos();
 		int32 totalSize = m_recvBuffer.DataSize();
 
-		int32 processLen = ParsePacket(buf, totalSize);
+		uint32 processLen = ParsePacket(buf, totalSize);
 		if (processLen < 0 || totalSize < processLen || !m_recvBuffer.OnRead(processLen)) return;
 		m_recvBuffer.Clean();
 	}
 
-	int32 UdpSession::ParsePacket(BYTE* buffer, int32 len)
+	uint32 UdpSession::ParsePacket(BYTE* buf, uint32 size)
 	{
-		if (len < static_cast<int32>(sizeof(PacketHeader)))
+		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf, size);
+
+		if (!analysis.isValid)
 			return 0;
 
-		PacketBuilder pb;
-		pb.BeginRead(buffer, len);
-
-		PacketHeader pktHeader;
-		pb.DetachHeaders(pktHeader);
-
-		int32 size = GetPacketSize(pktHeader.sizeAndflags);
-		if (len < size || size < sizeof(PacketHeader))
-			return 0;
-
-		uint8 flags = GetPacketFlags(pktHeader.sizeAndflags);
-
-		// Check if the packet is a reliable packet
-		if (flags & FLAG_RELIABLE)
+		if (analysis.IsReliable())
 		{
-			RudpHeader rudpHeader;
-			pb.DetachHeaders(rudpHeader);
-			if (!m_reliableTransportManager->IsSeqReceived(rudpHeader.sequence))
+			uint16 seq = analysis.GetSequence();
+			if (!m_reliableTransportManager->IsSeqReceived(seq))
 			{
-				m_reliableTransportManager->AddPendingPacket(rudpHeader.sequence, pb.GetSendBuffer(), Clock::Instance().GetCurrentTick());
-				SendAck(rudpHeader.sequence);
+				return analysis.totalSize;
 			}
 		}
 
+		if (analysis.IsFragmented())
+		{
+			auto fragmentResult = m_fragmentManager->OnRecvFragment(buf, size);
 
-		switch (pktHeader.type)
+			if (fragmentResult.first)
+			{
+				ProcessReassembledPayload(fragmentResult.second, analysis);
+			}
+
+			return analysis.totalSize;
+		}
+
+		BYTE* payload = analysis.GetPayloadPtr(buf);
+		uint32 payloadSize = analysis.payloadSize;
+
+		switch (analysis.GetType())
 		{
 		case ePacketType::SYSTEM:
-			{
-			HandleSystemPacket(buffer, len, pb);
+			HandleSystemPacket(analysis.GetId(), payload, payloadSize);
 			break;
-			}
-		case ePacketType::RPC:
-			{
-			HandleRpcPacket(buffer, len, pb);
-			break;
-			}
+
 		case ePacketType::ACK:
-			{
-			HandleAckPacket(buffer, len, pb);
+			HandleAckPacket(analysis.GetId(), payload, payloadSize);
 			break;
-			}
+
+		case ePacketType::RPC:
+			HandleRpcPacket(analysis.GetId(), payload, payloadSize);
+			break;
+
 		case ePacketType::CUSTOM:
-			break;
-		default:
+			HandleCustomPacket(analysis.GetId(), payload, payloadSize);
 			break;
 		}
 
-		pb.EndRead();
-
-		return size;
+		return analysis.totalSize;
 	}
 
-	void UdpSession::HandleSystemPacket(BYTE* buf, uint32 size, PacketBuilder& pb/*SysHeader* sys, BYTE* payload, uint32 payloadLen*/)
+	void UdpSession::HandleSystemPacket(uint8 id, BYTE* payload, uint32 payloadSize)
 	{
-		SysHeader sys;
-		pb.DetachHeaders(sys);
-
-		switch (sys.sysId)
+		switch (id)
 		{
-		case eSysPacketId::C_HANDSHAKE_SYN:
-			OnRecvHandshakeSyn();
+		case eSystemPacketId::CONNECT_SYN:
+		case eSystemPacketId::CONNECT_SYNACK:
+		case eSystemPacketId::CONNECT_ACK:
+			m_handshakeManager->HandleConnectionPacket(U2E(eSystemPacketId, id));
 			break;
-		case eSysPacketId::S_HANDSHAKE_SYNACK:
-			OnRecvHandshakeSynAck();
+		case eSystemPacketId::DISCONNECT_FIN:
+		case eSystemPacketId::DISCONNECT_FINACK:
+		case eSystemPacketId::DISCONNECT_ACK:
+			m_handshakeManager->HandleDisconnectionPacket(U2E(eSystemPacketId, id));
 			break;
-		case eSysPacketId::C_HANDSHAKE_ACK:
-			OnRecvHandshakeAck();
-			break;
-		case eSysPacketId::C_PING:
+		case eSystemPacketId::PING:
+			if (payloadSize >= sizeof(PING)) 
 			{
-			PING payload;
-			uint32 payloadSize;
-			pb.DetachPayload(&payload, payloadSize);
-			OnRecvPing(payload);
-			break;
+				PING* pingData = reinterpret_cast<PING*>(payload);
+				m_netStatTracker->OnRecvPing(pingData->clientSendTick);
 			}
-		case eSysPacketId::S_PONG:
+			break;
+		case eSystemPacketId::PONG:
+			if (payloadSize >= sizeof(PING))
 			{
-			PONG payload;
-			uint32 payloadSize;
-			pb.DetachPayload(&payload, payloadSize);
-			OnRecvPong(payload);
-			break;
+				PING* pongData = reinterpret_cast<PING*>(payload);
+				m_netStatTracker->OnRecvPong(pongData->clientSendTick, );
 			}
+			break;
 		default:
 			break;
 		}
 	}
 
-	void UdpSession::HandleRpcPacket(BYTE* buffer, uint32 size, PacketBuilder& pb/*RpcHeader* rpc, BYTE* payload, uint32 payloadLen*/)
+	void UdpSession::HandleRpcPacket(uint8 id, BYTE* payload, uint32 payloadSize)
 	{
-		RpcHeader rpcHeader;
-		pb.DetachHeaders(rpcHeader);
+		switch (static_cast<eRpcPacketId>(id))
+		{
+		case eRpcPacketId::FLATBUFFER_RPC:
+		{
+			// payload = [RpcHeader][FlatBuffer]
+			if (payloadSize < sizeof(RpcHeader))
+				return;
 
-		BYTE* payload;
-		uint32 payloadSize;
-		pb.DetachPayload(payload, payloadSize);
+			RpcHeader* rpcHeader = reinterpret_cast<RpcHeader*>(payload);
+			BYTE* flatBufferData = payload + sizeof(RpcHeader);
+			uint32 flatBufferSize = payloadSize - sizeof(RpcHeader);
 
-		m_rpcManager->Dispatch(GetSession(), rpcHeader.rpcId, rpcHeader.requestId, rpcHeader.flags, payload, payloadSize);
+			// RpcManager로 디스패치
+			m_rpcManager->Dispatch(GetSession(),
+				rpcHeader->rpcId,
+				rpcHeader->requestId,
+				rpcHeader->flags,
+				flatBufferData,
+				flatBufferSize);
+			break;
+		}
+		case eRpcPacketId::PROTOBUF_RPC:
+			// todo
+			break;
+		case eRpcPacketId::JSON_RPC:
+			// todo
+			break;
+		case eRpcPacketId::BINARY_RPC:
+			// todo
+			break;
+		}
 	}
 
-	void UdpSession::HandleAckPacket(BYTE* buffer, uint32 size, PacketBuilder& pb)
+	void UdpSession::HandleAckPacket(uint8 id, BYTE* payload, uint32 payloadSize)
 	{
-		AckHeader ackHeader;
-		pb.DetachHeaders(ackHeader);
+		switch (static_cast<eAckPacketId>(id))
+		{
+		case eAckPacketId::RELIABILITY_ACK:
+		{
+			if (payloadSize >= sizeof(AckHeader)) 
+			{
+				AckHeader* ackData = reinterpret_cast<AckHeader*>(payload);
+				m_reliableTransportManager->OnRecvAck(ackData->latestSeq, ackData->bitfield);
+				m_netStatTracker->OnRecvAck(ackData->latestSeq);
+				m_congestionController->OnRecvAck();
 
-		m_reliableTransportManager->OnRecvAck(ackHeader.latestSeq, ackHeader.bitfield);
-		m_netStatTracker->OnRecvAck(ackHeader.latestSeq);
+				ProcessQueuedSendBuffer();
+			}
+			break;
+		}
+		default:
+			break;
+		}
 	}
 
-	void UdpSession::HandleCustomPacket(BYTE* data, uint32 len)
+	void UdpSession::HandleCustomPacket(uint8 id, BYTE* payload, uint32 payloadSize)
 	{
 		//todo
 	}
 
-	void UdpSession::UpdateRetry()
-	{
-		const uint64 now = Clock::Instance().GetCurrentTick();
-
-		if (!IsConnected())
-			CheckRetryHandshake(now);
-
-	//	CheckRetrySend(now);
-	}
-
-
-	HANDLE UdpSession::GetHandle()
-	{
-		return HANDLE();
-	}
-
-	void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
-	{
-	}
 
 	void UdpSession::HandleError(int32 errorCode)
 	{
@@ -240,8 +259,112 @@ namespace jam::net
 	}
 
 
+	void UdpSession::Update()
+	{
+		if (m_state == eSessionState::DISCONNECTED)
+			return;
+
+		if (m_state == eSessionState::HANDSHAKING)
+		{
+			if (m_handshakeManager)
+			{
+				m_handshakeManager->Update();
+			}
+			return;
+		}
+
+
+		if (m_netStatTracker)
+		{
+			m_netStatTracker->Update();
+		}
+
+		if (m_reliableTransportManager)
+		{
+			m_reliableTransportManager->Update();
+		}
+	}
+
+
 	void UdpSession::SendDirect(const Sptr<SendBuffer>& buf)
 	{
 		GetService()->m_udpRouter->RegisterSend(buf, GetRemoteNetAddress());
+	}
+
+	void UdpSession::SendSinglePacket(const Sptr<SendBuffer>& buf)
+	{
+		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
+		if (analysis.isValid && analysis.IsReliable())
+		{
+			uint16 seq = analysis.GetSequence();
+			m_reliableTransportManager->AddPendingPacket(seq, buf, Clock::Instance().GetCurrentTick());
+		}
+
+		if (!m_reliableTransportManager->TryAttachPiggybackAck(buf))
+		{
+			m_reliableTransportManager->FailedAttachPiggybackAck();
+		}
+
+		SendDirect(buf);
+	}
+
+	void UdpSession::SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments)
+	{
+		for (auto& fragment : fragments)
+		{
+			SendSinglePacket(fragment);
+		}
+	}
+
+	void UdpSession::ProcessSend(const Sptr<SendBuffer>& buf)
+	{
+		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
+		if (!analysis.isValid)
+			return;
+
+		if (analysis.payloadSize > MAX_PAYLOAD_SIZE)
+		{
+			auto fragments = m_fragmentManager->Fragmentize(buf, analysis);
+			SendMultiplePacket(fragments);
+		}
+		else
+		{
+			SendSinglePacket(buf);
+		}
+	}
+
+	void UdpSession::ProcessQueuedSendBuffer()
+	{
+		while (!m_sendQueue.empty() && m_congestionController->CanSend(m_reliableTransportManager->GetInFlightSize()))
+		{
+			auto buf = m_sendQueue.front();
+			m_sendQueue.pop();
+			ProcessSend(buf);
+		}
+	}
+
+
+
+	void UdpSession::ProcessReassembledPayload(const xvector<BYTE>& payload, const PacketAnalysis& firstFragmentAnalysis)
+	{
+		// 재조립된 payload를 원본 패킷 타입으로 처리
+		ePacketType originalType = firstFragmentAnalysis.GetType();
+		uint8 originalId = firstFragmentAnalysis.GetId();
+
+		switch (originalType)
+		{
+		case ePacketType::SYSTEM:
+			HandleSystemPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+			break;
+		case ePacketType::RPC:
+			HandleRpcPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+			break;
+		case ePacketType::CUSTOM:
+			HandleCustomPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+			break;
+		case ePacketType::ACK:
+			HandleAckPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+			break;
+		}
 	}
 }
