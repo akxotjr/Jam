@@ -25,6 +25,9 @@
     <Filter Include="02.Thread\Lock">
       <UniqueIdentifier>{217017b4-f819-4c1a-b515-29779c93a8a4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="05.Exec">
+      <UniqueIdentifier>{37cb7a2d-a205-4ed8-a75e-5a1378b0fa45}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -83,6 +86,18 @@
     </ClCompile>
     <ClCompile Include="LockQueue.cpp">
       <Filter>02.Thread\Lock</Filter>
+    </ClCompile>
+    <ClCompile Include="GlobalExecutor.cpp">
+      <Filter>05.Exec</Filter>
+    </ClCompile>
+    <ClCompile Include="Mailbox.cpp">
+      <Filter>05.Exec</Filter>
+    </ClCompile>
+    <ClCompile Include="ShardEndpoint.cpp">
+      <Filter>05.Exec</Filter>
+    </ClCompile>
+    <ClCompile Include="ShardExecutor.cpp">
+      <Filter>05.Exec</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -163,6 +178,18 @@
     </ClInclude>
     <ClInclude Include="LockQueue.h">
       <Filter>02.Thread\Lock</Filter>
+    </ClInclude>
+    <ClInclude Include="ShardExecutor.h">
+      <Filter>05.Exec</Filter>
+    </ClInclude>
+    <ClInclude Include="GlobalExecutor.h">
+      <Filter>05.Exec</Filter>
+    </ClInclude>
+    <ClInclude Include="Mailbox.h">
+      <Filter>05.Exec</Filter>
+    </ClInclude>
+    <ClInclude Include="ShardEndpoint.h">
+      <Filter>05.Exec</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

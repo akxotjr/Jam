@@ -72,8 +72,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>libjamutils</TargetName>
-    <OutDir>C:\Users\matae\GameWorkSpace\Jam\Libraries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
-    <IntDir>C:\Users\matae\GameWorkSpace\Jam\Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
+    <OutDir>C:\Users\akxotjr\GameWorkSpace\Jam\Libraries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
+    <IntDir>C:\Users\akxotjr\GameWorkSpace\Jam\Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
     <IncludePath>$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
@@ -156,6 +156,7 @@
     <ClInclude Include="DeadLockProfiler.h" />
     <ClInclude Include="Fiber.h" />
     <ClInclude Include="FiberScheduler.h" />
+    <ClInclude Include="GlobalExecutor.h" />
     <ClInclude Include="JamEnums.h" />
     <ClInclude Include="GlobalQueue.h" />
     <ClInclude Include="JamUtilsPCH.h" />
@@ -167,10 +168,13 @@
     <ClInclude Include="LockQueue.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="JamMacro.h" />
+    <ClInclude Include="Mailbox.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MemoryPool.h" />
     <ClInclude Include="ObjectPool.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="ShardEndpoint.h" />
+    <ClInclude Include="ShardExecutor.h" />
     <ClInclude Include="WorkerPool.h" />
     <ClInclude Include="TLS.h" />
     <ClInclude Include="TypeCast.h" />
@@ -183,6 +187,7 @@
     <ClCompile Include="DeadLockProfiler.cpp" />
     <ClCompile Include="Fiber.cpp" />
     <ClCompile Include="FiberScheduler.cpp" />
+    <ClCompile Include="GlobalExecutor.cpp" />
     <ClCompile Include="GlobalQueue.cpp" />
     <ClCompile Include="JamUtilsPCH.cpp" />
     <ClCompile Include="Job.cpp" />
@@ -192,6 +197,7 @@
     <ClCompile Include="LockDeque.cpp" />
     <ClCompile Include="LockQueue.cpp" />
     <ClCompile Include="Logger.cpp" />
+    <ClCompile Include="Mailbox.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="MemoryPool.cpp" />
     <ClCompile Include="pch.cpp">
@@ -200,6 +206,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="ShardEndpoint.cpp" />
+    <ClCompile Include="ShardExecutor.cpp" />
     <ClCompile Include="WorkerPool.cpp" />
     <ClCompile Include="TLS.cpp" />
     <ClCompile Include="Worker.cpp" />

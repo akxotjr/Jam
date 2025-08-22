@@ -11,7 +11,7 @@ namespace jam::net
 		 Service
 		---------------*/
 
-	Service::Service(TransportConfig config) : m_config(config)
+	Service::Service(ServiceConfig config) : m_config(config)
 	{
 		m_iocpCore = std::make_unique<IocpCore>();
 		m_workerPool = std::make_unique<utils::thrd::WorkerPool>(4,
@@ -222,7 +222,7 @@ namespace jam::net
 
 
 
-	ClientService::ClientService(TransportConfig config) : Service(config)
+	ClientService::ClientService(ServiceConfig config) : Service(config)
 	{
 		m_peer = ePeerType::Client;
 	}
@@ -249,7 +249,7 @@ namespace jam::net
 
 
 
-	ServerService::ServerService(TransportConfig config) : Service(config)
+	ServerService::ServerService(ServiceConfig config) : Service(config)
 	{
 		m_peer = ePeerType::Server;
 	}

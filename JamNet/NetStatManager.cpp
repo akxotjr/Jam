@@ -86,6 +86,25 @@ namespace jam::net
 		m_netStat.totalLost++;
 	}
 
+	void NetStatManager::OnRTO()
+	{
+		m_netStat.timeoutRetransmits++;
+		m_netStat.totalRetransmits++;
+		
+	}
+
+	void NetStatManager::OnFastRTX()
+	{
+		m_netStat.fastRetransmits++;
+		m_netStat.totalRetransmits++;
+	}
+
+	void NetStatManager::OnNackRTX()
+	{
+		m_netStat.nackRetransmits++;
+		m_netStat.totalRetransmits++;
+	}
+
 
 	void NetStatManager::UpdateBandwidth()
 	{
@@ -122,6 +141,14 @@ namespace jam::net
 		m_ackSendAccum = 0;
 	}
 
+	void NetStatManager::UpdateRetransmitStats()
+	{
+		if (m_netStat.totalRetransmits > 0)
+		{
+			m_netStat.fastRetransmitRatio = static_cast<float>(m_netStat.fastRetransmits) / m_netStat.totalRetransmits;
+		}
+	}
+
 	std::string NetStatManager::GetNetStatString() const
 	{
 		std::stringstream ss;
@@ -155,11 +182,11 @@ namespace jam::net
 		return 1.0 + m_netStat.rtt * 0.5 + m_netStat.jitter + m_netStat.margin;
 	}
 
-
 	void NetStatManager::Update()
 	{
 		UpdateBandwidth();
 		UpdateAckEfficiency();
+		UpdateRetransmitStats();
 	}
 
 

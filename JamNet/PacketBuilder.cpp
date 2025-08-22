@@ -5,29 +5,29 @@
 
 namespace jam::net
 {
-	Sptr<SendBuffer> PacketBuilder::CreatePacket(ePacketType type, uint8 id, uint8 flags, const void* payload, uint32 payloadSize, uint16 seq, uint8 fragIndex, uint8 fragTotal)
+	Sptr<SendBuffer> PacketBuilder::CreatePacket(ePacketType type, uint8 id, uint8 flags, eChannelType channel, const void* payload, uint32 payloadSize, uint16 seq, uint8 fragIndex, uint8 fragTotal)
 	{
-		return CreatePacketInternal(E2U(type), id, flags, payload, payloadSize, seq, fragIndex, fragTotal);
+		return CreatePacketInternal(E2U(type), id, flags, E2U(channel), payload, payloadSize, seq, fragIndex, fragTotal);
 	}
 
-	Sptr<SendBuffer> PacketBuilder::CreateSystemPacket(eSystemPacketId id, uint8 flags, const void* payload, uint32 payloadSize, uint16 seq)
+	Sptr<SendBuffer> PacketBuilder::CreateSystemPacket(eSystemPacketId id, uint8 flags, eChannelType channel, const void* payload, uint32 payloadSize, uint16 seq)
 	{
-		return CreatePacketInternal(E2U(ePacketType::SYSTEM), E2U(id), flags, payload, payloadSize, seq);
+		return CreatePacketInternal(E2U(ePacketType::SYSTEM), E2U(id), flags, E2U(channel), payload, payloadSize, seq);
 	}
 
 	Sptr<SendBuffer> PacketBuilder::CreateHandshakePacket(eSystemPacketId id)
 	{
-		return CreateSystemPacket(id, PacketFlags::NONE, nullptr, 0);
+		return CreateSystemPacket(id, PacketFlags::NONE, eChannelType::RELIABLE_ORDERED, nullptr, 0);
 	}
 
 	Sptr<SendBuffer> PacketBuilder::CreatePingPacket(const PING& ping, uint16 seq)
 	{
-		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::RELIABLE, &ping, sizeof(ping), seq);
+		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::NONE, eChannelType::UNRELIABLE_SEQUENCED, &ping, sizeof(ping), seq);
 	}
 
 	Sptr<SendBuffer> PacketBuilder::CreatePongPacket(const PONG& pong, uint16 seq)
 	{
-		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::RELIABLE, &pong, sizeof(pong), seq);
+		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::NONE, eChannelType::UNRELIABLE_SEQUENCED, &pong, sizeof(pong), seq);
 	}
 
 	Sptr<SendBuffer> PacketBuilder::CreateReliabilityAckPacket(uint16 seq, uint32 bitfield)
@@ -36,16 +36,21 @@ namespace jam::net
 		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(size);
 		BufferWriter bw(buf->Buffer(), buf->AllocSize());
 
-
+		// todo
 
 		buf->Close(bw.WriteSize());
 
 		return buf;
 	}
 
-	Sptr<SendBuffer> PacketBuilder::CreateRpcPacket(eRpcPacketId id, uint8 flags, const void* payload, uint32 payloadSize, uint16 seq)
+	Sptr<SendBuffer> PacketBuilder::CreateNackPacket(uint16 seq, uint32 bitfield)
 	{
-		return CreatePacketInternal(E2U(ePacketType::RPC), E2U(id), flags, payload, payloadSize, seq);
+		return Sptr<SendBuffer>();
+	}
+
+	Sptr<SendBuffer> PacketBuilder::CreateRpcPacket(eRpcPacketId id, uint8 flags, uint8 channel, const void* payload, uint32 payloadSize, uint16 seq)
+	{
+		return CreatePacketInternal(E2U(ePacketType::RPC), E2U(id), flags, channel, payload, payloadSize, seq);
 	}
 
 
@@ -59,24 +64,18 @@ namespace jam::net
 		BufferReader br(buf, size);
 
 		if (!br.PeekBytes(&result.header, PacketHeader::GetBaseSize()))
-			return result;
+			return {};
 
-		bool isReliable = result.header.IsReliable();
-		result.headerSize = isReliable ? PacketHeader::GetHalfSize() : PacketHeader::GetBaseSize();
+		if (!result.header.IsValid())
+			return {};
+
+		result.headerSize = result.header.GetActualSize();
 
 		if (size < result.headerSize)
-			return result;
+			return {};
 
-		if (isReliable)
-		{
-			if (!br.ReadBytes(&result.header, PacketHeader::GetHalfSize()))
-				return result;
-		}
-		else
-		{
-			if (!br.ReadBytes(&result.header, PacketHeader::GetBaseSize()))
-				return result;
-		}
+		if (!br.ReadBytes(&result.header, result.headerSize))
+			return {};
 
 		result.totalSize = result.header.GetSize();
 		if (size < result.totalSize || result.totalSize < result.headerSize)
@@ -113,9 +112,9 @@ namespace jam::net
 
 
 
-	Sptr<SendBuffer> PacketBuilder::CreatePacketInternal(uint8 type, uint8 id, uint8 flags, const void* payload, uint32 payloadSize, uint16 seq, uint8 fragIndex, uint8 fragTotal)
+	Sptr<SendBuffer> PacketBuilder::CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 channel, const void* payload, uint32 payloadSize, uint16 seq, uint8 fragIndex, uint8 fragTotal)
 	{
-		bool isReliable = HasFlag(flags, PacketFlags::RELIABLE);
+		bool isReliable = HasReliable(U2E(eChannelType, channel));
 		bool isFragmented = HasFlag(flags, PacketFlags::FRAGMENTED);
 
 		uint32 headerSize;
@@ -133,7 +132,8 @@ namespace jam::net
 		Sptr<SendBuffer> buf = SendBufferManager::Instance().Open(allocSize);
 		BufferWriter bw(buf->Buffer(), buf->AllocSize());
 
-		PacketHeader header(type, id, totalSize, flags, seq, fragIndex, fragTotal);
+		// todo : size를 직접 계산해서 넣는게 맘에 안듦
+		PacketHeader header(type, id, totalSize, flags, channel, seq, fragIndex, fragTotal);
 
 		bw.WriteBytes(&header, headerSize);
 

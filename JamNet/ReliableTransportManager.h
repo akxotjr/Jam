@@ -44,7 +44,6 @@ namespace jam::net
 		bool			IsSeqReceived(uint16 seq);
 
 		// Retransmit
-		//xvector<uint16> GetPendingPacketsToRetransmit(uint64 currentTick) const;
 		uint32			GetInFlightSize() const { return m_inFlightSize; }
 
 		// Handle ACKs
@@ -58,8 +57,22 @@ namespace jam::net
 		bool			ShouldSendImmediateAck(uint64 currentTick);
 		bool			TryAttachPiggybackAck(const Sptr<SendBuffer>& buf);
 		void			FailedAttachPiggybackAck();
+
 		uint16			GetPendigAckSeq() const { return m_pendingAckSeq; }
 		uint32			GetPendingAckBitfield() const { return m_pendingAckBitfield; }
+
+
+
+		// Fast RTX
+		void OnRecvNack(uint16 missingSeq, uint32 bitfield);
+		void CheckFastRTX(uint16 ackSeq);
+		void TriggerFastRTX(uint16 seq);
+
+		uint32 GenerateNackBitfield(uint16 missingSeq);
+
+		// NACK
+		void SendNack(uint16 missingSeq, uint32 bitfield);
+		bool ShouldSendNack(uint16 expectedSeq, uint16 receivedSeq);
 
 
 	private:
@@ -82,6 +95,19 @@ namespace jam::net
 		uint16								m_pendingAckSeq = 0;		// Sequence number of the pending ACK
 		uint32								m_pendingAckBitfield = 0;	// Bitfield of ACKs to send
 		uint64								m_firstPendingAckTick = 0;	// Timestamp of the first pending ACK
+
+
+		// Fast RTX
+		constexpr static uint32 DUPLICATE_ACK_THRESHOLD = 3;
+		xumap<uint16, uint32>   m_duplicateAckCount;    // 시퀀스별 중복 ACK 카운트
+		uint16                  m_lastAckedSeq = 0;     // 마지막으로 ACK된 시퀀스
+
+		// NACK
+		uint16                  m_expectedNextSeq = 1;  // 다음에 받을 것으로 예상되는 시퀀스
+		uint64                  m_lastNackTime = 0;     // 마지막 NACK 전송 시간
+		constexpr static uint64 NACK_THROTTLE_INTERVAL = 10; // NACK 전송 간격 제한
+
+		xuset<uint16>			m_sentNackSeqs;
 	};
 }
 

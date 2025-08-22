@@ -126,6 +126,9 @@
     <ClInclude Include="Serializer.h">
       <Filter>03.Utils</Filter>
     </ClInclude>
+    <ClInclude Include="ChannelManager.h">
+      <Filter>02.Network\UDP\RUDP</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -214,6 +217,9 @@
     </ClCompile>
     <ClCompile Include="Serializer.cpp">
       <Filter>03.Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="ChannelManager.cpp">
+      <Filter>02.Network\UDP\RUDP</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

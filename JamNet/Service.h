@@ -7,7 +7,7 @@
 
 namespace jam::net
 {
-	struct TransportConfig
+	struct ServiceConfig
 	{
 		NetAddress	localTcpAddress = {};
 		NetAddress	localUdpAddress = {};
@@ -27,7 +27,7 @@ namespace jam::net
 		friend class UdpRouter;
 
 	public:
-		Service(TransportConfig config);
+		Service(ServiceConfig config);
 		virtual ~Service();
 
 		virtual bool						Start() = 0;
@@ -79,7 +79,7 @@ namespace jam::net
 	protected:
 		USE_LOCK
 
-		TransportConfig										m_config;
+		ServiceConfig										m_config;
 
 		Uptr<IocpCore>										m_iocpCore;
 
@@ -132,7 +132,7 @@ namespace jam::net
 	class ClientService : public Service
 	{
 	public:
-		ClientService(TransportConfig config);
+		ClientService(ServiceConfig config);
 		virtual ~ClientService() override;
 
 		bool Start() override;
@@ -143,7 +143,7 @@ namespace jam::net
 	class ServerService : public Service
 	{
 	public:
-		ServerService(TransportConfig config);
+		ServerService(ServiceConfig config);
 		virtual ~ServerService() override;
 
 		bool Start() override;

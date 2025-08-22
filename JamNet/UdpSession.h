@@ -12,6 +12,7 @@ namespace jam::net
 	class FragmentManager;
 	class NetStatManager;
 	class HandshakeManager;
+	class ChannelManager;
 	
 
 	/*--------------------------
@@ -38,14 +39,19 @@ namespace jam::net
 		uint64 serverSendTick;
 	};
 
-	constexpr int32		MAX_HANDSHAKE_RETRIES = 5;
-	constexpr double	HANDSHAKE_RETRY_INTERVAL = 0.5; 
+	//constexpr int32		MAX_HANDSHAKE_RETRIES = 5;
+	//constexpr double	HANDSHAKE_RETRY_INTERVAL = 0.5;
+
+
+
+
+
+
 
 	class UdpSession : public Session
 	{
 		enum { BUFFER_SIZE = 0x10000 }; // 64KB
 
-		friend class UdpReceiver;
 		friend class IocpCore;
 		friend class Service;
 
@@ -53,6 +59,7 @@ namespace jam::net
 		friend class NetStatManager;
 		friend class HandshakeManager;
 		friend class ReliableTransportManager;
+		friend class ChannelManager;
 
 	public:
 		UdpSession();
@@ -63,8 +70,8 @@ namespace jam::net
 		virtual void							Send(const Sptr<SendBuffer>& buf) override;
 
 	private:
-		void OnLinkEstablished();
-		void OnLinkTerminated();
+		void									OnLinkEstablished();
+		void									OnLinkTerminated();
 
 	private:
 		/* Iocp Object impl */ 
@@ -92,13 +99,18 @@ namespace jam::net
 		void									SendSinglePacket(const Sptr<SendBuffer>& buf);
 		void									SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments);
 
-		void ProcessSend(const Sptr<SendBuffer>& buf);
-		void ProcessQueuedSendBuffer();
+		void									ProcessSend(const Sptr<SendBuffer>& buf);
+		void									ProcessQueuedSendBuffer();
 
 		CongestionController*					GetCongestionController() { return m_congestionController.get(); }
-		NetStatManager*							GetNetStatTracker() { return m_netStatTracker.get(); }
+		NetStatManager*							GetNetStatManager() { return m_netStatTracker.get(); }
+		ReliableTransportManager*				GetReliableTransportManager() { return m_reliableTransportManager.get(); }
 
-		void ProcessReassembledPayload(const xvector<BYTE>& payload, const PacketAnalysis& firstFragmentAnalysis);
+
+		void									ProcessReassembledPayload(const xvector<BYTE>& payload, const PacketAnalysis& firstFragmentAnalysis);
+
+		void									ProcessBufferedPacket(const PacketAnalysis& analysis, BYTE* payload, uint32 payloadSize);
+
 	private:
 		USE_LOCK
 
@@ -112,6 +124,7 @@ namespace jam::net
 		Uptr<CongestionController>				m_congestionController = nullptr;
 		Uptr<FragmentManager>					m_fragmentManager = nullptr;
 		Uptr<ReliableTransportManager> 			m_reliableTransportManager = nullptr;
+		Uptr<ChannelManager>					m_channelManager = nullptr;
 	};
 
 }

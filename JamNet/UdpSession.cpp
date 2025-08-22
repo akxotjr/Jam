@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "UdpSession.h"
+
+#include "ChannelManager.h"
 #include "Clock.h"
 #include "RpcManager.h"
 #include "FragmentManager.h"
@@ -21,6 +23,7 @@ namespace jam::net
 		m_congestionController = std::make_unique<CongestionController>(this);
 		m_fragmentManager = std::make_unique<FragmentManager>(this);
 		m_reliableTransportManager = std::make_unique<ReliableTransportManager>(this);
+		m_channelManager = std::make_unique<ChannelManager>(this);
 	}
 
 
@@ -364,6 +367,25 @@ namespace jam::net
 			break;
 		case ePacketType::ACK:
 			HandleAckPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+			break;
+		}
+	}
+
+	void UdpSession::ProcessBufferedPacket(const PacketAnalysis& analysis, BYTE* payload, uint32 payloadSize)
+	{
+		switch (analysis.GetType())
+		{
+		case ePacketType::SYSTEM:
+			HandleSystemPacket(analysis.GetId(), payload, payloadSize);
+			break;
+		case ePacketType::ACK:
+			HandleAckPacket(analysis.GetId(), payload, payloadSize);
+			break;
+		case ePacketType::RPC:
+			HandleRpcPacket(analysis.GetId(), payload, payloadSize);
+			break;
+		case ePacketType::CUSTOM:
+			HandleCustomPacket(analysis.GetId(), payload, payloadSize);
 			break;
 		}
 	}

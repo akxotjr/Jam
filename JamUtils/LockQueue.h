@@ -53,7 +53,5 @@ namespace jam::utils::thrd
 	private:
 		USE_LOCK
 		xqueue<T>	m_items;
-
-		
 	};
 }

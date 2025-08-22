@@ -3,12 +3,6 @@
 
 namespace jam::net
 {
-	//struct TcpPacketHeader
-	//{
-	//	uint16 size;
-	//	uint16 id;
-	//};
-
 	class TcpSession : public Session
 	{
 		enum { BUFFER_SIZE = 0x10000 }; // 64KB
@@ -21,20 +15,16 @@ namespace jam::net
 		TcpSession();
 		virtual ~TcpSession() override;
 
-	public:
 		virtual bool							Connect() override;
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) override;
 
 	private:
 		/** Iocp Object impl **/
-
 		virtual HANDLE							GetHandle() override;
 		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
-
 		/** Transport **/
-
 		bool									RegisterConnect();
 		bool									RegisterDisconnect();
 		void									RegisterSend();
@@ -56,7 +46,6 @@ namespace jam::net
 		xqueue<Sptr<SendBuffer>>				m_sendQueue;
 		Atomic<bool>							m_sendRegistered = false;
 
-	private:
 		ConnectEvent							m_connectEvent;
 		DisconnectEvent							m_disconnectEvent;
 		SendEvent								m_sendEvent;
