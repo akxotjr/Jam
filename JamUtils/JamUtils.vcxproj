@@ -156,6 +156,7 @@
     <ClInclude Include="CpuAffinity.h" />
     <ClInclude Include="DeadLockProfiler.h" />
     <ClInclude Include="Fiber.h" />
+    <ClInclude Include="FiberCommon.h" />
     <ClInclude Include="FiberScheduler.h" />
     <ClInclude Include="GlobalExecutor.h" />
     <ClInclude Include="JamEnums.h" />
@@ -177,6 +178,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="ShardEndpoint.h" />
     <ClInclude Include="ShardExecutor.h" />
+    <ClInclude Include="WinFiberBackend.h" />
     <ClInclude Include="WorkerPool.h" />
     <ClInclude Include="TLS.h" />
     <ClInclude Include="TypeCast.h" />
@@ -189,6 +191,7 @@
     <ClCompile Include="CpuAffinity.cpp" />
     <ClCompile Include="DeadLockProfiler.cpp" />
     <ClCompile Include="Fiber.cpp" />
+    <ClCompile Include="FiberCommon.cpp" />
     <ClCompile Include="FiberScheduler.cpp" />
     <ClCompile Include="GlobalExecutor.cpp" />
     <ClCompile Include="GlobalQueue.cpp" />
@@ -212,6 +215,7 @@
     </ClCompile>
     <ClCompile Include="ShardEndpoint.cpp" />
     <ClCompile Include="ShardExecutor.cpp" />
+    <ClCompile Include="WinFiberBackend.cpp" />
     <ClCompile Include="WorkerPool.cpp" />
     <ClCompile Include="TLS.cpp" />
     <ClCompile Include="Worker.cpp" />
