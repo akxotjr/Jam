@@ -28,6 +28,9 @@
     <Filter Include="05.Exec">
       <UniqueIdentifier>{37cb7a2d-a205-4ed8-a75e-5a1378b0fa45}</UniqueIdentifier>
     </Filter>
+    <Filter Include="06.Sys">
+      <UniqueIdentifier>{a54d303c-ed9a-4423-ab40-bb981b3af6af}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -98,6 +101,12 @@
     </ClCompile>
     <ClCompile Include="ShardExecutor.cpp">
       <Filter>05.Exec</Filter>
+    </ClCompile>
+    <ClCompile Include="CpuAffinity.cpp">
+      <Filter>06.Sys</Filter>
+    </ClCompile>
+    <ClCompile Include="NumaTopology.cpp">
+      <Filter>06.Sys</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -190,6 +199,12 @@
     </ClInclude>
     <ClInclude Include="ShardEndpoint.h">
       <Filter>05.Exec</Filter>
+    </ClInclude>
+    <ClInclude Include="CpuAffinity.h">
+      <Filter>06.Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="NumaTopology.h">
+      <Filter>06.Sys</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

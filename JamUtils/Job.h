@@ -24,5 +24,11 @@ namespace jam::utils::job
 	private:
 		CallbackType	m_callback;
 	};
+
+
+	class TimedJob
+	{
+		
+	};
 }
 

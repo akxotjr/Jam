@@ -153,6 +153,7 @@
   <ItemGroup>
     <ClInclude Include="Allocator.h" />
     <ClInclude Include="Containers.h" />
+    <ClInclude Include="CpuAffinity.h" />
     <ClInclude Include="DeadLockProfiler.h" />
     <ClInclude Include="Fiber.h" />
     <ClInclude Include="FiberScheduler.h" />
@@ -171,6 +172,7 @@
     <ClInclude Include="Mailbox.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="MemoryPool.h" />
+    <ClInclude Include="NumaTopology.h" />
     <ClInclude Include="ObjectPool.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="ShardEndpoint.h" />
@@ -184,6 +186,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Allocator.cpp" />
+    <ClCompile Include="CpuAffinity.cpp" />
     <ClCompile Include="DeadLockProfiler.cpp" />
     <ClCompile Include="Fiber.cpp" />
     <ClCompile Include="FiberScheduler.cpp" />
@@ -200,6 +203,7 @@
     <ClCompile Include="Mailbox.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="MemoryPool.cpp" />
+    <ClCompile Include="NumaTopology.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
