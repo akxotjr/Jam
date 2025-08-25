@@ -1,9 +1,28 @@
 #pragma once
 #include "concurrentqueue/concurrentqueue.h"
 #include "Mailbox.h"
-#include "FiberScheduler.h"
 #include "Job.h"
 #include "NumaTopology.h"
+
+
+namespace
+{
+	// 큐 주소별 TLS ProducerToken 캐시
+	template <typename Q>
+	moodycamel::ProducerToken& TlsTokenFor(Q& q)
+	{
+		static thread_local std::unordered_map<const void*, std::unique_ptr<moodycamel::ProducerToken>> s_tokens;
+		void* key = static_cast<void*>(&q);
+		auto it = s_tokens.find(key);
+		if (it == s_tokens.end())
+		{
+			auto ins = s_tokens.emplace(key, std::make_unique<moodycamel::ProducerToken>(q));
+			return *ins.first->second;
+		}
+		return *it->second;
+	}
+
+} // anonymous
 
 namespace jam::utils::exec
 {
@@ -49,6 +68,11 @@ namespace jam::utils::exec
 		void						SetPinSlot(const utils::sys::CoreSlot& slot);
 		uint16						GetNumaNode() const { return m_config.numaNode; }
 
+		// Fiber
+		void SpawnFiber(thrd::FiberFn fn, const thrd::FiberDesc& desc);
+		void ResumeFiber(thrd::AwaitKey key);
+		void CancelFiberByKey(thrd::AwaitKey key, thrd::eCancelCode code);
+		void CancelFiberById(uint32 id, thrd::eCancelCode code);
 
 
 	private:
@@ -65,14 +89,16 @@ namespace jam::utils::exec
 		std::thread                                         m_thread;
 
 		// per-shard FiberScheduler (큐와 독립)
+		thrd::WinFiberBackend								m_backend;
 		Uptr<thrd::FiberScheduler>                          m_scheduler;
 		void*                                               m_mainFiber = nullptr;
 
 		// shard 큐 (MPSC 패턴)
-		moodycamel::ConcurrentQueue<job::Job>               m_queue;
-
+		moodycamel::ConcurrentQueue<job::Job>               m_shardsQ;
+		Uptr<moodycamel::ConsumerToken>						m_shardsCtok;
 		// ready Mailbox 목록 (MPSC, Mailbox가 0→1 전이 시 push)
-		moodycamel::ConcurrentQueue<Mailbox*>               m_ready;
+		moodycamel::ConcurrentQueue<Mailbox*>               m_readyQ;
+		Uptr<moodycamel::ConsumerToken>						m_readyCtok;
 
 		// Mailbox 관리 (수명)
 		USE_LOCK
@@ -83,7 +109,7 @@ namespace jam::utils::exec
 		Atomic<bool>                                        m_assistRequested{ false };
 
 		// Shard Pinning
-		bool m_pinEnabled = false;
-		utils::sys::CoreSlot m_pinSlot = {};
+		bool												m_pinEnabled = false;
+		utils::sys::CoreSlot								m_pinSlot = {};
 	};
 }

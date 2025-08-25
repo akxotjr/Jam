@@ -1,13 +1,16 @@
 #include "pch.h"
 #include "ShardExecutor.h"
 #include "GlobalExecutor.h"
+#include "WinFiberBackend.h"
 
 namespace jam::utils::exec
 {
 	ShardExecutor::ShardExecutor(const ShardExecutorConfig& config, Wptr<GlobalExecutor> owner)
 		: m_config(config), m_owner(std::move(owner))
 	{
-		m_scheduler = make_unique<thrd::FiberScheduler>();
+		m_scheduler = std::make_unique<thrd::FiberScheduler>(m_backend);
+		m_shardsCtok = std::make_unique<moodycamel::ConsumerToken>(m_shardsQ);
+		m_readyCtok = std::make_unique<moodycamel::ConsumerToken>(m_readyQ);
 	}
 
 	ShardExecutor::~ShardExecutor()
@@ -26,7 +29,9 @@ namespace jam::utils::exec
 				if (m_pinEnabled)
 					utils::sys::PinCurrentThreadTo(m_pinSlot);
 
+				m_scheduler->AttachToCurrentThread();
 				Loop();
+				m_scheduler->DetachFromThread();
 			});
 	}
 
@@ -35,19 +40,30 @@ namespace jam::utils::exec
 		if (!m_running.exchange(false))
 			return;
 		// 깨우기
-		m_queue.enqueue(job::Job([] {}));
-		m_ready.enqueue(nullptr);
+		{
+			auto& tok = TlsTokenFor(m_shardsQ);
+			m_shardsQ.enqueue(tok, job::Job([] {}));
+		}
+		{
+			auto& tok = TlsTokenFor(m_readyQ);
+			m_readyQ.enqueue(tok, nullptr);
+
+		}
 	}
 
 	void ShardExecutor::Join()
 	{
 		if (m_thread.joinable())
 			m_thread.join();
+
+		m_shardsCtok.reset();
+		m_readyCtok.reset();
 	}
 
 	void ShardExecutor::Submit(job::Job job)
 	{
-		m_queue.enqueue(std::move(job));
+		auto& tok = TlsTokenFor(m_shardsQ);
+		m_shardsQ.enqueue(tok, std::move(job));
 	}
 
 	std::shared_ptr<Mailbox> ShardExecutor::CreateMailbox()
@@ -70,7 +86,8 @@ namespace jam::utils::exec
 	void ShardExecutor::NotifyReady(Mailbox* mb)
 	{
 		// Mailbox가 처음 채워졌을 때 ready 큐에 등록
-		m_ready.enqueue(mb);
+		auto& tok = TlsTokenFor(m_readyQ);
+		m_readyQ.enqueue(tok, mb);
 	}
 
 	void ShardExecutor::SetPinSlot(const utils::sys::CoreSlot& slot)
@@ -79,13 +96,33 @@ namespace jam::utils::exec
 		m_pinEnabled = true;
 	}
 
+	void ShardExecutor::SpawnFiber(thrd::FiberFn fn, const thrd::FiberDesc& desc)
+	{
+		m_scheduler->PostSpawn(std::move(fn), desc);
+	}
+
+	void ShardExecutor::ResumeFiber(thrd::AwaitKey key)
+	{
+		m_scheduler->PostResume(key);
+	}
+
+	void ShardExecutor::CancelFiberByKey(thrd::AwaitKey key, thrd::eCancelCode code)
+	{
+		m_scheduler->CancelByKey(key, code);
+	}
+
+	void ShardExecutor::CancelFiberById(uint32 id, thrd::eCancelCode code)
+	{
+		m_scheduler->CancelById(id, code);
+	}
+
 	void ShardExecutor::AssistDrainOnce(int32 maxMailboxes, int32 budgetPerMailbox)
 	{
 		int processedLists = 0;
 		while (processedLists < maxMailboxes)
 		{
 			Mailbox* mb = nullptr;
-			if (!m_ready.try_dequeue(mb) || mb == nullptr)
+			if (!m_readyQ.try_dequeue(*m_readyCtok, mb) || mb == nullptr)
 				break;
 
 			if (mb->TryBeginConsume())
@@ -96,13 +133,16 @@ namespace jam::utils::exec
 
 			// 아직 남아있다면 다시 ready에 넣어 재처리
 			if (!mb->IsEmpty())
-				m_ready.enqueue(mb);
+			{
+				auto& tok = TlsTokenFor(m_readyQ);
+				m_readyQ.enqueue(tok, mb);
+			}
 
 			++processedLists;
 		}
 
 		// backlog가 충분히 줄었으면 assist 요청 플래그 해제
-		if (processedLists > 0 && !m_ready.peek()) // 비었거나 충분히 줄었을 때
+		if (processedLists > 0 && m_readyQ.size_approx() == 0) // 비었거나 충분히 줄었을 때
 			m_assistRequested.store(false, std::memory_order_relaxed);
 	}
 
@@ -116,7 +156,7 @@ namespace jam::utils::exec
 			for (int i = 0; i < 32; ++i)
 			{
 				job::Job j([] {});
-				if (!m_queue.try_dequeue(j))
+				if (!m_shardsQ.try_dequeue(*m_shardsCtok, j))
 					break;
 				didWork = true;
 				j.Execute();
@@ -124,6 +164,8 @@ namespace jam::utils::exec
 
 			// 준비된 Mailbox 처리
 			didWork |= ProcessReadyOnce();
+
+			m_scheduler->Poll(m_config.batchBudget, thrd::NowNs());
 
 			if (!didWork)
 				std::this_thread::sleep_for(std::chrono::milliseconds(m_config.idleSleepMs));
@@ -135,7 +177,7 @@ namespace jam::utils::exec
 		bool didWork = false;
 
 		Mailbox* mb = nullptr;
-		if (!m_ready.try_dequeue(mb) || mb == nullptr)
+		if (!m_readyQ.try_dequeue(*m_readyCtok, mb) || mb == nullptr)
 			return false;
 
 		// 동시에 1 소비자 보장
@@ -147,7 +189,10 @@ namespace jam::utils::exec
 
 			// 아직 남아있으면 재등록
 			if (!mb->IsEmpty())
-				m_ready.enqueue(mb);
+			{
+				auto& tok = TlsTokenFor(m_readyQ);
+				m_readyQ.enqueue(tok, mb);
+			}
 
 			// 임계치 체크
 			RequestAssistIfNeeded(mb);
@@ -155,7 +200,8 @@ namespace jam::utils::exec
 		else
 		{
 			// 이미 다른 스레드가 처리 중이면 나중에 다시 시도
-			m_ready.enqueue(mb);
+			auto& tok = TlsTokenFor(m_readyQ);
+			m_readyQ.enqueue(tok, mb);
 		}
 
 		return didWork;

@@ -66,9 +66,6 @@
     <ClCompile Include="FiberScheduler.cpp">
       <Filter>02.Thread\Fiber</Filter>
     </ClCompile>
-    <ClCompile Include="Fiber.cpp">
-      <Filter>02.Thread\Fiber</Filter>
-    </ClCompile>
     <ClCompile Include="WorkerPool.cpp">
       <Filter>02.Thread\Worker</Filter>
     </ClCompile>
@@ -102,16 +99,15 @@
     <ClCompile Include="ShardExecutor.cpp">
       <Filter>05.Exec</Filter>
     </ClCompile>
-    <ClCompile Include="CpuAffinity.cpp">
-      <Filter>06.Sys</Filter>
-    </ClCompile>
     <ClCompile Include="NumaTopology.cpp">
       <Filter>06.Sys</Filter>
     </ClCompile>
     <ClCompile Include="WinFiberBackend.cpp">
       <Filter>02.Thread\Fiber</Filter>
     </ClCompile>
-    <ClCompile Include="FiberCommon.cpp" />
+    <ClCompile Include="FiberCommon.cpp">
+      <Filter>02.Thread\Fiber</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -168,9 +164,6 @@
     <ClInclude Include="FiberScheduler.h">
       <Filter>02.Thread\Fiber</Filter>
     </ClInclude>
-    <ClInclude Include="Fiber.h">
-      <Filter>02.Thread\Fiber</Filter>
-    </ClInclude>
     <ClInclude Include="WorkerPool.h">
       <Filter>02.Thread\Worker</Filter>
     </ClInclude>
@@ -204,15 +197,14 @@
     <ClInclude Include="ShardEndpoint.h">
       <Filter>05.Exec</Filter>
     </ClInclude>
-    <ClInclude Include="CpuAffinity.h">
-      <Filter>06.Sys</Filter>
-    </ClInclude>
     <ClInclude Include="NumaTopology.h">
       <Filter>06.Sys</Filter>
     </ClInclude>
     <ClInclude Include="WinFiberBackend.h">
       <Filter>02.Thread\Fiber</Filter>
     </ClInclude>
-    <ClInclude Include="FiberCommon.h" />
+    <ClInclude Include="FiberCommon.h">
+      <Filter>02.Thread\Fiber</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
