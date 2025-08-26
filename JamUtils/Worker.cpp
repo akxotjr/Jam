@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "Worker.h"
-#include "Fiber.h"
 #include "FiberScheduler.h"
 #include "WorkerPool.h"
 

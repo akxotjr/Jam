@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Allocator.h" />
+    <ClInclude Include="Clock.h" />
     <ClInclude Include="Containers.h" />
     <ClInclude Include="DeadLockProfiler.h" />
     <ClInclude Include="FiberCommon.h" />
@@ -186,6 +187,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Allocator.cpp" />
+    <ClCompile Include="Clock.cpp" />
     <ClCompile Include="DeadLockProfiler.cpp" />
     <ClCompile Include="FiberCommon.cpp" />
     <ClCompile Include="FiberScheduler.cpp" />

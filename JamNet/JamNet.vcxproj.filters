@@ -117,9 +117,6 @@
     <ClInclude Include="NetStatManager.h">
       <Filter>02.Network\UDP\RUDP</Filter>
     </ClInclude>
-    <ClInclude Include="Clock.h">
-      <Filter>03.Utils</Filter>
-    </ClInclude>
     <ClInclude Include="RpcManager.h">
       <Filter>02.Network\UDP\RUDP</Filter>
     </ClInclude>
@@ -208,9 +205,6 @@
     </ClCompile>
     <ClCompile Include="NetStatManager.cpp">
       <Filter>02.Network\UDP\RUDP</Filter>
-    </ClCompile>
-    <ClCompile Include="Clock.cpp">
-      <Filter>03.Utils</Filter>
     </ClCompile>
     <ClCompile Include="RpcManager.cpp">
       <Filter>02.Network\UDP\RUDP</Filter>

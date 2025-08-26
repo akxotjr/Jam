@@ -1,8 +1,8 @@
 #include "pch.h"
 #include "GlobalExecutor.h"
+#include "Clock.h"
 #include "ShardExecutor.h"
 #include "ShardEndpoint.h"
-#include "Clock.h"
 
 
 namespace jam::utils::exec
@@ -59,12 +59,12 @@ namespace jam::utils::exec
 		m_offload.enqueue(std::move(job));
 	}
 
-	void GlobalExecutor::PostAfter(job::Job job, std::chrono::milliseconds delay)
+	void GlobalExecutor::PostAfter(job::Job job, uint64 delay_ns)
 	{
 		std::unique_lock lk(m_timerMutex);
-		const uint64 now = Clock::Instance().GetCurrentTick();
-		m_timed.push_back(TimedItem{ now + static_cast<uint64>(delay.count()), std::move(job) });
-		std::push_heap(m_timed.begin(), m_timed.end(), std::greater<>{});
+		const uint64 now_ns = Clock::Instance().NowNs();
+		m_timedItems.push_back(TimedItem{ now_ns + delay_ns, std::move(job) });
+		std::push_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
 		m_timerCv.notify_one();
 	}
 
@@ -108,19 +108,19 @@ namespace jam::utils::exec
 		std::unique_lock lk(m_timerMutex);
 		while (m_running.load())
 		{
-			if (m_timed.empty())
+			if (m_timedItems.empty())
 			{
 				m_timerCv.wait_for(lk, std::chrono::milliseconds(10));
 				continue;
 			}
 
-			std::pop_heap(m_timed.begin(), m_timed.end(), std::greater<>{});
-			TimedItem top = std::move(m_timed.back());
-			m_timed.pop_back();
+			std::pop_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
+			TimedItem top = std::move(m_timedItems.back());
+			m_timedItems.pop_back();
 
-			const uint64 now = Clock::Instance().GetCurrentTick();
-			if (top.due > now)
-				m_timerCv.wait_for(lk, std::chrono::milliseconds(top.due - now));
+			const uint64 now_ns = Clock::Instance().NowNs();
+			if (top.due_ns > now_ns)
+				m_timerCv.wait_for(lk, std::chrono::milliseconds(top.due_ns - now_ns));
 
 			lk.unlock();
 			Post(std::move(top.job));

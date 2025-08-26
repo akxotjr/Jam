@@ -36,14 +36,14 @@ namespace jam::utils::thrd
 	public:
 		void RequestCancel(eCancelCode code = eCancelCode::MANUAL)
 		{
-			m_reason.store(static_cast<int>(code), std::memory_order_relaxed);
+			m_cancelCode.store(static_cast<int>(code), std::memory_order_relaxed);
 			m_cancelled.store(true, std::memory_order_release);
 		}
-		bool IsCancelled() const { return m_cancelled.load(std::memory_order_acquire); }
-		eCancelCode Reason() const { return static_cast<eCancelCode>(m_reason.load(std::memory_order_relaxed)); }
+		bool			IsCancelled() const { return m_cancelled.load(std::memory_order_acquire); }
+		eCancelCode		GetCancelCode() const { return static_cast<eCancelCode>(m_cancelCode.load(std::memory_order_relaxed)); }
 	private:
 		std::atomic<bool> m_cancelled{ false };
-		std::atomic<int>  m_reason{ static_cast<int>(eCancelCode::NONE) };
+		std::atomic<int>  m_cancelCode{ static_cast<int>(eCancelCode::NONE) };
 	};
 
 	// 프로파일 샘플
@@ -51,14 +51,6 @@ namespace jam::utils::thrd
 	{
 		uint64 stepCount = 0;
 		uint64 switchCount = 0;
-		uint64 lastPollCostNs = 0;
+		uint64 lastPollCost_ns = 0;
 	};
-
-	inline uint64_t NowNs()
-	{
-		using namespace std::chrono;
-		return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
-	}
-
-
 }

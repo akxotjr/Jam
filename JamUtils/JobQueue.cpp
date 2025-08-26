@@ -2,7 +2,6 @@
 #include "JobQueue.h"
 #include "GlobalQueue.h"
 #include "Worker.h"
-#include "Fiber.h"
 #include "FiberScheduler.h"
 
 namespace jam::utils::job

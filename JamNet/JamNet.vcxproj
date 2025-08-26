@@ -151,7 +151,6 @@
     <ClInclude Include="BufferReader.h" />
     <ClInclude Include="BufferWriter.h" />
     <ClInclude Include="ChannelManager.h" />
-    <ClInclude Include="Clock.h" />
     <ClInclude Include="CongestionController.h" />
     <ClInclude Include="FragmentManager.h" />
     <ClInclude Include="HandshakeManager.h" />
@@ -185,7 +184,6 @@
     <ClCompile Include="BufferReader.cpp" />
     <ClCompile Include="BufferWriter.cpp" />
     <ClCompile Include="ChannelManager.cpp" />
-    <ClCompile Include="Clock.cpp" />
     <ClCompile Include="CongestionController.cpp" />
     <ClCompile Include="FragmentManager.cpp" />
     <ClCompile Include="HandshakeManager.cpp" />

@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "FiberScheduler.h"
 
+#include "Clock.h"
+
 namespace jam::utils::thrd
 {
 	void FiberScheduler::AttachToCurrentThread()
@@ -64,16 +66,16 @@ namespace jam::utils::thrd
 		m_backend.SwitchTo(m_main);
 	}
 
-	void FiberScheduler::SleepUntil(uint64 tick)
+	void FiberScheduler::SleepUntil(uint64 wakeup_ns)
 	{
 		Fiber* f = CurrentFiber();
 		f->state = eFiberState::WAITING_TIMER;
-		f->wakeupTick = tick;
-		m_sleepPQ.push({ tick, f->id });
+		f->wakeup_ns = wakeup_ns;
+		m_sleepPQ.push({ wakeup_ns, f->id });
 		m_backend.SwitchTo(m_main);
 	}
 
-	bool FiberScheduler::Suspend(AwaitKey key, uint64 deadline)
+	bool FiberScheduler::Suspend(AwaitKey key, uint64 deadline_ns)
 	{
 		Fiber* f = CurrentFiber();
 		f->state = eFiberState::WAITING_EXTERNAL;
@@ -81,10 +83,10 @@ namespace jam::utils::thrd
 		f->resume = eResumeCode::NONE;
 		m_waitMap.emplace(key, f->id);
 
-		if (deadline) 
+		if (deadline_ns) 
 		{
-			f->deadline = deadline;
-			m_sleepPQ.push({ deadline, f->id });
+			f->deadline_ns = deadline_ns;
+			m_sleepPQ.push({ deadline_ns, f->id });
 		}
 		m_backend.SwitchTo(m_main); // 재개되면 아래로 이어짐
 		return (f->resume == eResumeCode::SIGNALED);
@@ -121,7 +123,7 @@ namespace jam::utils::thrd
 		if (fit == m_fibers.end()) return false;
 
 		Fiber* f = fit->second;
-		Wake(f, eResumeCode::CANCELLED, code);
+		CompleteAwait(f, eResumeCode::CANCELLED, code);
 		return true;
 	}
 
@@ -131,44 +133,44 @@ namespace jam::utils::thrd
 		if (fit == m_fibers.end()) return false;
 
 		Fiber* f = fit->second;
-		Wake(f, eResumeCode::CANCELLED, code);
+		CompleteAwait(f, eResumeCode::CANCELLED, code);
 		return true;
  	}
 
 	void FiberScheduler::PostResume(AwaitKey key)
 	{
-		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_producerToken;
-		if (!tl_producerToken)
-			tl_producerToken = std::make_unique<moodycamel::ProducerToken>(m_resumeInbox);
+		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_resumePtok;
+		if (!tl_resumePtok)
+			tl_resumePtok = std::make_unique<moodycamel::ProducerToken>(m_resumeInbox);
 
-		m_resumeInbox.enqueue(*tl_producerToken, ResumeMsg{ key });
+		m_resumeInbox.enqueue(*tl_resumePtok, ResumeMsg{ key });
 	}
 
 	void FiberScheduler::PostSpawn(FiberFn fn, FiberDesc desc)
 	{
-		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_producerToken;
-		if (!tl_producerToken)
-			tl_producerToken = std::make_unique<moodycamel::ProducerToken>(m_spawnInbox);	// resumeInbox 와 spawnInbox 의 구분없이 같은 producer token을 만들어도 되나??
+		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_spawnPtok;
+		if (!tl_spawnPtok)
+			tl_spawnPtok = std::make_unique<moodycamel::ProducerToken>(m_spawnInbox);	// resumeInbox 와 spawnInbox 의 구분없이 같은 producer token을 만들어도 되나??
 
-		m_spawnInbox.enqueue(*tl_producerToken, SpawnMsg{ std::move(fn), desc });
+		m_spawnInbox.enqueue(*tl_spawnPtok, SpawnMsg{ std::move(fn), desc });
 	}
 
 	void FiberScheduler::PostCancelByKey(AwaitKey key, eCancelCode code)
 	{
-		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_producerToken;
-		if (!tl_producerToken)
-			tl_producerToken = std::make_unique<moodycamel::ProducerToken>(m_cancelKeyInbox);
+		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_cancelKeyPtok;
+		if (!tl_cancelKeyPtok)
+			tl_cancelKeyPtok = std::make_unique<moodycamel::ProducerToken>(m_cancelKeyInbox);
 
-		m_cancelKeyInbox.enqueue(CancelKeyMsg{ key, code });
+		m_cancelKeyInbox.enqueue(*tl_cancelKeyPtok, CancelKeyMsg{ key, code });
 	}
 
 	void FiberScheduler::PostCancelById(uint32 id, eCancelCode code)
 	{
-		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_producerToken;
-		if (!tl_producerToken)
-			tl_producerToken = std::make_unique<moodycamel::ProducerToken>(m_cancelIdInbox);
+		static thread_local std::unique_ptr<moodycamel::ProducerToken> tl_cancelIdPtok;
+		if (!tl_cancelIdPtok)
+			tl_cancelIdPtok = std::make_unique<moodycamel::ProducerToken>(m_cancelIdInbox);
 
-		m_cancelIdInbox.enqueue(CancelIdMsg{ id, code });
+		m_cancelIdInbox.enqueue(*tl_cancelIdPtok, CancelIdMsg{ id, code });
 	}
 
 	void FiberScheduler::DrainInbox()
@@ -183,45 +185,15 @@ namespace jam::utils::thrd
 		while (m_cancelIdInbox.try_dequeue(*m_cancelIdCtok, ci)) { CancelById(ci.id, ci.code); }
 	}
 
-	void FiberScheduler::Poll(int32 budget, uint64 now)
+	void FiberScheduler::Poll(int32 budget, uint64 now_ns)
 	{
-		const uint64 t0 = NowNs();
+		const uint64 pollStart_ns = Clock::Instance().NowNs();
+
+		// 0) 인박스 먼저 처리
+		DrainInbox();
 
 		// 1) 타이머/타임아웃 기상
-		while (!m_sleepPQ.empty() && m_sleepPQ.top().wakeupTick <= now)
-		{
-			const uint32 id = m_sleepPQ.top().fiberId;
-			m_sleepPQ.pop();
-			auto it = m_fibers.find(id);
-			if (it == m_fibers.end()) 
-				continue;
-
-			Fiber* f = it->second;
-
-			if (f->state == eFiberState::WAITING_TIMER) 
-			{
-				f->wakeupTick = 0;
-				MakeReady(id);
-			}
-			else if (f->state == eFiberState::WAITING_EXTERNAL) 
-			{
-				if (f->awaitKey) 
-				{
-					auto w = m_waitMap.find(f->awaitKey);
-					if (w != m_waitMap.end() && w->second == id) 
-					{
-						m_waitMap.erase(w);        // 타임아웃으로 소유 제거
-					}
-					f->resume = eResumeCode::TIMEOUT;
-					f->awaitKey = 0;
-
-					if (f->cancel)
-						f->cancel->RequestCancel(eCancelCode::TIMEOUT);
-
-					MakeReady(id);
-				}
-			}
-		}
+		WakeupTimed(now_ns);
 
 		// 2) ready 실행 (budget 만큼)
 		int steps = 0;
@@ -235,8 +207,13 @@ namespace jam::utils::thrd
 				continue;
 
 			Fiber* f = it->second;
-			if (f->state != eFiberState::READY) 
+
+			// READY가 아니거나(중간에 상태 바뀜), 이미 다른 pop에서 소비된 stale 엔트리라면 스킵
+			if (f->state != eFiberState::READY || !f->inReadyQ)
 				continue;
+
+			// ★ 이제 이 엔트리는 이 실행에서 소비됨
+			f->inReadyQ = false;
 
 			BindFls(f);
 			m_currentId = id;
@@ -258,9 +235,13 @@ namespace jam::utils::thrd
 			}
 		}
 
+		// 3) 실행 중 경과된 시간 기준으로 한 번 더 기상
+		WakeupTimed(Clock::Instance().NowNs());
+
 		// 3) 인박스 한 번 더 비우기(레이턴시↓)
 		DrainInbox();
-		m_profile.lastPollCostNs = NowNs() - t0;
+		const uint64 pollEnd_ns = Clock::Instance().NowNs();
+		m_profile.lastPollCost_ns = pollEnd_ns - pollStart_ns;
 	}
 
 	uint32 FiberScheduler::Current() const
@@ -305,8 +286,13 @@ namespace jam::utils::thrd
 		auto it = m_fibers.find(id);
 		if (it == m_fibers.end()) 
 			return;
+
 		Fiber* f = it->second;
+		if (f->state == eFiberState::READY && f->inReadyQ)
+			return; // 이미 큐에 있음
+
 		f->state = eFiberState::READY;
+		f->inReadyQ = true;
 		m_readyPQ.push(ReadyItem{f->priority, m_readySeq++, f->id});
 	}
 
@@ -334,14 +320,14 @@ namespace jam::utils::thrd
 	{
 		++f->switches;
 		++m_profile.switchCount;
-		f->lastRunStartNs = NowNs();
+		f->lastRunStart_ns = Clock::Instance().NowNs();
 	}
 
 	void FiberScheduler::EndRun(Fiber* f)
 	{
-		uint64 now = NowNs();
-		if (f->lastRunStartNs)
-			f->runNsAcc += (now - f->lastRunStartNs);
+		uint64 now_ns = Clock::Instance().NowNs();
+		if (f->lastRunStart_ns)
+			f->runtimeAcc_ns += (now_ns - f->lastRunStart_ns);
 		++f->steps;
 
 		uint64 used = 0, total = 0;
@@ -351,7 +337,7 @@ namespace jam::utils::thrd
 		}
 	}
 
-	void FiberScheduler::Wake(Fiber* f, eResumeCode rc, eCancelCode cc)
+	void FiberScheduler::CompleteAwait(Fiber* f, eResumeCode rc, eCancelCode cc)
 	{
 		if (!f)
 			return;
@@ -376,5 +362,46 @@ namespace jam::utils::thrd
 		f->resume = rc;
 		f->awaitKey = 0;
 		MakeReady(f->id);
+	}
+
+	void FiberScheduler::WakeupTimed(uint64 wakeup_ns)
+	{
+		while (!m_sleepPQ.empty() && m_sleepPQ.top().wakeup_ns <= wakeup_ns)
+		{
+			auto& top = m_sleepPQ.top();
+			const uint32 id = top.fiberId;
+			m_sleepPQ.pop();
+			auto it = m_fibers.find(id);
+			if (it == m_fibers.end())
+				continue;
+
+			Fiber* f = it->second;
+			if (!f) continue;
+
+			if (f->state == eFiberState::WAITING_TIMER)
+			{
+				if (top.wakeup_ns != f->wakeup_ns) continue;
+				f->wakeup_ns = 0;
+				MakeReady(id);
+			}
+			else if (f->state == eFiberState::WAITING_EXTERNAL)
+			{
+				if (f->awaitKey)
+				{
+					auto w = m_waitMap.find(f->awaitKey);
+					if (w != m_waitMap.end() && w->second == id)
+					{
+						m_waitMap.erase(w);        // 타임아웃으로 소유 제거
+					}
+					f->resume = eResumeCode::TIMEOUT;
+					f->awaitKey = 0;
+
+					if (f->cancel)
+						f->cancel->RequestCancel(eCancelCode::TIMEOUT);
+
+					MakeReady(id);
+				}
+			}
+		}
 	}
 }

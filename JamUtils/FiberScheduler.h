@@ -27,8 +27,8 @@ namespace jam::utils::thrd
 
 		uint32      SpawnFiber(FiberFn fn, const FiberDesc& desc = {});
 		void        YieldFiber();
-		void        SleepUntil(uint64 tick);
-		bool        Suspend(AwaitKey key, uint64 deadline); // true=정상, false=타임아웃/취소
+		void        SleepUntil(uint64 wakeup_ns);
+		bool        Suspend(AwaitKey key, uint64 deadline_ns); // true=정상, false=타임아웃/취소
 
         // inside
 		bool        Resume(AwaitKey key);
@@ -43,7 +43,7 @@ namespace jam::utils::thrd
 
 
 		void        DrainInbox();
-		void        Poll(int32 budget, uint64 now);
+		void        Poll(int32 budget, uint64 now_ns);
 
 		uint32      Current() const;
 
@@ -68,9 +68,10 @@ namespace jam::utils::thrd
 
             eFiberState     state = eFiberState::READY;
             eResumeCode     resume = eResumeCode::NONE;
-            uint64          wakeupTick = 0;
-            uint64          deadline = 0;
+            uint64          wakeup_ns = 0;
+            uint64          deadline_ns = 0;
             AwaitKey        awaitKey = 0;
+            bool            inReadyQ = false;
 
             int32           priority = 0;
             uint64          enqSequence = 0;
@@ -78,8 +79,8 @@ namespace jam::utils::thrd
             CancelToken*    cancel = nullptr;
             uint64          switches = 0;
             uint64          steps = 0;
-            uint64          runNsAcc = 0;
-            uint64          lastRunStartNs = 0;
+            uint64          runtimeAcc_ns = 0;
+            uint64          lastRunStart_ns = 0;
 
             FiberFn         entry = nullptr;
             TrampolineParam param = {};
@@ -128,7 +129,7 @@ namespace jam::utils::thrd
 
         struct SleepItem
         {
-            uint64 wakeupTick;
+            uint64 wakeup_ns;
             uint32 fiberId;
         };
 
@@ -136,15 +137,12 @@ namespace jam::utils::thrd
         {
 	        bool operator()(const SleepItem& a, const SleepItem& b) const
 	        {
-                return a.wakeupTick > b.wakeupTick;
+                return a.wakeup_ns > b.wakeup_ns;
 	        }
         };
 
 
         using FiberPool = jam::utils::memory::ObjectPool<Fiber>;
-
-
-
 
 
 
@@ -156,7 +154,9 @@ namespace jam::utils::thrd
         void                        BindFls(Fiber* f);
         void                        StartRun(Fiber* f);
         void                        EndRun(Fiber* f);
-        void                        Wake(Fiber* f, eResumeCode rc, eCancelCode cc = eCancelCode::NONE);
+        void                        CompleteAwait(Fiber* f, eResumeCode rc, eCancelCode cc = eCancelCode::NONE);
+
+        void                        WakeupTimed(uint64 wakeup_ns);
 
 	private:
 
@@ -169,26 +169,26 @@ namespace jam::utils::thrd
 
 
 
-        uint32                                              m_nextId = 1;
-        std::unordered_map<uint32, Fiber*>                  m_fibers;
+        uint32                                                              m_nextId = 1;
+        std::unordered_map<uint32, Fiber*>                                  m_fibers;
 
-        std::priority_queue<ReadyItem, std::vector<ReadyItem>, ReadyCmp> m_readyPQ;
-        std::priority_queue<SleepItem, std::vector<SleepItem>, SleepCmp> m_sleepPQ;
+        std::priority_queue<ReadyItem, std::vector<ReadyItem>, ReadyCmp>    m_readyPQ;
+        std::priority_queue<SleepItem, std::vector<SleepItem>, SleepCmp>    m_sleepPQ;
 
-        std::unordered_map<AwaitKey, uint32_t>      m_waitMap;
+        std::unordered_map<AwaitKey, uint32_t>                              m_waitMap;
 
         // Inbox
-        moodycamel::ConcurrentQueue<ResumeMsg>      m_resumeInbox;
-        moodycamel::ConcurrentQueue<SpawnMsg>       m_spawnInbox;
-        moodycamel::ConcurrentQueue<CancelKeyMsg>   m_cancelKeyInbox;
-        moodycamel::ConcurrentQueue<CancelIdMsg>    m_cancelIdInbox;
+        moodycamel::ConcurrentQueue<ResumeMsg>                              m_resumeInbox;
+        moodycamel::ConcurrentQueue<SpawnMsg>                               m_spawnInbox;
+        moodycamel::ConcurrentQueue<CancelKeyMsg>                           m_cancelKeyInbox;
+        moodycamel::ConcurrentQueue<CancelIdMsg>                            m_cancelIdInbox;
 
-        std::unique_ptr<moodycamel::ConsumerToken>  m_resumeCtok;
-        std::unique_ptr<moodycamel::ConsumerToken>  m_spawnCtok;
-        std::unique_ptr<moodycamel::ConsumerToken>  m_cancelKeyCtok;
-        std::unique_ptr<moodycamel::ConsumerToken>  m_cancelIdCtok;
+        std::unique_ptr<moodycamel::ConsumerToken>                          m_resumeCtok;
+        std::unique_ptr<moodycamel::ConsumerToken>                          m_spawnCtok;
+        std::unique_ptr<moodycamel::ConsumerToken>                          m_cancelKeyCtok;
+        std::unique_ptr<moodycamel::ConsumerToken>                          m_cancelIdCtok;
 
-        ProfileSample m_profile = {};
+        ProfileSample                                                       m_profile = {};
 
         // 기본 스택 크기
         static constexpr size_t kDefReserve = 512 * 1024;

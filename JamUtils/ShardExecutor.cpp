@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "ShardExecutor.h"
+
+#include "Clock.h"
 #include "GlobalExecutor.h"
 #include "WinFiberBackend.h"
 
@@ -165,7 +167,7 @@ namespace jam::utils::exec
 			// 준비된 Mailbox 처리
 			didWork |= ProcessReadyOnce();
 
-			m_scheduler->Poll(m_config.batchBudget, thrd::NowNs());
+			m_scheduler->Poll(m_config.batchBudget, Clock::Instance().NowNs());
 
 			if (!didWork)
 				std::this_thread::sleep_for(std::chrono::milliseconds(m_config.idleSleepMs));

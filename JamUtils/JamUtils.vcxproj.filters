@@ -108,6 +108,7 @@
     <ClCompile Include="FiberCommon.cpp">
       <Filter>02.Thread\Fiber</Filter>
     </ClCompile>
+    <ClCompile Include="Clock.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -206,5 +207,6 @@
     <ClInclude Include="FiberCommon.h">
       <Filter>02.Thread\Fiber</Filter>
     </ClInclude>
+    <ClInclude Include="Clock.h" />
   </ItemGroup>
 </Project>

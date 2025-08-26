@@ -35,7 +35,7 @@ namespace jam::utils::exec
 		void				Join();	
 
 		void				Post(job::Job job);
-		void				PostAfter(job::Job job, std::chrono::milliseconds delay);
+		void				PostAfter(job::Job job, uint64 delay_ns);
 
 		void				RequestAssist(uint32 shardIndex);
 
@@ -71,12 +71,12 @@ namespace jam::utils::exec
 
 		struct TimedItem
 		{
-			uint64		due; // monotonic tick(ms)
+			uint64		due_ns; // (ns)
 			job::Job	job;
 		};
 		std::mutex												m_timerMutex;
 		std::condition_variable									m_timerCv;
-		xvector<TimedItem>										m_timed;
+		xvector<TimedItem>										m_timedItems;
 
 	};
 }
