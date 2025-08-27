@@ -111,6 +111,7 @@
     <ClCompile Include="Clock.cpp">
       <Filter>04.Utils</Filter>
     </ClCompile>
+    <ClCompile Include="ShardSlot.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -212,5 +213,6 @@
     <ClInclude Include="Clock.h">
       <Filter>04.Utils</Filter>
     </ClInclude>
+    <ClInclude Include="ShardSlot.h" />
   </ItemGroup>
 </Project>

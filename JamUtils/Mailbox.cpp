@@ -4,8 +4,8 @@
 
 namespace jam::utils::exec
 {
-	Mailbox::Mailbox(uint32 id, Wptr<ShardExecutor> owner)
-		: m_id(id), m_owner(std::move(owner)), m_consumerToken(m_queue)
+	Mailbox::Mailbox(uint32 id, Wptr<ShardExecutor> owner, eMailboxChannel channel)
+		: m_id(id), m_owner(std::move(owner)), m_consumerToken(m_queue), m_channel(channel)
 	{
 	}
 

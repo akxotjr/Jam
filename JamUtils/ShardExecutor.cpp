@@ -13,7 +13,10 @@ namespace jam::utils::exec
 		m_scheduler = std::make_unique<thrd::FiberScheduler>(m_backend);
 
 		m_shardsCtok = std::make_unique<moodycamel::ConsumerToken>(m_shardsQ);
-		m_readyCtok = std::make_unique<moodycamel::ConsumerToken>(m_readyQ);
+
+
+		m_readyCtrlCtok = std::make_unique<moodycamel::ConsumerToken>(m_readyCtrlQ);
+		m_readyNormalCtok = std::make_unique<moodycamel::ConsumerToken>(m_readyNormalQ);
 	}
 
 	ShardExecutor::~ShardExecutor()
@@ -48,9 +51,24 @@ namespace jam::utils::exec
 			m_shardsQ.enqueue(tok, job::Job([] {}));
 		}
 		{
-			auto& tok = TlsTokenFor(m_readyQ);
-			m_readyQ.enqueue(tok, nullptr);
+			auto& tok = TlsTokenFor(m_readyCtrlQ);
+			m_readyCtrlQ.enqueue(tok, nullptr);
+		}
+		{
+			auto& tok = TlsTokenFor(m_readyNormalQ);
+			m_readyNormalQ.enqueue(tok, nullptr);
+		}
 
+
+		if (m_shardSlot)
+		{
+			for (uint8 i = 0; i < E2U(eMailboxChannel::COUNT); ++i)
+			{
+				auto& qs = m_shardSlot->ch[i];
+				qs.state.store(E2U(eShardState::CLOSED), std::memory_order_release);
+				qs.q.store(nullptr, std::memory_order_release);
+				qs.gen.fetch_add(1, std::memory_order_acq_rel);  // 폐기 세대
+			}
 		}
 	}
 
@@ -60,7 +78,8 @@ namespace jam::utils::exec
 			m_thread.join();
 
 		m_shardsCtok.reset();
-		m_readyCtok.reset();
+		m_readyCtrlCtok.reset();
+		m_readyNormalCtok.reset();
 	}
 
 	void ShardExecutor::Submit(job::Job job)
@@ -69,14 +88,26 @@ namespace jam::utils::exec
 		m_shardsQ.enqueue(tok, std::move(job));
 	}
 
-	std::shared_ptr<Mailbox> ShardExecutor::CreateMailbox()
+	std::shared_ptr<Mailbox> ShardExecutor::CreateMailbox(eMailboxChannel channel)
 	{
 		auto id = m_nextMailboxId.fetch_add(1, std::memory_order_relaxed);
-		auto mb = std::make_shared<Mailbox>(id, weak_from_this());
+		auto mb = std::make_shared<Mailbox>(id, weak_from_this(), channel);
 		{
 			WRITE_LOCK
 			m_mailboxes.emplace(id, mb);
 		}
+
+
+		if (m_shardSlot)
+		{
+			auto& qs = m_shardSlot->ch[E2U(channel)];
+			qs.state.store(E2U(eShardState::CLOSED), std::memory_order_release);
+			qs.q.store(mb.get(), std::memory_order_release);
+			qs.gen.fetch_add(1, std::memory_order_acq_rel);      // 새 세대
+			qs.state.store(E2U(eShardState::OPEN), std::memory_order_release);
+		}
+
+
 		return mb;
 	}
 
@@ -89,8 +120,9 @@ namespace jam::utils::exec
 	void ShardExecutor::NotifyReady(Mailbox* mb)
 	{
 		// Mailbox가 처음 채워졌을 때 ready 큐에 등록
-		auto& tok = TlsTokenFor(m_readyQ);
-		m_readyQ.enqueue(tok, mb);
+		auto& q = (mb->GetMailboxChannel() == eMailboxChannel::CTRL) ? m_readyCtrlQ : m_readyNormalQ;
+		auto& tok = TlsTokenFor(q);
+		q.enqueue(tok, mb);
 	}
 
 	void ShardExecutor::SetPinSlot(const utils::sys::CoreSlot& slot)
@@ -119,13 +151,25 @@ namespace jam::utils::exec
 		m_scheduler->CancelById(id, code);
 	}
 
+
+
+
+	void ShardExecutor::BeginDrain()
+	{
+		if (!m_shardSlot)
+			return;
+
+		for (uint8 i = 0; i < E2U(eMailboxChannel::COUNT); ++i)
+			m_shardSlot->ch[i].state.store(E2U(eShardState::DRAINING), std::memory_order_release);
+	}
+
 	void ShardExecutor::AssistDrainOnce(int32 maxMailboxes, int32 budgetPerMailbox)
 	{
 		int processedLists = 0;
 		while (processedLists < maxMailboxes)
 		{
 			Mailbox* mb = nullptr;
-			if (!m_readyQ.try_dequeue(*m_readyCtok, mb) || mb == nullptr)
+			if (!TryDequeueReady(mb) || mb == nullptr)
 				break;
 
 			if (mb->TryBeginConsume())
@@ -136,17 +180,15 @@ namespace jam::utils::exec
 
 			// 아직 남아있다면 다시 ready에 넣어 재처리
 			if (!mb->IsEmpty())
-			{
-				auto& tok = TlsTokenFor(m_readyQ);
-				m_readyQ.enqueue(tok, mb);
-			}
+				NotifyReady(mb);
 
 			++processedLists;
 		}
 
-		// backlog가 충분히 줄었으면 assist 요청 플래그 해제
-		if (processedLists > 0 && m_readyQ.size_approx() == 0) // 비었거나 충분히 줄었을 때
+		if (processedLists > 0 && m_readyCtrlQ.size_approx() == 0 && m_readyNormalQ.size_approx() == 0)
+		{
 			m_assistRequested.store(false, std::memory_order_relaxed);
+		}
 	}
 
 	void ShardExecutor::Loop()
@@ -180,7 +222,7 @@ namespace jam::utils::exec
 		bool didWork = false;
 
 		Mailbox* mb = nullptr;
-		if (!m_readyQ.try_dequeue(*m_readyCtok, mb) || mb == nullptr)
+		if (!TryDequeueReady(mb) || mb == nullptr)
 			return false;
 
 		// 동시에 1 소비자 보장
@@ -193,8 +235,7 @@ namespace jam::utils::exec
 			// 아직 남아있으면 재등록
 			if (!mb->IsEmpty())
 			{
-				auto& tok = TlsTokenFor(m_readyQ);
-				m_readyQ.enqueue(tok, mb);
+				NotifyReady(mb);
 			}
 
 			// 임계치 체크
@@ -202,9 +243,7 @@ namespace jam::utils::exec
 		}
 		else
 		{
-			// 이미 다른 스레드가 처리 중이면 나중에 다시 시도
-			auto& tok = TlsTokenFor(m_readyQ);
-			m_readyQ.enqueue(tok, mb);
+			NotifyReady(mb);
 		}
 
 		return didWork;
@@ -241,5 +280,19 @@ namespace jam::utils::exec
 					owner->RequestAssist(static_cast<uint32>(m_config.index));
 			}
 		}
+	}
+
+
+	bool ShardExecutor::TryDequeueReady(OUT Mailbox*& mailbox)
+	{
+		// 1) Ctrl 
+		if (m_readyCtrlQ.try_dequeue(*m_readyCtrlCtok, mailbox))
+			return true;
+
+		// 2) Normal
+		if (m_readyNormalQ.try_dequeue(*m_readyNormalCtok, mailbox))
+			return true;
+
+		return false;
 	}
 }

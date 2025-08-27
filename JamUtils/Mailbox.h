@@ -1,18 +1,20 @@
 #pragma once
 #include "concurrentqueue/concurrentqueue.h"
 #include "Job.h"
-
+#include "ShardSlot.h"
 
 namespace jam::utils::exec
 {
 
 	class ShardExecutor;
 
+
+
 	// Mailbox: 단일 소비자(ShardExecutor 스레드)만 Pop
 	class Mailbox
 	{
 	public:
-		explicit Mailbox(uint32 id, Wptr<ShardExecutor> owner);
+		explicit Mailbox(uint32 id, Wptr<ShardExecutor> owner, eMailboxChannel channel = eMailboxChannel::NORMAL);
 		~Mailbox() = default;
 
 		bool			Post(job::Job job);
@@ -36,6 +38,8 @@ namespace jam::utils::exec
 		bool			IsProcessing() const { return m_processing.load(std::memory_order_relaxed); }
 
 
+		eMailboxChannel GetMailboxChannel() const { return m_channel; }
+
 	private:
 		void			NotifyReadyIfFirst();
 
@@ -46,6 +50,8 @@ namespace jam::utils::exec
 		moodycamel::ConsumerToken					m_consumerToken;
 		Atomic<uint64>								m_size{ 0 };
 		Atomic<bool>								m_processing{ false };
+
+		eMailboxChannel								m_channel;
 	};
 
 

@@ -3,6 +3,7 @@
 #include "Mailbox.h"
 #include "Job.h"
 #include "NumaTopology.h"
+#include "ShardSlot.h"
 
 
 namespace
@@ -48,14 +49,17 @@ namespace jam::utils::exec
 		void                        Stop();
 		void                        Join();
 
+		void						AttachSlot(ShardSlot* slot) { m_shardSlot = slot; }
+
 		// 샤드 내부용 주입 (옵션: 샤드 레벨 작업)
 		void                        Submit(job::Job job);
 
 		// Mailbox 관리
-		std::shared_ptr<Mailbox>    CreateMailbox();
+		std::shared_ptr<Mailbox>    CreateMailbox(eMailboxChannel channel = eMailboxChannel::NORMAL);
 		void                        RemoveMailbox(uint32 id);
 
 		// Global이 호출하는 보조 Drain
+		void BeginDrain();
 		void                        AssistDrainOnce(int32 maxMailboxes, int32 budgetPerMailbox);
 
 		// Mailbox가 0→1 전이 시 호출
@@ -81,6 +85,8 @@ namespace jam::utils::exec
 		void                        ProcessMailbox(Mailbox* mb, int32 budget);
 		void                        RequestAssistIfNeeded(Mailbox* mb);
 
+		bool						TryDequeueReady(OUT Mailbox*& mailbox);
+
 	private:
 		ShardExecutorConfig                                 m_config{};
 		std::weak_ptr<GlobalExecutor>                       m_owner;         // Assist 요청 위해
@@ -93,12 +99,17 @@ namespace jam::utils::exec
 		Uptr<thrd::FiberScheduler>                          m_scheduler;
 		void*                                               m_mainFiber = nullptr;
 
+
+		ShardSlot*											m_shardSlot = nullptr;
+
 		// shard 큐 (MPSC 패턴)
 		moodycamel::ConcurrentQueue<job::Job>               m_shardsQ;
 		Uptr<moodycamel::ConsumerToken>						m_shardsCtok;
 		// ready Mailbox 목록 (MPSC, Mailbox가 0→1 전이 시 push)
-		moodycamel::ConcurrentQueue<Mailbox*>               m_readyQ;
-		Uptr<moodycamel::ConsumerToken>						m_readyCtok;
+		moodycamel::ConcurrentQueue<Mailbox*>               m_readyCtrlQ;
+		moodycamel::ConcurrentQueue<Mailbox*>				m_readyNormalQ;
+		Uptr<moodycamel::ConsumerToken>						m_readyCtrlCtok;
+		Uptr<moodycamel::ConsumerToken>						m_readyNormalCtok;
 
 		// Mailbox 관리 (수명)
 		USE_LOCK
