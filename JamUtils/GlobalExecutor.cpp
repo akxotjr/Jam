@@ -64,7 +64,7 @@ namespace jam::utils::exec
 		std::unique_lock lk(m_timerMutex);
 		const uint64 now_ns = Clock::Instance().NowNs();
 		m_timedItems.push_back(TimedItem{ now_ns + delay_ns, std::move(job) });
-		std::push_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
+		//std::push_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
 		m_timerCv.notify_one();
 	}
 
@@ -114,7 +114,7 @@ namespace jam::utils::exec
 				continue;
 			}
 
-			std::pop_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
+			//std::pop_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
 			TimedItem top = std::move(m_timedItems.back());
 			m_timedItems.pop_back();
 

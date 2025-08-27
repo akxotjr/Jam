@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "ShardExecutor.h"
-
+#include "Job.h"
 #include "Clock.h"
 #include "GlobalExecutor.h"
 #include "WinFiberBackend.h"
@@ -11,6 +11,7 @@ namespace jam::utils::exec
 		: m_config(config), m_owner(std::move(owner))
 	{
 		m_scheduler = std::make_unique<thrd::FiberScheduler>(m_backend);
+
 		m_shardsCtok = std::make_unique<moodycamel::ConsumerToken>(m_shardsQ);
 		m_readyCtok = std::make_unique<moodycamel::ConsumerToken>(m_readyQ);
 	}
@@ -212,10 +213,11 @@ namespace jam::utils::exec
 	void ShardExecutor::ProcessMailbox(Mailbox* mb, int32 budget)
 	{
 		// bulk pop으로 배치 처리
-		static thread_local xvector<job::Job> batch;
-		batch.resize(budget);
+		static thread_local std::vector<job::Job> batch;
+		batch.clear();
+		batch.reserve(budget);
 
-		uint64 n = mb->TryPopBulk(batch.data(), batch.size());
+		uint64 n = mb->TryPopBulk(std::back_inserter(batch), batch.size());
 		for (uint64 i = 0; i < n; ++i)
 			batch[i].Execute();
 

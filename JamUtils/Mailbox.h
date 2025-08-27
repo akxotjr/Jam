@@ -8,7 +8,7 @@ namespace jam::utils::exec
 
 	class ShardExecutor;
 
-	// 세션 전용 Mailbox: 단일 소비자(ShardExecutor 스레드)만 Pop
+	// Mailbox: 단일 소비자(ShardExecutor 스레드)만 Pop
 	class Mailbox
 	{
 	public:
@@ -22,6 +22,9 @@ namespace jam::utils::exec
 
 		bool			TryPop(OUT job::Job& job);
 		uint64			TryPopBulk(OUT job::Job* job, uint64 count);
+
+		template<typename OutputIt>
+		uint64			TryPopBulk(OUT OutputIt out, uint64 count);
 
 
 		bool			TryBeginConsume();
@@ -44,5 +47,16 @@ namespace jam::utils::exec
 		Atomic<uint64>								m_size{ 0 };
 		Atomic<bool>								m_processing{ false };
 	};
+
+
+
+	template<typename OutputIt>
+	inline uint64 Mailbox::TryPopBulk(OUT OutputIt out, uint64 count)
+	{
+		uint64 n = m_queue.try_dequeue_bulk(m_consumerToken, out, count);
+		if (n > 0)
+			m_size.fetch_sub(n, std::memory_order_relaxed);
+		return n;
+	}
 }
 

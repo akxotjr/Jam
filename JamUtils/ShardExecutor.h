@@ -69,10 +69,10 @@ namespace jam::utils::exec
 		uint16						GetNumaNode() const { return m_config.numaNode; }
 
 		// Fiber
-		void SpawnFiber(thrd::FiberFn fn, const thrd::FiberDesc& desc);
-		void ResumeFiber(thrd::AwaitKey key);
-		void CancelFiberByKey(thrd::AwaitKey key, thrd::eCancelCode code);
-		void CancelFiberById(uint32 id, thrd::eCancelCode code);
+		void						SpawnFiber(thrd::FiberFn fn, const thrd::FiberDesc& desc);
+		void						ResumeFiber(thrd::AwaitKey key);
+		void						CancelFiberByKey(thrd::AwaitKey key, thrd::eCancelCode code);
+		void						CancelFiberById(uint32 id, thrd::eCancelCode code);
 
 
 	private:

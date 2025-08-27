@@ -108,7 +108,9 @@
     <ClCompile Include="FiberCommon.cpp">
       <Filter>02.Thread\Fiber</Filter>
     </ClCompile>
-    <ClCompile Include="Clock.cpp" />
+    <ClCompile Include="Clock.cpp">
+      <Filter>04.Utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -207,6 +209,8 @@
     <ClInclude Include="FiberCommon.h">
       <Filter>02.Thread\Fiber</Filter>
     </ClInclude>
-    <ClInclude Include="Clock.h" />
+    <ClInclude Include="Clock.h">
+      <Filter>04.Utils</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
