@@ -2,35 +2,38 @@
 #include "concurrentqueue/blockingconcurrentqueue.h"
 #include "concurrentqueue/concurrentqueue.h"
 #include "Job.h"
+#include "ShardExecutor.h"
+#include "ShardDirectory.h"
+#include "CoreTopology.h"
+
 
 namespace jam::utils::exec
 {
-	class ShardExecutor;
 	class ShardEndpoint;
 
 
 	struct GlobalExecutorConfig
 	{
-		// 0이면 자동 산정(권장). 자동 산정은 논리 코어 수와 샤드 수를 고려.
-		uint32 workers = 0;
-
-		// 자동 산정 시 범위
-		uint32 minWorkers = 1;
-		uint32 maxWorkers = UINT32_MAX;
+		sys::CoreLayout layout;
+		sys::AutoLayoutConfig layoutCfg;
 
 		// 자동 튜닝(옵션): 큐 길이/지연 기반으로 런타임 조정할 때 사용 가능
 		bool   autoTune = false;
 
+		ShardExecutorConfig shardCfg;
+
 		uint64 capacity = 1 << 16;
 	};
 
-	class GlobalExecutor
+	class GlobalExecutor : public std::enable_shared_from_this<GlobalExecutor>
 	{
 	public:
 		GlobalExecutor(const GlobalExecutorConfig& config = {});
 		~GlobalExecutor();
 
-		void				Start(const xvector<Sptr<ShardExecutor>>& shards);
+		void				Init(const std::vector<Sptr<ShardExecutor>>& shards = {});
+
+		void				Start();
 		void				Stop();
 		void				Join();	
 
@@ -40,15 +43,13 @@ namespace jam::utils::exec
 		void				RequestAssist(uint32 shardIndex);
 
 		// shard/endpoint
-		uint32				GetShardCount() const { return static_cast<uint32>(m_shards.size()); }
-		Sptr<ShardExecutor> GetShard(uint32 index) const;
+		uint32				GetShardCount() const { return m_directory ? static_cast<uint32>(m_directory->Size()) : 0; }
+		Sptr<ShardExecutor> GetShard(uint32 index) const { return m_directory ? m_directory->ShardAt(index) : nullptr; };
 
 
 	private:
 		void				WorkerLoop();
 		void				TimerLoop();
-
-		uint32				ComputeWorkerCount(uint32 shardCount) const;
 
 	private:
 		GlobalExecutorConfig									m_config;
@@ -60,11 +61,8 @@ namespace jam::utils::exec
 		// assist (MPMC)
 		moodycamel::ConcurrentQueue<uint32>						m_assist;	// shard index
 
-		// shard list
-		xvector<Sptr<ShardExecutor>>							m_shards;
-
 		// worker
-		xvector<std::thread>									m_workers;
+		std::vector<std::thread>								m_workers;
 
 		// timer
 		std::thread												m_timerThread;
@@ -74,9 +72,19 @@ namespace jam::utils::exec
 			uint64		due_ns; // (ns)
 			job::Job	job;
 		};
+		struct TimedCmp
+		{
+			bool operator()(const TimedItem& a, const TimedItem& b)
+			{
+				return a.due_ns > b.due_ns;
+			}
+		};
+
 		std::mutex												m_timerMutex;
 		std::condition_variable									m_timerCv;
-		xvector<TimedItem>										m_timedItems;
+		std::priority_queue<TimedItem, std::vector<TimedItem>, TimedCmp>										m_timedItems;
+
+		Sptr<ShardDirectory> m_directory;
 
 	};
 }

@@ -4,26 +4,8 @@
 #include "Job.h"
 #include "NumaTopology.h"
 #include "ShardSlot.h"
+#include "ConcurrentQueueToken.h"
 
-
-namespace
-{
-	// 큐 주소별 TLS ProducerToken 캐시
-	template <typename Q>
-	moodycamel::ProducerToken& TlsTokenFor(Q& q)
-	{
-		static thread_local std::unordered_map<const void*, std::unique_ptr<moodycamel::ProducerToken>> s_tokens;
-		void* key = static_cast<void*>(&q);
-		auto it = s_tokens.find(key);
-		if (it == s_tokens.end())
-		{
-			auto ins = s_tokens.emplace(key, std::make_unique<moodycamel::ProducerToken>(q));
-			return *ins.first->second;
-		}
-		return *it->second;
-	}
-
-} // anonymous
 
 namespace jam::utils::exec
 {
@@ -38,6 +20,30 @@ namespace jam::utils::exec
 
 		uint16		numaNode = 0xFFFF;	// opt
 	};
+
+
+	struct GroupLocal
+	{
+		// 이 샤드에 “로컬”로 붙어있는 세션들의 Mailbox (Normal 배송 대상)
+		std::vector<std::weak_ptr<Mailbox>> members;
+	};
+
+	struct GroupHome
+	{
+		// 어떤 샤드에 멤버가 있는지: 샤드 인덱스별 refcount (0이면 없음)
+		std::vector<uint32> shard_refcnt;
+		// (옵션) 시퀀싱/백프레셔/그룹 큐
+		// std::shared_ptr<Mailbox> qNorm, qCtrl;
+		uint64 seq = 0;
+	};
+
+
+
+
+
+
+
+
 
 	class ShardExecutor : public std::enable_shared_from_this<ShardExecutor>
 	{
@@ -58,8 +64,8 @@ namespace jam::utils::exec
 		std::shared_ptr<Mailbox>    CreateMailbox(eMailboxChannel channel = eMailboxChannel::NORMAL);
 		void                        RemoveMailbox(uint32 id);
 
-		// Global이 호출하는 보조 Drain
 		void BeginDrain();
+		// Global이 호출하는 보조 Drain
 		void                        AssistDrainOnce(int32 maxMailboxes, int32 budgetPerMailbox);
 
 		// Mailbox가 0→1 전이 시 호출
@@ -69,7 +75,7 @@ namespace jam::utils::exec
 
 
 		// NUMA / Shard Pinning
-		void						SetPinSlot(const utils::sys::CoreSlot& slot);
+		void						PinCoreSlot(const utils::sys::CoreSlot& slot);
 		uint16						GetNumaNode() const { return m_config.numaNode; }
 
 		// Fiber
@@ -77,6 +83,21 @@ namespace jam::utils::exec
 		void						ResumeFiber(thrd::AwaitKey key);
 		void						CancelFiberByKey(thrd::AwaitKey key, thrd::eCancelCode code);
 		void						CancelFiberById(uint32 id, thrd::eCancelCode code);
+
+
+
+
+		// Routing
+		// 아래 핸들러들은 “샤드 스레드에서” 실행되는 Job 으로 호출
+		void OnGroupLocalJoin(uint64 group_id, std::shared_ptr<Mailbox> mailbox);
+		void OnGroupLocalLeave(uint64 group_id, std::shared_ptr<Mailbox> mailbox);
+		void OnGroupHomeMark(uint64 group_id, uint32 shardIdx, int32 delta); // +1 or -1
+
+		void OnGroupMulticastHome(uint64 group_id, job::Job j);     // 홈 샤드에서 실행
+		void OnGroupMulticastRemote(uint64 group_id, job::Job j);   // 원격 샤드에서 실행
+
+		// 유틸: 로컬 멤버에게 배달
+		void DeliverToLocal(uint64 group_id, job::Job j);
 
 
 	private:
@@ -122,5 +143,11 @@ namespace jam::utils::exec
 		// Shard Pinning
 		bool												m_pinEnabled = false;
 		utils::sys::CoreSlot								m_pinSlot = {};
+
+
+		// 샤드-로컬 그룹 상태(내 샤드의 로컬 멤버 목록)
+		std::unordered_map<uint64, GroupLocal>				m_groupLocal;
+		// 홈 역할(내가 홈인 그룹들의 분포/메타)
+		std::unordered_map<uint64, GroupHome>				m_groupHome;
 	};
 }

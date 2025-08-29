@@ -5,6 +5,8 @@
 #include "TcpListener.h"
 #include "UdpRouter.h"
 
+#include "GlobalExecutor.h"
+
 namespace jam::net
 {
 	struct ServiceConfig
@@ -105,7 +107,10 @@ namespace jam::net
 
 		Atomic<bool>										m_running{ false };
 		uint64												m_lastUpdateTick = 0;
-		Uptr<utils::thrd::WorkerPool>						m_workerPool;
+		//Uptr<utils::thrd::WorkerPool>						m_workerPool;
+
+
+		Uptr<utils::exec::GlobalExecutor>					m_globalExecutor;
 	};
 
 	template<typename TCP, typename UDP>

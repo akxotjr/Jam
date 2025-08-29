@@ -168,6 +168,7 @@
     <ClInclude Include="ReliableTransportManager.h" />
     <ClInclude Include="RpcManager.h" />
     <ClInclude Include="Serializer.h" />
+    <ClInclude Include="SessionEndpoint.h" />
     <ClInclude Include="TcpListener.h" />
     <ClInclude Include="NetAddress.h" />
     <ClInclude Include="pch.h" />
@@ -201,6 +202,7 @@
     <ClCompile Include="ReliableTransportManager.cpp" />
     <ClCompile Include="RpcManager.cpp" />
     <ClCompile Include="Serializer.cpp" />
+    <ClCompile Include="SessionEndpoint.cpp" />
     <ClCompile Include="TcpListener.cpp" />
     <ClCompile Include="NetAddress.cpp" />
     <ClCompile Include="pch.cpp">

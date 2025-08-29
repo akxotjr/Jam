@@ -4,6 +4,7 @@
 #include "Clock.h"
 #include "GlobalExecutor.h"
 #include "WinFiberBackend.h"
+#include "ShardDirectory.h"
 
 namespace jam::utils::exec
 {
@@ -97,7 +98,7 @@ namespace jam::utils::exec
 			m_mailboxes.emplace(id, mb);
 		}
 
-
+		// 채널 ingress Mailbox 게시
 		if (m_shardSlot)
 		{
 			auto& qs = m_shardSlot->ch[E2U(channel)];
@@ -125,7 +126,7 @@ namespace jam::utils::exec
 		q.enqueue(tok, mb);
 	}
 
-	void ShardExecutor::SetPinSlot(const utils::sys::CoreSlot& slot)
+	void ShardExecutor::PinCoreSlot(const utils::sys::CoreSlot& slot)
 	{
 		m_pinSlot = slot;
 		m_pinEnabled = true;
@@ -151,7 +152,108 @@ namespace jam::utils::exec
 		m_scheduler->CancelById(id, code);
 	}
 
+	void ShardExecutor::OnGroupLocalJoin(uint64 group_id, std::shared_ptr<Mailbox> mailbox)
+	{
+		auto& gl = m_groupLocal[group_id];
+		gl.members.emplace_back(mailbox);
+	}
 
+	void ShardExecutor::OnGroupLocalLeave(uint64 group_id, std::shared_ptr<Mailbox> mailbox)
+	{
+		auto it = m_groupLocal.find(group_id);
+		if (it == m_groupLocal.end()) return;
+
+		auto& v = it->second.members;
+		// 약한참조가 아니므로 직접 비교해 제거 (약한참조로 바꾸려면 lock()해서 비교)
+		for (size_t i = 0; i < v.size(); )
+		{
+			if (v[i].expired() || v[i].lock() == mailbox) 
+			{
+				v[i] = v.back();
+				v.pop_back();
+			}
+			else 
+			{
+				++i;
+			}
+		}
+		if (v.empty()) m_groupLocal.erase(it);
+	}
+
+	void ShardExecutor::OnGroupHomeMark(uint64 group_id, uint32 shardIdx, int32 delta)
+	{
+		auto& gh = m_groupHome[group_id];
+		if (gh.shard_refcnt.size() <= shardIdx)
+			gh.shard_refcnt.resize(shardIdx + 1, 0);
+
+		int64 newv = (int64)gh.shard_refcnt[shardIdx] + (int64)delta;
+		if (newv < 0) newv = 0;
+		gh.shard_refcnt[shardIdx] = (uint32)newv;
+
+		// (옵션) 모두 0이면 gh를 지울 수도 있음
+		// bool all0 = std::all_of(gh.shard_refcnt.begin(), gh.shard_refcnt.end(), [](uint32 x){return x==0;});
+		// if (all0) m_groupHome.erase(group_id);
+	}
+
+	void ShardExecutor::OnGroupMulticastHome(uint64 group_id, job::Job j)
+	{
+		// 1) 홈 샤드 로컬 멤버에게 배달
+		DeliverToLocal(group_id, j);
+
+		// 2) 원격 샤드 forward
+		auto it = m_groupHome.find(group_id);
+		if (it == m_groupHome.end()) return;
+
+		const auto& refcnt = it->second.shard_refcnt;
+		if (refcnt.empty()) return;
+
+		// owner(GlobalExecutor) 통해 원격 샤드 Sptr 얻기
+		auto owner = m_owner.lock();
+		if (!owner) return;
+
+		for (uint32 s = 0; s < refcnt.size(); ++s)
+		{
+			if (s == (uint32)m_config.index) continue;
+			if (refcnt[s] == 0) continue;
+
+			auto remote = owner->GetShard(s); // GlobalExecutor에 이 API가 있어야 함
+			if (!remote) continue;
+
+			// 실행자 기반 엔드포인트로 직접 Post
+			ShardEndpoint ep(remote);
+			ep.Post(job::Job([remote, group_id, j] {
+				remote->OnGroupMulticastRemote(group_id, j);
+				}));
+		}
+	}
+
+	void ShardExecutor::OnGroupMulticastRemote(uint64 group_id, job::Job j)
+	{
+		DeliverToLocal(group_id, j);
+	}
+
+	void ShardExecutor::DeliverToLocal(uint64 group_id, job::Job j)
+	{
+		auto it = m_groupLocal.find(group_id);
+		if (it == m_groupLocal.end()) return;
+
+		auto& members = it->second.members;
+		size_t i = 0;
+		while (i < members.size())
+		{
+			if (auto q = members[i].lock())
+			{
+				// 세션 Mailbox로 최종 배달(복사비 줄이려면 capturable payload로)
+				q->Post(j);
+				++i;
+			}
+			else
+			{
+				members[i] = members.back();
+				members.pop_back();
+			}
+		}
+	}
 
 
 	void ShardExecutor::BeginDrain()
@@ -198,7 +300,7 @@ namespace jam::utils::exec
 			bool didWork = false;
 
 			// 샤드 자체 작업
-			for (int i = 0; i < 32; ++i)
+			for (int i = 0; i < 32; ++i)	// why 32 ?
 			{
 				job::Job j([] {});
 				if (!m_shardsQ.try_dequeue(*m_shardsCtok, j))
@@ -256,7 +358,8 @@ namespace jam::utils::exec
 		batch.clear();
 		batch.reserve(budget);
 
-		uint64 n = mb->TryPopBulk(std::back_inserter(batch), batch.size());
+		uint64 n = mb->TryPopBulk(std::back_inserter(batch), static_cast<uint64>(budget));
+
 		for (uint64 i = 0; i < n; ++i)
 			batch[i].Execute();
 

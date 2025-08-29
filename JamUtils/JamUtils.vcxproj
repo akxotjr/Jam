@@ -153,7 +153,9 @@
   <ItemGroup>
     <ClInclude Include="Allocator.h" />
     <ClInclude Include="Clock.h" />
+    <ClInclude Include="ConcurrentQueueToken.h" />
     <ClInclude Include="Containers.h" />
+    <ClInclude Include="CoreTopology.h" />
     <ClInclude Include="DeadLockProfiler.h" />
     <ClInclude Include="FiberCommon.h" />
     <ClInclude Include="FiberScheduler.h" />
@@ -175,6 +177,8 @@
     <ClInclude Include="NumaTopology.h" />
     <ClInclude Include="ObjectPool.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="RoutingKey.h" />
+    <ClInclude Include="ShardDirectory.h" />
     <ClInclude Include="ShardEndpoint.h" />
     <ClInclude Include="ShardExecutor.h" />
     <ClInclude Include="ShardSlot.h" />
@@ -189,6 +193,7 @@
   <ItemGroup>
     <ClCompile Include="Allocator.cpp" />
     <ClCompile Include="Clock.cpp" />
+    <ClCompile Include="CoreTopology.cpp" />
     <ClCompile Include="DeadLockProfiler.cpp" />
     <ClCompile Include="FiberCommon.cpp" />
     <ClCompile Include="FiberScheduler.cpp" />
@@ -212,6 +217,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="RoutingKey.cpp" />
+    <ClCompile Include="ShardDirectory.cpp" />
     <ClCompile Include="ShardEndpoint.cpp" />
     <ClCompile Include="ShardExecutor.cpp" />
     <ClCompile Include="ShardSlot.cpp" />

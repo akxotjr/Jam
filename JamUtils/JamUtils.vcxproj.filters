@@ -111,7 +111,16 @@
     <ClCompile Include="Clock.cpp">
       <Filter>04.Utils</Filter>
     </ClCompile>
-    <ClCompile Include="ShardSlot.cpp" />
+    <ClCompile Include="ShardSlot.cpp">
+      <Filter>05.Exec</Filter>
+    </ClCompile>
+    <ClCompile Include="ShardDirectory.cpp">
+      <Filter>05.Exec</Filter>
+    </ClCompile>
+    <ClCompile Include="CoreTopology.cpp">
+      <Filter>06.Sys</Filter>
+    </ClCompile>
+    <ClCompile Include="RoutingKey.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -213,6 +222,18 @@
     <ClInclude Include="Clock.h">
       <Filter>04.Utils</Filter>
     </ClInclude>
-    <ClInclude Include="ShardSlot.h" />
+    <ClInclude Include="ConcurrentQueueToken.h">
+      <Filter>05.Exec</Filter>
+    </ClInclude>
+    <ClInclude Include="ShardSlot.h">
+      <Filter>05.Exec</Filter>
+    </ClInclude>
+    <ClInclude Include="ShardDirectory.h">
+      <Filter>05.Exec</Filter>
+    </ClInclude>
+    <ClInclude Include="CoreTopology.h">
+      <Filter>06.Sys</Filter>
+    </ClInclude>
+    <ClInclude Include="RoutingKey.h" />
   </ItemGroup>
 </Project>

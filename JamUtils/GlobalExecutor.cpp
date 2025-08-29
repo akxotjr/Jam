@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GlobalExecutor.h"
 #include "Clock.h"
+#include "ShardDirectory.h"
 #include "ShardExecutor.h"
 #include "ShardEndpoint.h"
 
@@ -18,25 +19,41 @@ namespace jam::utils::exec
 		Join();
 	}
 
-	void GlobalExecutor::Start(const xvector<Sptr<ShardExecutor>>& shards)
+	void GlobalExecutor::Init(const std::vector<Sptr<ShardExecutor>>& shards)
+	{
+		m_config.layout = sys::ResolveCoreLayout(m_config.layout, m_config.layoutCfg);
+
+		ShardDirectoryConfig dirCfg = {
+			.ownership = shards.empty() ? eShardOwnership::OWN : eShardOwnership::ADOPT,
+			.numShards = m_config.layout.shards,
+			.shardCfg = m_config.shardCfg
+		};
+
+		m_directory = std::make_shared<ShardDirectory>(dirCfg, weak_from_this());
+		m_directory->Init(shards);
+	}
+
+	void GlobalExecutor::Start()
 	{
 		if (m_running.exchange(true))
 			return;
 
-		m_shards = shards;
+		m_directory->Start();
 
-		const uint32 workersToStart = ComputeWorkerCount(m_shards.size());
-		m_workers.reserve(workersToStart);
-		for (int32 i = 0; i < workersToStart; ++i)
+		m_workers.reserve(m_config.layout.io);
+		for (int32 i = 0; i < m_config.layout.io; ++i)
 			m_workers.emplace_back(&GlobalExecutor::WorkerLoop, this);
 
-		m_timerThread = std::thread(&GlobalExecutor::TimerLoop, this);
+		if (m_config.layout.timers > 0)
+			m_timerThread = std::thread(&GlobalExecutor::TimerLoop, this);
 	}
 
 	void GlobalExecutor::Stop()
 	{
 		if (!m_running.exchange(false))
 			return;
+
+		m_directory->StopAll();
 
 		m_offload.enqueue(job::Job([] {}));
 		m_timerCv.notify_all();
@@ -45,6 +62,8 @@ namespace jam::utils::exec
 
 	void GlobalExecutor::Join()
 	{
+		m_directory->JoinAll();
+
 		for (auto& t : m_workers)
 			if (t.joinable()) t.join();
 
@@ -63,8 +82,7 @@ namespace jam::utils::exec
 	{
 		std::unique_lock lk(m_timerMutex);
 		const uint64 now_ns = Clock::Instance().NowNs();
-		m_timedItems.push_back(TimedItem{ now_ns + delay_ns, std::move(job) });
-		//std::push_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
+		m_timedItems.push(TimedItem{ .due_ns= now_ns + delay_ns, .job= std::move(job) });
 		m_timerCv.notify_one();
 	}
 
@@ -73,11 +91,6 @@ namespace jam::utils::exec
 		m_assist.enqueue(shardIndex);
 	}
 
-	std::shared_ptr<ShardExecutor> GlobalExecutor::GetShard(uint32 index) const
-	{
-		if (m_shards.empty()) return nullptr;
-		return m_shards[index % m_shards.size()];
-	}
 
 	void GlobalExecutor::WorkerLoop()
 	{
@@ -105,41 +118,64 @@ namespace jam::utils::exec
 
 	void GlobalExecutor::TimerLoop()
 	{
+		using namespace std::chrono; // 편의 (steady_clock, nanoseconds)
+
 		std::unique_lock lk(m_timerMutex);
+
 		while (m_running.load())
 		{
-			if (m_timedItems.empty())
+			// 아이템 생길 때까지 (또는 종료까지) 대기
+			m_timerCv.wait(lk, [this] { return !m_running.load() || !m_timedItems.empty(); });
+			if (!m_running.load()) break;
+			if (m_timedItems.empty()) continue;
+
+			// 현재 가장 이른 타이머 선정 (pq: top이 가장 이른 due여야 함)
+			TimedItem top = m_timedItems.top();
+			m_timedItems.pop();
+
+			const uint64 target_ns = top.due_ns;
+			bool reschedule = false;
+
+			while (m_running.load())
 			{
-				m_timerCv.wait_for(lk, std::chrono::milliseconds(10));
+				const uint64 now_ns = Clock::Instance().NowNs();
+				if (now_ns >= target_ns)
+					break; // 만료 시각 도달
+
+				const uint64 wait_ns = target_ns - now_ns;
+				const auto   deadline = steady_clock::now() + nanoseconds(wait_ns);
+
+				// 종료 or "더 이른 due"가 도착하면 깨어남
+				const bool woke = m_timerCv.wait_until(lk, deadline, [this, target_ns] {
+					if (!m_running.load()) return true;
+					// pq가 비지 않고, 현재 잡고 있는 target보다 더 이른 due가 생겼는가?
+					return !m_timedItems.empty() && (m_timedItems.top().due_ns < target_ns);
+					});
+
+				if (!m_running.load()) break;
+
+				// 더 이른 타이머가 도착했다면, 지금 들고 있던 top을 되돌리고 재선택
+				if (woke && !m_timedItems.empty() && m_timedItems.top().due_ns < target_ns) {
+					m_timedItems.push(std::move(top)); // 되돌리기
+					reschedule = true;
+					break; // 바깥 루프로 나가 새 top을 뽑는다
+				}
+
+				// 스퍼리어스 웨이크업이면 while로 돌아가 남은 시간을 다시 계산
+			}
+
+			if (!m_running.load()) break;
+
+			if (reschedule) {
+				// 더 이른 항목이 있으니, 바깥 루프에서 다시 top을 뽑자
 				continue;
 			}
 
-			//std::pop_heap(m_timedItems.begin(), m_timedItems.end(), std::greater<>{});
-			TimedItem top = std::move(m_timedItems.back());
-			m_timedItems.pop_back();
-
-			const uint64 now_ns = Clock::Instance().NowNs();
-			if (top.due_ns > now_ns)
-				m_timerCv.wait_for(lk, std::chrono::milliseconds(top.due_ns - now_ns));
-
+			// 이제 실행할 시간 → 락 풀고 실행(또는 워커 큐로 오프로드)
 			lk.unlock();
-			Post(std::move(top.job));
+			Post(std::move(top.job)); // TODO: 글로벌 워커 vs 샤드 중 선택
 			lk.lock();
 		}
 	}
 
-	uint32 GlobalExecutor::ComputeWorkerCount(uint32 shardCount) const
-	{
-		uint32 H = max(1, std::thread::hardware_concurrency());
-		uint32 S = shardCount;
-		uint32 spare = (H > S) ? (H - S) : 1;
-
-		uint32 desired = (m_config.workers == 0) ? spare : m_config.workers;
-		
-		if (m_config.minWorkers > 0)
-			desired = max(desired, m_config.minWorkers);
-		if (m_config.maxWorkers != UINT32_MAX)
-			desired = min(desired, m_config.maxWorkers);
-		return max(1, desired);
-	}
 }

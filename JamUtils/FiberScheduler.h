@@ -62,7 +62,7 @@ namespace jam::utils::thrd
 		{
             uint32          id = 0;
             const char*     name = nullptr;
-            void*           ctx = nullptr;                // Win Fiber วฺต้
+            void*           ctx = nullptr;                // Win Fiber Handle
             uint64          reserve = 0;
         	uint64          commit = 0;
 

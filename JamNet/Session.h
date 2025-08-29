@@ -1,5 +1,6 @@
 #pragma once
 #include "IocpCore.h"
+#include "SessionEndpoint.h"
 
 namespace jam::net
 {
@@ -7,6 +8,8 @@ namespace jam::net
 	class NetAddress;
 	class RpcManager;
 	class PacketBuilder;
+
+				
 
 	// Session ID
 	using SessionId = uint16;
@@ -41,57 +44,6 @@ namespace jam::net
 		DISCONNECTED	= 1,
 		HANDSHAKING		= 2
 	};
-
-
-	//----------------------------------------------------------------------------------//
-//#pragma pack(push, 1)
-//	struct PacketHeader
-//	{
-//		uint16 sizeAndflags;    // [4-bit flags][12-bit size]   total packet size and flags
-//		uint8  type;			// packet type (System, RPC, Ack, Custom)
-//	};
-//#pragma pack(pop)
-
-	//enum class ePacketType : uint8
-	//{
-	//	SYSTEM = 0,
-	//	RPC = 1,
-	//	ACK = 2,
-	//	CUSTOM = 3
-	//};
-
-	// mask & shift
-	//constexpr uint16 PACKET_FLAG_MASK = 0xF000;
-	//constexpr uint16 PACKET_SIZE_MASK = 0x0FFF;
-	//constexpr uint16 PACKET_FLAG_SHIFT = 12;
-
-	//// flags
-	//constexpr uint16 FLAG_RELIABLE = 0x1000;
-	//constexpr uint16 FLAG_COMPRESSED = 0x2000;
-	//constexpr uint16 FLAG_ENCRYPTED = 0x3000;
-	//constexpr uint16 FLAG_FRAGMENTED = 0x4000;
-	//constexpr uint16 FLAG_PIGGYBACK_ACK = 0x5000;
-
-	//inline uint16 GetPacketSize(uint16 sizeAndFlags)
-	//{
-	//	return sizeAndFlags & PACKET_SIZE_MASK;
-	//}
-
-	//inline uint8 GetPacketFlags(uint16 sizeAndFlags)
-	//{
-	//	return static_cast<uint8>((sizeAndFlags & PACKET_FLAG_MASK) >> PACKET_FLAG_SHIFT);
-	//}
-
-	//inline uint16 MakeSizeAndFlags(uint16 size, uint8 flags)
-	//{
-	//	return ((flags & 0x0F) << PACKET_FLAG_SHIFT) | (size & PACKET_SIZE_MASK);
-	//}
-
-
-	//----------------------------------------------------------------------------------//
-
-
-
 
 
 
@@ -137,5 +89,7 @@ namespace jam::net
 		eSessionState							m_state = eSessionState::DISCONNECTED;
 
 		Uptr<RpcManager>						m_rpcManager;
+
+		SessionEndpoint							m_endpoint;
 	};
 }

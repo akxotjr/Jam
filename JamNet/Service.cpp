@@ -14,21 +14,23 @@ namespace jam::net
 	Service::Service(ServiceConfig config) : m_config(config)
 	{
 		m_iocpCore = std::make_unique<IocpCore>();
-		m_workerPool = std::make_unique<utils::thrd::WorkerPool>(4,
-			[this]() -> Uptr<utils::thrd::Worker>
-			{
-				auto worker = std::make_unique<utils::thrd::Worker>();
-				worker->SetBaseJob(utils::job::Job([this]()
-					{
-						GetIocpCore()->Dispatch(10);
+		//m_workerPool = std::make_unique<utils::thrd::WorkerPool>(4,
+		//	[this]() -> Uptr<utils::thrd::Worker>
+		//	{
+		//		auto worker = std::make_unique<utils::thrd::Worker>();
+		//		worker->SetBaseJob(utils::job::Job([this]()
+		//			{
+		//				GetIocpCore()->Dispatch(10);
 
-						if (m_running.load())
-						{
-							Update();
-						}
-					}));
-				return worker;
-			});
+		//				if (m_running.load())
+		//				{
+		//					Update();
+		//				}
+		//			}));
+		//		return worker;
+		//	});
+
+		m_globalExecutor = std::make_unique<utils::exec::GlobalExecutor>();
 	}
 
 	Service::~Service()
@@ -46,7 +48,7 @@ namespace jam::net
 	void Service::StartUpdateLoop()
 	{
 		m_running.store(true);
-		m_lastUpdateTick = Clock::Instance().GetCurrentTick();
+		m_lastUpdateTick = utils::Clock::Instance().GetCurrentTick();
 	}
 
 	void Service::Update()
@@ -54,7 +56,7 @@ namespace jam::net
 		if (!m_running.load())
 			return;
 
-		uint64 currentTick = Clock::Instance().GetCurrentTick();
+		uint64 currentTick = utils::Clock::Instance().GetCurrentTick();
 
 		if (currentTick - m_lastUpdateTick < UPDATE_INTERVAL_MS)
 			return;
@@ -117,6 +119,7 @@ namespace jam::net
 		}
 
 		session->SetService(shared_from_this());
+		session->
 
 		return session;
 	}
@@ -241,7 +244,7 @@ namespace jam::net
 		if (m_udpRouter->Start(shared_from_this()) == false)
 			return false;
 
-		m_workerPool->Run();
+		//m_workerPool->Run();
 		StartUpdateLoop();
 
 		return true;
@@ -272,7 +275,7 @@ namespace jam::net
 		if (m_udpRouter->Start(shared_from_this()) == false)
 			return false;
 
-		m_workerPool->Run();
+		//m_workerPool->Run();
 		StartUpdateLoop();
 
 		return true;

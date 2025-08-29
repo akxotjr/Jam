@@ -35,6 +35,6 @@ namespace jam::utils::exec
 
 		ShardSlot*				m_slot = nullptr; // ºñ¼ÒÀ¯
 		eMailboxChannel			m_channel = eMailboxChannel::NORMAL;
-		uint32_t				m_gen = 0;       // »ý¼º ½ÃÁ¡ gen ½º³À¼¦
+		uint32					m_gen = 0;       // »ý¼º ½ÃÁ¡ gen ½º³À¼¦
 	};
 }
