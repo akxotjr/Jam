@@ -45,7 +45,7 @@ namespace jam::utils::exec
 		// shard/endpoint
 		uint32				GetShardCount() const { return m_directory ? static_cast<uint32>(m_directory->Size()) : 0; }
 		Sptr<ShardExecutor> GetShard(uint32 index) const { return m_directory ? m_directory->ShardAt(index) : nullptr; };
-
+		Sptr<ShardDirectory> GetDirectory() const { return m_directory; }
 
 	private:
 		void				WorkerLoop();
@@ -84,7 +84,6 @@ namespace jam::utils::exec
 		std::condition_variable									m_timerCv;
 		std::priority_queue<TimedItem, std::vector<TimedItem>, TimedCmp>										m_timedItems;
 
-		Sptr<ShardDirectory> m_directory;
-
+		Sptr<ShardDirectory>									m_directory;
 	};
 }

@@ -3,8 +3,8 @@
 
 namespace jam::net
 {
-	SessionEndpoint::SessionEndpoint(utils::exec::ShardDirectory& dir, uint64 routeKey, utils::exec::RouteSeed seed)
-		: m_dir(&dir), m_key(routeKey), m_routing(seed)
+	SessionEndpoint::SessionEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RoutingKey key)
+		: m_dir(&dir), m_routing(key)
 	{
 		RefreshEnpoint();
 	}

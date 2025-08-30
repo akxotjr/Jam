@@ -1,4 +1,5 @@
 #pragma once
+#include "Clock.h"
 
 
 namespace jam::utils::exec
@@ -14,6 +15,13 @@ namespace jam::utils::exec
 		x ^= x >> 33; x *= 0xff51afd7ed558ccdULL;
 		x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ULL;
 		x ^= x >> 33; return x;
+	}
+
+	// based on current time
+	inline RouteSeed RandomSeed()
+	{
+		const uint64 now = Clock::Instance().NowNs();
+		return { .k0 = now ^ 0x9e3779b97f4a7c15ULL, .k1= ~now };
 	}
 
 	class RoutingKey

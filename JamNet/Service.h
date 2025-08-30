@@ -7,19 +7,26 @@
 
 #include "GlobalExecutor.h"
 
+#include "RoutingKey.h"
+
 namespace jam::net
 {
 	struct ServiceConfig
 	{
-		NetAddress	localTcpAddress = {};
-		NetAddress	localUdpAddress = {};
-		NetAddress	remoteTcpAddress = {};
-		NetAddress	remoteUdpAddress = {};
-		int32		maxTcpSessionCount = 1;
-		int32		maxUdpSessionCount = 1;
+		NetAddress							localTcpAddress = {};
+		NetAddress							localUdpAddress = {};
+		NetAddress							remoteTcpAddress = {};
+		NetAddress							remoteUdpAddress = {};
+		int32								maxTcpSessionCount = 1;
+		int32								maxUdpSessionCount = 1;
+
+
+		// exec
+		utils::exec::RouteSeed				routeSeed = {0, 0};
+		utils::exec::GlobalExecutorConfig	geConfig = {};
 	};
 
-	class Service : public enable_shared_from_this<Service>
+	class Service : public std::enable_shared_from_this<Service>
 	{
 		using SessionFactory = std::function<Sptr<Session>()>;
 
@@ -32,6 +39,8 @@ namespace jam::net
 		Service(ServiceConfig config);
 		virtual ~Service();
 
+
+		void								Init();
 		virtual bool						Start() = 0;
 		bool								CanStart() const { return m_tcpSessionFactory != nullptr || m_udpSessionFactory; }
 
@@ -54,7 +63,7 @@ namespace jam::net
 		void								CompleteUdpHandshake(const NetAddress& from);
 
 		Sptr<UdpSession>					FindSessionInConnected(const NetAddress& from);
-		Sptr<UdpSession>					FindSessionInHandshaking(const NetAddress& from);
+		Sptr<UdpSession>					FindSessionInHandshaking(const NetAddress& from);	// connection/disconnection 분리해야할까?
 
 		Sptr<UdpSession>					CreateAndRegisterToHandshaking(const NetAddress& from);
 
@@ -110,6 +119,7 @@ namespace jam::net
 		//Uptr<utils::thrd::WorkerPool>						m_workerPool;
 
 
+		utils::exec::RoutingKey								m_routing{ m_config.routeSeed };
 		Uptr<utils::exec::GlobalExecutor>					m_globalExecutor;
 	};
 

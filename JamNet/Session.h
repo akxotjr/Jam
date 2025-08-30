@@ -72,7 +72,9 @@ namespace jam::net
 		Sptr<Session>							GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
 		eSessionState							GetState() { return m_state; }
 
-	
+
+		void									AttachEndpoint(utils::exec::ShardDirectory& dir, uint64 routeKey, utils::exec::RouteSeed seed);
+		void									RebindRouteKey(uint64 newKey);
 
 	protected:
 		virtual void							OnConnected() = 0;
@@ -90,6 +92,6 @@ namespace jam::net
 
 		Uptr<RpcManager>						m_rpcManager;
 
-		SessionEndpoint							m_endpoint;
+		Uptr<SessionEndpoint>					m_endpoint;
 	};
 }

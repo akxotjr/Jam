@@ -1,16 +1,17 @@
 #include "pch.h"
 #include "Session.h"
-#include "RpcManager.h"
-#include "PacketBuilder.h"
 
 namespace jam::net
 {
-	Session::Session()
+	void Session::AttachEndpoint(utils::exec::ShardDirectory& dir, uint64 routeKey, utils::exec::RouteSeed seed)
 	{
-		m_rpcManager = std::make_unique<RpcManager>();
-		m_packetBuilder = std::make_unique<PacketBuilder>();
+		m_endpoint = std::make_unique<SessionEndpoint>(dir, routeKey, seed);
 	}
 
+	void Session::RebindRouteKey(uint64 newKey)
+	{
+		if (m_endpoint) m_endpoint->RebindKey(newKey);
+	}
 }
 
 

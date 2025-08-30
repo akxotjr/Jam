@@ -44,8 +44,10 @@ namespace jam::net
     private:
         USE_LOCK
 
-        utils::exec::ShardDirectory*                m_dir = nullptr;   // 여기서 레퍼런스로 들고 있는 이유는?
-        uint64                                      m_key;
+		utils::exec::RoutingKey                     m_routing;
+
+
+        utils::exec::ShardDirectory*                m_dir = nullptr;   
         std::atomic<bool>                           m_closed{ false };
 
         // 채널별 슬롯 엔드포인트(슬롯/세대 스냅샷 포함)
@@ -56,7 +58,6 @@ namespace jam::net
         Sptr<utils::exec::Mailbox>                  m_mbCtrl;
         Wptr<utils::exec::ShardExecutor>            m_boundShard;
 
-        utils::exec::RoutingKey                     m_routing;
 	};
 
 }

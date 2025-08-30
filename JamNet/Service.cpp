@@ -30,12 +30,23 @@ namespace jam::net
 		//		return worker;
 		//	});
 
-		m_globalExecutor = std::make_unique<utils::exec::GlobalExecutor>();
+		m_globalExecutor = std::make_unique<utils::exec::GlobalExecutor>(m_config.geConfig);
 	}
 
 	Service::~Service()
 	{
 		//CloseService();
+	}
+
+	void Service::Init()
+	{
+		if (m_config.routeSeed.k0 == 0 && m_config.routeSeed.k1 == 0) 
+		{
+			m_config.routeSeed = utils::exec::RandomSeed();
+			m_routing = utils::exec::RoutingKey(m_config.routeSeed);
+		}
+
+		m_globalExecutor->Init();
 	}
 
 
@@ -119,7 +130,16 @@ namespace jam::net
 		}
 
 		session->SetService(shared_from_this());
-		session->
+
+		// ★ 여기부터 추가: 엔드포인트 붙이기
+		auto dir = m_globalExecutor->GetDirectory();
+		ASSERT_CRASH(dir != nullptr);
+
+		// 임시 route key: 세션 포인터/타임 등으로 섞어서 충돌 최소화
+		const uint64 connSalt = reinterpret_cast<uint64>(session.get()) ^ utils::Clock::Instance().NowNs();
+		const uint64 tempRouteKey = m_routing.KeyForSession(connSalt); // PerUser 정책의 해시를 임시키에도 재사용
+
+		session->AttachEndpoint(*dir, tempRouteKey);
 
 		return session;
 	}
