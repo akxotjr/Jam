@@ -7,7 +7,7 @@
 
 #include "GlobalExecutor.h"
 
-#include "RoutingKey.h"
+#include "RoutingPolicy.h"
 
 namespace jam::net
 {
@@ -116,10 +116,9 @@ namespace jam::net
 
 		Atomic<bool>										m_running{ false };
 		uint64												m_lastUpdateTick = 0;
-		//Uptr<utils::thrd::WorkerPool>						m_workerPool;
 
 
-		utils::exec::RoutingKey								m_routing{ m_config.routeSeed };
+		utils::exec::RoutingPolicy							m_routing{ m_config.routeSeed };
 		Uptr<utils::exec::GlobalExecutor>					m_globalExecutor;
 	};
 

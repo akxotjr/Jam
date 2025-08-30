@@ -120,7 +120,7 @@
     <ClCompile Include="CoreTopology.cpp">
       <Filter>06.Sys</Filter>
     </ClCompile>
-    <ClCompile Include="RoutingKey.cpp" />
+    <ClCompile Include="RoutingPolicy.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -234,6 +234,6 @@
     <ClInclude Include="CoreTopology.h">
       <Filter>06.Sys</Filter>
     </ClInclude>
-    <ClInclude Include="RoutingKey.h" />
+    <ClInclude Include="RoutingPolicy.h" />
   </ItemGroup>
 </Project>

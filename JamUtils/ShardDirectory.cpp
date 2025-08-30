@@ -3,15 +3,6 @@
 
 namespace jam::utils::exec
 {
-	static inline uint64 Mix64(uint64 x)
-	{
-		x ^= x >> 33; x *= 0xff51afd7ed558ccdULL;
-		x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ULL;
-		x ^= x >> 33;
-		return x;
-	}
-
-
 
 	ShardDirectory::ShardDirectory(const ShardDirectoryConfig& cfg, std::weak_ptr<GlobalExecutor> owner)
 		: m_config(cfg), m_owner(std::move(owner))
@@ -88,7 +79,7 @@ namespace jam::utils::exec
 	{
 		const uint64 n = Size();
 		if (n == 0) return 0;
-		return Mix64(key) % n;
+		return Mix64(key) % n;		// todo:?
 	}
 
 	Sptr<ShardExecutor> ShardDirectory::ShardAt(uint64 i) const
@@ -117,5 +108,16 @@ namespace jam::utils::exec
 
 		auto s = ShardAt(idx);
 		return {std::move(s)};
+	}
+
+
+	ShardEndpoint ShardDirectory::EndpointFor(RouteKey rk, eMailboxChannel channel) const
+	{
+		return EndpointFor(rk.value(), channel);
+	}
+
+	ShardEndpoint ShardDirectory::EndpointFor(GroupHomeKey gk, eMailboxChannel channel) const
+	{
+		return EndpointFor(gk.value(), channel);
 	}
 }

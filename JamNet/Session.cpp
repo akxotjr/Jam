@@ -3,12 +3,12 @@
 
 namespace jam::net
 {
-	void Session::AttachEndpoint(utils::exec::ShardDirectory& dir, uint64 routeKey, utils::exec::RouteSeed seed)
+	void Session::AttachEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey routeKey)
 	{
-		m_endpoint = std::make_unique<SessionEndpoint>(dir, routeKey, seed);
+		m_endpoint = std::make_unique<SessionEndpoint>(dir, routeKey);
 	}
 
-	void Session::RebindRouteKey(uint64 newKey)
+	void Session::RebindRouteKey(utils::exec::RouteKey newKey)
 	{
 		if (m_endpoint) m_endpoint->RebindKey(newKey);
 	}

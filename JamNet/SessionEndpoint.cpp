@@ -3,8 +3,8 @@
 
 namespace jam::net
 {
-	SessionEndpoint::SessionEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RoutingKey key)
-		: m_dir(&dir), m_routing(key)
+	SessionEndpoint::SessionEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key)
+		: m_dir(&dir), m_key(key)
 	{
 		RefreshEnpoint();
 	}
@@ -19,19 +19,23 @@ namespace jam::net
 		PostImpl(std::move(j), utils::exec::eMailboxChannel::CTRL);
 	}
 
-	void SessionEndpoint::PostGroup(uint64 group_id, utils::job::Job j)
+	void SessionEndpoint::PostGroup(uint64 group_id, utils::exec::GroupHomeKey gk, utils::job::Job j)
 	{
 		if (m_closed.load(std::memory_order_acquire)) return;
 
-		const uint64 rk = m_routing.KeyForGroup(group_id);
-		auto ep = m_dir->EndpointFor(rk, utils::exec::eMailboxChannel::NORMAL);
-		(void)ep.Post(utils::job::Job([group_id, j = std::move(j)]() mutable {
-				auto& shard = /* ShardLocal() or capture via TLS */;
-				shard.OnGroupMulticastHome(group_id, std::move(j));
+		// 홈 샤드 인덱스/실행자 포인터를 미리 구해 캡처해 둠
+		const uint64 homeShard_id = m_dir->PickShard(gk.v);
+		auto home_shard = m_dir->ShardAt(homeShard_id);
+		if (!home_shard) return;
+
+		// 실행자 기반 엔드포인트(실행자 직접 지정)로 보내면 TLS 없어도 this 호출 가능
+		utils::exec::ShardEndpoint home_ep(home_shard);
+		(void)home_ep.Post(utils::job::Job([s = home_shard, group_id, jj = std::move(j)]() mutable {
+				s->OnGroupMulticastHome(group_id, std::move(jj));
 			}));
 	}
 
-	void SessionEndpoint::RebindKey(uint64 newKey)
+	void SessionEndpoint::RebindKey(utils::exec::RouteKey newKey)
 	{
 		m_key = newKey;
 		RefreshEnpoint();
@@ -42,51 +46,56 @@ namespace jam::net
 		m_closed.store(true, std::memory_order_release);
 	}
 
-	void SessionEndpoint::JoinGroup(uint64 group_id)
+	void SessionEndpoint::JoinGroup(uint64 group_id, utils::exec::GroupHomeKey gk)
 	{
 		if (m_closed.load(std::memory_order_acquire)) return;
 		EnsureBound(); // 세션 Mailbox 보장
 
 		// 1) 내 샤드(세션 routeKey 기준)에서 로컬 가입 등록
-		const uint64 shard_id = m_dir->PickShard(m_key);
-		auto shard = m_dir->ShardAt(shard_id);
-		if (shard) {
-			auto q = m_mbNorm; // Normal 채널로 수신
-			shard->Submit(utils::job::Job([shard, group_id, q] {
-					shard->OnGroupLocalJoin(group_id, q);
+		const uint64 myShard_id = m_dir->PickShard(m_key.value());
+		auto my_shard = m_dir->ShardAt(myShard_id);
+		if (my_shard) 
+		{
+			auto q = m_mbNorm; // Normal 채널 수신
+			my_shard->Submit(utils::job::Job([s = my_shard, group_id, q] {
+					s->OnGroupLocalJoin(group_id, q);
 				}));
 		}
 
-		// 2) 홈 샤드에 “내 샤드에 멤버 1명 추가” 통지 (Ctrl 채널 권장)
-		const uint64 rk = m_routing.KeyForGroup(group_id);
-		auto epCtrl = m_dir->EndpointFor(rk, utils::exec::eMailboxChannel::CTRL);
-		epCtrl.Post(utils::job::Job([group_id, myShardIdx = static_cast<uint32>(shard_id)] {
-			// 홈 샤드 컨텍스트에서 실행
-				auto& shard = /* ShardLocal() or capture via TLS */;
-				shard.OnGroupHomeMark(group_id, myShardIdx, +1);
+		// 2) 홈 샤드에 “내 샤드에 멤버 +1” 통지 (Ctrl 채널 권장)
+		const uint64 homeShard_id = m_dir->PickShard(gk.v);
+		auto home_shard = m_dir->ShardAt(homeShard_id);
+		if (!home_shard) return;
+
+		utils::exec::ShardEndpoint epCtrl(home_shard);
+		epCtrl.Post(utils::job::Job([s = home_shard, group_id, myIdx = static_cast<uint32>(myShard_id)] {
+				s->OnGroupHomeMark(group_id, myIdx, +1);
 			}));
 	}
 
-	void SessionEndpoint::LeaveGroup(uint64 group_id)
+	void SessionEndpoint::LeaveGroup(uint64 group_id, utils::exec::GroupHomeKey gk)
 	{
 		if (m_closed.load(std::memory_order_acquire)) return;
 
 		// 1) 내 샤드에서 로컬 제거
-		const uint64 shard_id = m_dir->PickShard(m_key);
-		auto shard = m_dir->ShardAt(shard_id);
-		if (shard) {
+		const uint64 myShard_id = m_dir->PickShard(m_key.value());
+		auto my_shard = m_dir->ShardAt(myShard_id);
+		if (my_shard) 
+		{
 			auto q = m_mbNorm;
-			shard->Submit(utils::job::Job([shard, group_id, q] {
-					shard->OnGroupLocalLeave(group_id, q);
+			my_shard->Submit(utils::job::Job([s = my_shard, group_id, q] {
+					s->OnGroupLocalLeave(group_id, q);
 				}));
 		}
 
 		// 2) 홈 샤드 refcnt -1
-		const uint64 rk = m_routing.KeyForGroup(group_id);
-		auto epCtrl = m_dir->EndpointFor(rk, utils::exec::eMailboxChannel::CTRL);
-		epCtrl.Post(utils::job::Job([group_id, myShardIdx = static_cast<uint32>(shard_id)] {
-				auto& shard = /* ShardLocal() or capture via TLS */;
-				shard.OnGroupHomeMark(group_id, myShardIdx, -1);
+		const uint64 homeShard_id = m_dir->PickShard(gk.v);
+		auto home_shard = m_dir->ShardAt(homeShard_id);
+		if (!home_shard) return;
+
+		utils::exec::ShardEndpoint epCtrl(home_shard);
+		epCtrl.Post(utils::job::Job([s = home_shard, group_id, myIdx = static_cast<uint32>(myShard_id)] {
+				s->OnGroupHomeMark(group_id, myIdx, -1);
 			}));
 	}
 
@@ -105,7 +114,7 @@ namespace jam::net
 		if (m_mbNorm && m_mbCtrl && !m_boundShard.expired())
 			return;
 
-		const size_t sid = m_dir->PickShard(m_key);
+		const size_t sid = m_dir->PickShard(m_key.value());
 		auto shard = m_dir->ShardAt(sid);
 		if (!shard) return;
 
@@ -121,7 +130,7 @@ namespace jam::net
 	void SessionEndpoint::RebindIfExecutorChanged()
 	{
 		// 키 기준으로 현재 샤드 재계산
-		const uint64 sid = m_dir->PickShard(m_key);	//
+		const uint64 sid = m_dir->PickShard(m_key.value());	//
 		auto shard = m_dir->ShardAt(sid);
 		if (!shard) return;
 
@@ -146,29 +155,17 @@ namespace jam::net
 	{
 		if (m_closed.load(std::memory_order_acquire)) return;
 
-		// 1) lazy 바인딩: 세션 큐 보장
+		// 1) 세션 전용 Mailbox로 시도 (빠른 경로)
 		EnsureBound();
-
-		// 2) 슬롯 엔드포인트로 안전 Post (gen/state 체크)
-		utils::exec::ShardEndpoint& ep = (ch == utils::exec::eMailboxChannel::NORMAL) ? m_epNorm : m_epCtrl;
-		auto r = ep.Post(std::move(j));
-		if (r == utils::exec::ShardEndpoint::ePostResult::OK) return;
-
-		if (r == utils::exec::ShardEndpoint::ePostResult::STALE || r == utils::exec::ShardEndpoint::ePostResult::UNVAILABLE)
-		{
-			// 3) 최신 엔드포인트 재획득
-			ep = m_dir->EndpointFor(m_key, ch);
-
-			// 4) (중요) 실행자가 바뀌었으면 세션 Mailbox를 새 샤드에 재바인딩
-			RebindIfExecutorChanged();
-
-			// 5) 1회 재시도
-			(void)ep.Post(std::move(j));
+		auto& q = (ch == utils::exec::eMailboxChannel::NORMAL) ? m_mbNorm : m_mbCtrl;
+		if (q && q->Post(std::move(j)))
 			return;
-		}
 
-		// Draining/Closed → 정책적으로 drop/buffer
-		// 필요하면 여기서 로그 or 카운터 증가
+		// 2) 실패 시: 최신 엔드포인트 재획득 + 실행자 재바인딩 후 "한 번만" Post
+		auto& ep = (ch == utils::exec::eMailboxChannel::NORMAL) ? m_epNorm : m_epCtrl;
+		ep = m_dir->EndpointFor(m_key, ch);
+		RebindIfExecutorChanged();
+		(void)ep.Post(std::move(j));
 	}
 
 

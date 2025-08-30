@@ -1,6 +1,6 @@
 #pragma once
 #include "ShardDirectory.h"
-#include "RoutingKey.h"
+#include "RoutingPolicy.h"
 
 namespace jam::net
 {
@@ -9,7 +9,7 @@ namespace jam::net
 	class SessionEndpoint
 	{
     public:
-        SessionEndpoint(utils::exec::ShardDirectory& dir, uint64 routeKey, utils::exec::RouteSeed seed);
+        SessionEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key);
 
         // 일반 작업
         void Post(utils::job::Job j);
@@ -18,18 +18,17 @@ namespace jam::net
         void PostCtrl(utils::job::Job j);
 
 
-        void PostGroup(uint64 group_id, utils::job::Job j);
-
         // 세션 이동/리바인딩(샤드가 바뀌는 경우->migrate)
-        void RebindKey(uint64 newKey);
+        void RebindKey(utils::exec::RouteKey newKey);
 
         // 세션 단위 드레인(새로운 Post 차단)
         void BeginDrain();
 
 
-        // Routing
-        void JoinGroup(uint64 group_id);
-        void LeaveGroup(uint64 group_id);
+        // Group Routing
+        void JoinGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
+        void LeaveGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
+        void PostGroup(uint64 group_id, utils::exec::GroupHomeKey gk, utils::job::Job j);
 
 
     private:
@@ -44,8 +43,7 @@ namespace jam::net
     private:
         USE_LOCK
 
-		utils::exec::RoutingKey                     m_routing;
-
+        utils::exec::RouteKey                       m_key;
 
         utils::exec::ShardDirectory*                m_dir = nullptr;   
         std::atomic<bool>                           m_closed{ false };

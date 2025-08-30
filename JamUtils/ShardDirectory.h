@@ -1,4 +1,5 @@
 #pragma once
+#include "RoutingPolicy.h"
 #include "ShardEndpoint.h"
 #include "ShardExecutor.h"
 
@@ -40,11 +41,11 @@ namespace jam::utils::exec
         uint64                  PickShard(uint64 key) const;
         Sptr<ShardExecutor>     ShardAt(uint64 i) const;
 
-        // 엔드포인트 발급 (실행자 기반)
+        // 엔드포인트 발급
         ShardEndpoint           EndpointFor(uint64 key) const;
-
-        // 슬롯/채널 기반 엔드포인트까지 쓰려면 오버로드 추가
         ShardEndpoint           EndpointFor(uint64 key, eMailboxChannel channel) const;
+        ShardEndpoint           EndpointFor(RouteKey rk, eMailboxChannel channel) const;
+        ShardEndpoint           EndpointFor(GroupHomeKey gk, eMailboxChannel channel) const;
 
     private:
         ShardDirectoryConfig                m_config{};

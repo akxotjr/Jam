@@ -73,8 +73,8 @@ namespace jam::net
 		eSessionState							GetState() { return m_state; }
 
 
-		void									AttachEndpoint(utils::exec::ShardDirectory& dir, uint64 routeKey, utils::exec::RouteSeed seed);
-		void									RebindRouteKey(uint64 newKey);
+		void									AttachEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key);
+		void									RebindRouteKey(utils::exec::RouteKey newKey);
 
 	protected:
 		virtual void							OnConnected() = 0;

@@ -14,22 +14,6 @@ namespace jam::net
 	Service::Service(ServiceConfig config) : m_config(config)
 	{
 		m_iocpCore = std::make_unique<IocpCore>();
-		//m_workerPool = std::make_unique<utils::thrd::WorkerPool>(4,
-		//	[this]() -> Uptr<utils::thrd::Worker>
-		//	{
-		//		auto worker = std::make_unique<utils::thrd::Worker>();
-		//		worker->SetBaseJob(utils::job::Job([this]()
-		//			{
-		//				GetIocpCore()->Dispatch(10);
-
-		//				if (m_running.load())
-		//				{
-		//					Update();
-		//				}
-		//			}));
-		//		return worker;
-		//	});
-
 		m_globalExecutor = std::make_unique<utils::exec::GlobalExecutor>(m_config.geConfig);
 	}
 
@@ -43,7 +27,7 @@ namespace jam::net
 		if (m_config.routeSeed.k0 == 0 && m_config.routeSeed.k1 == 0) 
 		{
 			m_config.routeSeed = utils::exec::RandomSeed();
-			m_routing = utils::exec::RoutingKey(m_config.routeSeed);
+			m_routing = utils::exec::RoutingPolicy(m_config.routeSeed);
 		}
 
 		m_globalExecutor->Init();
@@ -137,9 +121,9 @@ namespace jam::net
 
 		// 임시 route key: 세션 포인터/타임 등으로 섞어서 충돌 최소화
 		const uint64 connSalt = reinterpret_cast<uint64>(session.get()) ^ utils::Clock::Instance().NowNs();
-		const uint64 tempRouteKey = m_routing.KeyForSession(connSalt); // PerUser 정책의 해시를 임시키에도 재사용
+		const utils::exec::RouteKey tempKey = m_routing.KeyForSession(connSalt); // PerUser 정책의 해시를 임시키에도 재사용
 
-		session->AttachEndpoint(*dir, tempRouteKey);
+		session->AttachEndpoint(*dir, tempKey);
 
 		return session;
 	}
@@ -264,7 +248,6 @@ namespace jam::net
 		if (m_udpRouter->Start(shared_from_this()) == false)
 			return false;
 
-		//m_workerPool->Run();
 		StartUpdateLoop();
 
 		return true;
