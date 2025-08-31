@@ -18,12 +18,12 @@ namespace jam::net
 	{
 		m_sid = GenerateSID(eProtocolType::UDP);
 
-		m_handshakeManager = std::make_unique<HandshakeManager>(this);
-		m_netStatTracker = std::make_unique<NetStatManager>();
-		m_congestionController = std::make_unique<CongestionController>(this);
-		m_fragmentManager = std::make_unique<FragmentManager>(this);
-		m_reliableTransportManager = std::make_unique<ReliableTransportManager>(this);
-		m_channelManager = std::make_unique<ChannelManager>(this);
+		m_handshakeManager				= std::make_unique<HandshakeManager>(this);
+		m_netStatTracker				= std::make_unique<NetStatManager>();
+		m_congestionController			= std::make_unique<CongestionController>(this);
+		m_fragmentManager				= std::make_unique<FragmentManager>(this);
+		m_reliableTransportManager		= std::make_unique<ReliableTransportManager>(this);
+		m_channelManager				= std::make_unique<ChannelManager>(this);
 	}
 
 
@@ -51,40 +51,33 @@ namespace jam::net
 		if (!buf || !buf->Buffer())
 			return;
 
-		const uint32 inFlightSize = m_reliableTransportManager->GetInFlightSize();
-		if (!m_congestionController->CanSend(inFlightSize))
-		{
-			if (m_sendQueue.size() <= MAX_SENDQUEUE_SIZE)
-			{
-				m_sendQueue.push(buf);
-			}
-			return;
-		}
-
-		ProcessSend(buf);
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		self->Post(utils::job::Job([self, buf] {
+				self->ProcessSend(buf);
+			}));
 	}
 
 	void UdpSession::OnLinkEstablished()
 	{
-		m_state = eSessionState::CONNECTED;
-
 		GetService()->CompleteUdpHandshake(m_remoteAddress);
-		OnConnected();
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		self->PostCtrl(utils::job::Job([self] {
+				self->m_state = eSessionState::CONNECTED;
+				self->OnConnected();
+			}));
 	}
 
 	void UdpSession::OnLinkTerminated()
 	{
-		m_state = eSessionState::DISCONNECTED;
-
-		OnDisconnected();
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		self->PostCtrl(utils::job::Job([self] {
+				self->m_state = eSessionState::DISCONNECTED;
+				self->OnDisconnected();
+			}));
 		GetService()->ReleaseUdpSession(static_pointer_cast<UdpSession>(shared_from_this()));
 	}
 
 
-	void UdpSession::ProcessSend(int32 numOfBytes)
-	{
-		OnSend(numOfBytes);
-	}
 
 	void UdpSession::ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer)
 	{
@@ -129,23 +122,43 @@ namespace jam::net
 		BYTE* payload = analysis.GetPayloadPtr(buf);
 		uint32 payloadSize = analysis.payloadSize;
 
+		auto self = static_pointer_cast<UdpSession>(shared_from_this()); 
+		const uint8 id = analysis.GetId();
+
 		switch (analysis.GetType())
 		{
-		case ePacketType::SYSTEM:
-			HandleSystemPacket(analysis.GetId(), payload, payloadSize);
+		case ePacketType::SYSTEM: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->PostCtrl(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleSystemPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-
-		case ePacketType::ACK:
-			HandleAckPacket(analysis.GetId(), payload, payloadSize);
+		}
+		case ePacketType::ACK: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->PostCtrl(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleAckPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-
-		case ePacketType::RPC:
-			HandleRpcPacket(analysis.GetId(), payload, payloadSize);
+		}
+		case ePacketType::RPC: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->Post(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleRpcPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-
-		case ePacketType::CUSTOM:
-			HandleCustomPacket(analysis.GetId(), payload, payloadSize);
+		}
+		case ePacketType::CUSTOM: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->Post(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleCustomPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
+		}
 		}
 
 		return analysis.totalSize;
@@ -264,6 +277,19 @@ namespace jam::net
 
 	void UdpSession::Update()
 	{
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		self->Post(utils::job::Job([self] {
+				self->ProcessUpdate();
+			}));
+	}
+
+	bool UdpSession::CanSend() const
+	{
+		return m_congestionController->CanSend(m_reliableTransportManager->GetInFlightSize());
+	}
+
+	void UdpSession::ProcessUpdate()
+	{
 		if (m_state == eSessionState::DISCONNECTED)
 			return;
 
@@ -294,13 +320,19 @@ namespace jam::net
 		GetService()->m_udpRouter->RegisterSend(buf, GetRemoteNetAddress());
 	}
 
+	void UdpSession::EnqueueEngress(const Sptr<SendBuffer>& buf)
+	{
+
+	}
+
+
 	void UdpSession::SendSinglePacket(const Sptr<SendBuffer>& buf)
 	{
 		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
 		if (analysis.isValid && analysis.IsReliable())
 		{
 			uint16 seq = analysis.GetSequence();
-			m_reliableTransportManager->AddPendingPacket(seq, buf, Clock::Instance().GetCurrentTick());
+			m_reliableTransportManager->AddPendingPacket(seq, buf, utils::Clock::Instance().GetCurrentTick());
 		}
 
 		if (!m_reliableTransportManager->TryAttachPiggybackAck(buf))
@@ -321,6 +353,15 @@ namespace jam::net
 
 	void UdpSession::ProcessSend(const Sptr<SendBuffer>& buf)
 	{
+		if (!CanSend())
+		{
+			if (m_sendQueue.size() <= MAX_SENDQUEUE_SIZE)
+			{
+				m_sendQueue.push(buf);
+			}
+			return;
+		}
+
 		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
 		if (!analysis.isValid)
 			return;
@@ -338,7 +379,7 @@ namespace jam::net
 
 	void UdpSession::ProcessQueuedSendBuffer()
 	{
-		while (!m_sendQueue.empty() && m_congestionController->CanSend(m_reliableTransportManager->GetInFlightSize()))
+		while (!m_sendQueue.empty() && CanSend())
 		{
 			auto buf = m_sendQueue.front();
 			m_sendQueue.pop();
@@ -348,45 +389,88 @@ namespace jam::net
 
 
 
-	void UdpSession::ProcessReassembledPayload(const xvector<BYTE>& payload, const PacketAnalysis& firstFragmentAnalysis)
+	void UdpSession::ProcessReassembledPayload(const xvector<BYTE>& payload, const PacketAnalysis& first)
 	{
-		// 재조립된 payload를 원본 패킷 타입으로 처리
-		ePacketType originalType = firstFragmentAnalysis.GetType();
-		uint8 originalId = firstFragmentAnalysis.GetId();
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		const uint8 originalId = first.GetId();
+		const ePacketType originalType = first.GetType();
 
 		switch (originalType)
 		{
-		case ePacketType::SYSTEM:
-			HandleSystemPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+		case ePacketType::SYSTEM: 
+		{
+			xvector<BYTE> data(payload.begin(), payload.end());
+			self->PostCtrl(utils::job::Job([self, id = originalId, data = std::move(data)]() mutable {
+					self->HandleSystemPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-		case ePacketType::RPC:
-			HandleRpcPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+		}
+		case ePacketType::ACK: 
+		{
+			xvector<BYTE> data(payload.begin(), payload.end());
+			self->PostCtrl(utils::job::Job([self, id = originalId, data = std::move(data)]() mutable {
+					self->HandleAckPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-		case ePacketType::CUSTOM:
-			HandleCustomPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+		}
+		case ePacketType::RPC: 
+		{
+			xvector<BYTE> data(payload.begin(), payload.end());
+			self->Post(utils::job::Job([self, id = originalId, data = std::move(data)]() mutable {
+					self->HandleRpcPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-		case ePacketType::ACK:
-			HandleAckPacket(originalId, const_cast<BYTE*>(payload.data()), payload.size());
+		}
+		case ePacketType::CUSTOM: 
+		{
+			xvector<BYTE> data(payload.begin(), payload.end());
+			self->Post(utils::job::Job([self, id = originalId, data = std::move(data)]() mutable {
+					self->HandleCustomPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
+		}
 		}
 	}
 
 	void UdpSession::ProcessBufferedPacket(const PacketAnalysis& analysis, BYTE* payload, uint32 payloadSize)
 	{
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		const uint8 id = analysis.GetId();
+
 		switch (analysis.GetType())
 		{
-		case ePacketType::SYSTEM:
-			HandleSystemPacket(analysis.GetId(), payload, payloadSize);
+		case ePacketType::SYSTEM: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->PostCtrl(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleSystemPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-		case ePacketType::ACK:
-			HandleAckPacket(analysis.GetId(), payload, payloadSize);
+		}
+		case ePacketType::ACK: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->PostCtrl(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleAckPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-		case ePacketType::RPC:
-			HandleRpcPacket(analysis.GetId(), payload, payloadSize);
+		}
+		case ePacketType::RPC: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->Post(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleRpcPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
-		case ePacketType::CUSTOM:
-			HandleCustomPacket(analysis.GetId(), payload, payloadSize);
+		}
+		case ePacketType::CUSTOM: 
+		{
+			xvector<BYTE> data(payload, payload + payloadSize);
+			self->Post(utils::job::Job([self, id, data = std::move(data)]() mutable {
+					self->HandleCustomPacket(id, data.data(), static_cast<uint32>(data.size()));
+				}));
 			break;
+		}
 		}
 	}
 }

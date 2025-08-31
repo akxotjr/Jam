@@ -79,7 +79,6 @@ namespace jam::net
 		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override {};
 
 	public:
-		void									ProcessSend(int32 numOfBytes);
 		void									ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
 
 
@@ -95,7 +94,15 @@ namespace jam::net
 		void									Update();
 
 	private:
+		bool									CanSend() const;
+
+		void									ProcessUpdate();
+
+
 		void									SendDirect(const Sptr<SendBuffer>& buf);
+
+		void EnqueueEngress(const Sptr<SendBuffer>& buf);
+
 		void									SendSinglePacket(const Sptr<SendBuffer>& buf);
 		void									SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments);
 

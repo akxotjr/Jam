@@ -15,12 +15,13 @@ namespace jam::net
 
 		bool                    Start(Sptr<Service> service);
 
-
+		// iocp object impl
 		virtual HANDLE			GetHandle() override;
 		virtual void			Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 
-		void					RegisterSend(Sptr<SendBuffer> sendBuffer, const NetAddress& remoteAddress);
+		void					RegisterSend(Sptr<SendBuffer> buf, const NetAddress& to);
+		void					RegisterSendMany(const xvector<Sptr<SendBuffer>>& bufs, const NetAddress& to);
 		void					RegisterRecv();
 
 		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddress);

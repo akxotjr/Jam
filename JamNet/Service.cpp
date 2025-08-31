@@ -7,10 +7,6 @@
 
 namespace jam::net
 {
-	/*--------------
-		 Service
-		---------------*/
-
 	Service::Service(ServiceConfig config) : m_config(config)
 	{
 		m_iocpCore = std::make_unique<IocpCore>();
@@ -19,7 +15,7 @@ namespace jam::net
 
 	Service::~Service()
 	{
-		//CloseService();
+		Service::CloseService();
 	}
 
 	void Service::Init()
@@ -36,7 +32,12 @@ namespace jam::net
 
 	void Service::CloseService()
 	{
-		// TODO
+		m_running.store(false, std::memory_order_relaxed);
+		if (m_globalExecutor)
+		{
+			m_globalExecutor->Stop();
+			m_globalExecutor->Join();
+		}
 	}
 
 
@@ -115,11 +116,9 @@ namespace jam::net
 
 		session->SetService(shared_from_this());
 
-		// ★ 여기부터 추가: 엔드포인트 붙이기
 		auto dir = m_globalExecutor->GetDirectory();
 		ASSERT_CRASH(dir != nullptr);
 
-		// 임시 route key: 세션 포인터/타임 등으로 섞어서 충돌 최소화
 		const uint64 connSalt = reinterpret_cast<uint64>(session.get()) ^ utils::Clock::Instance().NowNs();
 		const utils::exec::RouteKey tempKey = m_routing.KeyForSession(connSalt); // PerUser 정책의 해시를 임시키에도 재사용
 
@@ -243,6 +242,9 @@ namespace jam::net
 		if (CanStart() == false)
 			return false;
 
+		if (m_globalExecutor)
+			m_globalExecutor->Start();
+
 		m_udpRouter = utils::memory::MakeShared<UdpRouter>();
 
 		if (m_udpRouter->Start(shared_from_this()) == false)
@@ -268,6 +270,9 @@ namespace jam::net
 	{
 		if (CanStart() == false)
 			return false;
+
+		if (m_globalExecutor)
+			m_globalExecutor->Start();
 
 		m_listener = utils::memory::MakeShared<TcpListener>();
 		m_udpRouter = utils::memory::MakeShared<UdpRouter>();

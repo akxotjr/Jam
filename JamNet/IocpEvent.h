@@ -89,7 +89,12 @@ namespace jam::net
 		SendEvent() : IocpEvent(eEventType::Send) {}
 
 	public:
-		xvector<Sptr<SendBuffer>>	sendBuffers;
-		NetAddress					remoteAddress;
+		// 단일 / 다중 중 하나만 사용
+		bool                         use_gather = false;
+		WSABUF                       single{};          // 단일 경로
+		xvector<WSABUF>              gather;            // S/G 경로
+
+		xvector<Sptr<SendBuffer>>    sendBuffers;       // 데이터 생존 보장
+		NetAddress                   remoteAddress;
 	};
 }

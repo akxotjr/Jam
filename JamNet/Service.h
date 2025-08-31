@@ -84,6 +84,10 @@ namespace jam::net
 		void								SetRemoteTcpNetAddress(const NetAddress& addr) { m_config.remoteTcpAddress = addr; }
 		void								SetRemoteUdpNetAddress(const NetAddress& addr) { m_config.remoteUdpAddress = addr; }
 
+
+		utils::exec::GlobalExecutor*		GetGlobalExecutor() const { return m_globalExecutor.get(); }
+
+
 	private:
 		IocpCore*							GetIocpCore() { return m_iocpCore.get(); }
 

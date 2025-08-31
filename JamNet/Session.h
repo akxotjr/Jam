@@ -1,6 +1,8 @@
 #pragma once
 #include "IocpCore.h"
+#include "Job.h"
 #include "SessionEndpoint.h"
+
 
 namespace jam::net
 {
@@ -50,6 +52,8 @@ namespace jam::net
 
 	class Session : public IocpObject
 	{
+		friend class UdpRouter;
+
 	public:
 		Session();
 		virtual ~Session() = default;
@@ -73,10 +77,25 @@ namespace jam::net
 		eSessionState							GetState() { return m_state; }
 
 
+
+
+
 		void									AttachEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key);
 		void									RebindRouteKey(utils::exec::RouteKey newKey);
 
+		void Post(utils::job::Job job);
+		void PostCtrl(utils::job::Job job);
+		void PostAfter(uint64 delay_ns, utils::job::Job j);
+
+		void JoinGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
+		void LeaveGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
+		void PostGroup(uint64 group_id, utils::exec::GroupHomeKey gk, utils::job::Job j);
+
+
+
 	protected:
+
+		// application level callback
 		virtual void							OnConnected() = 0;
 		virtual void							OnDisconnected() = 0;
 		virtual void							OnSend(int32 len) = 0;
