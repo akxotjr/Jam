@@ -62,6 +62,8 @@ namespace jam::net
 		virtual void							Disconnect(const WCHAR* cause) = 0;
 		virtual void							Send(const Sptr<SendBuffer>& sendBuffer) = 0;
 
+		virtual void							Update() = 0;
+
 		bool									IsTcp() { return ExtractProtocol(m_sid) == eProtocolType::TCP; }
 		bool									IsUdp() { return ExtractProtocol(m_sid) == eProtocolType::UDP; }
 		bool									IsConnected() { return m_state == eSessionState::CONNECTED; }

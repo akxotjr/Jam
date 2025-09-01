@@ -69,6 +69,8 @@ namespace jam::net
 		virtual void							Disconnect(const WCHAR* cause) override;
 		virtual void							Send(const Sptr<SendBuffer>& buf) override;
 
+		virtual void							Update() override;
+
 	private:
 		void									OnLinkEstablished();
 		void									OnLinkTerminated();
@@ -91,8 +93,6 @@ namespace jam::net
 		void									HandleError(int32 errorCode);
 
 
-		void									Update();
-
 	private:
 		bool									CanSend() const;
 
@@ -101,7 +101,6 @@ namespace jam::net
 
 		void									SendDirect(const Sptr<SendBuffer>& buf);
 
-		void EnqueueEngress(const Sptr<SendBuffer>& buf);
 
 		void									SendSinglePacket(const Sptr<SendBuffer>& buf);
 		void									SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments);

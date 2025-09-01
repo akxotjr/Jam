@@ -57,6 +57,14 @@ namespace jam::net
 			}));
 	}
 
+	void UdpSession::Update()
+	{
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		self->Post(utils::job::Job([self] {
+				self->ProcessUpdate();
+			}));
+	}
+
 	void UdpSession::OnLinkEstablished()
 	{
 		GetService()->CompleteUdpHandshake(m_remoteAddress);
@@ -275,14 +283,6 @@ namespace jam::net
 	}
 
 
-	void UdpSession::Update()
-	{
-		auto self = static_pointer_cast<UdpSession>(shared_from_this());
-		self->Post(utils::job::Job([self] {
-				self->ProcessUpdate();
-			}));
-	}
-
 	bool UdpSession::CanSend() const
 	{
 		return m_congestionController->CanSend(m_reliableTransportManager->GetInFlightSize());
@@ -319,12 +319,6 @@ namespace jam::net
 	{
 		GetService()->m_udpRouter->RegisterSend(buf, GetRemoteNetAddress());
 	}
-
-	void UdpSession::EnqueueEngress(const Sptr<SendBuffer>& buf)
-	{
-
-	}
-
 
 	void UdpSession::SendSinglePacket(const Sptr<SendBuffer>& buf)
 	{

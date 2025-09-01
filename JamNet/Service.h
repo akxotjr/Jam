@@ -91,6 +91,9 @@ namespace jam::net
 	private:
 		IocpCore*							GetIocpCore() { return m_iocpCore.get(); }
 
+
+		void ProcessUpdate();
+
 	protected:
 		USE_LOCK
 

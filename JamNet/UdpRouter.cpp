@@ -239,7 +239,7 @@ namespace jam::net
             break;
         default:
             cout << "Handle Error : " << errorCode << '\n';
-            break;
+            break; 
         }
     }
 }

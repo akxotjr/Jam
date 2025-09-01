@@ -49,50 +49,10 @@ namespace jam::net
 
 	void Service::Update()
 	{
-		if (!m_running.load())
-			return;
-
-		uint64 currentTick = utils::Clock::Instance().GetCurrentTick();
-
-		if (currentTick - m_lastUpdateTick < UPDATE_INTERVAL_MS)
-			return;
-
-		m_lastUpdateTick = currentTick;
-
-		{
-			READ_LOCK
-			for (auto& session : m_tcpSessions | views::values)
-			{
-				if (session && session->IsConnected())
-				{
-					session->Update();
-				}
-			}
-		}
-
-		{
-			READ_LOCK
-			for (auto& session : m_udpSessions | views::values)
-			{
-				if (session && session->IsConnected())
-				{
-					auto udpSession = static_pointer_cast<UdpSession>(session);
-					udpSession->Update();
-				}
-			}
-		}
-
-		{
-			READ_LOCK
-			for (auto& session : m_handshakingUdpSessions | views::values)
-			{
-				if (session)
-				{
-					auto udpSession = static_pointer_cast<UdpSession>(session);
-					udpSession->Update();
-				}
-			}
-		}
+		auto self = static_pointer_cast<Service>(shared_from_this());
+		m_globalExecutor->Post(utils::job::Job([self] {
+				self->ProcessUpdate();
+			}));
 	}
 
 
@@ -218,14 +178,53 @@ namespace jam::net
 		session->ProcessRecv(numOfBytes, recvBuffer);
 	}
 
+	void Service::ProcessUpdate()
+	{
+		if (!m_running.load())
+			return;
 
+		uint64 currentTick = utils::Clock::Instance().GetCurrentTick();
 
+		if (currentTick - m_lastUpdateTick < UPDATE_INTERVAL_MS)
+			return;
 
+		m_lastUpdateTick = currentTick;
 
+		{
+			//READ_LOCK  ????
+				for (auto& session : m_tcpSessions | views::values)
+				{
+					if (session && session->IsConnected())
+					{
+						session->Update();
+					}
+				}
+		}
 
+		{
+			READ_LOCK
+				for (auto& session : m_udpSessions | views::values)
+				{
+					if (session && session->IsConnected())
+					{
+						session->Update();
+					}
+				}
+		}
 
+		{
+			READ_LOCK
+				for (auto& session : m_handshakingUdpSessions | views::values)
+				{
+					if (session)
+					{
+						session->Update();
+					}
+				}
+		}
 
-
+		m_globalExecutor->PostAfter(utils::job::Job<Service>(shared_from_this(), ProcessUpdate()), 100);
+	}
 
 
 	ClientService::ClientService(ServiceConfig config) : Service(config)
