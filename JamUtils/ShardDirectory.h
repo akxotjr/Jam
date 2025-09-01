@@ -40,6 +40,7 @@ namespace jam::utils::exec
         uint64                  Size() const;
         uint64                  PickShard(uint64 key) const;
         Sptr<ShardExecutor>     ShardAt(uint64 i) const;
+        std::vector<Sptr<ShardExecutor>>& Shards() { return m_shards; }
 
         // 엔드포인트 발급
         ShardEndpoint           EndpointFor(uint64 key) const;

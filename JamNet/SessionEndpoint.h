@@ -56,6 +56,9 @@ namespace jam::net
         Sptr<utils::exec::Mailbox>                  m_mbCtrl;
         Wptr<utils::exec::ShardExecutor>            m_boundShard;
 
+        //ecs-temp
+        entt::entity            m_entitiy{ entt::null };
+        std::weak_ptr<Session>  m_session;
 	};
 
 }

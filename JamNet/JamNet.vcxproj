@@ -151,6 +151,7 @@
     <ClInclude Include="BufferReader.h" />
     <ClInclude Include="BufferWriter.h" />
     <ClInclude Include="ChannelManager.h" />
+    <ClInclude Include="Components.h" />
     <ClInclude Include="CongestionController.h" />
     <ClInclude Include="FragmentManager.h" />
     <ClInclude Include="HandshakeManager.h" />
@@ -169,6 +170,7 @@
     <ClInclude Include="RpcManager.h" />
     <ClInclude Include="Serializer.h" />
     <ClInclude Include="SessionEndpoint.h" />
+    <ClInclude Include="Systems.h" />
     <ClInclude Include="TcpListener.h" />
     <ClInclude Include="NetAddress.h" />
     <ClInclude Include="pch.h" />
@@ -185,6 +187,7 @@
     <ClCompile Include="BufferReader.cpp" />
     <ClCompile Include="BufferWriter.cpp" />
     <ClCompile Include="ChannelManager.cpp" />
+    <ClCompile Include="Components.cpp" />
     <ClCompile Include="CongestionController.cpp" />
     <ClCompile Include="FragmentManager.cpp" />
     <ClCompile Include="HandshakeManager.cpp" />
@@ -203,6 +206,7 @@
     <ClCompile Include="RpcManager.cpp" />
     <ClCompile Include="Serializer.cpp" />
     <ClCompile Include="SessionEndpoint.cpp" />
+    <ClCompile Include="Systems.cpp" />
     <ClCompile Include="TcpListener.cpp" />
     <ClCompile Include="NetAddress.cpp" />
     <ClCompile Include="pch.cpp">

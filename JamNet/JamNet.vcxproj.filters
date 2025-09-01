@@ -31,6 +31,12 @@
     <Filter Include="02.Network\UDP\RUDP">
       <UniqueIdentifier>{c90f0d6a-a760-4d84-a2ef-cbfc03fc438b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="05.Exec">
+      <UniqueIdentifier>{3a35a8c6-0496-448d-85df-c96bdfaa0eed}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="06.ECS">
+      <UniqueIdentifier>{f605e0bd-0afa-4d86-8eb9-153cb090505f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetAddress.h">
@@ -129,6 +135,12 @@
     <ClInclude Include="SessionEndpoint.h">
       <Filter>02.Network</Filter>
     </ClInclude>
+    <ClInclude Include="Systems.h">
+      <Filter>06.ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Components.h">
+      <Filter>06.ECS</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -220,6 +232,12 @@
     </ClCompile>
     <ClCompile Include="SessionEndpoint.cpp">
       <Filter>02.Network</Filter>
+    </ClCompile>
+    <ClCompile Include="Systems.cpp">
+      <Filter>06.ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Components.cpp">
+      <Filter>06.ECS</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

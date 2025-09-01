@@ -35,7 +35,7 @@ namespace jam::utils::exec
 
 	void GlobalExecutor::Start()
 	{
-		if (m_running.exchange(true))
+		if (m_running.exchange(true, std::memory_order_release))
 			return;
 
 		m_directory->Start();
