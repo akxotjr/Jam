@@ -15,6 +15,8 @@
 #include <spdlog/spdlog.h>
 
 
+/** entt **/
+#include <entt/entt.hpp>
 
 /** JamUtils **/
 

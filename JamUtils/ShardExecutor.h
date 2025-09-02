@@ -11,6 +11,21 @@ namespace jam::utils::exec
 {
 	class GlobalExecutor; // fwd
 
+
+	struct ShardLocal
+	{
+		entt::registry world;
+		entt::dispatcher events;	// for optimization hot-pass
+
+		// std::unordered_map<GroupId, std::vector<entt::entity>> groupIndex;
+
+		std::vector<std::function<void(entt::registry&)>> defers; //지연 반영용 : 프레임 끝에 실행할 작업
+
+		using SystemFn = void(*)(ShardLocal&, uint64 now_ns, uint64 dt_ns);	//system runner
+		std::vector<SystemFn> systems;
+	};
+
+
 	struct ShardExecutorConfig
 	{
 		int32		index = 0;
@@ -36,13 +51,6 @@ namespace jam::utils::exec
 		// std::shared_ptr<Mailbox> qNorm, qCtrl;
 		uint64 seq = 0;
 	};
-
-
-
-
-
-
-
 
 
 	class ShardExecutor : public std::enable_shared_from_this<ShardExecutor>
@@ -85,8 +93,6 @@ namespace jam::utils::exec
 		void						CancelFiberById(uint32 id, thrd::eCancelCode code);
 
 
-
-
 		// Routing
 		// 아래 핸들러들은 “샤드 스레드에서” 실행되는 Job 으로 호출
 		void OnGroupLocalJoin(uint64 group_id, std::shared_ptr<Mailbox> mailbox);
@@ -98,6 +104,12 @@ namespace jam::utils::exec
 
 		// 유틸: 로컬 멤버에게 배달
 		void DeliverToLocal(uint64 group_id, job::Job j);
+
+
+
+		ShardLocal& Local() { return m_local; }
+		const ShardLocal& Local() const { return m_local; }
+		void Tick(uint64 now_ns, uint64 dt_ns);
 
 
 	private:
@@ -149,5 +161,7 @@ namespace jam::utils::exec
 		std::unordered_map<uint64, GroupLocal>				m_groupLocal;
 		// 홈 역할(내가 홈인 그룹들의 분포/메타)
 		std::unordered_map<uint64, GroupHome>				m_groupHome;
+
+		ShardLocal m_local;
 	};
 }

@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "SessionEndpoint.h"
 
+#include "SessionUpdateSystem.h"
+
 namespace jam::net
 {
 	SessionEndpoint::SessionEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key)
@@ -125,6 +127,19 @@ namespace jam::net
 		m_mbNorm = std::move(qN);
 		m_mbCtrl = std::move(qC);
 		m_boundShard = shard;
+
+		// ecs-temp
+		if (m_entitiy != entt::null) return;
+		shard->Local().defers.emplace_back([this](entt::registry& r)
+			{
+				m_entitiy = r.create();
+				r.emplace<SessionRef>(m_entitiy, m_session);
+				r.emplace<MailboxRef>(m_entitiy, MailboxRef{ m_mbNorm, m_mbCtrl });
+				r.emplace<utils::exec::RouteKey>(m_entitiy, utils::exec::RouteKey{ m_key });
+				//r.emplace<SessionKey>(m_e, SessionKey{ m_sessKey });
+			});
+
+
 	}
 
 	void SessionEndpoint::RebindIfExecutorChanged()
@@ -149,6 +164,8 @@ namespace jam::net
 		m_mbNorm.swap(mbN);
 		m_mbCtrl.swap(mbC);
 		m_boundShard = shard;
+
+
 	}
 
 	void SessionEndpoint::PostImpl(utils::job::Job j, utils::exec::eMailboxChannel ch)

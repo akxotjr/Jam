@@ -9,15 +9,12 @@
 namespace jam::utils::exec
 {
 	ShardExecutor::ShardExecutor(const ShardExecutorConfig& config, Wptr<GlobalExecutor> owner)
-		: m_config(config), m_owner(std::move(owner))
+			: m_config(config), m_owner(std::move(owner))
 	{
-		m_scheduler = std::make_unique<thrd::FiberScheduler>(m_backend);
-
-		m_shardsCtok = std::make_unique<moodycamel::ConsumerToken>(m_shardsQ);
-
-
-		m_readyCtrlCtok = std::make_unique<moodycamel::ConsumerToken>(m_readyCtrlQ);
-		m_readyNormalCtok = std::make_unique<moodycamel::ConsumerToken>(m_readyNormalQ);
+		m_scheduler			= std::make_unique<thrd::FiberScheduler>(m_backend);
+		m_shardsCtok		= std::make_unique<moodycamel::ConsumerToken>(m_shardsQ);
+		m_readyCtrlCtok		= std::make_unique<moodycamel::ConsumerToken>(m_readyCtrlQ);
+		m_readyNormalCtok	= std::make_unique<moodycamel::ConsumerToken>(m_readyNormalQ);
 	}
 
 	ShardExecutor::~ShardExecutor()
@@ -253,6 +250,25 @@ namespace jam::utils::exec
 				members.pop_back();
 			}
 		}
+	}
+
+	void ShardExecutor::Tick(uint64 now_ns, uint64 dt_ns)
+	{
+		auto& L = m_local;
+
+		// 1) Systems run in fixed order
+		for (auto* fn : L.systems) {
+			fn(L, now_ns, dt_ns);
+		}
+
+		// 2) 프레임 말미 지연 작업 일괄 반영
+		if (!L.defers.empty()) {
+			for (auto& f : L.defers) f(L.world);
+			L.defers.clear();
+		}
+
+		// 3)
+		L.events.update();
 	}
 
 

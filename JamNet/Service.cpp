@@ -4,6 +4,7 @@
 #include <ranges>
 
 #include "Clock.h"
+#include "SessionUpdateSystem.h"
 
 namespace jam::net
 {
@@ -27,6 +28,15 @@ namespace jam::net
 		}
 
 		m_globalExecutor->Init();
+
+
+
+		// temp
+		auto& shards = m_globalExecutor->GetShards();
+		for (auto& shard : shards)
+		{
+			shard->Local().systems.push_back(&SessionUpdateSystem);
+		}
 	}
 
 
@@ -41,18 +51,28 @@ namespace jam::net
 	}
 
 
-	void Service::StartUpdateLoop()
+	void Service::StartUpdateLoop(uint64 period_ns)
 	{
-		m_running.store(true);
-		m_lastUpdateTick = utils::Clock::Instance().GetCurrentTick();
+		//m_running.store(true);
+		//m_lastUpdateTick = utils::Clock::Instance().GetCurrentTick();
+		auto& shards = m_globalExecutor->GetShards();
+		for (auto& shard : shards) {
+			auto postTick = [this, &shard, period_ns]() {
+				const uint64_t now = utils::Clock::Instance().NowNs();
+				shard->Tick(now, period_ns);
+				// Àç±Í ¿¹¾à
+				utils::exec::GlobalExecutor::PostAfter(utils::job::Job([this, &shard, period_ns]() { /* same lambda body */ }), period_ns);
+				};
+			utils::exec::GlobalExecutor::PostAfter(utils::job::Job(postTick), period_ns);
+		}
 	}
 
 	void Service::Update()
 	{
-		auto self = static_pointer_cast<Service>(shared_from_this());
-		m_globalExecutor->Post(utils::job::Job([self] {
-				self->ProcessUpdate();
-			}));
+		//auto self = static_pointer_cast<Service>(shared_from_this());
+		//m_globalExecutor->Post(utils::job::Job([self] {
+		//		self->ProcessUpdate();
+		//	}));
 	}
 
 
