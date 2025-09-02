@@ -74,8 +74,8 @@
     <OutDir>C:\Users\akxotjr\GameWorkSpace\Jam\Libraries\$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
     <IntDir>C:\Users\akxotjr\GameWorkSpace\Jam\Intermediates\$(Platform)\$(Configuration)\$(ProjectName)</IntDir>
     <TargetName>libjamnet</TargetName>
-    <IncludePath>C:\Users\matae\GameWorkSpace\Jam\JamUtils\;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\matae\GameWorkSpace\Jam\Libraries;$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\akxotjr\GameWorkSpace\Jam\JamUtils\;$(VcpkgRoot)\installed\x64-windows\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\akxotjr\GameWorkSpace\Jam\Libraries;$(VcpkgRoot)\installed\x64-windows\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
