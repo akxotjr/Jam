@@ -92,6 +92,12 @@ namespace jam::net
 
 		void									HandleError(int32 errorCode);
 
+		CongestionController* GetCongestionController() { return m_congestionController.get(); }
+		NetStatManager* GetNetStatManager() { return m_netStatTracker.get(); }
+		ReliableTransportManager* GetReliableTransportManager() { return m_reliableTransportManager.get(); }
+		FragmentManager* GetFragmentManager() { return m_fragmentManager.get(); }
+		HandshakeManager* GetHandshakeManager() { return m_handshakeManager.get(); }
+
 
 	private:
 		bool									CanSend() const;
@@ -108,14 +114,15 @@ namespace jam::net
 		void									ProcessSend(const Sptr<SendBuffer>& buf);
 		void									ProcessQueuedSendBuffer();
 
-		CongestionController*					GetCongestionController() { return m_congestionController.get(); }
-		NetStatManager*							GetNetStatManager() { return m_netStatTracker.get(); }
-		ReliableTransportManager*				GetReliableTransportManager() { return m_reliableTransportManager.get(); }
-
+		
 
 		void									ProcessReassembledPayload(const xvector<BYTE>& payload, const PacketAnalysis& firstFragmentAnalysis);
 
 		void									ProcessBufferedPacket(const PacketAnalysis& analysis, BYTE* payload, uint32 payloadSize);
+
+
+
+
 
 	private:
 		USE_LOCK

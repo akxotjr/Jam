@@ -31,6 +31,8 @@ namespace jam::net
         void PostGroup(uint64 group_id, utils::exec::GroupHomeKey gk, utils::job::Job j);
 
 
+        void BindSession(std::weak_ptr<Session> s) { m_session = std::move(s); }
+
     private:
         void RefreshEnpoint();
         void EnsureBound();     // lazy-bind

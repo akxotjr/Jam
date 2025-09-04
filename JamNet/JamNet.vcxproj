@@ -153,6 +153,8 @@
     <ClInclude Include="ChannelManager.h" />
     <ClInclude Include="Components.h" />
     <ClInclude Include="CongestionController.h" />
+    <ClInclude Include="EcsEvents.h" />
+    <ClInclude Include="EcsHandle.h" />
     <ClInclude Include="FragmentManager.h" />
     <ClInclude Include="HandshakeManager.h" />
     <ClInclude Include="IocpEvent.h" />
@@ -161,6 +163,7 @@
     <ClInclude Include="ipzip_lz4_impl.h" />
     <ClInclude Include="JamNetEnums.h" />
     <ClInclude Include="JamNetPCH.h" />
+    <ClInclude Include="NetEcsBootstrap.h" />
     <ClInclude Include="NetStatManager.h" />
     <ClInclude Include="NetworkLayer.h" />
     <ClInclude Include="PacketCompressor.h" />
@@ -189,6 +192,8 @@
     <ClCompile Include="ChannelManager.cpp" />
     <ClCompile Include="Components.cpp" />
     <ClCompile Include="CongestionController.cpp" />
+    <ClCompile Include="EcsEvents.cpp" />
+    <ClCompile Include="EcsHandle.cpp" />
     <ClCompile Include="FragmentManager.cpp" />
     <ClCompile Include="HandshakeManager.cpp" />
     <ClCompile Include="IocpEvent.cpp" />
@@ -197,6 +202,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="JamNetPCH.cpp" />
+    <ClCompile Include="NetEcsBootstrap.cpp" />
     <ClCompile Include="NetStatManager.cpp" />
     <ClCompile Include="NetworkLayer.cpp" />
     <ClCompile Include="PacketCompressor.cpp" />

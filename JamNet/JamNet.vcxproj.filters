@@ -37,6 +37,9 @@
     <Filter Include="06.ECS">
       <UniqueIdentifier>{f605e0bd-0afa-4d86-8eb9-153cb090505f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="06.ECS\utils">
+      <UniqueIdentifier>{dbb8cbdf-a0bd-4e85-9ee5-bab0976bf302}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetAddress.h">
@@ -141,6 +144,11 @@
     <ClInclude Include="Components.h">
       <Filter>06.ECS</Filter>
     </ClInclude>
+    <ClInclude Include="NetEcsBootstrap.h">
+      <Filter>06.ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsHandle.h" />
+    <ClInclude Include="EcsEvents.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -239,5 +247,10 @@
     <ClCompile Include="Components.cpp">
       <Filter>06.ECS</Filter>
     </ClCompile>
+    <ClCompile Include="NetEcsBootstrap.cpp">
+      <Filter>06.ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="EcsHandle.cpp" />
+    <ClCompile Include="EcsEvents.cpp" />
   </ItemGroup>
 </Project>

@@ -4,7 +4,9 @@
 #include <ranges>
 
 #include "Clock.h"
-#include "SessionUpdateSystem.h"
+#include "NetEcsBootstrap.h"
+#include "Systems.h"
+
 
 namespace jam::net
 {
@@ -35,7 +37,7 @@ namespace jam::net
 		auto& shards = m_globalExecutor->GetShards();
 		for (auto& shard : shards)
 		{
-			shard->Local().systems.push_back(&SessionUpdateSystem);
+			ecs::RegisterNetEcs(shard->Local(), this);
 		}
 	}
 
@@ -56,14 +58,22 @@ namespace jam::net
 		//m_running.store(true);
 		//m_lastUpdateTick = utils::Clock::Instance().GetCurrentTick();
 		auto& shards = m_globalExecutor->GetShards();
-		for (auto& shard : shards) {
-			auto postTick = [this, &shard, period_ns]() {
-				const uint64_t now = utils::Clock::Instance().NowNs();
-				shard->Tick(now, period_ns);
-				// Àç±Í ¿¹¾à
-				utils::exec::GlobalExecutor::PostAfter(utils::job::Job([this, &shard, period_ns]() { /* same lambda body */ }), period_ns);
+
+		for (auto& shard : shards)
+		{
+			Sptr<utils::exec::ShardExecutor> s = shard; // °ª Ä¸Ã³
+			// Àç±Í ¿¹¾à¿ë ÇÔ¼ö °´Ã¼
+			auto tick = std::make_shared<std::function<void()>>();
+			*tick = [this, s, period_ns, tick]()
+				{
+					const uint64 now = utils::Clock::Instance().NowNs();
+					s->Tick(now, period_ns);
+					// ´ÙÀ½ Æ½ ¿¹¾à
+					m_globalExecutor->PostAfter(utils::job::Job([tick]() { (*tick)(); }), period_ns);
 				};
-			utils::exec::GlobalExecutor::PostAfter(utils::job::Job(postTick), period_ns);
+
+			// ÃÖÃÊ ¿¹¾à
+			m_globalExecutor->PostAfter(utils::job::Job([tick]() { (*tick)(); }), period_ns);
 		}
 	}
 

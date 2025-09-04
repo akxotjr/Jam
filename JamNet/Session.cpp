@@ -6,6 +6,9 @@ namespace jam::net
 	void Session::AttachEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey routeKey)
 	{
 		m_endpoint = std::make_unique<SessionEndpoint>(dir, routeKey);
+		m_endpoint->BindSession(static_pointer_cast<Session>(shared_from_this()));
+
+		// todo ecs
 	}
 
 	void Session::RebindRouteKey(utils::exec::RouteKey newKey)

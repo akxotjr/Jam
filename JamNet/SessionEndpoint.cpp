@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "SessionEndpoint.h"
-
-#include "SessionUpdateSystem.h"
+#include "Components.h"
+#include "Systems.h"
 
 namespace jam::net
 {
@@ -116,8 +116,8 @@ namespace jam::net
 		if (m_mbNorm && m_mbCtrl && !m_boundShard.expired())
 			return;
 
-		const size_t sid = m_dir->PickShard(m_key.value());
-		auto shard = m_dir->ShardAt(sid);
+		const uint64 shard_id = m_dir->PickShard(m_key.value());
+		auto shard = m_dir->ShardAt(shard_id);
 		if (!shard) return;
 
 		// 技记侩 Mailbox 2盲澄 积己
@@ -133,13 +133,10 @@ namespace jam::net
 		shard->Local().defers.emplace_back([this](entt::registry& r)
 			{
 				m_entitiy = r.create();
-				r.emplace<SessionRef>(m_entitiy, m_session);
-				r.emplace<MailboxRef>(m_entitiy, MailboxRef{ m_mbNorm, m_mbCtrl });
+				r.emplace<ecs::SessionRef>(m_entitiy, m_session);
+				r.emplace<ecs::MailboxRef>(m_entitiy, ecs::MailboxRef{ m_mbNorm, m_mbCtrl });
 				r.emplace<utils::exec::RouteKey>(m_entitiy, utils::exec::RouteKey{ m_key });
-				//r.emplace<SessionKey>(m_e, SessionKey{ m_sessKey });
 			});
-
-
 	}
 
 	void SessionEndpoint::RebindIfExecutorChanged()

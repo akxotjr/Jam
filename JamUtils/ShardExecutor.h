@@ -14,8 +14,8 @@ namespace jam::utils::exec
 
 	struct ShardLocal
 	{
-		entt::registry world;
-		entt::dispatcher events;	// for optimization hot-pass
+		entt::registry		world;
+		entt::dispatcher	events;	// for optimization hot-pass
 
 		// std::unordered_map<GroupId, std::vector<entt::entity>> groupIndex;
 
@@ -24,6 +24,7 @@ namespace jam::utils::exec
 		using SystemFn = void(*)(ShardLocal&, uint64 now_ns, uint64 dt_ns);	//system runner
 		std::vector<SystemFn> systems;
 	};
+
 
 
 	struct ShardExecutorConfig
