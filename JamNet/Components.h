@@ -11,11 +11,16 @@ namespace jam::net::ecs
 		std::weak_ptr<Session> wp;
 	};
 
-	//struct MailboxRef
-	//{
-	//	std::shared_ptr<utils::exec::Mailbox> norm;
-	//	std::shared_ptr<utils::exec::Mailbox> ctrl;
-	//};
+	struct MailboxRef
+	{
+		std::shared_ptr<utils::exec::Mailbox> norm;
+		std::shared_ptr<utils::exec::Mailbox> ctrl;
+	};
+
+	struct CompEndpoint
+	{
+		UdpSession* owner;
+	};
 
 
 	//struct GroupMember
@@ -51,29 +56,31 @@ namespace jam::net::ecs
 
 	struct ReliabilityState
 	{
-		uint16		sendSeq = 1;
-		uint16		latestSeq = 0;
-		uint16		expectedNextSeq = 1;
-		uint32		inFlightSize = 0;
+		// 송신/수신 창
+		uint16  sendSeq = 1;
+		uint16  latestSeq = 0;
+		uint16  expectedNextSeq = 1;
+		std::bitset<WINDOW_SIZE> receiveHistory;
 
-		bool		hasPendingAck = false;
-		uint16		pendingAckSeq = 0;
-		uint32		pendingAckBitfield = 0;
-		uint64		firstPendingAckTick = 0;
+		// in-flight(바이트) / 지연 ACK
+		uint32  inFlightSize = 0;
+		bool    hasPendingAck = false;
+		uint16  pendingAckSeq = 0;
+		uint32  pendingAckBitfield = 0;
+		uint64  firstPendingAckTick = 0;
 
-		bitset<WINDOW_SIZE> receiveHistory;
+		// NACK 타이밍
+		uint64  lastNackTime = 0;
 
-		// NACK 타이밍(매 프레임 체크)
-		uint64		lastNackTime = 0;
-
-		EcsHandle	hStore = EcsHandle::invalid();
+		// 콜드 스토어 핸들
+		EcsHandle hStore = EcsHandle::invalid();
 	};
 
 	struct ReliabilityStore
 	{
-		std::unordered_map<uint16, PendingPacketInfo> pending; // seq -> info
-		std::unordered_map<uint16, uint32> dupAckCount;
-		std::unordered_set<uint16> sentNackSeqs;
-		uint16 lastAckedSeq = 0;
+		xumap<uint16, PendingPacketInfo> pending;   // seq -> {buf,size,timestamp,retry}
+		xumap<uint16, uint32>            dupAckCount;
+		xuset<uint16>                    sentNackSeqs;
+		uint16                           lastAckedSeq = 0;
 	};
 }

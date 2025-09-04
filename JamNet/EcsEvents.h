@@ -9,7 +9,32 @@ namespace jam::net::ecs
         uint32         bitfield{};
     };
 
+    struct EvRecvData
+    {
+        entt::entity e{ entt::null };
+        uint16 seq;
+    };
 
+    struct EvRecvNack
+    {
+        entt::entity e{ entt::null };
+        uint16 missingSeq;
+        uint32 bitfield;
+    };
+
+    struct EvDidSend
+    {
+        entt::entity e{ entt::null };
+        Sptr<SendBuffer> buf;
+        uint16 seq;
+        uint32 size;
+        uint64 ts;
+    };
+
+    struct EvPiggybackFailed
+    {
+        entt::entity e{ entt::null };
+    };
 
 
 
