@@ -33,8 +33,6 @@ namespace jam::net::ecs
     }
 
 
-
-
 	inline void InstallLifeObserver(entt::registry& R);
 	inline void RegisterNetEcs(utils::exec::ShardLocal& L, Service* svc);
 }

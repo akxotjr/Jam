@@ -40,6 +40,9 @@
     <Filter Include="06.ECS\utils">
       <UniqueIdentifier>{dbb8cbdf-a0bd-4e85-9ee5-bab0976bf302}</UniqueIdentifier>
     </Filter>
+    <Filter Include="06.ECS\ecs">
+      <UniqueIdentifier>{bfdce04d-fe4f-401b-8d1c-d9d90f166d1c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetAddress.h">
@@ -138,17 +141,33 @@
     <ClInclude Include="SessionEndpoint.h">
       <Filter>02.Network</Filter>
     </ClInclude>
-    <ClInclude Include="Systems.h">
-      <Filter>06.ECS</Filter>
+    <ClInclude Include="EcsCommon.hpp">
+      <Filter>06.ECS\utils</Filter>
     </ClInclude>
-    <ClInclude Include="Components.h">
-      <Filter>06.ECS</Filter>
+    <ClInclude Include="EcsFragment.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsCongestionControl.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsNetstat.hpp">
+      <Filter>06.ECS\ecs</Filter>
     </ClInclude>
     <ClInclude Include="NetEcsBootstrap.h">
-      <Filter>06.ECS</Filter>
+      <Filter>06.ECS\utils</Filter>
     </ClInclude>
-    <ClInclude Include="EcsHandle.h" />
-    <ClInclude Include="EcsEvents.h" />
+    <ClInclude Include="EcsChannel.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsReliability.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsHandshake.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsHandle.h">
+      <Filter>06.ECS\utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -241,16 +260,11 @@
     <ClCompile Include="SessionEndpoint.cpp">
       <Filter>02.Network</Filter>
     </ClCompile>
-    <ClCompile Include="Systems.cpp">
-      <Filter>06.ECS</Filter>
-    </ClCompile>
-    <ClCompile Include="Components.cpp">
-      <Filter>06.ECS</Filter>
-    </ClCompile>
     <ClCompile Include="NetEcsBootstrap.cpp">
-      <Filter>06.ECS</Filter>
+      <Filter>06.ECS\utils</Filter>
     </ClCompile>
-    <ClCompile Include="EcsHandle.cpp" />
-    <ClCompile Include="EcsEvents.cpp" />
+    <ClCompile Include="EcsHandle.cpp">
+      <Filter>06.ECS\utils</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
