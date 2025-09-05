@@ -1,8 +1,8 @@
 #pragma once
-#include "Components.h"
 
 namespace jam::net::ecs
 {
+	struct ReliabilityStore;
 
 	struct EcsHandle
 	{
@@ -78,6 +78,7 @@ namespace jam::net::ecs
 	struct EcsHandlePools
 	{
 		EcsHandlePool<ReliabilityStore> reliability;
+		
 	};
 
 }
