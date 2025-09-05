@@ -147,8 +147,12 @@
     <ClInclude Include="NetEcsBootstrap.h">
       <Filter>06.ECS</Filter>
     </ClInclude>
-    <ClInclude Include="EcsHandle.h" />
-    <ClInclude Include="EcsEvents.h" />
+    <ClInclude Include="EcsHandle.h">
+      <Filter>06.ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsEvents.h">
+      <Filter>06.ECS</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">
@@ -250,7 +254,11 @@
     <ClCompile Include="NetEcsBootstrap.cpp">
       <Filter>06.ECS</Filter>
     </ClCompile>
-    <ClCompile Include="EcsHandle.cpp" />
-    <ClCompile Include="EcsEvents.cpp" />
+    <ClCompile Include="EcsHandle.cpp">
+      <Filter>06.ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="EcsEvents.cpp">
+      <Filter>06.ECS</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
