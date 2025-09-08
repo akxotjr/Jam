@@ -44,7 +44,8 @@ namespace jam::utils::exec
 
 		// shard/endpoint
 		uint32				GetShardCount() const { return m_directory ? static_cast<uint32>(m_directory->Size()) : 0; }
-		Sptr<ShardExecutor> GetShard(uint32 index) const { return m_directory ? m_directory->ShardAt(index) : nullptr; };
+		Sptr<ShardExecutor> GetShard(uint32 index) const { return m_directory ? m_directory->ShardAt(index) : nullptr; }
+		Sptr<ShardExecutor> GetShard(uint64 key) const { return m_directory ? m_directory->ShardAt(m_directory->PickShard(key)) : nullptr; }
 		std::vector<Sptr<ShardExecutor>>& GetShards() { return m_directory->Shards(); }
 
 		Sptr<ShardDirectory> GetDirectory() const { return m_directory; }

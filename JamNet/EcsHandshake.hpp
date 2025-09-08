@@ -10,18 +10,30 @@ namespace jam::net::ecs
 
 	struct CompHandshake
 	{
-		eHandshakeState state = eHandshakeState::DISCONNECTED;
-		uint64 lastHsTime = 0;
-		uint32 retryCount = 0;
-		uint64 timeWaitStart = 0;
+		eHandshakeState     state = eHandshakeState::DISCONNECTED;
+		uint64              lastHsTime = 0;
+		uint32              retryCount = 0;
+		uint64              timeWaitStart = 0;
 	};
 
 
 	// Events
 
-	struct EvHsCmdConnect { entt::entity e; };
-	struct EvHsCmdDisconnect { entt::entity e; };
-	struct EvHsPacket { entt::entity e; eSystemPacketId id; };
+	struct EvHsCmdConnect
+	{
+		entt::entity e{ entt::null };
+	};
+
+	struct EvHsCmdDisconnect
+	{
+		entt::entity e{ entt::null };
+	};
+
+	struct EvHsPacket
+	{
+		entt::entity e;
+		eSystemPacketId id;
+	};
 
 	// Handlers
 

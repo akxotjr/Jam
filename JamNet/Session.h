@@ -78,25 +78,19 @@ namespace jam::net
 		Sptr<Session>							GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
 		eSessionState							GetState() { return m_state; }
 
-
-
-
-
 		void									AttachEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key);
 		void									RebindRouteKey(utils::exec::RouteKey newKey);
 
-		void Post(utils::job::Job job);
-		void PostCtrl(utils::job::Job job);
-		void PostAfter(uint64 delay_ns, utils::job::Job j);
+		void									Post(utils::job::Job job);
+		void									PostCtrl(utils::job::Job job);
+		void									PostAfter(uint64 delay_ns, utils::job::Job j);
 
-		void JoinGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
-		void LeaveGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
-		void PostGroup(uint64 group_id, utils::exec::GroupHomeKey gk, utils::job::Job j);
-
+		void									JoinGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
+		void									LeaveGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
+		void									PostGroup(uint64 group_id, utils::exec::GroupHomeKey gk, utils::job::Job j);
 
 
 	protected:
-
 		// application level callback
 		virtual void							OnConnected() = 0;
 		virtual void							OnDisconnected() = 0;

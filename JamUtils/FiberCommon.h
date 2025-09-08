@@ -3,7 +3,7 @@
 
 namespace jam::utils::thrd
 {
-	using AwaitKey = uint64;
+	using AwaitKey = uint64;	// todo: change to struct not type alias
 	using FiberFn = std::function<void()>;
 
 	enum class eFiberState : uint8

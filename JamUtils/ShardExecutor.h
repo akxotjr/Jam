@@ -163,6 +163,6 @@ namespace jam::utils::exec
 		// 홈 역할(내가 홈인 그룹들의 분포/메타)
 		std::unordered_map<uint64, GroupHome>				m_groupHome;
 
-		ShardLocal m_local;
+		ShardLocal											m_local;
 	};
 }

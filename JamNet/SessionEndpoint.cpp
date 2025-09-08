@@ -1,7 +1,5 @@
 #include "pch.h"
 #include "SessionEndpoint.h"
-#include "Components.h"
-#include "Systems.h"
 
 namespace jam::net
 {

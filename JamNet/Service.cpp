@@ -1,11 +1,15 @@
 #include "pch.h"
 #include "Service.h"
-
 #include <ranges>
-
 #include "Clock.h"
 #include "NetEcsBootstrap.h"
-#include "Systems.h"
+
+#include "EcsReliability.hpp"
+#include "EcsFragment.hpp"
+#include "EcsChannel.hpp"
+#include "EcsHandshake.hpp"
+#include "EcsNetstat.hpp"
+#include "EcsCongestionControl.hpp"
 
 
 namespace jam::net
@@ -30,8 +34,6 @@ namespace jam::net
 		}
 
 		m_globalExecutor->Init();
-
-
 
 		// temp
 		auto& shards = m_globalExecutor->GetShards();
@@ -113,6 +115,47 @@ namespace jam::net
 		const utils::exec::RouteKey tempKey = m_routing.KeyForSession(connSalt); // PerUser 정책의 해시를 임시키에도 재사용
 
 		session->AttachEndpoint(*dir, tempKey);
+
+
+		// temp
+		//const int32 targetShard = /* e.g. */ static_cast<int>(tempKey.shardIndex);
+
+		//auto shards = m_globalExecutor->GetShards();
+		//ASSERT_CRASH(targetShard >= 0 && targetShard < (int)shards.size());
+		//auto shard = shards[targetShard];
+
+		//auto shard = m_globalExecutor->GetShard(tempKey);
+
+		Sptr<Session> s = session; // 캡처용
+		shard->Submit(utils::job::Job([s, this]()
+			{
+				auto& L = this->m_globalExecutor->GetShards()[/*thread-local index or from shard*/]->Local();
+				auto& R = L.world;
+
+				// 1) 엔티티 생성
+				entt::entity e = R.create();
+
+				// 2) 필수 컴포넌트 부착
+				// CompEndpoint
+				ecs::CompEndpoint ep{};
+				ep.owner = static_cast<UdpSession*>(s.get()); // TCP면 TcpSession*
+				R.emplace<ecs::CompEndpoint>(e, ep);
+
+				R.emplace<ecs::CompReliability>(e);
+				R.emplace<ecs::CompFragment>(e);
+				R.emplace<ecs::CompChannel>(e);
+				R.emplace<ecs::CompNetstat>(e);
+				R.emplace<ecs::CompHandshake>(e);
+				R.emplace<ecs::CompCongestion>(e);
+
+				// (선택) 세션 ↔ 엔티티 역참조 보관 (세션 멤버에 entt::entity 저장)
+				s->SetEntity(e);
+
+				// (선택) 그룹 멤버십/메일박스와 연동하고 싶으면 별도 컴포넌트 부착
+				// R.emplace<GroupMember>(e, GroupMember{ .gid = MakeGidFrom(addr or session id) });
+				// R.emplace<MailboxRef>(e, MailboxRef{ .norm = s->GetMailbox() });
+			}));
+
 
 		return session;
 	}
