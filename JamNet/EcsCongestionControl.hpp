@@ -19,8 +19,6 @@ namespace jam::net::ecs
     struct EvCCPacketLoss { entt::entity e; };
     struct EvCCNewAck { entt::entity e; };
     struct EvCCFastRTX { entt::entity e; };
-    struct EvCCNackRTX { entt::entity e; };
-
 
     // Handlers
 
@@ -65,12 +63,6 @@ namespace jam::net::ecs
             cs.cwnd = cs.ssthresh + 3 * CompCongestion::MTU;
             cs.fastRecovery = true;
         }
-
-        void OnNackRTX(const EvCCNackRTX& ev)
-        {
-            auto& cs = R->get<CompCongestion>(ev.e);
-            cs.cwnd = std::max<uint32>(CompCongestion::MTU, static_cast<uint32>(cs.cwnd * 0.9f));
-        }
     };
 
     // Sinks
@@ -78,7 +70,12 @@ namespace jam::net::ecs
     struct CongestionSinks
     {
         bool                    wired = false;
-        entt::scoped_connection onAck, onLoss, onNewAck, onFast, onNack;
+
+        entt::scoped_connection onRecvAck;
+        entt::scoped_connection onPktLoss;
+        entt::scoped_connection onFastRTX;
+        entt::scoped_connection onNewACK;
+
         CongestionHandlers      handlers;
     };
 
@@ -91,16 +88,11 @@ namespace jam::net::ecs
         if (s.wired) return;
         s.handlers.R = &R;
 
-        s.onAck = D.sink<EvCCRecvAck>().connect<&CongestionHandlers::OnRecvAck>(&s.handlers);
-        s.onLoss = D.sink<EvCCPacketLoss>().connect<&CongestionHandlers::OnPacketLoss>(&s.handlers);
-        s.onNewAck = D.sink<EvCCNewAck>().connect<&CongestionHandlers::OnNewAck>(&s.handlers);
-        s.onFast = D.sink<EvCCFastRTX>().connect<&CongestionHandlers::OnFastRTX>(&s.handlers);
-        s.onNack = D.sink<EvCCNackRTX>().connect<&CongestionHandlers::OnNackRTX>(&s.handlers);
+        s.onRecvAck     = D.sink<EvCCRecvAck>().connect<&CongestionHandlers::OnRecvAck>(&s.handlers);
+        s.onPktLoss     = D.sink<EvCCPacketLoss>().connect<&CongestionHandlers::OnPacketLoss>(&s.handlers);
+        s.onNewACK      = D.sink<EvCCNewAck>().connect<&CongestionHandlers::OnNewAck>(&s.handlers);
+        s.onFastRTX     = D.sink<EvCCFastRTX>().connect<&CongestionHandlers::OnFastRTX>(&s.handlers);
 
         s.wired = true;
 	}
-
-    //inline void CongestionControlTickSystem(utils::exec::ShardLocal& L, uint64, uint64)
-    //{
-    //}
 }

@@ -28,7 +28,7 @@ namespace jam::net
             auto fragment = PacketBuilder::CreatePacket(
                 U2E(ePacketType, originHeader.GetType()),
                 originHeader.GetId(),
-                originHeader.GetFlags() | PacketFlags::FRAGMENTED | PacketFlags::RELIABLE,
+                originHeader.GetFlags() | PacketFlags::FRAGMENTED,
                 payload + offset,
                 payloadSize,
                 baseSeq + i,

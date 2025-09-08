@@ -3,6 +3,9 @@
 namespace jam::net::ecs
 {
 	struct ReliabilityStore;
+	struct ChannelStore;
+	struct FragmentStore;
+
 
 	struct EcsHandle
 	{
@@ -78,7 +81,8 @@ namespace jam::net::ecs
 	struct EcsHandlePools
 	{
 		EcsHandlePool<ReliabilityStore> reliability;
-		
+		EcsHandlePool<ChannelStore>		channels;
+		EcsHandlePool<FragmentStore>	fragments;
 	};
 
 }

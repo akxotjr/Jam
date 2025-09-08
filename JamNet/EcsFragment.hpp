@@ -3,7 +3,9 @@
 #include "pch.h"
 
 #include "EcsHandle.h"
+#include "EcsReliability.hpp"
 #include "FragmentManager.h"
+#include "PacketBuilder.h"
 
 namespace jam::net::ecs
 {
@@ -11,30 +13,30 @@ namespace jam::net::ecs
 
 	struct CompFragment
 	{
-		EcsHandle hStore = EcsHandle::invalid();
+		EcsHandle                           hStore = EcsHandle::invalid();
 	};
 
 	struct FragmentStore
 	{
-		xumap<uint16, FragmentReassembly> reassemblies;
+		xumap<uint16, FragmentReassembly>   reassemblies;
 	};
 
 	// Events
 
-	// 수신 원시 버퍼 → 재조립 시도
-	struct EvFragRecvRaw
+	struct EvFgFragmentize
 	{
-		entt::entity e;
-		BYTE* buf;
-		uint16 size;
+        entt::entity        e{ entt::null };
+        Sptr<SendBuffer>    buf;
+        PacketAnalysis      analysis;
 	};
-	// 재조립 성공 시 알림 (이벤트 체인용)
-	struct EvFragReassembled
+
+	struct EvFgReassemble
 	{
-		entt::entity e;
-		PacketHeader original;
-		xvector<BYTE> data;
+		entt::entity        e{ entt::null };
+		BYTE*               buf;
+		uint16              size;
 	};
+
 
 	// Handlers
 
@@ -42,7 +44,47 @@ namespace jam::net::ecs
 	{
         entt::registry* R{};
 
-    	void OnRecvRaw(const EvFragRecvRaw& ev)
+        void Fragmentize(const EvFgFragmentize& ev)
+        {
+            xvector<Sptr<SendBuffer>> fragments;
+
+            if (!ev.buf || ev.analysis.payloadSize == 0) return;
+
+            uint8 totalCount = (size + MAX_FRAGMENT_PAYLOAD_SIZE - 1) / MAX_FRAGMENT_PAYLOAD_SIZE;  //todo: what is size?
+            if (totalCount > MAX_FRAGMENTS)
+                return;
+
+            PacketHeader originHeader = ev.analysis.header;
+            BYTE* payload = ev.analysis.GetPayloadPtr(ev.buf->Buffer());
+
+            const uint16 baseSeq = AllocSeqRange(*R, ev.e, totalCount);
+
+            for (uint8 i = 0; i < totalCount; i++)
+            {
+                uint32 offset = i * MAX_FRAGMENT_PAYLOAD_SIZE;
+                uint32 payloadSize = min(MAX_FRAGMENT_PAYLOAD_SIZE, size - offset);
+
+                auto fragment = PacketBuilder::CreatePacket(
+                    U2E(ePacketType, originHeader.GetType()),
+                    originHeader.GetId(),
+                    originHeader.GetFlags() | PacketFlags::FRAGMENTED,
+                    eChannelType::RELIABLE_ORDERED,
+                    payload + offset,
+                    payloadSize,
+                    baseSeq + i,
+                    i,
+                    totalCount
+                );
+
+                fragments.push_back(fragment);
+            }
+
+            // todo
+            //auto& ep = R->get<CompEndpoint>(ev.e);
+            //ep.owner->
+        }
+
+    	void Reassemble(const EvFgReassemble& ev)
     	{
             auto& pools = R->ctx().get<EcsHandlePools>();
             auto& cf = R->get<CompFragment>(ev.e);
@@ -69,8 +111,9 @@ namespace jam::net::ecs
                 for (auto k : stale) st->reassemblies.erase(k);
             }
 
-            uint16 groupKey = (uint16)(seq - fragIdx);
+            uint16 groupKey = static_cast<uint16>(seq - fragIdx);
             auto& re = st->reassemblies[groupKey];
+
             if (!re.headerSaved) 
             {
                 re.Init(fragTot);
@@ -78,19 +121,31 @@ namespace jam::net::ecs
                 re.originalHeader.SetFlags(re.originalHeader.GetFlags() & ~PacketFlags::FRAGMENTED);
                 re.headerSaved = true;
             }
-            if (re.totalCount != fragTot) { st->reassemblies.erase(groupKey); return; }
-            if (re.recvFragments.size() > fragIdx && re.recvFragments[fragIdx]) { return; } // dup
+            if (re.totalCount != fragTot)
+            {
+	            st->reassemblies.erase(groupKey);
+            	return;
+            }
+            if (re.recvFragments.size() > fragIdx && re.recvFragments[fragIdx])
+            {
+	            return;
+            }
+            if (!re.WriteFragment(fragIdx, payload, psize))
+            {
+                return;
+            }
 
-            if (!re.WriteFragment(fragIdx, payload, psize)) return;
-            re.lastRecvTime = now;
+    		re.lastRecvTime = now;
 
             if (re.IsComplete()) 
             {
                 auto data = re.GetReassembledData();
                 auto orig = re.originalHeader;
                 st->reassemblies.erase(groupKey);
-                // 재조립 완료 이벤트 재발행(샤드 스레드)
-                R->ctx().get<entt::dispatcher>().trigger<EvFragReassembled>(EvFragReassembled{ ev.e, orig, std::move(data) });
+                
+				// todo
+                auto& ep = R->get<CompEndpoint>(ev.e);
+                //ep.owner->
             }
         }
     };
@@ -99,9 +154,12 @@ namespace jam::net::ecs
 
     struct FragmentSinks
 	{
-        bool wired = false;
-        entt::scoped_connection onRaw;
-        FragmentHandlers handlers;
+        bool                        wired = false;
+
+    	entt::scoped_connection     onFragmentize;
+        entt::scoped_connection     onReassemble;
+
+        FragmentHandlers            handlers;
     };
 
 	// Systems
@@ -114,7 +172,8 @@ namespace jam::net::ecs
     	if (sinks.wired) return;
     	sinks.handlers.R = &R;
 
-        sinks.onRaw = D.sink<EvFragRecvRaw>().connect<&FragmentHandlers::OnRecvRaw>(&sinks.handlers);
+        sinks.onFragmentize     = D.sink<EvFgFragmentize>().connect<&FragmentHandlers::Fragmentize>(&sinks.handlers);
+        sinks.onReassemble      = D.sink<EvFgReassemble>().connect<&FragmentHandlers::Reassemble>(&sinks.handlers);
 
         sinks.wired = true;
     }

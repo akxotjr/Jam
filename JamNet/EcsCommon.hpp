@@ -2,6 +2,11 @@
 #include "pch.h"
 
 
+namespace jam::net
+{
+	class UdpSession;
+}
+
 namespace jam::net::ecs
 {
 	struct SessionRef

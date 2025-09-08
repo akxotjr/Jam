@@ -283,10 +283,10 @@ namespace jam::net
 	}
 
 
-	bool UdpSession::CanSend() const
-	{
-		return m_congestionController->CanSend(m_reliableTransportManager->GetInFlightSize());
-	}
+	//bool UdpSession::CanSend() const
+	//{
+	//	return m_congestionController->CanSend(m_reliableTransportManager->GetInFlightSize());
+	//}
 
 	void UdpSession::ProcessUpdate()
 	{
@@ -317,58 +317,59 @@ namespace jam::net
 
 	void UdpSession::SendDirect(const Sptr<SendBuffer>& buf)
 	{
+		// todo: post to io-thread (in Service::GE) 
 		GetService()->m_udpRouter->RegisterSend(buf, GetRemoteNetAddress());
 	}
 
-	void UdpSession::SendSinglePacket(const Sptr<SendBuffer>& buf)
-	{
-		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
-		if (analysis.isValid && analysis.IsReliable())
-		{
-			uint16 seq = analysis.GetSequence();
-			m_reliableTransportManager->AddPendingPacket(seq, buf, utils::Clock::Instance().GetCurrentTick());
-		}
+	//void UdpSession::SendSinglePacket(const Sptr<SendBuffer>& buf)
+	//{
+	//	PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
+	//	if (analysis.isValid && analysis.IsReliable())
+	//	{
+	//		uint16 seq = analysis.GetSequence();
+	//		m_reliableTransportManager->AddPendingPacket(seq, buf, utils::Clock::Instance().GetCurrentTick());
+	//	}
 
-		if (!m_reliableTransportManager->TryAttachPiggybackAck(buf))
-		{
-			m_reliableTransportManager->FailedAttachPiggybackAck();
-		}
+	//	if (!m_reliableTransportManager->TryAttachPiggybackAck(buf))
+	//	{
+	//		m_reliableTransportManager->FailedAttachPiggybackAck();
+	//	}
 
-		SendDirect(buf);
-	}
+	//	SendDirect(buf);
+	//}
 
-	void UdpSession::SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments)
-	{
-		for (auto& fragment : fragments)
-		{
-			SendSinglePacket(fragment);
-		}
-	}
+	//void UdpSession::SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments)
+	//{
+	//	for (auto& fragment : fragments)
+	//	{
+	//		SendSinglePacket(fragment);
+	//	}
+	//}
 
 	void UdpSession::ProcessSend(const Sptr<SendBuffer>& buf)
 	{
-		if (!CanSend())
-		{
-			if (m_sendQueue.size() <= MAX_SENDQUEUE_SIZE)
-			{
-				m_sendQueue.push(buf);
-			}
-			return;
-		}
+		//if (!CanSend())
+		//{
+		//	if (m_sendQueue.size() <= MAX_SENDQUEUE_SIZE)
+		//	{
+		//		m_sendQueue.push(buf);
+		//	}
+		//	return;
+		//}
 
-		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
-		if (!analysis.isValid)
-			return;
+		//PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
+		//if (!analysis.isValid)
+		//	return;
 
-		if (analysis.payloadSize > MAX_PAYLOAD_SIZE)
-		{
-			auto fragments = m_fragmentManager->Fragmentize(buf, analysis);
-			SendMultiplePacket(fragments);
-		}
-		else
-		{
-			SendSinglePacket(buf);
-		}
+		//if (analysis.payloadSize > MAX_PAYLOAD_SIZE)
+		//{
+		//	auto fragments = m_fragmentManager->Fragmentize(buf, analysis);
+		//	SendMultiplePacket(fragments);
+		//}
+		//else
+		//{
+		//	SendSinglePacket(buf);
+		//}
 	}
 
 	void UdpSession::ProcessQueuedSendBuffer()

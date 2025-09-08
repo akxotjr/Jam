@@ -8,15 +8,15 @@ namespace jam::net::ecs
 
 	struct CompNetstat
 	{
-		NetStat stat{};
-		uint64 prevTick = 0;
-		double prevRtt = 0.0;
-		uint64 bwSendAccum = 0;
-		uint64 bwRecvAccum = 0;
-		uint64 expectedRecv = 0;
-		uint64 highestSeqSeen = 0;
-		uint64 lastAckedSeq = 0;
-		uint64 ackSendAccum = 0;
+		NetStat		stat{};
+		uint64		prevTick = 0;
+		double		prevRtt = 0.0;
+		uint64		bwSendAccum = 0;
+		uint64		bwRecvAccum = 0;
+		uint64		expectedRecv = 0;
+		uint64		highestSeqSeen = 0;
+		uint64		lastAckedSeq = 0;
+		uint64		ackSendAccum = 0;
 	};
 
 
@@ -24,56 +24,52 @@ namespace jam::net::ecs
 
 	struct EvNsOnSend
 	{
-		entt::entity	e;
+		entt::entity	e{ entt::null };
 		uint32			size;
 	};
 
 	struct EvNsOnRecv
 	{
-		entt::entity	e;
+		entt::entity	e{ entt::null };
 		uint32			size;
 	};
 
 	struct EvNsOnSendR
 	{
-		entt::entity	e;
+		entt::entity	e{ entt::null };
 	};
 
 	struct EvNsOnRecvR
 	{
-		entt::entity	e;
+		entt::entity	e{ entt::null };
 		uint16			seq;
 	};
 
 	struct EvNsOnPacketLoss
 	{
-		entt::entity e;
-		uint32 count;
+		entt::entity	e{ entt::null };
+		uint32			count;
 	};
 
 	struct EvNsOnPiggyAck
 	{
-		entt::entity	e;
+		entt::entity	e{ entt::null };
 	};
 	struct EvNsOnImmAck
 	{
-		entt::entity	e;
+		entt::entity	e{ entt::null };
 	};
 	struct EvNsOnDelayedAck
 	{
-		entt::entity e;
+		entt::entity	e{ entt::null };
 	};
 	struct EvNsOnRTO
 	{
-		entt::entity e;
+		entt::entity	e{ entt::null };
 	};
 	struct EvNsOnFastRTX
 	{
-		entt::entity e;
-	};
-	struct EvNsOnNackRTX
-	{
-		entt::entity e;
+		entt::entity	e{ entt::null };
 	};
 
 
@@ -177,9 +173,20 @@ namespace jam::net::ecs
 
 	struct NetstatSinks
 	{
-		bool wired = false;
-		entt::scoped_connection a, b, c, d, e, f, g, h, i, j, k;
-		NetstatHandlers handlers;
+		bool					wired = false;
+
+		entt::scoped_connection onSend;
+		entt::scoped_connection onRecv;
+		entt::scoped_connection onSendR;
+		entt::scoped_connection onRecvR;
+		entt::scoped_connection onPacketLoss;
+		entt::scoped_connection onPiggybackACK;
+		entt::scoped_connection onImmdediateACK;
+		entt::scoped_connection onDelayedACK;
+		entt::scoped_connection onRTO;
+		entt::scoped_connection onFastRTX;
+
+		NetstatHandlers			handlers;
 	};
 
 
@@ -193,17 +200,16 @@ namespace jam::net::ecs
 		if (sinks.wired) return;
 		sinks.handlers.R = &R;
 
-		sinks.a = D.sink<EvNsOnSend>().connect<&NetstatHandlers::OnSend>(&sinks.handlers);
-		sinks.b = D.sink<EvNsOnRecv>().connect<&NetstatHandlers::OnRecv>(&sinks.handlers);
-		sinks.c = D.sink<EvNsOnSendR>().connect<&NetstatHandlers::OnSendR>(&sinks.handlers);
-		sinks.d = D.sink<EvNsOnRecvR>().connect<&NetstatHandlers::OnRecvAck>(&sinks.handlers);
-		sinks.e = D.sink<EvNsOnPacketLoss>().connect<&NetstatHandlers::OnPacketLoss>(&sinks.handlers);
-		sinks.f = D.sink<EvNsOnPiggyAck>().connect<&NetstatHandlers::OnPiggy>(&sinks.handlers);
-		sinks.g = D.sink<EvNsOnImmAck>().connect<&NetstatHandlers::OnImm>(&sinks.handlers);
-		sinks.h = D.sink<EvNsOnDelayedAck>().connect<&NetstatHandlers::OnDelayed>(&sinks.handlers);
-		sinks.i = D.sink<EvNsOnRTO>().connect<&NetstatHandlers::OnRTO>(&sinks.handlers);
-		sinks.j = D.sink<EvNsOnFastRTX>().connect<&NetstatHandlers::OnFast>(&sinks.handlers);
-		sinks.k = D.sink<EvNsOnNackRTX>().connect<&NetstatHandlers::OnNack>(&sinks.handlers);
+		sinks.onSend			= D.sink<EvNsOnSend>().connect<&NetstatHandlers::OnSend>(&sinks.handlers);
+		sinks.onRecv			= D.sink<EvNsOnRecv>().connect<&NetstatHandlers::OnRecv>(&sinks.handlers);
+		sinks.onSendR			= D.sink<EvNsOnSendR>().connect<&NetstatHandlers::OnSendR>(&sinks.handlers);
+		sinks.onRecvR			= D.sink<EvNsOnRecvR>().connect<&NetstatHandlers::OnRecvAck>(&sinks.handlers);
+		sinks.onPacketLoss		= D.sink<EvNsOnPacketLoss>().connect<&NetstatHandlers::OnPacketLoss>(&sinks.handlers);
+		sinks.onPiggybackACK	= D.sink<EvNsOnPiggyAck>().connect<&NetstatHandlers::OnPiggy>(&sinks.handlers);
+		sinks.onImmdediateACK	= D.sink<EvNsOnImmAck>().connect<&NetstatHandlers::OnImm>(&sinks.handlers);
+		sinks.onDelayedACK		= D.sink<EvNsOnDelayedAck>().connect<&NetstatHandlers::OnDelayed>(&sinks.handlers);
+		sinks.onRTO				= D.sink<EvNsOnRTO>().connect<&NetstatHandlers::OnRTO>(&sinks.handlers);
+		sinks.onFastRTX			= D.sink<EvNsOnFastRTX>().connect<&NetstatHandlers::OnFast>(&sinks.handlers);
 
 		sinks.wired = true;
 	}
@@ -214,39 +220,39 @@ namespace jam::net::ecs
 		auto view = R.view<CompNetstat>();
 		for (auto e : view) 
 		{
-			auto& s = view.get<CompNetstat>(e);
+			auto& cn = view.get<CompNetstat>(e);
 			// UpdateBandwidth
-			s.stat.bandwidthSend = static_cast<float>(s.bwSendAccum / NetStatManager::TICK_INTERVAL);			//todo:TICK_INTERVAL 
-			s.stat.bandwidthRecv = static_cast<float>(s.bwRecvAccum / NetStatManager::TICK_INTERVAL);			//todo:TICK_INTERVAL 
-			s.bwSendAccum = 0; s.bwRecvAccum = 0;
+			cn.stat.bandwidthSend = static_cast<float>(cn.bwSendAccum / NetStatManager::TICK_INTERVAL);			//todo:TICK_INTERVAL 
+			cn.stat.bandwidthRecv = static_cast<float>(cn.bwRecvAccum / NetStatManager::TICK_INTERVAL);			//todo:TICK_INTERVAL 
+			cn.bwSendAccum = 0; cn.bwRecvAccum = 0;
 
-			if (s.stat.totalSent > 0) 
+			if (cn.stat.totalSent > 0) 
 			{
-				s.stat.packetLossSend = (float)s.stat.totalLost / (float)s.stat.totalSent * 100.f;
+				cn.stat.packetLossSend = static_cast<float>(cn.stat.totalLost) / static_cast<float>(cn.stat.totalSent) * 100.f;
 			}
-			if (s.expectedRecv > 0 && s.stat.totalRecv > 0) 
+			if (cn.expectedRecv > 0 && cn.stat.totalRecv > 0) 
 			{
-				s.stat.packetLossRecv = (float)(s.expectedRecv - s.stat.totalRecv) / (float)s.expectedRecv * 100.f;
-				s.stat.packetLossRecv = std::clamp(s.stat.packetLossRecv, 0.f, 100.f);
+				cn.stat.packetLossRecv = static_cast<float>(cn.expectedRecv - cn.stat.totalRecv) / static_cast<float>(cn.expectedRecv) * 100.f;
+				cn.stat.packetLossRecv = std::clamp(cn.stat.packetLossRecv, 0.f, 100.f);
 			}
 
 			// UpdateAckEfficiency
-			if (s.bwSendAccum > 0) 
+			if (cn.bwSendAccum > 0) 
 			{
-				float ackBw = (float)(s.ackSendAccum / NetStatManager::TICK_INTERVAL);
-				s.stat.ackEfficiency = ackBw / s.stat.bandwidthSend;
+				float ackBw = static_cast<float>(cn.ackSendAccum / NetStatManager::TICK_INTERVAL);
+				cn.stat.ackEfficiency = ackBw / cn.stat.bandwidthSend;
 			}
 			else
 			{
-				s.stat.ackEfficiency = 0.f;
+				cn.stat.ackEfficiency = 0.f;
 			}
 
-			s.ackSendAccum = 0;
+			cn.ackSendAccum = 0;
 
 			// UpdateRetransmitStats
-			if (s.stat.totalRetransmits > 0) 
+			if (cn.stat.totalRetransmits > 0) 
 			{
-				s.stat.fastRetransmitRatio = (float)s.stat.fastRetransmits / (float)s.stat.totalRetransmits;
+				cn.stat.fastRetransmitRatio = static_cast<float>(cn.stat.fastRetransmits) / static_cast<float>(cn.stat.totalRetransmits);
 			}
 		}
 	}

@@ -20,7 +20,7 @@ namespace jam::utils::exec
 	};
 
 
-	class ShardDirectory : public enable_shared_from_this<ShardDirectory>
+	class ShardDirectory : public std::enable_shared_from_this<ShardDirectory>
 	{
 	public:
         ShardDirectory(const ShardDirectoryConfig& cfg, std::weak_ptr<GlobalExecutor> owner);

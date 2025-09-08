@@ -1,4 +1,5 @@
 #pragma once
+#include "EcsReliability.hpp"
 #include "Session.h"
 #include "RecvBuffer.h"
 
@@ -61,6 +62,8 @@ namespace jam::net
 		friend class ReliableTransportManager;
 		friend class ChannelManager;
 
+		friend struct jam::net::ecs::ReliabilityHandlers;
+
 	public:
 		UdpSession();
 		virtual ~UdpSession() override = default;
@@ -98,9 +101,10 @@ namespace jam::net
 		FragmentManager* GetFragmentManager() { return m_fragmentManager.get(); }
 		HandshakeManager* GetHandshakeManager() { return m_handshakeManager.get(); }
 
+		void									PushSendQueue(const Sptr<SendBuffer>& buf) { m_sendQueue.push(buf); }
 
 	private:
-		bool									CanSend() const;
+		//bool									CanSend() const;
 
 		void									ProcessUpdate();
 
@@ -108,8 +112,8 @@ namespace jam::net
 		void									SendDirect(const Sptr<SendBuffer>& buf);
 
 
-		void									SendSinglePacket(const Sptr<SendBuffer>& buf);
-		void									SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments);
+		//void									SendSinglePacket(const Sptr<SendBuffer>& buf);
+		//void									SendMultiplePacket(const xvector<Sptr<SendBuffer>>& fragments);
 
 		void									ProcessSend(const Sptr<SendBuffer>& buf);
 		void									ProcessQueuedSendBuffer();
