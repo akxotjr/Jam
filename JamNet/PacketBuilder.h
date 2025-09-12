@@ -45,6 +45,14 @@ namespace jam::net
 	};
 
 #pragma pack(push, 1)
+	struct AckHeader
+	{
+		uint16 latestSeq = 0;
+		uint32 bitfield;
+	};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 	struct NackHeader
 	{
 		uint16 missingSeq;
@@ -75,7 +83,7 @@ namespace jam::net
 	constexpr uint8 SetFlag(uint8 flags, uint8 flag) { return flags | flag; }
 	constexpr uint8 ClearFlag(uint8 flags, uint8 flag) { return flags & ~flag; }
 
-	//constexpr uint16 MAX_PAYLOAD_SIZE = 1024;
+	constexpr uint16 MAX_PAYLOAD_SIZE = 1024;
 
 
 	// type(2) + id(5) + size(11) + flags(4) + channel(2) = 24bit

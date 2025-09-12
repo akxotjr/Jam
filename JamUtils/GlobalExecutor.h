@@ -14,15 +14,15 @@ namespace jam::utils::exec
 
 	struct GlobalExecutorConfig
 	{
-		sys::CoreLayout layout;
-		sys::AutoLayoutConfig layoutCfg;
+		sys::CoreLayout			layout;
+		sys::AutoLayoutConfig	layoutCfg;
 
 		// 자동 튜닝(옵션): 큐 길이/지연 기반으로 런타임 조정할 때 사용 가능
 		bool   autoTune = false;
 
-		ShardExecutorConfig shardCfg;
+		ShardExecutorConfig		shardCfg;
 
-		uint64 capacity = 1 << 16;
+		uint64					capacity = 1 << 16;
 	};
 
 	class GlobalExecutor : public std::enable_shared_from_this<GlobalExecutor>
@@ -45,7 +45,6 @@ namespace jam::utils::exec
 		// shard/endpoint
 		uint32				GetShardCount() const { return m_directory ? static_cast<uint32>(m_directory->Size()) : 0; }
 		Sptr<ShardExecutor> GetShard(uint32 index) const { return m_directory ? m_directory->ShardAt(index) : nullptr; }
-		Sptr<ShardExecutor> GetShard(uint64 key) const { return m_directory ? m_directory->ShardAt(m_directory->PickShard(key)) : nullptr; }
 		std::vector<Sptr<ShardExecutor>>& GetShards() { return m_directory->Shards(); }
 
 		Sptr<ShardDirectory> GetDirectory() const { return m_directory; }
@@ -58,8 +57,8 @@ namespace jam::utils::exec
 		GlobalExecutorConfig									m_config;
 		Atomic<bool>											m_running{ false };
 
-		// offload (MPMC)
-		moodycamel::BlockingConcurrentQueue<job::Job>			m_offload;
+		// offload (MPMC)	
+		moodycamel::BlockingConcurrentQueue<job::Job>			m_offload;	// todo: Why BlockingQ ?
 
 		// assist (MPMC)
 		moodycamel::ConcurrentQueue<uint32>						m_assist;	// shard index
@@ -85,7 +84,7 @@ namespace jam::utils::exec
 
 		std::mutex												m_timerMutex;
 		std::condition_variable									m_timerCv;
-		std::priority_queue<TimedItem, std::vector<TimedItem>, TimedCmp>										m_timedItems;
+		std::priority_queue<TimedItem, std::vector<TimedItem>, TimedCmp>	m_timedItems;
 
 		Sptr<ShardDirectory>									m_directory;
 	};

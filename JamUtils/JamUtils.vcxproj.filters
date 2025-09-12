@@ -235,5 +235,8 @@
       <Filter>06.Sys</Filter>
     </ClInclude>
     <ClInclude Include="RoutingPolicy.h" />
+    <ClInclude Include="TimeUnits.h">
+      <Filter>04.Utils</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

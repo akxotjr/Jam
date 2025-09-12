@@ -1,10 +1,10 @@
 #include "pch.h"
 #include "NetStatManager.h"
-#include "Clock.h"
+//#include "Clock.h"
 
 namespace jam::net
 {
-	void NetStatManager::OnRecvPing(uint64 clientSendTick, uint64 serverRecvTick)
+	/*void NetStatManager::OnRecvPing(uint64 clientSendTick, uint64 serverRecvTick)
 	{
 		m_netStat.tickOffset = static_cast<int64>(serverRecvTick) - static_cast<int64>(clientSendTick);
 	}
@@ -193,5 +193,5 @@ namespace jam::net
 	double NetStatManager::EWMA(double prev, double cur, double alpha) const
 	{
 		return alpha * cur + (1 - alpha) * prev;
-	}
+	}*/
 }

@@ -17,7 +17,7 @@ namespace jam::net
 
 	struct FragmentReassembly
 	{
-        uint64			        lastRecvTime;
+        uint64			        lastRecvTime_ns;
         uint8			        totalCount;
         xvector<bool>	        recvFragments;
         xvector<xvector<BYTE>>  fragmentData;  // 각 Fragment 데이터를 별도 저장

@@ -46,7 +46,7 @@ namespace jam::net
 
 		virtual void						CloseService();
 
-		void								StartUpdateLoop(uint64 period_ns = 1'000'000);
+		void								StartUpdateLoop(uint64 period_ns = 1'000'000_ns);
 		void								Update();
 
 		template<typename TCP, typename UDP>

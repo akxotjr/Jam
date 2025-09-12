@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include "TimeUnits.h"
 
 namespace jam::utils
 {
@@ -77,11 +78,11 @@ namespace jam::utils
 
 	private:
 
-		int64 m_qpcFreq{ 0 };
-		int64 m_qpcAtBoot{ 0 };
-		int64 m_qpcAtStart{ 0 };
+		int64	m_qpcFreq{ 0 };
+		int64	m_qpcAtBoot{ 0 };
+		int64	m_qpcAtStart{ 0 };
 
-		uint32 m_tickHz{ 0 };
-		uint64 m_tickIntervalNs{ 0 };
+		uint32	m_tickHz{ 0 };
+		uint64	m_tickInterval_ns{ 0_ns };
 	};
 }

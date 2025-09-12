@@ -4,14 +4,6 @@
 #include "Clock.h"
 #include "NetEcsBootstrap.h"
 
-#include "EcsReliability.hpp"
-#include "EcsFragment.hpp"
-#include "EcsChannel.hpp"
-#include "EcsHandshake.hpp"
-#include "EcsNetstat.hpp"
-#include "EcsCongestionControl.hpp"
-
-
 namespace jam::net
 {
 	Service::Service(ServiceConfig config) : m_config(config)
@@ -111,51 +103,11 @@ namespace jam::net
 		auto dir = m_globalExecutor->GetDirectory();
 		ASSERT_CRASH(dir != nullptr);
 
+		// todo
 		const uint64 connSalt = reinterpret_cast<uint64>(session.get()) ^ utils::Clock::Instance().NowNs();
 		const utils::exec::RouteKey tempKey = m_routing.KeyForSession(connSalt); // PerUser 정책의 해시를 임시키에도 재사용
 
 		session->AttachEndpoint(*dir, tempKey);
-
-
-		// temp
-		//const int32 targetShard = /* e.g. */ static_cast<int>(tempKey.shardIndex);
-
-		//auto shards = m_globalExecutor->GetShards();
-		//ASSERT_CRASH(targetShard >= 0 && targetShard < (int)shards.size());
-		//auto shard = shards[targetShard];
-
-		//auto shard = m_globalExecutor->GetShard(tempKey);
-
-		Sptr<Session> s = session; // 캡처용
-		shard->Submit(utils::job::Job([s, this]()
-			{
-				auto& L = this->m_globalExecutor->GetShards()[/*thread-local index or from shard*/]->Local();
-				auto& R = L.world;
-
-				// 1) 엔티티 생성
-				entt::entity e = R.create();
-
-				// 2) 필수 컴포넌트 부착
-				// CompEndpoint
-				ecs::CompEndpoint ep{};
-				ep.owner = static_cast<UdpSession*>(s.get()); // TCP면 TcpSession*
-				R.emplace<ecs::CompEndpoint>(e, ep);
-
-				R.emplace<ecs::CompReliability>(e);
-				R.emplace<ecs::CompFragment>(e);
-				R.emplace<ecs::CompChannel>(e);
-				R.emplace<ecs::CompNetstat>(e);
-				R.emplace<ecs::CompHandshake>(e);
-				R.emplace<ecs::CompCongestion>(e);
-
-				// (선택) 세션 ↔ 엔티티 역참조 보관 (세션 멤버에 entt::entity 저장)
-				s->SetEntity(e);
-
-				// (선택) 그룹 멤버십/메일박스와 연동하고 싶으면 별도 컴포넌트 부착
-				// R.emplace<GroupMember>(e, GroupMember{ .gid = MakeGidFrom(addr or session id) });
-				// R.emplace<MailboxRef>(e, MailboxRef{ .norm = s->GetMailbox() });
-			}));
-
 
 		return session;
 	}
@@ -253,50 +205,50 @@ namespace jam::net
 
 	void Service::ProcessUpdate()
 	{
-		if (!m_running.load())
-			return;
+		//if (!m_running.load())
+		//	return;
 
-		uint64 currentTick = utils::Clock::Instance().GetCurrentTick();
+		//uint64 currentTick = utils::Clock::Instance().GetCurrentTick();
 
-		if (currentTick - m_lastUpdateTick < UPDATE_INTERVAL_MS)
-			return;
+		//if (currentTick - m_lastUpdateTick < UPDATE_INTERVAL_MS)
+		//	return;
 
-		m_lastUpdateTick = currentTick;
+		//m_lastUpdateTick = currentTick;
 
-		{
-			//READ_LOCK  ????
-				for (auto& session : m_tcpSessions | views::values)
-				{
-					if (session && session->IsConnected())
-					{
-						session->Update();
-					}
-				}
-		}
+		//{
+		//	//READ_LOCK  ????
+		//		for (auto& session : m_tcpSessions | views::values)
+		//		{
+		//			if (session && session->IsConnected())
+		//			{
+		//				session->Update();
+		//			}
+		//		}
+		//}
 
-		{
-			READ_LOCK
-				for (auto& session : m_udpSessions | views::values)
-				{
-					if (session && session->IsConnected())
-					{
-						session->Update();
-					}
-				}
-		}
+		//{
+		//	READ_LOCK
+		//		for (auto& session : m_udpSessions | views::values)
+		//		{
+		//			if (session && session->IsConnected())
+		//			{
+		//				session->Update();
+		//			}
+		//		}
+		//}
 
-		{
-			READ_LOCK
-				for (auto& session : m_handshakingUdpSessions | views::values)
-				{
-					if (session)
-					{
-						session->Update();
-					}
-				}
-		}
+		//{
+		//	READ_LOCK
+		//		for (auto& session : m_handshakingUdpSessions | views::values)
+		//		{
+		//			if (session)
+		//			{
+		//				session->Update();
+		//			}
+		//		}
+		//}
 
-		m_globalExecutor->PostAfter(utils::job::Job<Service>(shared_from_this(), ProcessUpdate()), 100);
+		//m_globalExecutor->PostAfter(utils::job::Job<Service>(shared_from_this(), ProcessUpdate()), 100);
 	}
 
 
@@ -355,7 +307,6 @@ namespace jam::net
 		if (m_udpRouter->Start(shared_from_this()) == false)
 			return false;
 
-		//m_workerPool->Run();
 		StartUpdateLoop();
 
 		return true;

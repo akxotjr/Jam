@@ -40,12 +40,12 @@ namespace jam::net
 
 
 
-	enum class eSessionState : uint8
-	{
-		CONNECTED		= 0,
-		DISCONNECTED	= 1,
-		HANDSHAKING		= 2
-	};
+	//enum class eSessionState : uint8
+	//{
+	//	CONNECTED		= 0,
+	//	DISCONNECTED	= 1,
+	//	HANDSHAKING		= 2
+	//};
 
 
 
@@ -66,7 +66,7 @@ namespace jam::net
 
 		bool									IsTcp() { return ExtractProtocol(m_sid) == eProtocolType::TCP; }
 		bool									IsUdp() { return ExtractProtocol(m_sid) == eProtocolType::UDP; }
-		bool									IsConnected() { return m_state == eSessionState::CONNECTED; }
+		//bool									IsConnected() { return m_state == eSessionState::CONNECTED; }
 
 		Sptr<Service>							GetService() { return m_service.lock(); }
 		void									SetService(const Sptr<Service>& service) { m_service = service; }
@@ -76,7 +76,7 @@ namespace jam::net
 		SOCKET									GetSocket() { return m_socket; }
 
 		Sptr<Session>							GetSession() { return static_pointer_cast<Session>(shared_from_this()); }
-		eSessionState							GetState() { return m_state; }
+//		eSessionState							GetState() { return m_state; }
 
 		void									AttachEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key);
 		void									RebindRouteKey(utils::exec::RouteKey newKey);
@@ -103,9 +103,8 @@ namespace jam::net
 		NetAddress								m_remoteAddress = {};
 
 		SessionId								m_sid;
-		eSessionState							m_state = eSessionState::DISCONNECTED;
-
-		Uptr<RpcManager>						m_rpcManager;
+		
+		//Uptr<RpcManager>						m_rpcManager;
 
 		Uptr<SessionEndpoint>					m_endpoint;
 	};

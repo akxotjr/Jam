@@ -10,7 +10,7 @@ namespace jam::utils
 		m_qpcFreq = freq.QuadPart;
 
 		m_tickHz = tickHz;
-		m_tickIntervalNs = (m_tickHz > 0) ? (1'000'000'000ull / m_tickHz) : 0ull;
+		m_tickInterval_ns = (m_tickHz > 0) ? (1'000'000'000ull / m_tickHz) : 0ull;
 
 		const int64 q = ReadQpc();
 		if (m_qpcAtBoot == 0)
@@ -79,11 +79,11 @@ namespace jam::utils
 
 	FractionalTick Clock::NowFractionalTick() const
 	{
-		return ToFractionalTickU64(NowAbsNs(), m_tickIntervalNs);
+		return ToFractionalTickU64(NowAbsNs(), m_tickInterval_ns);
 	}
 
 	FractionalTick Clock::ElapsedFractionalTick() const
 	{
-		return ToFractionalTickU64(ElapsedAbsNs(), m_tickIntervalNs);
+		return ToFractionalTickU64(ElapsedAbsNs(), m_tickInterval_ns);
 	}
 }
