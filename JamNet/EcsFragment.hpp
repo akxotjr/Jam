@@ -48,9 +48,11 @@ namespace jam::net::ecs
         {
             xvector<Sptr<SendBuffer>> fragments;
 
-            if (!ev.buf || ev.analysis.payloadSize == 0) return;
+            if (!ev.buf || ev.analysis.payloadSize == 0) 
+                return;
 
-            uint8 totalCount = (size + MAX_FRAGMENT_PAYLOAD_SIZE - 1) / MAX_FRAGMENT_PAYLOAD_SIZE;  //todo: what is size?
+            const uint32 fullPayload = ev.analysis.payloadSize;
+            const uint8 totalCount = static_cast<uint8>((fullPayload + MAX_FRAGMENT_PAYLOAD_SIZE - 1) / MAX_FRAGMENT_PAYLOAD_SIZE);
             if (totalCount > MAX_FRAGMENTS)
                 return;
 
@@ -59,29 +61,28 @@ namespace jam::net::ecs
 
             const uint16 baseSeq = AllocSeqRange(*R, ev.e, totalCount);
 
-            for (uint8 i = 0; i < totalCount; i++)
+            for (uint8 i = 0; i < totalCount; ++i) 
             {
-                uint32 offset = i * MAX_FRAGMENT_PAYLOAD_SIZE;
-                uint32 payloadSize = min(MAX_FRAGMENT_PAYLOAD_SIZE, size - offset);
-
-                auto fragment = PacketBuilder::CreatePacket(
-                    U2E(ePacketType, originHeader.GetType()),
-                    originHeader.GetId(),
-                    originHeader.GetFlags() | PacketFlags::FRAGMENTED,
-                    eChannelType::RELIABLE_ORDERED,
+                const uint32 offset = i * MAX_FRAGMENT_PAYLOAD_SIZE;
+                const uint32 chunk = std::min<uint32>(MAX_FRAGMENT_PAYLOAD_SIZE, fullPayload - offset);
+                auto frag = PacketBuilder::CreatePacket(
+                    U2E(ePacketType, ev.analysis.header.GetType()),
+                    ev.analysis.header.GetId(),
+                    ev.analysis.header.GetFlags() | PacketFlags::FRAGMENTED,
+                    ev.analysis.header.GetChannel(),
                     payload + offset,
-                    payloadSize,
-                    baseSeq + i,
+                    chunk,
+                    static_cast<uint16>(baseSeq + i),
                     i,
                     totalCount
                 );
-
-                fragments.push_back(fragment);
+                fragments.push_back(frag);
             }
 
-            // todo
-            //auto& ep = R->get<CompEndpoint>(ev.e);
-            //ep.owner->
+            for (auto& frag : fragments) 
+            {
+                ecs::EnqueueSend(*R, ev.e, frag, eTxReason::NORMAL);
+            }
         }
 
     	void Reassemble(const EvFgReassemble& ev)
@@ -95,20 +96,22 @@ namespace jam::net::ecs
             if (!an.isValid || !an.IsFragmented()) return;
 
             uint8 fragIdx = an.GetFragmentIndex();
-            uint8 fragTot = an.GetTotalFragments();
+            uint8 fragTotal = an.GetTotalFragments();
             uint16 seq = an.GetSequence();
-            if (fragTot == 0 || fragIdx >= fragTot) return;
+            if (fragTotal == 0 || fragIdx >= fragTotal) return;
 
             auto payload = an.GetPayloadPtr(ev.buf);
             uint32 psize = an.payloadSize;
 
-            // CleanupStaleReassemblies (lazy)
-            uint64 now = utils::Clock::Instance().GetCurrentTick();
+            // lazy
+            uint64 now = utils::Clock::Instance().NowNs();
             {
                 xvector<uint16> stale;
                 for (auto& [k, re] : st->reassemblies)
-                    if (now - re.lastRecvTime > REASSEMBLY_TIMEOUT_TICK) stale.push_back(k);
-                for (auto k : stale) st->reassemblies.erase(k);
+                    if (now - re.lastRecvTime_ns > REASSEMBLY_TIMEOUT_TICK) 
+                        stale.push_back(k);
+                for (auto k : stale) 
+                    st->reassemblies.erase(k);
             }
 
             uint16 groupKey = static_cast<uint16>(seq - fragIdx);
@@ -116,12 +119,12 @@ namespace jam::net::ecs
 
             if (!re.headerSaved) 
             {
-                re.Init(fragTot);
+                re.Init(fragTotal);
                 re.originalHeader = an.header;
                 re.originalHeader.SetFlags(re.originalHeader.GetFlags() & ~PacketFlags::FRAGMENTED);
                 re.headerSaved = true;
             }
-            if (re.totalCount != fragTot)
+            if (re.totalCount != fragTotal)
             {
 	            st->reassemblies.erase(groupKey);
             	return;
@@ -135,7 +138,7 @@ namespace jam::net::ecs
                 return;
             }
 
-    		re.lastRecvTime = now;
+    		re.lastRecvTime_ns = now;
 
             if (re.IsComplete()) 
             {

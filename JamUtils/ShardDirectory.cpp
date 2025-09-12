@@ -79,7 +79,7 @@ namespace jam::utils::exec
 	{
 		const uint64 n = Size();
 		if (n == 0) return 0;
-		return Mix64(key) % n;		// todo:?
+		return Mix64(key) % n;		// return shard index
 	}
 
 	Sptr<ShardExecutor> ShardDirectory::ShardAt(uint64 i) const

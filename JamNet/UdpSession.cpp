@@ -1,15 +1,15 @@
 #include "pch.h"
 #include "UdpSession.h"
 
-#include "ChannelManager.h"
+//#include "ChannelManager.h"
 #include "Clock.h"
 #include "RpcManager.h"
-#include "FragmentManager.h"
-#include "CongestionController.h"
-#include "NetStatManager.h"
+//#include "FragmentManager.h"
+//#include "CongestionController.h"
+//#include "NetStatManager.h"
 #include "PacketBuilder.h"
-#include "ReliableTransportManager.h"
-#include "HandshakeManager.h"
+//#include "ReliableTransportManager.h"
+//#include "HandshakeManager.h"
 
 
 namespace jam::net
@@ -18,12 +18,12 @@ namespace jam::net
 	{
 		m_sid = GenerateSID(eProtocolType::UDP);
 
-		m_handshakeManager				= std::make_unique<HandshakeManager>(this);
-		m_netStatTracker				= std::make_unique<NetStatManager>();
-		m_congestionController			= std::make_unique<CongestionController>(this);
-		m_fragmentManager				= std::make_unique<FragmentManager>(this);
-		m_reliableTransportManager		= std::make_unique<ReliableTransportManager>(this);
-		m_channelManager				= std::make_unique<ChannelManager>(this);
+		//m_handshakeManager				= std::make_unique<HandshakeManager>(this);
+		//m_netStatTracker				= std::make_unique<NetStatManager>();
+		//m_congestionController			= std::make_unique<CongestionController>(this);
+		//m_fragmentManager				= std::make_unique<FragmentManager>(this);
+		//m_reliableTransportManager		= std::make_unique<ReliableTransportManager>(this);
+		//m_channelManager				= std::make_unique<ChannelManager>(this);
 	}
 
 
@@ -32,18 +32,35 @@ namespace jam::net
 		if (IsConnected())
 			return false;
 
-		m_state = eSessionState::HANDSHAKING;
-		m_handshakeManager->InitiateConnection();
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+
+		m_endpoint->EmitConnect();
+
+		//Post(utils::job::Job([this]()
+		//	{
+		//		this->m_state = eSessionState::HANDSHAKING;
+		//		
+		//	}));
+
+		//m_state = eSessionState::HANDSHAKING;
+		//m_handshakeManager->InitiateConnection();
 		return true;
 	}
 
 	void UdpSession::Disconnect(const WCHAR* cause)
 	{
-		if (IsConnected() == false)
-			return;
+		//if (IsConnected() == false)
+		//	return;
 
-		m_state = eSessionState::HANDSHAKING;
-		m_handshakeManager->InitiateDisconnection();
+		//Post(utils::job::Job([this]()
+		//	{
+		//		this->m_state = eSessionState::HANDSHAKING;
+		//		
+		//	}));
+		//m_state = eSessionState::HANDSHAKING;
+		//m_handshakeManager->InitiateDisconnection();
+
+		m_endpoint->EmitDisconnect();
 	}
 
 	void UdpSession::Send(const Sptr<SendBuffer>& buf)
@@ -51,18 +68,20 @@ namespace jam::net
 		if (!buf || !buf->Buffer())
 			return;
 
-		auto self = static_pointer_cast<UdpSession>(shared_from_this());
-		self->Post(utils::job::Job([self, buf] {
-				self->ProcessSend(buf);
-			}));
+		//auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		//self->Post(utils::job::Job([self, buf] {
+		//		self->ProcessSend(buf);
+		//	}));
+
+		m_endpoint->EmitSend();
 	}
 
 	void UdpSession::Update()
 	{
-		auto self = static_pointer_cast<UdpSession>(shared_from_this());
-		self->Post(utils::job::Job([self] {
-				self->ProcessUpdate();
-			}));
+		//auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		//self->Post(utils::job::Job([self] {
+		//		self->ProcessUpdate();
+		//	}));
 	}
 
 	void UdpSession::OnLinkEstablished()
@@ -70,7 +89,7 @@ namespace jam::net
 		GetService()->CompleteUdpHandshake(m_remoteAddress);
 		auto self = static_pointer_cast<UdpSession>(shared_from_this());
 		self->PostCtrl(utils::job::Job([self] {
-				self->m_state = eSessionState::CONNECTED;
+				//self->m_state = eSessionState::CONNECTED;
 				self->OnConnected();
 			}));
 	}
@@ -79,7 +98,7 @@ namespace jam::net
 	{
 		auto self = static_pointer_cast<UdpSession>(shared_from_this());
 		self->PostCtrl(utils::job::Job([self] {
-				self->m_state = eSessionState::DISCONNECTED;
+				//self->m_state = eSessionState::DISCONNECTED;
 				self->OnDisconnected();
 			}));
 		GetService()->ReleaseUdpSession(static_pointer_cast<UdpSession>(shared_from_this()));
@@ -101,7 +120,9 @@ namespace jam::net
 
 	uint32 UdpSession::ParsePacket(BYTE* buf, uint32 size)
 	{
-		PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf, size);
+
+
+		/*PacketAnalysis analysis = PacketBuilder::AnalyzePacket(buf, size);
 
 		if (!analysis.isValid)
 			return 0;
@@ -169,7 +190,7 @@ namespace jam::net
 		}
 		}
 
-		return analysis.totalSize;
+		return analysis.totalSize;*/
 	}
 
 	void UdpSession::HandleSystemPacket(uint8 id, BYTE* payload, uint32 payloadSize)
@@ -290,34 +311,35 @@ namespace jam::net
 
 	void UdpSession::ProcessUpdate()
 	{
-		if (m_state == eSessionState::DISCONNECTED)
-			return;
+		//if (m_state == eSessionState::DISCONNECTED)
+		//	return;
 
-		if (m_state == eSessionState::HANDSHAKING)
-		{
-			if (m_handshakeManager)
-			{
-				m_handshakeManager->Update();
-			}
-			return;
-		}
+		//if (m_state == eSessionState::HANDSHAKING)
+		//{
+		//	if (m_handshakeManager)
+		//	{
+		//		m_handshakeManager->Update();
+		//	}
+		//	return;
+		//}
 
 
-		if (m_netStatTracker)
-		{
-			m_netStatTracker->Update();
-		}
+		//if (m_netStatTracker)
+		//{
+		//	m_netStatTracker->Update();
+		//}
 
-		if (m_reliableTransportManager)
-		{
-			m_reliableTransportManager->Update();
-		}
+		//if (m_reliableTransportManager)
+		//{
+		//	m_reliableTransportManager->Update();
+		//}
 	}
 
 
 	void UdpSession::SendDirect(const Sptr<SendBuffer>& buf)
 	{
-		// todo: post to io-thread (in Service::GE) 
+		// todo: post to io-thread (in Service::GE)
+		
 		GetService()->m_udpRouter->RegisterSend(buf, GetRemoteNetAddress());
 	}
 

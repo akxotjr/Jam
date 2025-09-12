@@ -71,7 +71,7 @@ namespace jam::net::ecs
 
 	private:
 		std::vector<Slot>		m_slots;
-		uint32_t				m_freeHead = UINT32_MAX;
+		uint32					m_freeHead = UINT32_MAX;
 	};
 
 

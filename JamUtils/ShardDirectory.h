@@ -54,6 +54,4 @@ namespace jam::utils::exec
         std::vector<Sptr<ShardExecutor>>    m_shards;   // Own/Adopt 공통 보관
         std::vector<ShardSlot>              m_slots;    
 	};
-
-
 }

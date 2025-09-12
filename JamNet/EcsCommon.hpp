@@ -24,35 +24,4 @@ namespace jam::net::ecs
 	{
 		UdpSession* owner;
 	};
-
-
-	//struct GroupMember
-//{
-//	uint64 gid = 0;
-//	utils::exec::GroupHomeKey gk{ 0 };
-//};
-
-//struct SendQueue
-//{
-//	std::deque<Sptr<SendBuffer>> q;
-//};
-
-//struct BackpressureConfig
-//{
-//	uint64 maxQueue = 1024;
-//	bool dropWhenFull = true;
-//};
-
-//struct BackpressureStats
-//{
-//	uint64 dropped = 0;
-//	uint64 delayed = 0;
-//};
-
-//struct GroupMulticastEvent
-//{
-//	uint64 group_id;
-//	utils::job::Job j;
-//};
-
 }

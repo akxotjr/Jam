@@ -168,6 +168,15 @@
     <ClInclude Include="EcsHandle.h">
       <Filter>06.ECS\utils</Filter>
     </ClInclude>
+    <ClInclude Include="EcsTransport.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsTransportAPI.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
+    <ClInclude Include="EcsGroup.hpp">
+      <Filter>06.ECS\ecs</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NetAddress.cpp">

@@ -81,6 +81,7 @@ namespace jam::utils::exec
 	void GlobalExecutor::PostAfter(job::Job job, uint64 delay_ns)
 	{
 		std::unique_lock lk(m_timerMutex);
+
 		const uint64 now_ns = Clock::Instance().NowNs();
 		m_timedItems.push(TimedItem{ .due_ns= now_ns + delay_ns, .job= std::move(job) });
 		m_timerCv.notify_one();

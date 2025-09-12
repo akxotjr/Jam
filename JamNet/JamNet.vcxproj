@@ -156,10 +156,13 @@
     <ClInclude Include="EcsCommon.hpp" />
     <ClInclude Include="EcsCongestionControl.hpp" />
     <ClInclude Include="EcsFragment.hpp" />
+    <ClInclude Include="EcsGroup.hpp" />
     <ClInclude Include="EcsHandle.h" />
     <ClInclude Include="EcsHandshake.hpp" />
     <ClInclude Include="EcsNetstat.hpp" />
     <ClInclude Include="EcsReliability.hpp" />
+    <ClInclude Include="EcsTransport.hpp" />
+    <ClInclude Include="EcsTransportAPI.hpp" />
     <ClInclude Include="FragmentManager.h" />
     <ClInclude Include="HandshakeManager.h" />
     <ClInclude Include="IocpEvent.h" />

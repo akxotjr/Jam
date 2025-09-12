@@ -24,6 +24,7 @@
 #include "JamEnums.h"
 #include "JamValues.h"
 #include "JamMacro.h"
+#include "TimeUnits.h"
 
 /** jam::utils::memory **/
 #include "Containers.h"

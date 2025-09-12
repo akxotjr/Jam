@@ -30,8 +30,29 @@ namespace jam::net
         void LeaveGroup(uint64 group_id, utils::exec::GroupHomeKey gk);
         void PostGroup(uint64 group_id, utils::exec::GroupHomeKey gk, utils::job::Job j);
 
+        void BindSession(std::weak_ptr<Session> s);
 
-        void BindSession(std::weak_ptr<Session> s) { m_session = std::move(s); }
+
+        // Emit Helpers
+
+        template<typename Ev>
+        void Emit(Ev ev)
+        {
+            PostCtrl(utils::job::Job([wk = m_boundShard, ev = std::move(ev), e = m_entitiy]() mutable {
+	                if (auto sh = wk.lock())
+	                {
+	                    auto& L = sh->Local();            // ShardLocal
+	                    ev.e = e;                         // 엔티티 주입
+	                    L.events.enqueue<Ev>(std::move(ev));
+	                }
+                }));
+        }
+
+        
+        void EmitConnect();
+        void EmitDisconnect();
+        void EmitSend();
+        void EmitRecv();
 
     private:
         void RefreshEnpoint();
@@ -50,7 +71,6 @@ namespace jam::net
         utils::exec::ShardDirectory*                m_dir = nullptr;   
         std::atomic<bool>                           m_closed{ false };
 
-        // 채널별 슬롯 엔드포인트(슬롯/세대 스냅샷 포함)
         utils::exec::ShardEndpoint                  m_epNorm{nullptr};
         utils::exec::ShardEndpoint                  m_epCtrl{nullptr};
 
@@ -58,9 +78,8 @@ namespace jam::net
         Sptr<utils::exec::Mailbox>                  m_mbCtrl;
         Wptr<utils::exec::ShardExecutor>            m_boundShard;
 
-        //ecs-temp
-        entt::entity            m_entitiy{ entt::null };
-        std::weak_ptr<Session>  m_session;
+        entt::entity                                m_entitiy{ entt::null };
+        std::weak_ptr<Session>                      m_session;
 	};
 
 }

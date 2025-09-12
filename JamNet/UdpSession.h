@@ -1,32 +1,23 @@
 #pragma once
-#include "EcsReliability.hpp"
+
 #include "Session.h"
 #include "RecvBuffer.h"
-
-
 
 namespace jam::net
 {
 	struct PacketAnalysis;
-	class CongestionController;
-	class ReliableTransportManager;
-	class FragmentManager;
-	class NetStatManager;
-	class HandshakeManager;
-	class ChannelManager;
+	//class CongestionController;
+	//class ReliableTransportManager;
+	//class FragmentManager;
+	//class NetStatManager;
+	//class HandshakeManager;
+	//class ChannelManager;
 	
 
 	/*--------------------------
 		 ReliableUdpSession
 	---------------------------*/
 
-#pragma pack(push, 1)
-	struct AckHeader
-	{
-		uint16 latestSeq = 0;
-		uint32 bitfield;
-	};
-#pragma pack(pop)
 
 
 	struct PING
@@ -56,11 +47,11 @@ namespace jam::net
 		friend class IocpCore;
 		friend class Service;
 
-		friend class CongestionController;
-		friend class NetStatManager;
-		friend class HandshakeManager;
-		friend class ReliableTransportManager;
-		friend class ChannelManager;
+		//friend class CongestionController;
+		//friend class NetStatManager;
+		//friend class HandshakeManager;
+		//friend class ReliableTransportManager;
+		//friend class ChannelManager;
 
 		friend struct jam::net::ecs::ReliabilityHandlers;
 
@@ -95,11 +86,11 @@ namespace jam::net
 
 		void									HandleError(int32 errorCode);
 
-		CongestionController* GetCongestionController() { return m_congestionController.get(); }
-		NetStatManager* GetNetStatManager() { return m_netStatTracker.get(); }
-		ReliableTransportManager* GetReliableTransportManager() { return m_reliableTransportManager.get(); }
-		FragmentManager* GetFragmentManager() { return m_fragmentManager.get(); }
-		HandshakeManager* GetHandshakeManager() { return m_handshakeManager.get(); }
+		//CongestionController* GetCongestionController() { return m_congestionController.get(); }
+		//NetStatManager* GetNetStatManager() { return m_netStatTracker.get(); }
+		//ReliableTransportManager* GetReliableTransportManager() { return m_reliableTransportManager.get(); }
+		//FragmentManager* GetFragmentManager() { return m_fragmentManager.get(); }
+		//HandshakeManager* GetHandshakeManager() { return m_handshakeManager.get(); }
 
 		void									PushSendQueue(const Sptr<SendBuffer>& buf) { m_sendQueue.push(buf); }
 
@@ -136,12 +127,12 @@ namespace jam::net
 		xqueue<Sptr<SendBuffer>>				m_sendQueue;
 		static constexpr uint32 MAX_SENDQUEUE_SIZE = 100;
 
-		Uptr<HandshakeManager>					m_handshakeManager = nullptr;
-		Uptr<NetStatManager>					m_netStatTracker = nullptr;
-		Uptr<CongestionController>				m_congestionController = nullptr;
-		Uptr<FragmentManager>					m_fragmentManager = nullptr;
-		Uptr<ReliableTransportManager> 			m_reliableTransportManager = nullptr;
-		Uptr<ChannelManager>					m_channelManager = nullptr;
+		//Uptr<HandshakeManager>					m_handshakeManager = nullptr;
+		//Uptr<NetStatManager>					m_netStatTracker = nullptr;
+		//Uptr<CongestionController>				m_congestionController = nullptr;
+		//Uptr<FragmentManager>					m_fragmentManager = nullptr;
+		//Uptr<ReliableTransportManager> 			m_reliableTransportManager = nullptr;
+		//Uptr<ChannelManager>					m_channelManager = nullptr;
 	};
 
 }

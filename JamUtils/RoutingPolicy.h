@@ -46,8 +46,8 @@ namespace jam::utils::exec
 	public:
 		explicit RoutingPolicy(RouteSeed s) : m_seed(s) {}
 
-		// PerUser 기본
-		RouteKey KeyForSession(uint64 user_id) const { return RouteKey(Mix64(user_id ^ m_seed.k0)); }
+		// PerSession 기본
+		RouteKey KeyForSession(uint64 session_id) const { return RouteKey(Mix64(session_id ^ m_seed.k0)); }
 
 		// 그룹성 작업 오버라이드에 사용
 		GroupHomeKey KeyForGroup(uint64 group_id) const { return GroupHomeKey(Mix64(group_id ^ m_seed.k1)); }

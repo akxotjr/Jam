@@ -1,6 +1,15 @@
 #include "pch.h"
 #include "SessionEndpoint.h"
 
+// ECS 컴포넌트들 포함
+#include "EcsCommon.hpp"
+#include "EcsReliability.hpp"
+#include "EcsFragment.hpp"
+#include "EcsChannel.hpp"
+#include "EcsHandshake.hpp"
+#include "EcsNetstat.hpp"
+#include "EcsCongestionControl.hpp"
+
 namespace jam::net
 {
 	SessionEndpoint::SessionEndpoint(utils::exec::ShardDirectory& dir, utils::exec::RouteKey key)
@@ -33,6 +42,31 @@ namespace jam::net
 		(void)home_ep.Post(utils::job::Job([s = home_shard, group_id, jj = std::move(j)]() mutable {
 				s->OnGroupMulticastHome(group_id, std::move(jj));
 			}));
+	}
+
+	void SessionEndpoint::BindSession(std::weak_ptr<Session> s)
+	{
+		m_session = std::move(s);
+		EnsureBound();
+	}
+
+	void SessionEndpoint::EmitConnect()
+	{
+		Emit(ecs::EvHsConnect{});
+	}
+
+	void SessionEndpoint::EmitDisconnect()
+	{
+		Emit(ecs::EvHsDisconnect{});
+	}
+
+	void SessionEndpoint::EmitSend()
+	{
+		Emit(ecs::EvReSendR{});
+	}
+
+	void SessionEndpoint::EmitRecv()
+	{
 	}
 
 	void SessionEndpoint::RebindKey(utils::exec::RouteKey newKey)
@@ -126,14 +160,29 @@ namespace jam::net
 		m_mbCtrl = std::move(qC);
 		m_boundShard = shard;
 
-		// ecs-temp
+		// 엔드포인트 생성 시 ECS 엔티티를 샤드 로컬에 생성해 컴포넌트 구성
 		if (m_entitiy != entt::null) return;
 		shard->Local().defers.emplace_back([this](entt::registry& r)
 			{
+				if (m_entitiy != entt::null) return;
+
 				m_entitiy = r.create();
-				r.emplace<ecs::SessionRef>(m_entitiy, m_session);
+
+				// 세션/메일박스/라우팅키 연결
+				r.emplace<ecs::SessionRef>(m_entitiy, ecs::SessionRef{ m_session });
 				r.emplace<ecs::MailboxRef>(m_entitiy, ecs::MailboxRef{ m_mbNorm, m_mbCtrl });
 				r.emplace<utils::exec::RouteKey>(m_entitiy, utils::exec::RouteKey{ m_key });
+
+				// 네트워크 ECS 컴포넌트 기본 셋업
+				r.emplace<ecs::CompReliability>(m_entitiy);
+				r.emplace<ecs::CompFragment>(m_entitiy);
+				r.emplace<ecs::CompChannel>(m_entitiy);
+				r.emplace<ecs::CompNetstat>(m_entitiy);
+				r.emplace<ecs::CompHandshake>(m_entitiy);
+				r.emplace<ecs::CompCongestion>(m_entitiy);
+
+				// 필요 시 추가 컴포넌트도 여기서 부착
+				// r.emplace<GroupMember>(...);
 			});
 	}
 
@@ -147,7 +196,7 @@ namespace jam::net
 		auto locked = m_boundShard.lock();
 		if (locked == shard) return; // 같은 실행자면 메일박스 재생성 불필요
 
-		WRITE_LOCK
+		WRITE_LOCK	
 		locked = m_boundShard.lock();
 		if (locked == shard) return;
 
@@ -159,8 +208,6 @@ namespace jam::net
 		m_mbNorm.swap(mbN);
 		m_mbCtrl.swap(mbC);
 		m_boundShard = shard;
-
-
 	}
 
 	void SessionEndpoint::PostImpl(utils::job::Job j, utils::exec::eMailboxChannel ch)

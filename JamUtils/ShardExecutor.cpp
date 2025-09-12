@@ -219,7 +219,7 @@ namespace jam::utils::exec
 			// 실행자 기반 엔드포인트로 직접 Post
 			ShardEndpoint ep(remote);
 			ep.Post(job::Job([remote, group_id, j] {
-				remote->OnGroupMulticastRemote(group_id, j);
+					remote->OnGroupMulticastRemote(group_id, j);
 				}));
 		}
 	}
@@ -257,12 +257,14 @@ namespace jam::utils::exec
 		auto& L = m_local;
 
 		// 1) Systems run in fixed order
-		for (auto* fn : L.systems) {
+		for (auto* fn : L.systems) 
+		{
 			fn(L, now_ns, dt_ns);
 		}
 
 		// 2) 프레임 말미 지연 작업 일괄 반영
-		if (!L.defers.empty()) {
+		if (!L.defers.empty()) 
+		{
 			for (auto& f : L.defers) f(L.world);
 			L.defers.clear();
 		}
