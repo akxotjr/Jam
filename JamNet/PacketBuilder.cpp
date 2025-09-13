@@ -87,7 +87,7 @@ namespace jam::net
 		return result;
 	}
 
-	bool PacketBuilder::ParsePacketHeader(BYTE* buf, uint32 size, PacketHeader& pktHeader)
+	bool PacketBuilder::ParsePacketHeader(BYTE* buf, uint32 size, OUT PacketHeader& pktHeader)
 	{
 		PacketAnalysis analysis = AnalyzePacket(buf, size);
 		if (analysis.isValid)

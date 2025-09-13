@@ -121,6 +121,7 @@
       <Filter>06.Sys</Filter>
     </ClCompile>
     <ClCompile Include="RoutingPolicy.cpp" />
+    <ClCompile Include="ShardTLS.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -238,5 +239,6 @@
     <ClInclude Include="TimeUnits.h">
       <Filter>04.Utils</Filter>
     </ClInclude>
+    <ClInclude Include="ShardTLS.h" />
   </ItemGroup>
 </Project>

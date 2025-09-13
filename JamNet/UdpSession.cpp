@@ -7,6 +7,8 @@
 //#include "FragmentManager.h"
 //#include "CongestionController.h"
 //#include "NetStatManager.h"
+#include "EcsChannel.hpp"
+#include "EcsTransport.hpp"
 #include "PacketBuilder.h"
 //#include "ReliableTransportManager.h"
 //#include "HandshakeManager.h"
@@ -68,12 +70,12 @@ namespace jam::net
 		if (!buf || !buf->Buffer())
 			return;
 
+
+		m_endpoint->EmitSend(buf);
 		//auto self = static_pointer_cast<UdpSession>(shared_from_this());
 		//self->Post(utils::job::Job([self, buf] {
-		//		self->ProcessSend(buf);
+		//		jam::net::ecs::EnqueueSend()
 		//	}));
-
-		m_endpoint->EmitSend();
 	}
 
 	void UdpSession::Update()

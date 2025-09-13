@@ -11,5 +11,5 @@ namespace jam::net::ecs
         ACK_ONLY,
     };
 
-    void EnqueueSend(entt::registry& R, entt::entity e, const Sptr<SendBuffer>& buf, eTxReason reason);
+    void EnqueueSend(/*entt::registry& R,*/ entt::entity e, const Sptr<SendBuffer>& buf, eTxReason reason);
 }

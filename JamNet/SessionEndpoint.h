@@ -51,7 +51,7 @@ namespace jam::net
         
         void EmitConnect();
         void EmitDisconnect();
-        void EmitSend();
+        void EmitSend(const Sptr<SendBuffer>& buf);
         void EmitRecv();
 
     private:

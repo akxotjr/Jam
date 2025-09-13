@@ -9,6 +9,7 @@
 #include "EcsHandshake.hpp"
 #include "EcsNetstat.hpp"
 #include "EcsCongestionControl.hpp"
+#include "EcsTransport.hpp"
 
 namespace jam::net
 {
@@ -60,9 +61,9 @@ namespace jam::net
 		Emit(ecs::EvHsDisconnect{});
 	}
 
-	void SessionEndpoint::EmitSend()
+	void SessionEndpoint::EmitSend(const Sptr<SendBuffer>& buf)
 	{
-		Emit(ecs::EvReSendR{});
+		Post(utils::job::Job([this, buf] { EnqueueSend(m_entitiy, buf, ecs::eTxReason::NORMAL); }));
 	}
 
 	void SessionEndpoint::EmitRecv()

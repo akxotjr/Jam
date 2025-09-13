@@ -145,9 +145,7 @@ namespace jam::net::ecs
                 if (it == buf.end()) break;
 
                 auto& pkt = it->second;
-                owner->ProcessBufferedPacket(pkt.analysis,
-                    const_cast<BYTE*>(pkt.payload.data()),
-                    static_cast<uint32>(pkt.payload.size()));
+                owner->ProcessBufferedPacket(pkt.analysis, const_cast<BYTE*>(pkt.payload.data()), static_cast<uint32>(pkt.payload.size()));
                 buf.erase(it);
                 ++expected;
             }
@@ -163,12 +161,15 @@ namespace jam::net::ecs
 
     inline void ChannelWiringSystem(utils::exec::ShardLocal& L, uint64, uint64)
     {
-        auto& R = L.world; auto& D = L.events;
+        auto& R = L.world;
+    	auto& D = L.events;
         auto& sinks = R.ctx().emplace<ChannelSinks>();
         if (sinks.wired) return;
         sinks.handlers.R = &R;
+
         sinks.onRecv = D.sink<EvChRecv>().connect<&ChannelHandlers::OnRecv>(&sinks.handlers);
-        sinks.wired = true;
+
+    	sinks.wired = true;
     }
 
     inline void ChannelTickSystem(utils::exec::ShardLocal& L, uint64 now_ns, uint64 dt_ns)

@@ -182,6 +182,7 @@
     <ClInclude Include="ShardEndpoint.h" />
     <ClInclude Include="ShardExecutor.h" />
     <ClInclude Include="ShardSlot.h" />
+    <ClInclude Include="ShardTLS.h" />
     <ClInclude Include="TimeUnits.h" />
     <ClInclude Include="WinFiberBackend.h" />
     <ClInclude Include="WorkerPool.h" />
@@ -223,6 +224,7 @@
     <ClCompile Include="ShardEndpoint.cpp" />
     <ClCompile Include="ShardExecutor.cpp" />
     <ClCompile Include="ShardSlot.cpp" />
+    <ClCompile Include="ShardTLS.cpp" />
     <ClCompile Include="WinFiberBackend.cpp" />
     <ClCompile Include="WorkerPool.cpp" />
     <ClCompile Include="TLS.cpp" />

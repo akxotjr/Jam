@@ -4,11 +4,17 @@
 
 #include "EcsHandle.h"
 #include "EcsReliability.hpp"
+//#include "EcsTransport.hpp"
 #include "FragmentManager.h"
 #include "PacketBuilder.h"
+#include "ShardTLS.h"
 
 namespace jam::net::ecs
 {
+    // fwd
+
+    struct EvTxEnqueue;
+
 	// Components
 
 	struct CompFragment
@@ -42,10 +48,12 @@ namespace jam::net::ecs
 
     struct FragmentHandlers
 	{
-        entt::registry* R{};
-
         void Fragmentize(const EvFgFragmentize& ev)
         {
+            auto& L = SHARD_LOCAL_CHECKED();
+            auto& R = L.world;
+
+
             xvector<Sptr<SendBuffer>> fragments;
 
             if (!ev.buf || ev.analysis.payloadSize == 0) 
@@ -59,7 +67,7 @@ namespace jam::net::ecs
             PacketHeader originHeader = ev.analysis.header;
             BYTE* payload = ev.analysis.GetPayloadPtr(ev.buf->Buffer());
 
-            const uint16 baseSeq = AllocSeqRange(*R, ev.e, totalCount);
+            const uint16 baseSeq = AllocSeqRange(R, ev.e, totalCount);
 
             for (uint8 i = 0; i < totalCount; ++i) 
             {
@@ -81,14 +89,20 @@ namespace jam::net::ecs
 
             for (auto& frag : fragments) 
             {
-                ecs::EnqueueSend(*R, ev.e, frag, eTxReason::NORMAL);
+                auto& R = SHARD_LOCAL_CHECKED();
+                auto& D = R.events;
+
+                D.enqueue<EvTxEnqueue>(EvTxEnqueue{ ev.e, frag, eTxReason::NORMAL, frag->WriteSize() });
             }
         }
 
     	void Reassemble(const EvFgReassemble& ev)
     	{
-            auto& pools = R->ctx().get<EcsHandlePools>();
-            auto& cf = R->get<CompFragment>(ev.e);
+            auto& L = SHARD_LOCAL_CHECKED();
+            auto& R = L.world;
+
+            auto& pools = R.ctx().get<EcsHandlePools>();
+            auto& cf = R.get<CompFragment>(ev.e);
             auto* st = pools.fragments.get(cf.hStore);
             if (!st) return;
 
@@ -147,7 +161,7 @@ namespace jam::net::ecs
                 st->reassemblies.erase(groupKey);
                 
 				// todo
-                auto& ep = R->get<CompEndpoint>(ev.e);
+                auto& ep = R.get<CompEndpoint>(ev.e);
                 //ep.owner->
             }
         }
@@ -166,14 +180,13 @@ namespace jam::net::ecs
     };
 
 	// Systems
-
+    // todo: 여기 인자에서도 ShardLocal 을 없애도 되나?
     inline void FragmentWiringSystem(utils::exec::ShardLocal& L, uint64, uint64)
 	{
         auto& R = L.world;
     	auto& D = L.events;
         auto& sinks = R.ctx().emplace<FragmentSinks>();
     	if (sinks.wired) return;
-    	sinks.handlers.R = &R;
 
         sinks.onFragmentize     = D.sink<EvFgFragmentize>().connect<&FragmentHandlers::Fragmentize>(&sinks.handlers);
         sinks.onReassemble      = D.sink<EvFgReassemble>().connect<&FragmentHandlers::Reassemble>(&sinks.handlers);

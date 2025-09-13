@@ -6,9 +6,16 @@
 
 #include "EcsReliability.hpp"
 #include "EcsCongestionControl.hpp"    
+#include "EcsFragment.hpp"
 #include "EcsNetstat.hpp"
 
 #include "PacketBuilder.h"
+#include "ShardTLS.h"
+
+namespace jam::net::ecs
+{
+	struct EvFgFragmentize;
+}
 
 namespace jam::net::ecs
 {
@@ -62,8 +69,6 @@ namespace jam::net::ecs
 
     struct TransportHandlers
     {
-        entt::registry* R{};
-
         static int32 Priority(eTxReason r) noexcept
     	{
             switch (r)
@@ -77,20 +82,25 @@ namespace jam::net::ecs
         }
 
 
-        // todo: change to PacketAnalysis
-        static bool IsReliable(const Sptr<SendBuffer>&buf)
-    	{
-            if (!buf || !buf->Buffer()) return false;
-            auto* h = reinterpret_cast<PacketHeader*>(buf->Buffer());
-            return h->IsReliable();
-        }
+     //   // todo: change to PacketAnalysis
+     //   static bool IsReliable(const Sptr<SendBuffer>&buf)
+    	//{
+     //       if (!buf || !buf->Buffer()) return false;
+     //       auto* h = reinterpret_cast<PacketHeader*>(buf->Buffer());
+     //       return h->IsReliable();
+     //   }
 
 
         // Piggyback 시도 (성공 시 true)
         bool TryPiggyback(entt::entity e, PendingTx& txp)
     	{
-            if (!R->all_of<CompReliability>(e)) return false;
-            auto& cr = R->get<CompReliability>(e);
+            auto& L = SHARD_LOCAL_CHECKED();
+            auto& R = L.world;
+            auto& D = L.events;
+
+            if (!R.all_of<CompReliability>(e)) return false;
+
+            auto& cr = R.get<CompReliability>(e);
             if (!cr.hasPendingAck) return false;
             if (txp.reason == eTxReason::ACK_ONLY) return false;
             if (!IsReliable(txp.buf)) return false;
@@ -120,21 +130,25 @@ namespace jam::net::ecs
 
         bool CanFlush(entt::entity e)
         {
-            // 혼잡/인플라이트 검사 (선택)
-            if (!R->all_of<CompReliability, CompCongestion>(e)) return true;
-            auto& cr = R->get<CompReliability>(e);
-            auto& cc = R->get<CompCongestion>(e);
+            auto& L = SHARD_LOCAL_CHECKED();
+            auto& R = L.world;
+
+            if (!R.all_of<CompReliability, CompCongestion>(e)) return true;
+            auto& cr = R.get<CompReliability>(e);
+            auto& cc = R.get<CompCongestion>(e);
             return (cr.inFlightSize < cc.cwnd);
         }
 
         void OnEnqueue(const EvTxEnqueue& ev)
         {
+            auto& L = SHARD_LOCAL_CHECKED();
+            auto& R = L.world;
+            auto& D = L.events;
+
             if (!ev.buf || !ev.buf->Buffer()) return;
-            auto& tx = R->get<CompTransportTx>(ev.e);
+            auto& tx = R.get<CompTransportTx>(ev.e);
             tx.queue.push_back(PendingTx{ ev.buf, ev.reason, ev.size });
             tx.bytesQueued += ev.size;
-
-            R->ctx().get<entt::dispatcher>().enqueue<EvNsOnSend>(EvNsOnSend{ ev.e, ev.size });
 
             // 즉시 플러시 조건
             bool immediate = false;
@@ -153,24 +167,28 @@ namespace jam::net::ecs
             if (tx.queue.size() >= TRANSPORT_BATCH_MAX) immediate = true;
             if (immediate && CanFlush(ev.e))
             {
-                R->ctx().get<entt::dispatcher>().enqueue<EvTxFlush>(EvTxFlush{ ev.e });
+               D.enqueue<EvTxFlush>(EvTxFlush{ ev.e });
             }
         }
 
         void OnFlush(const EvTxFlush& ev)
         {
-            if (!R->all_of<CompTransportTx, CompEndpoint>(ev.e)) return;
-            auto& tx = R->get<CompTransportTx>(ev.e);
+            auto& L = SHARD_LOCAL_CHECKED();
+            auto& R = L.world;
+            auto& D = L.events;
+
+            if (!R.all_of<CompTransportTx, CompEndpoint>(ev.e)) return;
+            auto& tx = R.get<CompTransportTx>(ev.e);
             if (tx.queue.empty()) return;
 
             // (1) 지연 ACK 타임아웃이면 standalone ACK_ONLY 패킷 삽입 (Piggyback 못 찾을 대비)
-            if (R->all_of<CompReliability>(ev.e)) 
+            if (R.all_of<CompReliability>(ev.e)) 
             {
-                auto& cr = R->get<CompReliability>(ev.e);
+                auto& cr = R.get<CompReliability>(ev.e);
                 if (cr.hasPendingAck) 
                 {
                     uint64 now = utils::Clock::Instance().NowNs();
-                    if ((now - cr.firstPendingAckTick) >= MAX_DELAY_TICK_PIGGYBACK_ACK) 
+                    if ((now - cr.firstPendingAckTime_ns) >= MAX_DELAY_TICK_PIGGYBACK_ACK) 
                     {
                         auto ackBuf = PacketBuilder::CreateReliabilityAckPacket(cr.pendingAckSeq, cr.pendingAckBitfield);
                         tx.queue.push_back(PendingTx{ ackBuf, eTxReason::ACK_ONLY, ackBuf->WriteSize() });
@@ -179,18 +197,19 @@ namespace jam::net::ecs
             }
 
             // (2) 우선순위 정렬
-            std::stable_sort(tx.queue.begin(), tx.queue.end(),
-                [](const PendingTx& a, const PendingTx& b) {
-                    return Priority(a.reason) < Priority(b.reason);
-                });
+            ranges::stable_sort(tx.queue, [](const PendingTx& a, const PendingTx& b) { return Priority(a.reason) < Priority(b.reason); });
 
             // (3) Piggyback 1회 시도 (뒤에서부터 Reliable 후보)
             bool piggyOK = false;
-            if (R->all_of<CompReliability>(ev.e)) {
-                auto& cr = R->get<CompReliability>(ev.e);
-                if (cr.hasPendingAck) {
-                    for (int i = (int)tx.queue.size() - 1; i >= 0; --i) {
-                        if (TryPiggyback(ev.e, tx.queue[i])) {
+            if (R.all_of<CompReliability>(ev.e)) 
+            {
+                auto& cr = R.get<CompReliability>(ev.e);
+                if (cr.hasPendingAck) 
+                {
+                    for (int i = static_cast<int32>(tx.queue.size()) - 1; i >= 0; --i) 
+                    {
+                        if (TryPiggyback(ev.e, tx.queue[i])) 
+                        {
                             piggyOK = true;
                             break;
                         }
@@ -201,12 +220,24 @@ namespace jam::net::ecs
             // (4) 성공했다면 ACK_ONLY 항목 제거
             if (piggyOK) 
             {
-                tx.queue.erase(std::remove_if(tx.queue.begin(), tx.queue.end(),
-                    [](const PendingTx& p) { return p.reason == eTxReason::ACK_ONLY; }), tx.queue.end());
+                std::erase_if(tx.queue, [](const PendingTx& p) { return p.reason == eTxReason::ACK_ONLY; });
             }
             // (piggy 실패 + timeout이면 ACK_ONLY 남아 있으므로 그대로 전송)
 
-            auto& ep = R->get<CompEndpoint>(ev.e);
+
+            for (auto& p : tx.queue)
+            {
+                PacketAnalysis an = PacketBuilder::AnalyzePacket(p.buf->Buffer(), p.buf->WriteSize());
+                if (an.IsReliable())
+                {
+                	D.enqueue<EvNsOnSendR>(EvNsOnSendR{ ev.e });
+                }
+
+                D.enqueue<EvNsOnSend>(EvNsOnSend{ ev.e });
+            }
+
+
+            auto& ep = R.get<CompEndpoint>(ev.e);
 
             // 큐 스왑하여 락없이 전송 준비
             xvector<PendingTx> batch;
@@ -243,7 +274,8 @@ namespace jam::net::ecs
 
     inline void TransportWiringSystem(utils::exec::ShardLocal& L, uint64, uint64)
     {
-        auto& R = L.world; auto& D = L.events;
+        auto& R = L.world;
+    	auto& D = L.events;
         auto& s = R.ctx().emplace<TransportSinks>();
         if (s.wired) return;
         s.handlers.R = &R;
@@ -257,6 +289,7 @@ namespace jam::net::ecs
     inline void TransportTickSystem(utils::exec::ShardLocal& L, uint64 now_ns, uint64 dt_ns)
     {
         auto& R = L.world;
+        auto& D = L.events;
         auto view = R.view<CompTransportTx, CompEndpoint>();
         for (auto e : view)
         {
@@ -278,18 +311,46 @@ namespace jam::net::ecs
 
             if ((timeFlush || forceFlush) && canFlush)
             {
-                R.ctx().get<entt::dispatcher>().enqueue<EvTxFlush>(EvTxFlush{ e });
+                D.enqueue<EvTxFlush>(EvTxFlush{ e });
             }
         }
     }
 
+    
     // Helper
 
-    inline void EnqueueSend(entt::registry& R, entt::entity e, const Sptr<SendBuffer>& buf, eTxReason reason)
+    inline void EnqueueSend(entt::entity e, const Sptr<SendBuffer>& buf, eTxReason reason)
     {
-        if (!R.all_of<CompTransportTx>(e)) 
+        auto& L = utils::exec::ShardTLS::GetCurrentChecked();
+        auto& R = L.world;
+        auto& D = L.events;
+
+        if (!R.all_of<CompTransportTx>(e))
             R.emplace<CompTransportTx>(e);
+
+        PacketAnalysis an = PacketBuilder::AnalyzePacket(buf->Buffer(), buf->WriteSize());
+
+        if (an.IsNeedToFragmentation())
+        {
+            D.enqueue<EvFgFragmentize>(EvFgFragmentize{ e, buf, an });
+            return;
+        }
+
+        // 2. 신뢰성 필요
+        if (an.IsReliable() && R.all_of<CompReliability>(e))
+        {
+            uint16 seq = AllocSeqRange(R, e, 1);
+            auto* ph = reinterpret_cast<PacketHeader*>(buf->Buffer());
+            ph->SetSequence(seq);
+
+            uint64 now = utils::Clock::Instance().NowNs();
+            uint32 size = buf->WriteSize();
+
+            D.enqueue<EvReSendR>(EvReSendR{ e, buf, seq, size, now });
+            return;
+        }
+
         uint32 sz = (buf && buf->Buffer()) ? buf->WriteSize() : 0;
-        R.ctx().get<entt::dispatcher>().enqueue<EvTxEnqueue>(EvTxEnqueue{ e, buf, reason, sz });
+        D.enqueue<EvTxEnqueue>(EvTxEnqueue{ e, buf, reason, sz });
     }
 }

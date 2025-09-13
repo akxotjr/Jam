@@ -134,7 +134,7 @@ namespace jam::net::ecs
 			st->pending[ev.seq] = { ev.buf, ev.size, ev.ts, 0 };
 			cr.inFlightSize += ev.size;
 
-			ecs::EnqueueSend(*R, ev.e, ev.buf, eTxReason::NORMAL);
+			//ecs::EnqueueSend(/**R,*/ ev.e, ev.buf, eTxReason::NORMAL);
 		}
 
 		void OnRecvR(const EvReRecvR& ev)
@@ -158,7 +158,7 @@ namespace jam::net::ecs
 					SeqGreater(seq, static_cast<uint16>(cr.expectedNextSeq + 1)))
 				{
 					const uint32 nack = BuildNackBitfield(cr, cr.expectedNextSeq, cr.latestSeq);
-					ecs::EnqueueSend(*R, ev.e, PacketBuilder::CreateNackPacket(cr.expectedNextSeq, nack), eTxReason::CONTROL);
+					ecs::EnqueueSend(/**R, */ev.e, PacketBuilder::CreateNackPacket(cr.expectedNextSeq, nack), eTxReason::CONTROL);
 					cr.lastNackTime_ns = now;
 					st->sentNackSeqs.insert(cr.expectedNextSeq);
 				}

@@ -83,7 +83,6 @@ namespace jam::net
 	constexpr uint8 SetFlag(uint8 flags, uint8 flag) { return flags | flag; }
 	constexpr uint8 ClearFlag(uint8 flags, uint8 flag) { return flags & ~flag; }
 
-	constexpr uint16 MAX_PAYLOAD_SIZE = 1024;
 
 
 	// type(2) + id(5) + size(11) + flags(4) + channel(2) = 24bit
@@ -132,7 +131,6 @@ namespace jam::net
 		bool			IsValid() const { return GetType() <= MAX_TYPE && GetId() <= MAX_ID && GetSize() <= MAX_SIZE && GetFlags() <= MAX_FLAGS && E2U(GetChannel()) <= MAX_CHANNEL; }
 
 
-
 		static constexpr uint32 GetBaseSize() { return 3; }			// only data : 3 bytes
 		static constexpr uint32 GetHalfSize() { return 5; }			// data + sequence : 5 bytes
 		static constexpr uint32 GetFullSize() { return 7; }			// data + sequence + fragment : 7 bytes
@@ -168,13 +166,18 @@ namespace jam::net
 	};
 #pragma pop
 
+	constexpr uint16 ACK_PACKET_SIZE = PacketHeader::GetBaseSize() + sizeof(AckHeader);
+	constexpr uint16 NACK_PACKET_SIZE = PacketHeader::GetBaseSize() + sizeof(NackHeader);
 
+	constexpr uint16 MAX_PACKET_SIZE = 1400;
+	constexpr uint16 MAX_PAYLOAD_SIZE = MAX_PACKET_SIZE - PacketHeader::GetFullSize() - ACK_PACKET_SIZE;
 
 
 	struct PacketAnalysis
 	{
 		bool			IsReliable() const { return header.IsReliable(); }
 		bool			IsFragmented() const { return header.IsFragmented(); }
+		bool			IsNeedToFragmentation() const { return header.GetSize() > MAX_PACKET_SIZE; }
 
 		ePacketType		GetType() const { return U2E(ePacketType, header.GetType()); }
 		uint8			GetId() const { return header.GetId(); }
