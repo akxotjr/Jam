@@ -1,0 +1,8 @@
+#include "pch.h"
+
+#pragma warning(disable: 4996)
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define TINYGLTF_IMPLEMENTATION
+#include <tiny_gltf.h>

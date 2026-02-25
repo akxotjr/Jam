@@ -1,0 +1,16 @@
+namespace jam.net.fb;
+
+struct fbVec3
+{
+	x: float;
+	y: float;
+	z: float;
+}
+
+struct fbQuat
+{
+	x: float;
+	y: float;
+	z: float;
+	w: float;
+}

@@ -1,0 +1,575 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Header">
+      <UniqueIdentifier>{b09a609c-883e-49b9-bde7-1e9340d4a96e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core">
+      <UniqueIdentifier>{5105503d-0b38-4adb-9022-612fbd366f25}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core\base">
+      <UniqueIdentifier>{aaa8a668-42bd-4855-9843-f33a6e8ccec3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core\executor">
+      <UniqueIdentifier>{8c365bbf-df18-4d76-aaca-3b5f4bbc2d6a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core\memory">
+      <UniqueIdentifier>{ece3aa3c-6f63-4f97-aa22-56481e2bf48b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core\utils">
+      <UniqueIdentifier>{d249b5cb-b29a-4480-8831-8f8a3ab51ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core\net">
+      <UniqueIdentifier>{f893f741-d76e-4022-8411-dfe24b46e14e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync">
+      <UniqueIdentifier>{6295b8a9-d2bc-4217-98dc-4e2a6c79c4c6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime">
+      <UniqueIdentifier>{7376cd94-42b1-4caf-8b19-61fb5183ee44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\schema">
+      <UniqueIdentifier>{51444c64-2f1a-4b33-9e2c-9217e528d865}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\schema\gen">
+      <UniqueIdentifier>{9de4b35a-1033-4924-a02d-1809dd7f8dae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\schema\fbs">
+      <UniqueIdentifier>{beca7572-1c73-473f-865b-0a61a190b094}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\transport">
+      <UniqueIdentifier>{b5157f31-547e-4fdd-bd7a-6e60c4048d49}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\replication">
+      <UniqueIdentifier>{f9ed3469-fc55-4d14-8d2b-ae1a8d1f4dd2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\schema">
+      <UniqueIdentifier>{ffd21c84-2bb7-4144-8376-85af60ade18a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\schema\gen">
+      <UniqueIdentifier>{36950184-71ef-4f4d-be08-d62e6972ef2f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\schema\fbs">
+      <UniqueIdentifier>{a6f8bf54-8227-42aa-abc8-35a519341e41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\networld">
+      <UniqueIdentifier>{1bcc8473-bf68-4ff0-ad96-b804d8ad1186}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\matchmaking">
+      <UniqueIdentifier>{ad53b76d-c0cb-4f83-afcf-cdba66d2d3f9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\physics">
+      <UniqueIdentifier>{127e16be-cdd8-46f5-83db-2a0395181ea6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>Header</Filter>
+    </ClInclude>
+    <ClInclude Include="include\JamNetAPI.h">
+      <Filter>Header</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\base\JamNetMacro.h">
+      <Filter>core\base</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\base\JamNetTypes.h">
+      <Filter>core\base</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ConcurrentPriorityQueue.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ConcurrentQueueToken.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\CoreTopology.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\DeadLockProfiler.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ExecutorTLS.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\FiberCommon.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\FiberScheduler.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\GlobalEventBus.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\GlobalExecutor.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\IExecutor.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\JamNetExecutor.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\Job.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\Lock.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\LockDeque.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\LockQueue.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\Mailbox.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\MainExecutor.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\NumaTopology.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\RoutingPolicy.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ShardDirectory.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ShardDomain.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ShardExecutor.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ShardSlot.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ShardTLS.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ThreadRegistry.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\WinFiberBackend.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\memory\JamNetMemory.h">
+      <Filter>core\memory</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\memory\MemoryManager.h">
+      <Filter>core\memory</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\memory\MemoryPool.h">
+      <Filter>core\memory</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\memory\ObjectPool.h">
+      <Filter>core\memory</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\BufferReader.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\BufferWriter.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\IocpCore.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\IocpEvent.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\JamNetNetwork.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\JamNetRuntime.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\NetAddress.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\PacketBuilder.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\PacketStructure.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\RecvBuffer.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\RPC.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\RPCAPI.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\SendBuffer.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\Service.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\Session.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\SessionBootstrap.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\SessionComponents.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\SessionSystems.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\SocketUtils.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\TcpListener.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\TcpSession.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\UdpRouter.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\UdpSession.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\utils\TimeUnits.h">
+      <Filter>core\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\utils\Clock.h">
+      <Filter>core\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\utils\Logger.h">
+      <Filter>core\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\utils\TaggedKey.h">
+      <Filter>core\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\schema\gen\binding_handshake_generated.h">
+      <Filter>runtime\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h">
+      <Filter>runtime</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ClientSession.h">
+      <Filter>runtime</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ClientTransportAdapter.h">
+      <Filter>runtime</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h">
+      <Filter>runtime</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ServerSession.h">
+      <Filter>runtime</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ServerTransportAdapter.h">
+      <Filter>runtime</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\schema\gen\snapshot_generated.h">
+      <Filter>sync\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\schema\gen\actor_control_generated.h">
+      <Filter>sync\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\schema\gen\actor_spawn_generated.h">
+      <Filter>sync\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\schema\gen\input_generated.h">
+      <Filter>sync\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ServerReplicationSystem.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientReplicationSystem.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientSamplingSystem.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\NetActorComponents.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationTypes.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationUtils.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ServerInputSystem.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h">
+      <Filter>sync\networld</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\networld\ClientNetWorld.h">
+      <Filter>sync\networld</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\networld\NetWorld.h">
+      <Filter>sync\networld</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\transport\ITransportEndpoint.h">
+      <Filter>sync\transport</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\transport\IRpcEndpoint.h">
+      <Filter>sync\transport</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\schema\gen\physics_type_generated.h">
+      <Filter>sync\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\transport\CustomPacketHelper.h">
+      <Filter>sync\transport</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\executor\SeqLock.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\matchmaking\IMatchmaker.h">
+      <Filter>runtime\matchmaking</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\matchmaking\DefaultMatchmaker.h">
+      <Filter>runtime\matchmaking</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\schema\gen\matchmaking_generated.h">
+      <Filter>runtime\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationEvents.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\NetWorldContext.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\physics\ShardJobBridge.h">
+      <Filter>sync\physics</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <Filter>Header</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\CoreTopology.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\DeadLockProfiler.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\ExecutorTLS.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\FiberCommon.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\FiberScheduler.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\GlobalEventBus.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\GlobalExecutor.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\IExecutor.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\Job.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\Lock.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\LockDeque.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\LockQueue.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\Mailbox.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\MainExecutor.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\NumaTopology.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\RoutingPolicy.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\ShardDirectory.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\ShardExecutor.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\ShardSlot.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\ShardTLS.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\ThreadRegistry.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\WinFiberBackend.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\memory\MemoryManager.cpp">
+      <Filter>core\memory</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\memory\MemoryPool.cpp">
+      <Filter>core\memory</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\BufferReader.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\BufferWriter.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\IocpCore.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\IocpEvent.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\JamNetRuntime.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\NetAddress.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\PacketBuilder.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\RecvBuffer.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\RPC.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\SendBuffer.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\Service.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\Session.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\SessionComponents.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\SessionSystems.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\SocketUtils.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\TcpListener.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\TcpSession.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\UdpRouter.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\UdpSession.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\utils\Clock.cpp">
+      <Filter>core\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\utils\Logger.cpp">
+      <Filter>core\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\utils\TaggedKey.cpp">
+      <Filter>core\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ServerTransportAdapter.cpp">
+      <Filter>runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ClientNetworkManager.cpp">
+      <Filter>runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ClientSession.cpp">
+      <Filter>runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ClientTransportAdapter.cpp">
+      <Filter>runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ServerNetworkManager.cpp">
+      <Filter>runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ServerSession.cpp">
+      <Filter>runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\networld\ServerNetWorld.cpp">
+      <Filter>sync\networld</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\networld\ClientNetWorld.cpp">
+      <Filter>sync\networld</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\networld\NetWorld.cpp">
+      <Filter>sync\networld</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientInputSystem.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientReplicationSystem.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientSamplingSystem.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ServerInputSystem.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ServerPhysicsSystem.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\matchmaking\DefaultMatchmaker.cpp">
+      <Filter>runtime\matchmaking</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\physics\ShardJobBridge.cpp">
+      <Filter>sync\physics</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\actor_control.fbs">
+      <Filter>sync\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\actor_spawn.fbs">
+      <Filter>sync\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\input.fbs">
+      <Filter>sync\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\physics_type.fbs">
+      <Filter>sync\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\snapshot.fbs">
+      <Filter>sync\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\runtime\schema\fbs\binding_handshake.fbs">
+      <Filter>runtime\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\runtime\schema\fbs\matchmaking.fbs">
+      <Filter>runtime\schema\fbs</Filter>
+    </CustomBuild>
+  </ItemGroup>
+</Project>

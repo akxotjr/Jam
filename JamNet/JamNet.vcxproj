@@ -1,0 +1,610 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{1ad2ca5e-d7a5-4588-b2dc-12d55553bf94}</ProjectGuid>
+    <RootNamespace>JamNet</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetName>libjamnet</TargetName>
+    <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jamnet\</IntDir>
+    <LibraryPath>$(SolutionDir)lib\$(Platform)\$(Configuration)\;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)lib\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)intermediates\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetName>libjamnet</TargetName>
+    <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ShowIncludes>true</ShowIncludes>
+      <ExternalWarningLevel>InheritWarningLevel</ExternalWarningLevel>
+      <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\jampx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Users\akxotjr\GameWorkSpace\JamPx\JamPhysicsAPI\include\;$(ProjectDir)\include\;$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>
+      </SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="include\JamNetAPI.h" />
+    <ClInclude Include="include\jamnet\core\base\JamNetMacro.h" />
+    <ClInclude Include="include\jamnet\core\base\JamNetTypes.h" />
+    <ClInclude Include="include\jamnet\core\executor\ConcurrentPriorityQueue.h" />
+    <ClInclude Include="include\jamnet\core\executor\ConcurrentQueueToken.h" />
+    <ClInclude Include="include\jamnet\core\executor\CoreTopology.h" />
+    <ClInclude Include="include\jamnet\core\executor\DeadLockProfiler.h" />
+    <ClInclude Include="include\jamnet\core\executor\ExecutorTLS.h" />
+    <ClInclude Include="include\jamnet\core\executor\FiberCommon.h" />
+    <ClInclude Include="include\jamnet\core\executor\FiberScheduler.h" />
+    <ClInclude Include="include\jamnet\core\executor\GlobalEventBus.h" />
+    <ClInclude Include="include\jamnet\core\executor\GlobalExecutor.h" />
+    <ClInclude Include="include\jamnet\core\executor\IExecutor.h" />
+    <ClInclude Include="include\jamnet\core\executor\JamNetExecutor.h" />
+    <ClInclude Include="include\jamnet\core\executor\Job.h" />
+    <ClInclude Include="include\jamnet\core\executor\Lock.h" />
+    <ClInclude Include="include\jamnet\core\executor\LockDeque.h" />
+    <ClInclude Include="include\jamnet\core\executor\LockQueue.h" />
+    <ClInclude Include="include\jamnet\core\executor\Mailbox.h" />
+    <ClInclude Include="include\jamnet\core\executor\MainExecutor.h" />
+    <ClInclude Include="include\jamnet\core\executor\NumaTopology.h" />
+    <ClInclude Include="include\jamnet\core\executor\RoutingPolicy.h" />
+    <ClInclude Include="include\jamnet\core\executor\ShardDirectory.h" />
+    <ClInclude Include="include\jamnet\core\executor\ShardDomain.h" />
+    <ClInclude Include="include\jamnet\core\executor\ShardExecutor.h" />
+    <ClInclude Include="include\jamnet\core\executor\ShardSlot.h" />
+    <ClInclude Include="include\jamnet\core\executor\ShardTLS.h" />
+    <ClInclude Include="include\jamnet\core\executor\ThreadRegistry.h" />
+    <ClInclude Include="include\jamnet\core\executor\WinFiberBackend.h" />
+    <ClInclude Include="include\jamnet\core\memory\JamNetMemory.h" />
+    <ClInclude Include="include\jamnet\core\memory\MemoryManager.h" />
+    <ClInclude Include="include\jamnet\core\memory\MemoryPool.h" />
+    <ClInclude Include="include\jamnet\core\memory\ObjectPool.h" />
+    <ClInclude Include="include\jamnet\core\net\BufferReader.h" />
+    <ClInclude Include="include\jamnet\core\net\BufferWriter.h" />
+    <ClInclude Include="include\jamnet\core\net\IocpCore.h" />
+    <ClInclude Include="include\jamnet\core\net\IocpEvent.h" />
+    <ClInclude Include="include\jamnet\core\net\JamNetNetwork.h" />
+    <ClInclude Include="include\jamnet\core\net\JamNetRuntime.h" />
+    <ClInclude Include="include\jamnet\core\net\NetAddress.h" />
+    <ClInclude Include="include\jamnet\core\net\PacketBuilder.h" />
+    <ClInclude Include="include\jamnet\core\net\PacketStructure.h" />
+    <ClInclude Include="include\jamnet\core\net\RecvBuffer.h" />
+    <ClInclude Include="include\jamnet\core\net\RPC.h" />
+    <ClInclude Include="include\jamnet\core\net\RPCAPI.h" />
+    <ClInclude Include="include\jamnet\core\net\SendBuffer.h" />
+    <ClInclude Include="include\jamnet\core\net\Service.h" />
+    <ClInclude Include="include\jamnet\core\net\Session.h" />
+    <ClInclude Include="include\jamnet\core\net\SessionBootstrap.h" />
+    <ClInclude Include="include\jamnet\core\net\SessionComponents.h" />
+    <ClInclude Include="include\jamnet\core\net\SessionSystems.h" />
+    <ClInclude Include="include\jamnet\core\net\SocketUtils.h" />
+    <ClInclude Include="include\jamnet\core\net\TcpListener.h" />
+    <ClInclude Include="include\jamnet\core\net\TcpSession.h" />
+    <ClInclude Include="include\jamnet\core\net\UdpRouter.h" />
+    <ClInclude Include="include\jamnet\core\net\UdpSession.h" />
+    <ClInclude Include="include\jamnet\core\utils\Clock.h" />
+    <ClInclude Include="include\jamnet\core\utils\Logger.h" />
+    <ClInclude Include="include\jamnet\core\utils\TaggedKey.h" />
+    <ClInclude Include="include\jamnet\core\utils\TimeUnits.h" />
+    <ClInclude Include="include\jamnet\executor\SeqLock.h" />
+    <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h" />
+    <ClInclude Include="include\jamnet\runtime\ClientSession.h" />
+    <ClInclude Include="include\jamnet\runtime\ClientTransportAdapter.h" />
+    <ClInclude Include="include\jamnet\runtime\matchmaking\DefaultMatchmaker.h" />
+    <ClInclude Include="include\jamnet\runtime\matchmaking\IMatchmaker.h" />
+    <ClInclude Include="include\jamnet\runtime\schema\gen\binding_handshake_generated.h" />
+    <ClInclude Include="include\jamnet\runtime\schema\gen\matchmaking_generated.h" />
+    <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h" />
+    <ClInclude Include="include\jamnet\runtime\ServerSession.h" />
+    <ClInclude Include="include\jamnet\runtime\ServerTransportAdapter.h" />
+    <ClInclude Include="include\jamnet\sync\networld\ClientNetWorld.h" />
+    <ClInclude Include="include\jamnet\sync\networld\NetWorld.h" />
+    <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h" />
+    <ClInclude Include="include\jamnet\sync\physics\ShardJobBridge.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ClientReplicationSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ClientSamplingSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\NetActorComponents.h" />
+    <ClInclude Include="include\jamnet\sync\replication\NetWorldContext.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationEvents.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationTypes.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationUtils.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ServerInputSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ServerReplicationSystem.h" />
+    <ClInclude Include="include\jamnet\sync\schema\gen\actor_control_generated.h" />
+    <ClInclude Include="include\jamnet\sync\schema\gen\actor_spawn_generated.h" />
+    <ClInclude Include="include\jamnet\sync\schema\gen\input_generated.h" />
+    <ClInclude Include="include\jamnet\sync\schema\gen\physics_type_generated.h" />
+    <ClInclude Include="include\jamnet\sync\schema\gen\snapshot_generated.h" />
+    <ClInclude Include="include\jamnet\sync\transport\CustomPacketHelper.h" />
+    <ClInclude Include="include\jamnet\sync\transport\IRpcEndpoint.h" />
+    <ClInclude Include="include\jamnet\sync\transport\ITransportEndpoint.h" />
+    <ClInclude Include="pch.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\CoreTopology.cpp" />
+    <ClCompile Include="src\core\executor\DeadLockProfiler.cpp" />
+    <ClCompile Include="src\core\executor\ExecutorTLS.cpp" />
+    <ClCompile Include="src\core\executor\FiberCommon.cpp" />
+    <ClCompile Include="src\core\executor\FiberScheduler.cpp" />
+    <ClCompile Include="src\core\executor\GlobalEventBus.cpp" />
+    <ClCompile Include="src\core\executor\GlobalExecutor.cpp" />
+    <ClCompile Include="src\core\executor\IExecutor.cpp" />
+    <ClCompile Include="src\core\executor\Job.cpp" />
+    <ClCompile Include="src\core\executor\Lock.cpp" />
+    <ClCompile Include="src\core\executor\LockDeque.cpp" />
+    <ClCompile Include="src\core\executor\LockQueue.cpp" />
+    <ClCompile Include="src\core\executor\Mailbox.cpp" />
+    <ClCompile Include="src\core\executor\MainExecutor.cpp" />
+    <ClCompile Include="src\core\executor\NumaTopology.cpp" />
+    <ClCompile Include="src\core\executor\RoutingPolicy.cpp" />
+    <ClCompile Include="src\core\executor\ShardDirectory.cpp" />
+    <ClCompile Include="src\core\executor\ShardExecutor.cpp" />
+    <ClCompile Include="src\core\executor\ShardSlot.cpp" />
+    <ClCompile Include="src\core\executor\ShardTLS.cpp" />
+    <ClCompile Include="src\core\executor\ThreadRegistry.cpp" />
+    <ClCompile Include="src\core\executor\WinFiberBackend.cpp" />
+    <ClCompile Include="src\core\memory\MemoryManager.cpp" />
+    <ClCompile Include="src\core\memory\MemoryPool.cpp" />
+    <ClCompile Include="src\core\net\BufferReader.cpp" />
+    <ClCompile Include="src\core\net\BufferWriter.cpp" />
+    <ClCompile Include="src\core\net\IocpCore.cpp" />
+    <ClCompile Include="src\core\net\IocpEvent.cpp" />
+    <ClCompile Include="src\core\net\JamNetRuntime.cpp" />
+    <ClCompile Include="src\core\net\NetAddress.cpp" />
+    <ClCompile Include="src\core\net\PacketBuilder.cpp" />
+    <ClCompile Include="src\core\net\RecvBuffer.cpp" />
+    <ClCompile Include="src\core\net\RPC.cpp" />
+    <ClCompile Include="src\core\net\SendBuffer.cpp" />
+    <ClCompile Include="src\core\net\Service.cpp" />
+    <ClCompile Include="src\core\net\Session.cpp" />
+    <ClCompile Include="src\core\net\SessionComponents.cpp" />
+    <ClCompile Include="src\core\net\SessionSystems.cpp" />
+    <ClCompile Include="src\core\net\SocketUtils.cpp" />
+    <ClCompile Include="src\core\net\TcpListener.cpp" />
+    <ClCompile Include="src\core\net\TcpSession.cpp" />
+    <ClCompile Include="src\core\net\UdpRouter.cpp" />
+    <ClCompile Include="src\core\net\UdpSession.cpp" />
+    <ClCompile Include="src\core\utils\Clock.cpp" />
+    <ClCompile Include="src\core\utils\Logger.cpp" />
+    <ClCompile Include="src\core\utils\TaggedKey.cpp" />
+    <ClCompile Include="src\runtime\ClientNetworkManager.cpp" />
+    <ClCompile Include="src\runtime\ClientSession.cpp" />
+    <ClCompile Include="src\runtime\ClientTransportAdapter.cpp" />
+    <ClCompile Include="src\runtime\matchmaking\DefaultMatchmaker.cpp" />
+    <ClCompile Include="src\runtime\ServerNetworkManager.cpp" />
+    <ClCompile Include="src\runtime\ServerSession.cpp" />
+    <ClCompile Include="src\runtime\ServerTransportAdapter.cpp" />
+    <ClCompile Include="src\sync\networld\ClientNetWorld.cpp" />
+    <ClCompile Include="src\sync\networld\NetWorld.cpp" />
+    <ClCompile Include="src\sync\networld\ServerNetWorld.cpp" />
+    <ClCompile Include="src\sync\physics\ShardJobBridge.cpp" />
+    <ClCompile Include="src\sync\replication\ClientInputSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ClientReplicationSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ClientSamplingSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ServerInputSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ServerPhysicsSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="include\jamnet\runtime\schema\fbs\binding_handshake.fbs">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\runtime\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\actor_control.fbs">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\actor_spawn.fbs">
+      <FileType>Document</FileType>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\input.fbs">
+      <FileType>Document</FileType>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\physics_type.fbs">
+      <FileType>Document</FileType>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\snapshot.fbs">
+      <FileType>Document</FileType>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\runtime\schema\fbs\matchmaking.fbs">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\runtime\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+    </CustomBuild>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

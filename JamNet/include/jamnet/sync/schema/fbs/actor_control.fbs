@@ -1,0 +1,27 @@
+namespace jam.net.fb;
+
+table fbPossessActorReq
+{
+	net_id: uint;
+}
+
+table fbPossessActorRes
+{
+	success: bool;
+	//error_msg: string;
+	net_id: uint;
+}
+
+table fbUnpossessActorReq
+{
+	net_id: uint;
+}
+
+table fbUnpossessActorRes
+{
+	success: bool;
+	//error_msg: string;
+}
+
+root_type fbPossessActorReq;
+file_identifier "POSS";

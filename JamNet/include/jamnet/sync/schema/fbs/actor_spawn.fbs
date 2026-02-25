@@ -1,0 +1,42 @@
+include "physics_type.fbs";
+include "snapshot.fbs";
+
+namespace jam.net.fb;
+
+
+
+table fbSpawnActorReq
+{
+	spawn_req_id		 : uint;
+	prefab_key			 : ulong;
+	owner_user_id		 : ulong;
+	controller_user_id	 : ulong;
+
+
+	// -- overrides
+
+	initial_rigid_state	 : fbTransformFull;
+	initial_char_state	 : fbCharacterFull160;
+	team_id				 : uint;
+	part_id				 : uint;
+}
+
+table fbSpawnActorRes
+{
+	success				: bool;
+	spawn_req_id		: ulong;
+	net_id				: uint;
+}
+
+table fbDespawnActorReq
+{
+	net_id				: uint;
+}
+
+table fbDespawnActorRes
+{
+	success				: bool;
+}
+
+root_type fbSpawnActorReq;
+file_identifier "SPAW";

@@ -1,0 +1,26 @@
+namespace jam.net.fb;
+
+table fbTcpBindReq
+{
+	user_id : ulong;
+}
+
+table fbTcpBindRes
+{
+	success : bool;
+	user_id : ulong;
+}
+
+table fbUdpBindReq
+{
+	user_id : ulong;
+}
+
+table fbUdpBindRes
+{
+	success : bool;
+	user_id : ulong;
+}
+
+root_type fbTcpBindReq;
+file_identifier "BIND";

@@ -1,0 +1,86 @@
+namespace jam.net.fb;
+
+
+
+struct fbTransformDelta
+{
+	data0				: ulong;
+	data1				: ulong;
+}
+
+struct fbTransformFull
+{
+	data0				: ulong;
+	data1				: ulong;
+	data2				: ulong;
+}
+
+struct fbCharacterFull128
+{
+	data0 : ulong;
+	data1 : ulong;
+}
+
+struct fbCharacterFull160
+{
+	data0 : ulong;
+	data1 : ulong;
+	data2 : uint;
+}
+
+struct fbCharacterDelta96
+{
+	data0 : uint;
+	data1 : uint;
+	data2 : uint;
+}
+
+struct fbCharacterDelta128
+{
+	data0 : ulong;
+	data1 : ulong;
+}
+
+
+// --- Snapshot --- 
+
+table fbSnapshotHeader
+{
+	server_tick			: uint;
+	input_ack			: uint;
+	global_keyframe		: bool = false;
+}
+
+
+
+table fbActorMeta
+{
+	owner_user_id		: ulong = 0;		// 소유권(권한 관리용). = 0 : 서버소유, > 0 : 유저 소유
+	controller_user_id	: ulong = 0;		// 조종권(입력 관리용). = 0 : 조종자 없음, > 0 : 유저 조종
+	prefab_key			: ulong = 0;
+	spawn_req_id		: uint  = 0;
+}
+
+
+table fbActorEntity
+{
+	net_id				: uint;
+	baseline_rev		: uint;
+
+	meta				: fbActorMeta;
+
+	transform_full		: fbTransformFull;
+	transform_delta		: fbTransformDelta;
+
+	character_full		: fbCharacterFull160;
+	character_delta		: fbCharacterDelta128;
+}
+
+table fbSnapshot
+{
+	header				: fbSnapshotHeader;
+	entities			: [fbActorEntity];
+}
+
+root_type fbSnapshot;
+file_identifier "SNAP";

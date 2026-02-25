@@ -1,0 +1,158 @@
+{
+  "templates": [
+    {
+      "allow_replication": true,
+      "cct": {
+        "allow_crouch": true,
+        "height": 1.0,
+        "material": {
+          "dynamic_friction": 0.5,
+          "restitution": 0.1,
+          "static_friction": 0.5
+        },
+        "movement": {
+          "accel_ground": 35.0,
+          "crouch_speed": 3.0,
+          "gravity": 25.0,
+          "jump_speed": 7.0,
+          "sprint_speed": 7.5,
+          "walk_speed": 5.0
+        },
+        "radius": 0.35
+      },
+      "kind": "character",
+      "name": "Character",
+      "shapes": [
+        {
+          "half_height": 0.5,
+          "local_pose": {
+            "p": [
+              0.0,
+              0.9,
+              0.0
+            ],
+            "q": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "material": {
+            "dynamic_friction": 0.5,
+            "restitution": 0.0,
+            "static_friction": 0.5
+          },
+          "qry_filter": {
+            "word0": 1,
+            "word1": 0,
+            "word2": 0,
+            "word3": 0
+          },
+          "radius": 0.35,
+          "shape_flag": "simulation",
+          "sim_filter": {
+            "word0": 1,
+            "word1": 0,
+            "word2": 0,
+            "word3": 0
+          },
+          "type": "capsule"
+        }
+      ],
+      "spawn_policy": "both"
+    },
+    {
+      "allow_replication": false,
+      "kind": "static",
+      "name": "Map",
+      "shapes": [
+        {
+          "local_pose": {
+            "p": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "q": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "material": {
+            "dynamic_friction": 0.6,
+            "restitution": 0.0,
+            "static_friction": 0.6
+          },
+          "mesh": {
+            "mode": "merged_scene",
+            "cooked": "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//TestClient//Contents//ThirdPersonMap11.pxtri",
+            "mesh_index": 0,
+            "primitive_index": 0
+          },
+          "qry_filter": {
+            "word0": 1,
+            "word1": 0,
+            "word2": 0,
+            "word3": 0
+          },
+          "shape_flag": "simulation",
+          "sim_filter": {
+            "word0": 1,
+            "word1": 0,
+            "word2": 0,
+            "word3": 0
+          },
+          "type": "triangle_mesh"
+        }
+      ],
+      "spawn_policy": "level_only"
+    },
+    {
+      "allow_replication": false,
+      "kind": "static",
+      "name": "PlaneBox",
+      "shapes": [
+        {
+          "local_pose": {
+            "p": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "q": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "half_extents": [100, 0.2, 100],
+          "material": {
+            "dynamic_friction": 0.6,
+            "restitution": 0.0,
+            "static_friction": 0.6
+          },
+          "qry_filter": {
+            "word0": 1,
+            "word1": 0,
+            "word2": 0,
+            "word3": 0
+          },
+          "shape_flag": "simulation",
+          "sim_filter": {
+            "word0": 1,
+            "word1": 0,
+            "word2": 0,
+            "word3": 0
+          },
+          "type": "box"
+        }
+      ],
+      "spawn_policy": "level_only"
+    }
+  ],
+  "version": 1
+}

@@ -1,0 +1,14 @@
+namespace jam.net.fb;
+
+
+table fbGameInput
+{
+	user_id: ulong;
+	sequence: uint;
+	flags: uint;
+	yaw : float;
+	pitch : float;
+}
+
+root_type fbGameInput;
+file_identifier "INPT";

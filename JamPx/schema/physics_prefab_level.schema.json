@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jampx://schema/physics_prefab.schema.json",
+  "title": "JamPx Prefab Level",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "version", "instances" ],
+  "properties": {
+    "version"  : { "type": "integer", "const": 1 },
+    "instances": { "type": "array",   "items": { "$ref": "#/$defs/instance" } }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    },
+    "quat": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number" }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "p": { "$ref": "#/$defs/vec3" },
+        "q": { "$ref": "#/$defs/quat" }
+      }
+    },
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "template", "pose" ],
+      "properties": {
+        "template": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pose": { "$ref": "#/%24defs/transform" },
+        "overrides": {
+          "linear_velocity": { "$ref": "#/%24defs/vec3" },
+          "angular_velocity": { "$ref": "#/%24defs/vec3" },
+          "linear_damping": { "type": "number" },
+          "angular_damping": { "type": "number" }
+        }
+      }
+    }
+  }
+}

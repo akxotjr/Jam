@@ -1,0 +1,168 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="px">
+      <UniqueIdentifier>{87196bf2-db96-45cf-8e5b-546abcc48f48}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="prefab">
+      <UniqueIdentifier>{69fdd930-a4c0-42c3-bcb8-7a794716c5f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="schema">
+      <UniqueIdentifier>{1d5938a3-9517-42bf-b3d8-c91b9b344b0b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party">
+      <UniqueIdentifier>{1075ea55-1796-4b39-aa05-002b2475b1f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="pch">
+      <UniqueIdentifier>{ba26a8a6-7b02-4155-bd2e-09893d7e1819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="api">
+      <UniqueIdentifier>{e3739d8f-11f8-4e37-bc37-dd54277e1ca4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="character">
+      <UniqueIdentifier>{28b555e0-206c-4365-82c9-bcca11af581f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\jampx\PhysicsCore.cpp">
+      <Filter>px</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\PhysicsFacade.cpp">
+      <Filter>px</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\PhysicsWorld.cpp">
+      <Filter>px</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\prefab\PhysicsPrefabIO.cpp">
+      <Filter>prefab</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\prefab\PhysicsPrefabRegistry.cpp">
+      <Filter>prefab</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\prefab\PrefabAssetCreator.cpp">
+      <Filter>prefab</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\prefab\PrefabDocument.cpp">
+      <Filter>prefab</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\prefab\PrefabCooker.cpp">
+      <Filter>prefab</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\prefab\PrefabLevelLoader.cpp">
+      <Filter>prefab</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\third_party\tinygltf_impl.cpp">
+      <Filter>third_party</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>pch</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\character\DefaultQuakePolicy.cpp">
+      <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\character\ExternalMoveAccumulator.cpp">
+      <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\character\CharacterMotor.cpp">
+      <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\character\CharacterMovementComponent.cpp">
+      <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp">
+      <Filter>px</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\ShardPxCpuDispacter.cpp">
+      <Filter>px</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\jampx\PhysicsWorld.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\JamPx.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsCore.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsFacade.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsFilter.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\prefab\PhysicsPrefabIO.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\prefab\PhysicsPrefabRegistry.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\prefab\PrefabAssetCreator.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\prefab\PrefabAssets.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\prefab\PrefabDocument.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\prefab\PrefabCooker.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\prefab\PrefabLevelLoader.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\third_party\tinygltf_impl.h">
+      <Filter>third_party</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>pch</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\api\PhysicsTypes.h">
+      <Filter>api</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\api\IPhysicsFacade.h">
+      <Filter>api</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsUtils.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\IAccelerationPolicy.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\DefaultQuakePolicy.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\ExternalMoveAccumulator.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\CharacterMotor.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\CharacterMovementComponent.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\CharacterMovementTypes.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsCompletionTask.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\ShardPxCpuDispacter.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\api\IPhysicsJobBridge.h">
+      <Filter>api</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="schema\physics_prefab.schema.json">
+      <Filter>schema</Filter>
+    </None>
+    <None Include="schema\physics_prefab_level.schema.json">
+      <Filter>schema</Filter>
+    </None>
+    <None Include="..\character_movement.md" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,42 @@
+[
+  {
+    "Name": "새 프로필",
+    "Projects": [
+      {
+        "Path": "TestApp\\TestClient\\TestClient.vcxproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "TestApp\\TestServer\\TestServer.vcxproj",
+        "Action": "Start"
+      }
+    ]
+  },
+  {
+    "Name": "새 프로필",
+    "Projects": [
+      {
+        "Path": "TestApp\\TestClient\\TestClient.vcxproj",
+        "Action": "Start",
+        "DebugTarget": "로컬 Windows 디버거"
+      },
+      {
+        "Path": "TestApp\\TestServer\\TestServer.vcxproj",
+        "Action": "Start"
+      }
+    ]
+  },
+  {
+    "Name": "새 프로필",
+    "Projects": [
+      {
+        "Path": "TestApp\\TestClient\\TestClient.vcxproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "TestApp\\TestServer\\TestServer.vcxproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
