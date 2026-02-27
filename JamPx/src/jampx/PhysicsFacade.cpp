@@ -75,7 +75,7 @@ namespace jam::px
 				const auto [v] = PackedId32::Make(
 					teamId.value_or(old.Team()),
 					partId.value_or(old.Part()),
-					user8.value_or(old.User8())
+					user8.value_or(old.Role())
 				);
 
 				qfd.word2 = v;
@@ -473,6 +473,35 @@ namespace jam::px
 		entry.lastIntent		= ToMoveIntent(input);
 		entry.state.facingYaw	= input.facingYaw;
 		entry.state.facingPitch = input.facingPitch;
+	}
+
+	bool PhysicsFacade::RaycastLos(const Vec3& from, const Vec3& to) const
+	{
+		if (!m_world) return true;
+		PxScene* scene = m_world->GetScene();
+		if (!scene) return true;
+
+		const PxVec3 origin = ToPhysX(from);
+		PxVec3 dir = ToPhysX(to - from);
+		const float  dist = dir.magnitude();
+		if (dist < 1e-3f) return true;
+		dir /= dist;
+
+		// WORLD 카테고리만 검사, sublayer=1 → ShapeQuery::NO_LOS_BLOCK 존중
+		PxFilterData qfd{};
+		qfd.word0 = QueryCategory::Flags(QueryCategory::WORLD).bits();
+		qfd.word1 = QueryMeta::Make(/*channel*/ 0, /*sublayer*/ 1).v;
+
+		QueryFilterCallbackT<> cb{};
+		cb.map.world = PxQueryHitType::eBLOCK;
+		cb.map.character = PxQueryHitType::eNONE;
+		cb.map.hitbox = PxQueryHitType::eNONE;
+		cb.map.trigger = PxQueryHitType::eNONE;
+
+		const PxQueryFilterData fd(qfd, PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC | PxQueryFlag::ePREFILTER);
+
+		PxRaycastBuffer buf;
+		return !scene->raycast(origin, dir, dist, buf, PxHitFlag::eDEFAULT, fd, &cb);
 	}
 
 	void PhysicsFacade::MoveCharacter(float dt)

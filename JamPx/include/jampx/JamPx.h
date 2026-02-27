@@ -6,6 +6,7 @@
 #include "jampx/third_party/tinygltf_impl.h"
 
 #include "PhysicsFilter.h"
+#include "jampx/PhysicsSimFilter.h"
 
 #include "PhysicsCore.h"
 #include "prefab/PhysicsPrefabRegistry.h"

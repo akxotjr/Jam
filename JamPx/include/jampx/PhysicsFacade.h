@@ -54,6 +54,8 @@ namespace jam::px
 
 		void								ApplyCharacterInput(ObjectKey key, const CharacterInput& input) override;
 
+		bool								RaycastLos(const Vec3& from, const Vec3& to) const override;
+
 	private:
 		void								MoveCharacter(float dt);
 

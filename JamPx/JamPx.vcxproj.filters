@@ -57,9 +57,6 @@
     <ClCompile Include="pch.cpp">
       <Filter>pch</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\character\DefaultQuakePolicy.cpp">
-      <Filter>character</Filter>
-    </ClCompile>
     <ClCompile Include="src\jampx\character\ExternalMoveAccumulator.cpp">
       <Filter>character</Filter>
     </ClCompile>
@@ -74,6 +71,9 @@
     </ClCompile>
     <ClCompile Include="src\jampx\ShardPxCpuDispacter.cpp">
       <Filter>px</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\character\DefaultQuakeAccelerator.cpp">
+      <Filter>character</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -128,12 +128,6 @@
     <ClInclude Include="include\jampx\PhysicsUtils.h">
       <Filter>px</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\character\IAccelerationPolicy.h">
-      <Filter>character</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\character\DefaultQuakePolicy.h">
-      <Filter>character</Filter>
-    </ClInclude>
     <ClInclude Include="include\jampx\character\ExternalMoveAccumulator.h">
       <Filter>character</Filter>
     </ClInclude>
@@ -154,6 +148,15 @@
     </ClInclude>
     <ClInclude Include="include\jampx\api\IPhysicsJobBridge.h">
       <Filter>api</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\IAccelerator.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\DefaultQuakeAccelerator.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsSimFilter.h">
+      <Filter>px</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

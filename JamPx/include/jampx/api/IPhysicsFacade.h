@@ -37,5 +37,10 @@ namespace jam::px
 		virtual bool			SetRigidState(ObjectKey key, const RigidState& state) = 0;
 
 		virtual void 			ApplyCharacterInput(ObjectKey key, const CharacterInput& input) = 0;
+	
+	
+		/// @brief LOS raycast. WORLD 지오메트리에 막히면 false, 통과하면 true
+		/// @note  내부적으로 sublayer=1 (LOS) 쿼리를 사용하며 ShapeQuery::NO_LOS_BLOCK 플래그를 존중함
+		virtual bool			RaycastLos(const Vec3& from, const Vec3& to) const = 0;
 	};
 }

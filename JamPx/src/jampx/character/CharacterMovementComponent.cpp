@@ -1,6 +1,6 @@
 ﻿#include "pch.h"
 #include "jampx/character/CharacterMovementComponent.h"
-#include "jampx/character/DefaultQuakePolicy.h"
+#include "jampx/character/DefaultQuakeAccelerator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,7 +13,7 @@ namespace jam::px
 	CharacterMovementComponent::CharacterMovementComponent(const MovementConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox)
 		: m_cfg(cfg)
 	{
-		m_accelerator = std::make_unique<DefaultQuakePolicy>(cfg);
+		m_accelerator = std::make_unique<DefaultQuakeAccelerator>(cfg);
 		m_accumulator = std::make_unique<ExternalMoveAccumulator>();
 		m_motor		  = std::make_unique<CharacterMotor>(controller, hitbox);
 

@@ -14,7 +14,7 @@ namespace jam::px
             PxFilterObjectAttributes attributes1, PxFilterData filterData1,
             PxPairFlags& pairFlags, const void* constantBlock, PxU32 constantBlockSize)
         {
-            return SimulationFilterShader<ExampleSimPolicy>(
+            return SimulationFilterShader<>(
 				attributes0, filterData0,
                 attributes1, filterData1,
                 pairFlags, constantBlock, constantBlockSize
@@ -106,13 +106,7 @@ namespace jam::px
         desc.filterShader = DefaultFilterShader;
         desc.flags |= PxSceneFlag::eENABLE_ACTIVE_ACTORS | PxSceneFlag::eENABLE_CCD | PxSceneFlag::eENABLE_STABILIZATION;
 
-        //// ---- GPU 강제 비활성화(명시적) ----
-        ////desc.gpuDispatcher = nullptr;
-        //desc.flags &= ~PxSceneFlag::eENABLE_GPU_DYNAMICS;
-        //desc.flags &= ~PxSceneFlag::eENABLE_PCM; // 선택: GPU 때문은 아니지만 결과 재현을 단순화하려면 꺼도 됨(원하면 유지)
-
-        //// Broadphase도 CPU로 강제
-        //desc.broadPhaseType = PxBroadPhaseType::eABP;
+        
 
         return desc;
 	}

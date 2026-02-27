@@ -85,6 +85,7 @@ namespace jam
 		int32       idleSleepMs		= 1;
 		uint16      numaNode		= 0xFFFF;
 		uint64      tickPeriod_ns	= 1'000'000_ns;
+		int32		maxTickCatchUp  = 4;
 	};
 
 

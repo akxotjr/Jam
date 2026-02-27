@@ -27,7 +27,7 @@
     </ClCompile>
     <ClCompile Include="src\jampx\character\CharacterMotor.cpp" />
     <ClCompile Include="src\jampx\character\CharacterMovementComponent.cpp" />
-    <ClCompile Include="src\jampx\character\DefaultQuakePolicy.cpp" />
+    <ClCompile Include="src\jampx\character\DefaultQuakeAccelerator.cpp" />
     <ClCompile Include="src\jampx\character\ExternalMoveAccumulator.cpp" />
     <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp" />
     <ClCompile Include="src\jampx\PhysicsCore.cpp" />
@@ -49,14 +49,15 @@
     <ClInclude Include="include\jampx\character\CharacterMotor.h" />
     <ClInclude Include="include\jampx\character\CharacterMovementComponent.h" />
     <ClInclude Include="include\jampx\character\CharacterMovementTypes.h" />
-    <ClInclude Include="include\jampx\character\DefaultQuakePolicy.h" />
+    <ClInclude Include="include\jampx\character\DefaultQuakeAccelerator.h" />
     <ClInclude Include="include\jampx\character\ExternalMoveAccumulator.h" />
-    <ClInclude Include="include\jampx\character\IAccelerationPolicy.h" />
+    <ClInclude Include="include\jampx\character\IAccelerator.h" />
     <ClInclude Include="include\jampx\JamPx.h" />
     <ClInclude Include="include\jampx\PhysicsCompletionTask.h" />
     <ClInclude Include="include\jampx\PhysicsCore.h" />
     <ClInclude Include="include\jampx\PhysicsFacade.h" />
     <ClInclude Include="include\jampx\PhysicsFilter.h" />
+    <ClInclude Include="include\jampx\PhysicsSimFilter.h" />
     <ClInclude Include="include\jampx\PhysicsUtils.h" />
     <ClInclude Include="include\jampx\PhysicsWorld.h" />
     <ClInclude Include="include\jampx\prefab\PhysicsPrefabIO.h" />

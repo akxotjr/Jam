@@ -2,8 +2,8 @@
 
 #include <jampx/api/PhysicsTypes.h>
 
+#include "jampx/character/IAccelerator.h"
 #include "jampx/character/CharacterMotor.h"
-#include "jampx/character/IAccelerationPolicy.h"
 #include "jampx/character/ExternalMoveAccumulator.h"
 
 namespace jam::px
@@ -43,7 +43,7 @@ namespace jam::px
         MovementConfig                              m_cfg{};
         MovementState                               m_state{};
 
-        std::unique_ptr<IAccelerationPolicy>        m_accelerator = nullptr;
+        std::unique_ptr<IAccelerator>               m_accelerator = nullptr;
         std::unique_ptr<ExternalMoveAccumulator>    m_accumulator = nullptr;
         std::unique_ptr<CharacterMotor>             m_motor       = nullptr;
     };

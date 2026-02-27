@@ -167,19 +167,27 @@ namespace jam
 		for (auto& group : L.domainGroups | views::values)
 		{
 			const uint64 period_ns = group.tickPeriod_ns;
+			uint64		 group_dt  = dt_ns;
 
 			// tick 주기 체크 (0이면 매번 실행)
 			if (period_ns != 0)
 			{
-				const uint64 elapsed_ns = now_ns - group.lastTick_ns;
-				if (elapsed_ns < period_ns)
+				if (group.lastTick_ns == 0)
+					group.lastTick_ns = now_ns - period_ns;
+
+				if (now_ns < group.lastTick_ns + period_ns)
 					continue;
 
-				// dt는 "그룹 기준 dt"로 재계산
-				dt_ns = elapsed_ns;
-			}
+				group_dt = period_ns;
+				group.lastTick_ns += period_ns;
 
-			group.lastTick_ns = now_ns;
+				if (now_ns >= group.lastTick_ns + period_ns)
+					group.lastTick_ns = now_ns;
+			}
+			else
+			{
+				group.lastTick_ns = now_ns;
+			}
 
 			// Bootstrap (한 번만 실행)
 			if (!group.bootstraps.empty())
@@ -194,10 +202,9 @@ namespace jam
 			}
 
 			// Systems
-			// (필요하면 systemsCopy 전략으로 바꿀 수 있으나, 현재는 직접 순회)
 			for (auto& fn : group.systems)
 			{
-				if (fn) fn(L, now_ns, dt_ns);
+				if (fn) fn(L, now_ns, group_dt);
 			}
 		}
 
@@ -330,23 +337,33 @@ namespace jam
 
 	void ShardExecutor::Loop()
 	{
+		m_lastTick_ns = NOW_NS();
+
 		while (m_running.load())
 		{
 			bool didWork = false;
 
 			DrainReadyMailboxes(64, m_config.batchBudget);
-
 			didWork |= ProcessJobsOnce();
-
 			m_scheduler->Poll(m_config.batchBudget, NOW_NS());
 
-			uint64 now_ns = NOW_NS();
-			uint64 elapsed_ns = now_ns - m_lastTick_ns;
-			if (elapsed_ns >= m_config.tickPeriod_ns)
+			const uint64 now_ns		= NOW_NS();
+			const uint64 tickPeriod = m_config.tickPeriod_ns;
+
+			if (now_ns >= m_lastTick_ns + tickPeriod)
 			{
-				uint64 dt = elapsed_ns;
-				Tick(now_ns, dt);
-				m_lastTick_ns = now_ns;
+				int32 catches = 0;
+
+				while (now_ns >= m_lastTick_ns + tickPeriod && catches < m_config.maxTickCatchUp)
+				{
+					m_lastTick_ns += tickPeriod;
+					Tick(m_lastTick_ns, tickPeriod);
+					++catches;
+				}
+
+				if (now_ns >= m_lastTick_ns + tickPeriod)
+					m_lastTick_ns = now_ns;
+
 				didWork = true;
 			}
 
