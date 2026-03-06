@@ -10,7 +10,7 @@
 namespace jam::px
 {
 
-	CharacterMovementComponent::CharacterMovementComponent(const MovementConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox)
+	CharacterMovementComponent::CharacterMovementComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox)
 		: m_cfg(cfg)
 	{
 		m_accelerator = std::make_unique<DefaultQuakeAccelerator>(cfg);
@@ -23,7 +23,7 @@ namespace jam::px
 		m_state.air		 = eAirState::Grounded;
 	}
 
-	void CharacterMovementComponent::SetMoveState(const MovementState& state)
+	void CharacterMovementComponent::SetMoveState(const CharacterMoveState& state)
 	{
 		m_state = state;
 

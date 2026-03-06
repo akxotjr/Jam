@@ -13,103 +13,132 @@ namespace jam::px::prefab
 
 
     // ----------------------------
-    // Root
+    //  Root
     // ----------------------------
-    inline constexpr const char* kVersion           = "version";
-    inline constexpr const char* kTemplates         = "templates";
+
+    inline constexpr const char* k_version          = "version";
+    inline constexpr const char* k_templates        = "templates";
 
     // ----------------------------
-    // templateDef
+    //  TemplateDef
     // ----------------------------
-    inline constexpr const char* kName              = "name";
-    inline constexpr const char* kKind              = "kind";
-    inline constexpr const char* kSpawnPolicy       = "spawn_policy";
-    inline constexpr const char* kAllowReplication  = "allow_replication";
-    inline constexpr const char* kShapes            = "shapes";
 
-    inline constexpr const char* kDynBody           = "dyn_body";
-    inline constexpr const char* kCct               = "cct";
+    inline constexpr const char* k_name             = "name";
+    inline constexpr const char* k_actorType        = "actor_type";
+    inline constexpr const char* k_motionType       = "motion_type";
+    inline constexpr const char* k_bodyFlags        = "body_flags";
+    inline constexpr const char* k_spawnPolicy      = "spawn_policy";
+    inline constexpr const char* k_allowReplication = "allow_replication";
+    inline constexpr const char* k_shapes           = "shapes";
 
-    // kind enum values
-    inline constexpr const char* vKindStatic        = "static";
-    inline constexpr const char* vKindDynamic       = "dynamic";
-    inline constexpr const char* vKindKinematic     = "kinematic";
-    inline constexpr const char* vKindCharacter     = "character";
+    inline constexpr const char* k_dynBody          = "dyn_body";
+    inline constexpr const char* k_cct              = "cct";
 
-    // spawn_policy enum values
-    inline constexpr const char* vSpawnLevelOnly    = "level_only";
-    inline constexpr const char* vSpawnRuntimeOnly  = "runtime_only";
-    inline constexpr const char* vSpawnBoth         = "both";
+    // ---- actor type enum values ----
 
-    // ----------------------------
-    // shapeDef
-    // ----------------------------
-    inline constexpr const char* kType              = "type";
-    inline constexpr const char* kLocalPose         = "local_pose";
-    inline constexpr const char* kMaterial          = "material";
-    inline constexpr const char* kShapeFlag         = "shape_flag";
-    inline constexpr const char* kSimFilter         = "sim_filter";
-    inline constexpr const char* kQryFilter         = "qry_filter";
-    inline constexpr const char* kContactOffset     = "contact_offset";
-    inline constexpr const char* kRestOffset        = "rest_offset";
+    inline constexpr const char* k_genericActor     = "generic";
+    inline constexpr const char* k_projectile       = "projectile";
+    inline constexpr const char* k_character        = "character";
 
-    // shape geometry params
-    inline constexpr const char* kHalfExtents       = "half_extents";
-    inline constexpr const char* kRadius            = "radius";
-    inline constexpr const char* kHalfHeight        = "half_height";
-    inline constexpr const char* kMesh              = "mesh";
+    // ---- motion type enum values ----
 
-    // type enum values
-    inline constexpr const char* vShapeBox              = "box";
-    inline constexpr const char* vShapeSphere           = "sphere";
-    inline constexpr const char* vShapeCapsule          = "capsule";
-    inline constexpr const char* vShapePlane            = "plane";
-    inline constexpr const char* vShapeConvexMesh       = "convex_mesh";
-    inline constexpr const char* vShapeTriangleMesh     = "triangle_mesh";
-    inline constexpr const char* vShapeHeightField      = "height_field";
+    inline constexpr const char* k_static           = "static";
+    inline constexpr const char* k_dynamic          = "dynamic";
+    inline constexpr const char* k_kinematic        = "kinematic";
 
-    // shape_flag enum values
-    inline constexpr const char* vShapeFlagSimulation       = "simulation";
-    inline constexpr const char* vShapeFlagSimulationOnly   = "simulation_only";
-    inline constexpr const char* vShapeFlagTrigger          = "trigger";
-    inline constexpr const char* vShapeFlagTriggerOnly      = "trigger_only";
-    inline constexpr const char* vShapeFlagQueryOnly        = "query_only";
+    // ---- body flag enum values ----
+
+    inline constexpr const char* k_disableGravity   = "disable_gravity";
+    inline constexpr const char* k_enableCCD        = "enable_ccd";
+    inline constexpr const char* k_lockLinearX      = "lock_linear_x";
+    inline constexpr const char* k_lockLinearY      = "lock_linear_y";
+    inline constexpr const char* k_lockLinearZ      = "lock_linear_z";
+    inline constexpr const char* k_lockAngularX     = "lock_angular_x";
+    inline constexpr const char* k_lockAngularY     = "lock_angular_y";
+    inline constexpr const char* k_lockAngularZ     = "lock_angular_z";
+
+    // ---- spawn policy enum values ----
+
+    inline constexpr const char* k_spawnLevelOnly   = "level_only";
+    inline constexpr const char* k_spawnRuntimeOnly = "runtime_only";
+    inline constexpr const char* k_spawnBoth        = "both";
 
     // ----------------------------
-    // materialDef
+    //  ShapeDef
     // ----------------------------
-    inline constexpr const char* kStaticFriction    = "static_friction";
-    inline constexpr const char* kDynamicFriction   = "dynamic_friction";
-    inline constexpr const char* kRestitution       = "restitution";
+
+    inline constexpr const char* k_shapeType         = "shape_type";
+    inline constexpr const char* k_localPose         = "local_pose";
+    inline constexpr const char* k_material          = "material";
+    inline constexpr const char* k_shapeFlag         = "shape_flag";
+    inline constexpr const char* k_simFilter         = "sim_filter";
+    inline constexpr const char* k_qryFilter         = "qry_filter";
+    inline constexpr const char* k_contactOffset     = "contact_offset";
+    inline constexpr const char* k_restOffset        = "rest_offset";
+
+    // ---- shape geometry params ---- 
+    inline constexpr const char* k_halfExtents       = "half_extents";
+    inline constexpr const char* k_radius            = "radius";
+    inline constexpr const char* k_halfHeight        = "half_height";
+    inline constexpr const char* k_mesh              = "mesh";
+
+    // ---- shape type enum values ----
+
+    inline constexpr const char* k_shapeBox              = "box";
+    inline constexpr const char* k_shapeSphere           = "sphere";
+    inline constexpr const char* k_shapeCapsule          = "capsule";
+    inline constexpr const char* k_shapePlane            = "plane";
+    inline constexpr const char* k_shapeConvexMesh       = "convex_mesh";
+    inline constexpr const char* k_shapeTriangleMesh     = "triangle_mesh";
+
+    // ---- shape flag enum values ----
+
+    inline constexpr const char* k_simulation           = "simulation";
+    inline constexpr const char* k_simulation_only      = "simulation_only";
+    inline constexpr const char* k_trigger              = "trigger";
+    inline constexpr const char* k_trigger_only         = "trigger_only";
+    inline constexpr const char* k_query_only           = "query_only";
 
     // ----------------------------
-    // simFilter / qryFilter
+    //  MaterialDef
     // ----------------------------
-    inline constexpr const char* kWord0             = "word0";
-    inline constexpr const char* kWord1             = "word1";
-    inline constexpr const char* kWord2             = "word2";
-    inline constexpr const char* kWord3             = "word3";
+
+    inline constexpr const char* k_staticFriction       = "static_friction";
+    inline constexpr const char* k_dynamicFriction      = "dynamic_friction";
+    inline constexpr const char* k_restitution          = "restitution";
 
     // ----------------------------
-    // meshDef
+    //  SimFilter / QryFilter
     // ----------------------------
-    inline constexpr const char* kSrc               = "src";
-    inline constexpr const char* kMeshIndex         = "mesh_index";
-    inline constexpr const char* kPrimitiveIndex    = "primitive_index";
-    inline constexpr const char* kCooked            = "cooked";
+
+    inline constexpr const char* k_word0                = "word0";
+    inline constexpr const char* k_word1                = "word1";
+    inline constexpr const char* k_word2                = "word2";
+    inline constexpr const char* k_word3                = "word3";
+
+
 
     // ----------------------------
-    // dynBodyDef
+    //  MeshDef
     // ----------------------------
-    inline constexpr const char* kDensity           = "density";
-    inline constexpr const char* kUseGravity        = "use_gravity";
-    inline constexpr const char* kLinearDamping     = "linear_damping";
-    inline constexpr const char* kAngularDamping    = "angular_damping";
-    inline constexpr const char* kLinearVelocity    = "linear_velocity";
-    inline constexpr const char* kAngularVelocity   = "angular_velocity";
+
+    inline constexpr const char* k_src                  = "src";
+    inline constexpr const char* k_meshIndex            = "mesh_index";
+    inline constexpr const char* k_primitiveIndex       = "primitive_index";
+    inline constexpr const char* k_cooked               = "cooked";
 
     // ----------------------------
-    // cctDef
+    //  DynBodyDef
+    // ----------------------------
+
+    inline constexpr const char* k_density              = "density";
+    inline constexpr const char* k_linearDamping        = "linear_damping";
+    inline constexpr const char* k_angularDamping       = "angular_damping";
+    inline constexpr const char* k_linearVelocity       = "linear_velocity";
+    inline constexpr const char* k_angularVelocity      = "angular_velocity";
+
+    // ----------------------------
+    //  CCTDef
     // ----------------------------
     inline constexpr const char* kCctRadius         = "radius";
     inline constexpr const char* kCctHeight         = "height";
@@ -121,44 +150,21 @@ namespace jam::px::prefab
     inline constexpr const char* kHasHitbox         = "has_hitbox";
     inline constexpr const char* kMovement          = "movement";
 
-    // ----------------------------
-    // cctMovement
-    // ----------------------------
-    inline constexpr const char* kWalkSpeed         = "walk_speed";
-    inline constexpr const char* kSprintSpeed       = "sprint_speed";
-    inline constexpr const char* kCrouchSpeed       = "crouch_speed";
-
-    inline constexpr const char* kAccelGround       = "accel_ground";
-    inline constexpr const char* kAccelAir          = "accel_air";
-    inline constexpr const char* kFrictionGround    = "friction_ground";
-    inline constexpr const char* kGravity           = "gravity";
-    inline constexpr const char* kJumpSpeed         = "jump_speed";
-
-    inline constexpr const char* kCoyoteTimeSec     = "coyote_time_sec";
-    inline constexpr const char* kJumpBufferSec     = "jump_buffer_sec";
-
-    inline constexpr const char* kStandHeight       = "stand_height";
-    inline constexpr const char* kCrouchHeight      = "crouch_height";
-    inline constexpr const char* kSlideHeight       = "slide_height";
-    inline constexpr const char* kCharRadius        = "radius"; // movement 내부 radius(주의: 이름 중복)
-
-    inline constexpr const char* kSlideMinSpeed     = "slide_min_speed";
-    inline constexpr const char* kSlideDurationSec  = "slide_duration_sec";
-    inline constexpr const char* kSlideFriction     = "slide_friction";
-    inline constexpr const char* kSlideSpeedCap     = "slide_speed_cap";
 
     // ----------------------------
-    // transform / vec3 / quat
+    //  Transform / Vec3 / Quat
     // ----------------------------
-    inline constexpr const char* kP = "p";
-    inline constexpr const char* kQ = "q";
 
-    inline constexpr int kVec3Size = 3;
-    inline constexpr int kQuatSize = 4;
+    inline constexpr const char* k_p = "p";
+    inline constexpr const char* k_q = "q";
+
+    inline constexpr int32 k_vec3Size = 3;
+    inline constexpr int32 k_quatSize = 4;
 
     // ----------------------------
 	// JSON pointer paths (정적)
 	// ----------------------------
+
     inline constexpr const char* pVersion   = "/version";
     inline constexpr const char* pTemplates = "/templates";
 
@@ -177,54 +183,54 @@ namespace jam::px::prefab
 
     inline json::json_pointer MakeShapePtr(size_t templateIndex, size_t shapeIndex)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kShapes + "/" + std::to_string(shapeIndex));
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_shapes + "/" + std::to_string(shapeIndex));
     }
 
     inline json::json_pointer MakeShapeFieldPtr(size_t templateIndex, size_t shapeIndex, const char* field)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kShapes + "/" + std::to_string(shapeIndex) + "/" + field);
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_shapes + "/" + std::to_string(shapeIndex) + "/" + field);
     }
 
     // materialDef 서브트리(주의: material은 보통 shape.material 아래에 객체로 존재)
     inline json::json_pointer MakeShapeMaterialFieldPtr(size_t templateIndex, size_t shapeIndex, const char* field)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kShapes + "/" + std::to_string(shapeIndex) + "/" + kMaterial + "/" + field);
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_shapes + "/" + std::to_string(shapeIndex) + "/" + k_material + "/" + field);
     }
 
     // meshDef 서브트리(주의: mesh는 보통 shape.mesh 아래에 객체로 존재)
     inline json::json_pointer MakeShapeMeshFieldPtr(size_t templateIndex, size_t shapeIndex, const char* field)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kShapes + "/" + std::to_string(shapeIndex) + "/" + kMesh + "/" + field);
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_shapes + "/" + std::to_string(shapeIndex) + "/" + k_mesh + "/" + field);
     }
 
     inline json::json_pointer MakeDynBodyPtr(size_t templateIndex)
     {
-        return MakeTemplateFieldPtr(templateIndex, kDynBody);
+        return MakeTemplateFieldPtr(templateIndex, k_dynBody);
     }
 
     inline json::json_pointer MakeDynBodyFieldPtr(size_t templateIndex, const char* field)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kDynBody + "/" + field);
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_dynBody + "/" + field);
     }
 
     inline json::json_pointer MakeCctPtr(size_t templateIndex)
     {
-        return MakeTemplateFieldPtr(templateIndex, kCct);
+        return MakeTemplateFieldPtr(templateIndex, k_cct);
     }
 
     inline json::json_pointer MakeCctFieldPtr(size_t templateIndex, const char* field)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kCct + "/" + field);
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_cct + "/" + field);
     }
 
     inline json::json_pointer MakeCctMovementPtr(size_t templateIndex)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kCct + "/" + kMovement);
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_cct + "/" + kMovement);
     }
 
     inline json::json_pointer MakeCctMovementFieldPtr(size_t templateIndex, const char* field)
     {
-        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + kCct + "/" + kMovement + "/" + field);
+        return json::json_pointer("/templates/" + std::to_string(templateIndex) + "/" + k_cct + "/" + kMovement + "/" + field);
     }
 
 

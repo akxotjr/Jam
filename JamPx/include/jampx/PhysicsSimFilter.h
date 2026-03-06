@@ -1,6 +1,9 @@
 #pragma once
 
 #include <jambase/EnumUtils.h>
+
+#include "PhysicsUtils.h"
+#include "api/PhysicsTypes.h"
 #include "jambase/Fnv1a.h"
 
 
@@ -344,11 +347,10 @@ namespace jam::px
         ePairKind kind = ePairKind::Auto)
     {
         PairFlagsBuildInput in{};
-        in.attrs0 = attrs0;
-        in.fd0    = fd0;
-        in.attrs1 = attrs1;
-        in.fd1    = fd1;
+        in.attrs0 = attrs0; in.fd0 = fd0;
+        in.attrs1 = attrs1; in.fd1 = fd1;
         in.kind   = kind;
+
         return PairFlagsBuilder::Build(in);
     }
 
@@ -418,20 +420,22 @@ namespace jam::px
     PxFilterFlags SimulationFilterShader(
         PxFilterObjectAttributes attrs0, PxFilterData fd0,
         PxFilterObjectAttributes attrs1, PxFilterData fd1,
-        PxPairFlags& pair,
+        PxPairFlags& pairFlags,
         const void*, PxU32)
     {
         if (!PassSimCategory(fd0.word0, fd0.word1, fd1.word0, fd1.word1))
             return PxFilterFlag::eKILL;
 
-        PolicyT::ConfigurePairFlags(attrs0, fd0, attrs1, fd1, pair);
+        PolicyT::ConfigurePairFlags(attrs0, fd0, attrs1, fd1, pairFlags);
         return PolicyT::PostDecision(attrs0, fd0, attrs1, fd1);
     }
 
 
-    // 이벤트 타입을 네 엔진 쪽에서 처리하기 쉽게 정리
-    enum class eSimEventType : uint8_t
+
+    enum class eSimEventType : uint8
     {
+        None,
+
         ContactFound,
         ContactLost,
         ContactPersists,
@@ -444,40 +448,41 @@ namespace jam::px
         TriggerFound,
         TriggerLost,
 
-        AdvancePose, // optional
+        //(optional)
+        //AdvancePose, 
     };
 
     struct SimContactPoint
     {
-        PxVec3 position{};
-        PxVec3 normal{};
-        PxReal separation{ 0 };
+        PxVec3      position   = PxVec3(PxZero);
+        PxVec3      normal     = PxVec3(PxZero);
+        PxReal      separation = 0.f;
     };
 
     struct SimEvent
     {
-        eSimEventType type{};
+        eSimEventType       type        = eSimEventType::None;
 
-        // pair identity (pointer 기반)
-        const PxActor* actor0{ nullptr };
-        const PxActor* actor1{ nullptr };
-        const PxShape* shape0{ nullptr };
-        const PxShape* shape1{ nullptr };
+        // ---- contact pair identity(ObjectId) ----
 
-        // trigger identity
-        const PxShape* triggerShape{ nullptr };
-        const PxShape* otherShape{ nullptr };
-        const PxActor* triggerActor{ nullptr };
-        const PxActor* otherActor{ nullptr };
+        ObjectId            contact0    = INVALID_OBJ_ID;
+        ObjectId            contact1    = INVALID_OBJ_ID;
 
-        // contact extras
-        PxReal contactImpulseSum{ 0 };   // 필요시(대략치) - 가능할 때만 채움
-        PxU32  contactPointCount{ 0 };
-        SimContactPoint contactPoints[8]{}; // 고정 크기(과도한 할당 방지)
+        // ---- trigger pair identity(ObjectId) ----
 
-        // onAdvance
-        const PxRigidBody* body{ nullptr };
-        PxTransform pose{};
+        ObjectId            trigger0    = INVALID_OBJ_ID;
+        ObjectId            trigger1    = INVALID_OBJ_ID;
+
+        // ---- contact extras ----
+
+        PxReal              contactImpulseSum = 0.f;
+        PxU32               contactPointCount = 0;
+        SimContactPoint     contactPoints[8]{}; // 고정 크기(과도한 할당 방지)
+
+        // ---- onAdvance ----
+		//(optional)
+        //ObjectId            body        = INVALID_OBJ_ID;
+        //PxTransform         pose        = PxTransform(PxIdentity);
     };
 
     struct SimulationEventCallback final : PxSimulationEventCallback
@@ -485,51 +490,53 @@ namespace jam::px
         // 비용 제어: contact points는 최대 몇 개 뽑을지
         PxU32                   maxExtractContacts = 8;
         std::vector<SimEvent>   events;
+        std::vector<ObjectId>   advanceActive;
 
         void Clear()
         {
             events.clear();
         }
 
-
-        std::vector<SimEvent> Consume()
+        std::vector<SimEvent> ConsumeEvents()
         {
             std::vector<SimEvent> out;
             out.swap(events);
             return out;
         }
 
+        std::vector<ObjectId> ConsumeActiveList()
+        {
+            std::vector<ObjectId> out;
+            out.swap(advanceActive);
+            return out;
+        }
+
         // ---- unused by default ----
+
         void onConstraintBreak(PxConstraintInfo*, PxU32) override {}
         void onWake(PxActor**, PxU32) override {}
         void onSleep(PxActor**, PxU32) override {}
 
         // ---- Contact ----
+
         void onContact(const PxContactPairHeader& header, const PxContactPair* pairs, PxU32 nbPairs) override
         {
-            // 주의: header.actors[0/1]는 항상 유효하지만, pair에서 shape가 제거된 경우 flags로 확인 필요
-            const PxActor* a0 = header.actors[0];
-            const PxActor* a1 = header.actors[1];
+            const ObjectId oid0 = GetObjectId(header.actors[0]);
+            const ObjectId oid1 = GetObjectId(header.actors[1]);
 
             for (PxU32 i = 0; i < nbPairs; ++i)
             {
                 const PxContactPair& cp = pairs[i];
 
-                // shape pointers may be null/invalid if removed:
                 const bool removed0 = cp.flags.isSet(PxContactPairFlag::eREMOVED_SHAPE_0);
                 const bool removed1 = cp.flags.isSet(PxContactPairFlag::eREMOVED_SHAPE_1);
-
-                const PxShape* s0 = removed0 ? nullptr : cp.shapes[0];
-                const PxShape* s1 = removed1 ? nullptr : cp.shapes[1];
 
                 auto pushEvent = [&](eSimEventType t)
                     {
                         SimEvent e{};
-                        e.type   = t;
-                        e.actor0 = a0;
-                        e.actor1 = a1;
-                        e.shape0 = s0;
-                        e.shape1 = s1;
+                        e.type     = t;
+                        e.contact0 = oid0;
+                        e.contact1 = oid1;
 
                         // contact points 추출은 "요청된 페어"에서만 실제로 유효/의미가 있음
                         // (PairFlagsBuilder에서 eNOTIFY_CONTACT_POINTS를 켠 경우)
@@ -537,13 +544,13 @@ namespace jam::px
                         {
                             PxContactPairPoint pts[16];
                             const PxU32 cap = (maxExtractContacts < 16u) ? maxExtractContacts : 16u;
-                            const PxU32 n = cp.extractContacts(pts, cap);
+                            const PxU32 n   = cp.extractContacts(pts, cap);
 
                             e.contactPointCount = (n <= 8u) ? n : 8u;
                             for (PxU32 k = 0; k < e.contactPointCount; ++k)
                             {
-                                e.contactPoints[k].position = pts[k].position;
-                                e.contactPoints[k].normal = pts[k].normal;
+                                e.contactPoints[k].position   = pts[k].position;
+                                e.contactPoints[k].normal     = pts[k].normal;
                                 e.contactPoints[k].separation = pts[k].separation;
                             }
                         }
@@ -554,7 +561,6 @@ namespace jam::px
                 		events.push_back(e);
                     };
 
-                // cp.events는 PxPairFlag 비트(Notify 종류)가 들어옴
                 if (cp.events & PxPairFlag::eNOTIFY_TOUCH_FOUND)              pushEvent(eSimEventType::ContactFound);
                 if (cp.events & PxPairFlag::eNOTIFY_TOUCH_LOST)               pushEvent(eSimEventType::ContactLost);
                 if (cp.events & PxPairFlag::eNOTIFY_TOUCH_PERSISTS)           pushEvent(eSimEventType::ContactPersists);
@@ -565,55 +571,54 @@ namespace jam::px
             }
         }
 
+
         // ---- Trigger ----
+
         void onTrigger(PxTriggerPair* pairs, PxU32 count) override
         {
             for (PxU32 i = 0; i < count; ++i)
             {
                 const PxTriggerPair& tp = pairs[i];
 
-                // removed shape/actor 체크
-                const bool removedTriggerShape = tp.flags.isSet(PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER);
-                const bool removedOtherShape   = tp.flags.isSet(PxTriggerPairFlag::eREMOVED_SHAPE_OTHER);
+                const bool removedTrigger = tp.flags.isSet(PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER);
+                const bool removedOther   = tp.flags.isSet(PxTriggerPairFlag::eREMOVED_SHAPE_OTHER);
 
-                const PxShape* triggerShape = removedTriggerShape ? nullptr : tp.triggerShape;
-                const PxShape* otherShape   = removedOtherShape ? nullptr : tp.otherShape;
-
-                // actors might be null if removed
-                const PxActor* triggerActor = tp.triggerActor;
-                const PxActor* otherActor   = tp.otherActor;
+                const ObjectId oid0 = removedTrigger ? INVALID_OBJ_ID : GetObjectId(tp.triggerActor);
+                const ObjectId oid1 = removedOther   ? INVALID_OBJ_ID : GetObjectId(tp.otherActor);
 
                 auto pushEvent = [&](eSimEventType t)
                     {
                         SimEvent e{};
-                        e.type         = t;
-                        e.triggerShape = triggerShape;
-                        e.otherShape   = otherShape;
-                        e.triggerActor = triggerActor;
-                        e.otherActor   = otherActor;
+                        e.type      = t;
+                        e.trigger0  = oid0;
+                        e.trigger1  = oid1;
 
                         events.push_back(e);
                     };
 
-                // tp.status는 PxPairFlag notify bit를 담는 케이스가 일반적
                 if (tp.status & PxPairFlag::eNOTIFY_TOUCH_FOUND) pushEvent(eSimEventType::TriggerFound);
                 if (tp.status & PxPairFlag::eNOTIFY_TOUCH_LOST)  pushEvent(eSimEventType::TriggerLost);
             }
         }
 
         // ---- Advance ----
+
         void onAdvance(const PxRigidBody* const* bodyBuffer, const PxTransform* poseBuffer, const PxU32 count) override
         {
-            // 필요 없으면 early return;
-            // return;
-
             for (PxU32 i = 0; i < count; ++i)
             {
-                SimEvent e{};
-                e.type = eSimEventType::AdvancePose;
-                e.body = bodyBuffer[i];
-                e.pose = poseBuffer[i];
-                events.push_back(e);
+                const ObjectId oid = GetObjectId(bodyBuffer[i]);
+                if (oid == INVALID_OBJ_ID) continue;
+
+                advanceActive.push_back(oid);
+
+                //(optional)
+                //SimEvent e{};
+                //e.type = eSimEventType::AdvancePose;
+                //e.body = oid;
+                //e.pose = poseBuffer[i];
+
+                //events.push_back(e);
             }
         }
     };

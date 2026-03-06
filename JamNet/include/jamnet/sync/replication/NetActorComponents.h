@@ -11,14 +11,14 @@ namespace jam::net
 	/// @brief	Identifier of NetActor
 	struct NetIdentity
 	{
-		uint32					netId = 0;
+		uint32				netId = 0;
 	};
 
 	/// @brief	PhysicsFacade(ObjectKey) is NetWorld(registry) local Key. 
 	///			rule : ObjectKey.value == entt::entity (casted uint32) 
-	inline px::ObjectKey MakeObjectKey(entt::entity e) noexcept
+	inline px::ObjectId MakeObjectId(entt::entity e) noexcept
 	{
-		return px::ObjectKey{ static_cast<uint32>(e) };
+		return static_cast<px::ObjectId>(e);
 	}
 
 	/// @brief	PrefabKey(in PhyiscsFacade) of NetActor

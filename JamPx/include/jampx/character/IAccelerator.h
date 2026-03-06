@@ -15,6 +15,6 @@ namespace jam::px
         virtual ~IAccelerator() = default;
 
         virtual WishMovement    BuildWishMovement(const MoveIntent& in) const = 0;
-        virtual void            Integrate(MovementState& st, const WishMovement& wish, float dt) const = 0;
+        virtual void            Integrate(CharacterMoveState& st, const WishMovement& wish, float dt) const = 0;
     };
 }

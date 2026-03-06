@@ -8,7 +8,7 @@ namespace jam::px
 	namespace 
 	{
 
-        static void ApplyGroundFriction(MovementState& st, const MovementConfig& cfg, float dt)
+        static void ApplyGroundFriction(CharacterMoveState& st, const CharacterMoveConfig& cfg, float dt)
         {
             const float speed = HorizontalSpeed(st.velocity);
             if (speed <= EPSILON) return;
@@ -22,7 +22,7 @@ namespace jam::px
         }
 
         // Quake-style accelerate: wishDir 방향 성분만 add
-        static void Accelerate(MovementState& st, const Vec3& wishDir, float wishSpeed, float accel, float dt)
+        static void Accelerate(CharacterMoveState& st, const Vec3& wishDir, float wishSpeed, float accel, float dt)
         {
             if (wishSpeed <= 0.0f) return;
             if (wishDir.MagnitudeSquared() <= EPSILON) return;
@@ -39,7 +39,7 @@ namespace jam::px
         }
 
        
-        static void ApplyAirSpeedCap(MovementState& st, const MovementConfig& cfg, float dt)
+        static void ApplyAirSpeedCap(CharacterMoveState& st, const CharacterMoveConfig& cfg, float dt)
         {
             Vec3 v      = st.velocity;
             float speed = cfg.capHorizontalOnly ? HorizontalSpeed(v) : v.Magnitude();
@@ -88,7 +88,7 @@ namespace jam::px
 	}
 
 
-	DefaultQuakeAccelerator::DefaultQuakeAccelerator(const MovementConfig& cfg)
+	DefaultQuakeAccelerator::DefaultQuakeAccelerator(const CharacterMoveConfig& cfg)
 		: m_cfg(cfg)
 	{
 	}
@@ -115,7 +115,7 @@ namespace jam::px
         return w;
 	}
 
-	void DefaultQuakeAccelerator::Integrate(MovementState& st, const WishMovement& wish, float dt) const
+	void DefaultQuakeAccelerator::Integrate(CharacterMoveState& st, const WishMovement& wish, float dt) const
 	{
         if (dt <= 0.0f) return;
 

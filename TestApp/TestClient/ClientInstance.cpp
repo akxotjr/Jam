@@ -330,14 +330,14 @@ void ClientInstance::OnActorSpawned(const net::RenderActorSpawnedEvent& evt)
 		m_pendingSpawnToRenderData.erase(it);
 
 		data.ensured = true;
-		data.key	 = evt.key;
+		data.key	 = evt.objectId;
 		data.isLocal = evt.isLocal;
 
-		m_actorRenderData.emplace(evt.key, std::move(data));
+		m_actorRenderData.emplace(evt.objectId, std::move(data));
 		return;
 	}
 
-	ActorRenderingData* data = EnsureRenderingActorData(evt.key);
+	ActorRenderingData* data = EnsureRenderingActorData(evt.objectId);
 	data->ensured			= true;
 	data->pendingSpawnReqId = 0;
 	data->isLocal			= evt.isLocal;
@@ -349,7 +349,7 @@ void ClientInstance::OnActorDespawned(const net::RenderActorDespawnedEvent& evt)
 	if (evt.userId != m_userId)
 		return;
 
-	m_actorRenderData.erase(evt.key);
+	m_actorRenderData.erase(evt.objectId);
 }
 
 void ClientInstance::OnRenderSamples(const net::RenderSamplesEvent& evt)
@@ -361,7 +361,7 @@ void ClientInstance::OnRenderSamples(const net::RenderSamplesEvent& evt)
 
 	for (const auto& actor : evt.actors)
 	{
-		ActorRenderingData* data = GetRenderingActorData(actor.key);
+		ActorRenderingData* data = GetRenderingActorData(actor.objectId);
 		if (!data) return;
 
 		// isLocal은 소유권 변경 가능하므로 매 프레임 업데이트

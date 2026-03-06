@@ -90,7 +90,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [ "box", "sphere", "capsule", "plane", "convex_mesh", "triangle_mesh", "height_field" ]
+          "enum": [ "box", "sphere", "capsule", "plane", "convex_mesh", "triangle_mesh" ]
         },
         "local_pose": { "$ref": "#/$defs/transform" },
         "material"  : { "$ref": "#/$defs/materialDef" },

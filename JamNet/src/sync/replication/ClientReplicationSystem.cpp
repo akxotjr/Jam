@@ -165,7 +165,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAMNET_CRASH("[ApplyFullSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyFullSnapshot] : Invalid entity")
 			return;
 		}
 
@@ -180,7 +180,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAMNET_CRASH("[ApplyDeltaSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyDeltaSnapshot] : Invalid entity")
 				return;
 		}
 
@@ -222,7 +222,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAMNET_CRASH("[ApplyCharacterFullSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyCharacterFullSnapshot] : Invalid entity")
 			return;
 		}
 
@@ -253,7 +253,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAMNET_CRASH("[ApplyCharacterDeltaSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyCharacterDeltaSnapshot] : Invalid entity")
 				return;
 		}
 

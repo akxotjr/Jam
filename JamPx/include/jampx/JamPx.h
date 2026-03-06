@@ -5,8 +5,9 @@
 
 #include "jampx/third_party/tinygltf_impl.h"
 
+#include "PhysicsSimFilter.h"
+#include "PhysicsQueryFilter.h"
 #include "PhysicsFilter.h"
-#include "jampx/PhysicsSimFilter.h"
 
 #include "PhysicsCore.h"
 #include "prefab/PhysicsPrefabRegistry.h"
@@ -14,3 +15,5 @@
 
 #include "PhysicsFacade.h"
 
+
+#include "PhysicsAsset.h"

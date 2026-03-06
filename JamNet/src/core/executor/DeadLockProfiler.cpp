@@ -50,11 +50,11 @@ namespace jam
 		LockGuard guard(m_lock);
 
 		if (tl_LockStack.empty())
-			JAMNET_CRASH("MULTIPLE_UNLOCK");
+			JAM_CRASH("MULTIPLE_UNLOCK");
 
 		int32 lockId = m_nameToId[name];
 		if (tl_LockStack.top() != lockId)
-			JAMNET_CRASH("INVALID_UNLOCK");
+			JAM_CRASH("INVALID_UNLOCK");
 
 		tl_LockStack.pop();
 	}
@@ -116,7 +116,7 @@ namespace jam
 						break;
 				}
 
-				JAMNET_CRASH("DEADLOCK_DETECTED")
+				JAM_CRASH("DEADLOCK_DETECTED")
 			}
 		}
 

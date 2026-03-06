@@ -35,7 +35,7 @@ namespace jam
 			}
 
 			if (::GetTickCount64() - beginTick >= ACQUIRE_TIMEOUT_TICK)
-				JAMNET_CRASH("LOCK_TIMEOUT");
+				JAM_CRASH("LOCK_TIMEOUT");
 
 			std::this_thread::yield();
 		}
@@ -49,7 +49,7 @@ namespace jam
 
 		// ReadLock 다 풀기 전에는 WriteUnlock 불가능.
 		if ((m_lockFlag.load() & READ_COUNT_MASK) != 0)
-			JAMNET_CRASH("INVALID_UNLOCK_ORDER");
+			JAM_CRASH("INVALID_UNLOCK_ORDER");
 
 		const int32 lockCount = --m_writeCount;
 		if (lockCount == 0)
@@ -82,7 +82,7 @@ namespace jam
 			}
 
 			if (::GetTickCount64() - beginTick >= ACQUIRE_TIMEOUT_TICK)
-				JAMNET_CRASH("LOCK_TIMEOUT");
+				JAM_CRASH("LOCK_TIMEOUT");
 
 			std::this_thread::yield();
 		}
@@ -95,6 +95,6 @@ namespace jam
 #endif
 
 		if ((m_lockFlag.fetch_sub(1) & READ_COUNT_MASK) == 0)
-			JAMNET_CRASH("MULTIPLE_UNLOCK");
+			JAM_CRASH("MULTIPLE_UNLOCK");
 	}
 }

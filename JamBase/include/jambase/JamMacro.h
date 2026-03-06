@@ -12,14 +12,14 @@
       Crash
 ---------------*/
 
-#define JAMNET_CRASH(cause)					\
+#define JAM_CRASH(cause)					\
 {											\
 	uint32* crash = nullptr;				\
 	__analysis_assume(crash != nullptr);	\
 	*crash = 0xDEADBEEF;					\
 }
 
-#define JAMNET_ASSERT(expr)			        \
+#define JAM_ASSERT(expr)			        \
 {									        \
 	if (!(expr))					        \
 	{								        \
@@ -62,4 +62,126 @@ private:                                                        \
 
 
 
-#define JAMNET_FORCE_INLINE __forceinline
+#define JAM_FORCE_INLINE __forceinline
+
+
+// ============================================================
+//  Compiler detection
+// ============================================================
+
+#if defined(__clang__)
+#define JAM_COMPILER_CLANG 1
+#elif defined(__GNUC__)
+#define JAM_COMPILER_GCC 1
+#elif defined(_MSC_VER)
+#define JAM_COMPILER_MSVC 1
+#endif
+
+
+// ============================================================
+//  Likely / Unlikely
+// ============================================================
+
+#if defined(__has_cpp_attribute)
+
+#if __has_cpp_attribute(likely)
+#define JAM_LIKELY [[likely]]
+#else
+#define JAM_LIKELY
+#endif
+
+#if __has_cpp_attribute(unlikely)
+#define JAM_UNLIKELY [[unlikely]]
+#else
+#define JAM_UNLIKELY
+#endif
+
+#else
+#define JAM_LIKELY
+#define JAM_UNLIKELY
+#endif
+
+
+// ============================================================
+//  Fallthrough
+// ============================================================
+
+#if defined(__has_cpp_attribute)
+
+#if __has_cpp_attribute(fallthrough)
+#define JAM_FALLTHROUGH [[fallthrough]]
+#else
+#define JAM_FALLTHROUGH
+#endif
+
+#else
+#define JAM_FALLTHROUGH
+#endif
+
+
+// ============================================================
+//  Nodiscard
+// ============================================================
+
+#if defined(__has_cpp_attribute)
+
+#if __has_cpp_attribute(nodiscard)
+#define JAM_NODISCARD [[nodiscard]]
+#else
+#define JAM_NODISCARD
+#endif
+
+#else
+#define JAM_NODISCARD
+#endif
+
+
+// ============================================================
+//  Maybe unused
+// ============================================================
+
+#if defined(__has_cpp_attribute)
+
+#if __has_cpp_attribute(maybe_unused)
+#define JAM_MAYBE_UNUSED [[maybe_unused]]
+#else
+#define JAM_MAYBE_UNUSED
+#endif
+
+#else
+#define JAM_MAYBE_UNUSED
+#endif
+
+
+// ============================================================
+//  Deprecated
+// ============================================================
+
+#if defined(__has_cpp_attribute)
+
+#if __has_cpp_attribute(deprecated)
+#define JAM_DEPRECATED(msg) [[deprecated(msg)]]
+#else
+#define JAM_DEPRECATED(msg)
+#endif
+
+#else
+#define JAM_DEPRECATED(msg)
+#endif
+
+
+// ============================================================
+//  no_unique_address
+// ============================================================
+
+#if defined(__has_cpp_attribute)
+
+#if __has_cpp_attribute(no_unique_address)
+#define JAM_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#else
+#define JAM_NO_UNIQUE_ADDRESS
+#endif
+
+#else
+#define JAM_NO_UNIQUE_ADDRESS
+#endif

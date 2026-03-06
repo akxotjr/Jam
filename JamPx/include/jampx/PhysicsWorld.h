@@ -34,7 +34,7 @@ namespace jam::px
 		PxRigidActor*					CreateActor(prefab::TemplateHandle templateHandle, const PxTransform& worldPose, void* userData);
 		void							RemoveActor(PxRigidActor* actor) const;
 
-		PxCapsuleController*			CreateController(prefab::TemplateHandle templateHandle, const PxVec3& pos, void* userData, MovementConfig& outMoveCfg);
+		PxCapsuleController*			CreateController(prefab::TemplateHandle templateHandle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg);
 		void							RemoveController(PxController* controller);
 
 	public:
@@ -42,37 +42,20 @@ namespace jam::px
 		{
 			PxCapsuleController*		controller = nullptr;
 			PxRigidActor*				hitboxActor = nullptr;
-			MovementConfig				moveCfg{};
+			CharacterMoveConfig				moveCfg{};
 		};
 
 		CreatedCharacter				CreateCharacter(prefab::TemplateHandle templateHandle, const PxVec3& pos, void* userData);
 
+		std::vector<SimEvent>			ConsumeSimEvents();
+		std::vector<ObjectId>			ConsumeAdvancdActive();
 
 	private:
-		// Simulation event callback
-		struct SimCallback final : PxSimulationEventCallback
-		{
-			void onConstraintBreak(PxConstraintInfo*, PxU32) override {}
-			void onWake(PxActor**, PxU32) override {}
-			void onSleep(PxActor**, PxU32) override {}
-			void onContact(const PxContactPairHeader&, const PxContactPair*, PxU32) override {}
-			void onTrigger(PxTriggerPair* pairs, PxU32 count) override
-			{
-				for (PxU32 i = 0; i < count; ++i)
-				{
-					const auto& p = pairs[i];
-					(void)p;
-				}
-			}
-			void onAdvance(const PxRigidBody* const*, const PxTransform*, const PxU32) override {}
-		};
+		PxScene*									m_pxScene = nullptr;
+		PxControllerManager*						m_controllerManager = nullptr;
+		std::unique_ptr<SimulationEventCallback>	m_simCallback = nullptr;
 
-
-	private:
-		PxScene*							m_pxScene = nullptr;
-		PxControllerManager*				m_controllerManager = nullptr;
-		std::unique_ptr<SimCallback>		m_simCallback;
-
-
+		PxUserControllerHitReport*		m_characterReportCB = nullptr;
+		PxControllerBehaviorCallback*	m_characterBehaviorCB = nullptr;
 	};
 }

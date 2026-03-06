@@ -115,7 +115,7 @@ namespace jam::px::prefab
 			const uint64 key64 = fnv1a<uint64>(tmpDef.name);
 			m_keyToHandle[key64] = h;
 
-			if (tmpDef.kind == ePrefabBodyKind::CHARACTER)
+			if (tmpDef.actorType == eActorType::Character)
 				continue; // 별도 시스템에서 처리
 
 			vector<PxShape*> shapes;
@@ -155,16 +155,16 @@ namespace jam::px::prefab
 		return it != m_asset.templates.end() ? &it->second : nullptr;
 	}
 
-	ePrefabBodyKind PhysicsPrefabRegistry::GetBodyKind(const PrefabKey key)
+	eMotionType PhysicsPrefabRegistry::GetMotionType(const PrefabKey key)
 	{
-		if (!key.IsValid()) return ePrefabBodyKind::NONE;
+		if (!key.IsValid()) return eMotionType::None;
 
 		auto h = FindHandleByKey(key);
 		auto* def = FindTemplateDef(h);
 
-		if (!def) return ePrefabBodyKind::NONE;
+		if (!def) return eMotionType::None;
 
-		return def->kind;
+		return def->motionType;
 	}
 
 	PxMaterial* PhysicsPrefabRegistry::GetMaterial(MaterialHandle h) const

@@ -106,8 +106,6 @@ namespace jam::px
         desc.filterShader = DefaultFilterShader;
         desc.flags |= PxSceneFlag::eENABLE_ACTIVE_ACTORS | PxSceneFlag::eENABLE_CCD | PxSceneFlag::eENABLE_STABILIZATION;
 
-        
-
         return desc;
 	}
 }

@@ -4,15 +4,16 @@
 
 #include <cstdint>
 #include <cmath>
+#include <optional>
 
 namespace jam::px
 {
-	inline constexpr float PI			= 3.14159265358979323846f;
-	inline constexpr float TWO_PI		= 6.28318530717958647692f;
-	inline constexpr float PI_DIV_TWO	= 1.57079632679489661923f;
-	inline constexpr float PI_DIV_FOUR	= 0.78539816339744830962f;
+	inline constexpr float PI = 3.14159265358979323846f;
+	inline constexpr float TWO_PI = 6.28318530717958647692f;
+	inline constexpr float PI_DIV_TWO = 1.57079632679489661923f;
+	inline constexpr float PI_DIV_FOUR = 0.78539816339744830962f;
 
-	inline constexpr float EPSILON		= 1e-6f;
+	inline constexpr float EPSILON = 1e-6f;
 
 
 	inline float Clamp(float v, float lo, float hi) noexcept
@@ -295,13 +296,13 @@ namespace jam::px
 
 	struct CharacterState
 	{
-		Vec3		pos				= Vec3::Zero();
-		float		facingYaw		= 0.f;
-		float		facingPitch		= 0.f;
-		float		verticalSpeed	= 0.f;
+		Vec3		pos = Vec3::Zero();
+		float		facingYaw = 0.f;
+		float		facingPitch = 0.f;
+		float		verticalSpeed = 0.f;
 		float		horizontalSpeed = 0.f;
-		Vec2		moveDir			= Vec2::Zero();
-		uint32_t	stateFlags		= 0;
+		Vec2		moveDir = Vec2::Zero();
+		uint32_t	stateFlags = 0;
 
 		bool operator==(const CharacterState&) const = default;
 
@@ -313,26 +314,66 @@ namespace jam::px
 
 	enum eStateFlag : uint32_t
 	{
-		STATE_NONE			= 0,
-		STATE_IS_JUMPING	= 1u << 0,
-		STATE_IS_SPRINT		= 1u << 1,
+		STATE_NONE = 0,
+		STATE_IS_JUMPING = 1u << 0,
+		STATE_IS_SPRINT = 1u << 1,
 	};
 
 	inline bool HasStateFlag(uint32_t flags, eStateFlag f) noexcept { return (flags & static_cast<uint32_t>(f)) != 0; }
 	inline void SetStateFlag(uint32_t& flags, eStateFlag f) noexcept { flags |= static_cast<uint32_t>(f); }
 	inline void ClearStateFlag(uint32_t& flags, eStateFlag f) noexcept { flags &= ~static_cast<uint32_t>(f); }
 
-	enum class eBodyKind : uint8_t
+
+	enum class eActorType : uint8
 	{
-		NONE = 0,
-		RIGID_STATIC,
-		RIGID_DYNAMIC,
-		KINEMATIC,
-		CHARACTER,
+		None		= 0,
+		Generic		= 1,
+		Projectile	= 2,
+		Character   = 3,
 	};
 
-	inline bool IsStaticBody(eBodyKind kind) noexcept { return kind == eBodyKind::RIGID_STATIC; }
-	inline bool IsCharacterBody(eBodyKind kind) noexcept { return kind == eBodyKind::CHARACTER; }
+	enum class ePhyiscsRep : uint8
+	{
+		Rigid,
+		Character,
+	};
+
+	enum class eMotionType : uint8
+	{
+		None		= 0,
+		Static		= 1,
+		Dynamic		= 2,
+		Kinematic	= 3,
+	};
+
+	struct BodyFlag
+	{
+		enum Enum : uint32
+		{
+			// ---- common ----
+
+			NONE							= 0,
+			DISABLE_GRAVITY					= 1 << 0,
+
+			// ---- dynamic ----
+
+			ENABLE_CCD						= 1 << 1,
+
+			LOCK_LINEAR_X					= 1 << 2,
+			LOCK_LINEAR_Y					= 1 << 3,
+			LOCK_LINEAR_Z					= 1 << 4,
+			LOCK_ANGULAR_X					= 1 << 5,
+			LOCK_ANGULAR_Y					= 1 << 6,
+			LOCK_ANGULAR_Z					= 1 << 7,
+		};
+
+		using Flags = FlagsT<Enum>;
+	};
+
+	inline void HashAppend(jam::Fnv1a32& h, const BodyFlag::Flags& bodyFlag) noexcept
+	{
+		HashAppend(h, bodyFlag.bits());
+	}
 
 	struct PhysicsHandle
 	{
@@ -340,7 +381,7 @@ namespace jam::px
 
 		bool IsValid() const { return value != 0; }
 		constexpr bool operator==(const PhysicsHandle& r) const noexcept = default;
- 	};
+	};
 
 	struct PrefabKey
 	{
@@ -356,11 +397,11 @@ namespace jam::px
 		PrefabKey			prefab{};
 		bool				isKinematic = false;
 
-		std::optional<RigidState>		rs		= std::nullopt;
-		std::optional<CharacterState>	cs		= std::nullopt;
-		std::optional<uint16>			teamId	= std::nullopt;
-		std::optional<uint8>			partId	= std::nullopt;
-		std::optional<uint8>			user8	= std::nullopt;
+		std::optional<RigidState>		rs = std::nullopt;
+		std::optional<CharacterState>	cs = std::nullopt;
+		std::optional<uint16>			teamId = std::nullopt;
+		std::optional<uint8>			partId = std::nullopt;
+		std::optional<uint8>			user8 = std::nullopt;
 
 		bool IsValid() const
 		{
@@ -368,36 +409,24 @@ namespace jam::px
 		}
 	};
 
-	struct ObjectKey
-	{
-		uint32_t value{};
 
-		constexpr bool operator==(const ObjectKey&) const noexcept = default;
-	};
-
-	struct ObjectKeyHash
-	{
-		size_t operator()(const ObjectKey& k) const noexcept
-		{
-			return std::hash<uint32_t>{}(k.value);
-		}
-	};
-
+	using ObjectId = uint32;
+	static constexpr ObjectId INVALID_OBJ_ID = 0;
 
 	/// @brief 입력 비트 플래그 (32bit로 최대 32개 입력 지원)
 	enum eInputFlag : uint32_t
 	{
-		INPUT_NONE		= 0,
-		INPUT_FORWARD	= 1 << 0,    
-		INPUT_BACKWARD	= 1 << 1,   
-		INPUT_LEFT		= 1 << 2,       
-		INPUT_RIGHT		= 1 << 3,
-		INPUT_CROUCH	= 1 << 4,
-		INPUT_PRONE		= 1 << 5,
-		INPUT_RUN		= 1 << 6,
-		INPUT_SPRINT	= 1 << 7,
-		INPUT_JUMP		= 1 << 8,       
-		INPUT_DASH		= 1 << 9,
+		INPUT_NONE = 0,
+		INPUT_FORWARD = 1 << 0,
+		INPUT_BACKWARD = 1 << 1,
+		INPUT_LEFT = 1 << 2,
+		INPUT_RIGHT = 1 << 3,
+		INPUT_CROUCH = 1 << 4,
+		INPUT_PRONE = 1 << 5,
+		INPUT_RUN = 1 << 6,
+		INPUT_SPRINT = 1 << 7,
+		INPUT_JUMP = 1 << 8,
+		INPUT_DASH = 1 << 9,
 	};
 
 	inline bool HasInputFlag(uint32_t flags, eInputFlag f) noexcept { return (flags & static_cast<uint32_t>(f)) != 0; }
@@ -406,8 +435,44 @@ namespace jam::px
 
 	struct CharacterInput
 	{
-		uint32_t		inputFlags	= 0;
-		float		facingYaw	= 0.f;
+		uint32_t		inputFlags = 0;
+		float		facingYaw = 0.f;
 		float		facingPitch = 0.f;
 	};
+
+
+
+
+
+	enum class eProjectileKind : uint8
+	{
+		DYN_SIM,		// 0~30   m/s : PxRigidDynamic, PhysX simulate
+		ANALYTIC,		// 30-300 m/s : Kinematic + Manual integration + Sweep CCD
+		HITSCAN,		// 300+   m/s : Instant raycast
+	};
+
+
+	struct ProjectileSpawnDesc
+	{
+		eProjectileKind kind = eProjectileKind::DYN_SIM;
+
+		PrefabKey prefab{};
+		Transform pose{};
+		Vec3 velocity = Vec3::Zero();
+		float gravityScale = 1.f;
+		float maxRange = 1000.f;
+		uint16 teamId = 0;
+	};
+
+	struct HitscanResult
+	{
+		bool hit = false;
+		Vec3 position = Vec3::Zero();
+		Vec3 normal = Vec3::Zero();
+		ObjectId hitId = INVALID_OBJ_ID;
+	};
+
+
+
+
 }

@@ -17,7 +17,7 @@ namespace jam
 
 	void FiberScheduler::AttachToCurrentThread()
 	{
-		JAMNET_ASSERT(m_ownerThreadId != std::this_thread::get_id())
+		JAM_ASSERT(m_ownerThreadId != std::this_thread::get_id())
 
 		m_main = m_backend.ConvertThreadToMainFiber();
 		EnsureFlsKey();

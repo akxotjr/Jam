@@ -7,12 +7,12 @@ namespace jam::px
 	class DefaultQuakeAccelerator : public IAccelerator
 	{
 	public:
-		explicit DefaultQuakeAccelerator(const MovementConfig& cfg);
+		explicit DefaultQuakeAccelerator(const CharacterMoveConfig& cfg);
 
 		WishMovement	BuildWishMovement(const MoveIntent& intent) const override;
-		void			Integrate(MovementState& st, const WishMovement& wish, float dt) const override;
+		void			Integrate(CharacterMoveState& st, const WishMovement& wish, float dt) const override;
 
 	private:
-		MovementConfig	m_cfg{};
+		CharacterMoveConfig	m_cfg{};
 	};
 }

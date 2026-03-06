@@ -18,6 +18,8 @@ namespace jam::net
     private:
         void                    ApplyInputs() const;
         void                    Simulate();
+
+        void                    SyncActiveTransforms() const;
         void                    SyncTransforms() const;
 
     private:

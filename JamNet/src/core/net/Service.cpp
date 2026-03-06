@@ -105,7 +105,7 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
-		JAMNET_ASSERT(m_tcpSessions.erase(session->GetRemoteNetAddress()) != 0);
+		JAM_ASSERT(m_tcpSessions.erase(session->GetRemoteNetAddress()) != 0);
 		m_tcpSessionCount--;
 	}
 
@@ -125,7 +125,7 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
-		JAMNET_ASSERT(m_udpSessions.erase(session->GetRemoteNetAddress()) != 0);
+		JAM_ASSERT(m_udpSessions.erase(session->GetRemoteNetAddress()) != 0);
 		m_udpSessionCount--;
 	}
 
@@ -143,7 +143,7 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
-		JAMNET_ASSERT(m_handshakingUdpSessions.erase(session->GetRemoteNetAddress()) != 0)
+		JAM_ASSERT(m_handshakingUdpSessions.erase(session->GetRemoteNetAddress()) != 0)
 	}
 
 	void Service::CompleteUdpHandshake(const NetAddress& from)

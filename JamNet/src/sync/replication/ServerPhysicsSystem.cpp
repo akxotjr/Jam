@@ -26,18 +26,18 @@ namespace jam::net
 		if (!m_physics || !m_world.valid(e))
 			return;
 
-		const auto key = MakeObjectKey(e);
-		const px::PhysicsHandle h = m_physics->Spawn(key, desc);
+		const px::ObjectId		id = MakeObjectId(e);
+		const px::PhysicsHandle h  = m_physics->Spawn(id, desc);
 		if (!h.IsValid()) return;
 
-		const px::eBodyKind kind = m_physics->GetKind(key);
+		const px::eBodyKind kind = m_physics->GetBodyKind(id);
 		m_world.emplace<NetActorBodyKind>(e, NetActorBodyKind{ kind });
 
 		if (px::IsCharacterBody(kind))
 		{
 			m_world.emplace<CharacterPhysicalBody>(e, CharacterPhysicalBody{ h });
 			auto& cs = m_world.emplace<px::CharacterState>(e);
-			JAMNET_ASSERT(m_physics->GetCharacterState(key, cs))
+			JAM_ASSERT(m_physics->GetCharacterState(id, cs))
 
 			const uint64 controller = m_world.get<ControlTag>(e).userId;
 			const uint64 owner		= m_world.get<OwnershipTag>(e).userId;
@@ -51,7 +51,7 @@ namespace jam::net
 		{
 			m_world.emplace<RigidPhysicalBody>(e, RigidPhysicalBody{ h });
 			auto& rs = m_world.emplace<px::RigidState>(e);
-			JAMNET_ASSERT(m_physics->GetRigidState(key, rs))
+			JAM_ASSERT(m_physics->GetRigidState(id, rs))
 		}
 	}
 
@@ -60,8 +60,8 @@ namespace jam::net
 		if (!m_physics || !m_world.valid(e))
 			return;
 
-		const px::ObjectKey key = MakeObjectKey(e);
-		m_physics->Despawn(key);
+		const px::ObjectId id = MakeObjectId(e);
+		m_physics->Despawn(id);
 
 		if (auto* hb = m_world.try_get<CharacterHitboxPhysicalBody>(e))
 			hb->handle = {};
@@ -80,7 +80,7 @@ namespace jam::net
 		for (auto e : view)
 		{
 			auto& input = view.get<px::CharacterInput>(e);
-			m_physics->ApplyCharacterInput(MakeObjectKey(e), input);
+			m_physics->ApplyCharacterInput(MakeObjectId(e), input);
 		}
 	}
 
@@ -103,6 +103,46 @@ namespace jam::net
 		m_physics->EndStep();
 	}
 
+	void ServerPhysicsSystem::SyncActiveTransforms() const
+	{
+		if (!m_physics) return;
+
+		// PopActiveList = onAdvance(dynamic) + dirty set(kinematic / character move / setGlobalPose)
+		const auto activeList = m_physics->PopActiveList();
+		if (activeList.empty()) return;
+
+		for (const px::ObjectId id : activeList)
+		{
+			// ObjectId == entt::entity (uint32 캐스팅 규칙)
+			const entt::entity e = static_cast<entt::entity>(id);
+			if (!m_world.valid(e)) continue;
+
+			const auto* kindComp = m_world.try_get<NetActorBodyKind>(e);
+			if (!kindComp) continue;
+
+			if (px::IsCharacterBody(kindComp->body))
+			{
+				px::CharacterState cs{};
+				if (m_physics->GetCharacterState(id, cs))
+				{
+					if (auto* state = m_world.try_get<px::CharacterState>(e))
+						*state = cs;
+
+					JAMNET_LOG_TRACE("SyncActiveTransform(Character) id={} pos({:.2f},{:.2f},{:.2f})", id, cs.pos.x, cs.pos.y, cs.pos.z);
+				}
+			}
+			else
+			{
+				px::RigidState rs{};
+				if (m_physics->GetRigidState(id, rs))
+				{
+					if (auto* state = m_world.try_get<px::RigidState>(e))
+						*state = rs;
+				}
+			}
+		}
+	}
+
 	void ServerPhysicsSystem::SyncTransforms() const
 	{
 		if (!m_physics)
@@ -112,13 +152,13 @@ namespace jam::net
 
 		for (auto e : view)
 		{
-			const auto key  = MakeObjectKey(e);
+			const px::ObjectId id = MakeObjectId(e);
 			const auto kind = view.get<NetActorBodyKind>(e).body;
 
 			if (px::IsCharacterBody(kind))
 			{
 				px::CharacterState cs{};
-				if (m_physics->GetCharacterState(key, cs))
+				if (m_physics->GetCharacterState(id, cs))
 				{
 					auto& state = m_world.get<px::CharacterState>(e);
 					state = cs;
@@ -129,7 +169,7 @@ namespace jam::net
 			else
 			{
 				px::RigidState rs{};
-				if (m_physics->GetRigidState(key, rs))
+				if (m_physics->GetRigidState(id, rs))
 				{
 					auto& state = m_world.get<px::RigidState>(e);
 					state = rs;

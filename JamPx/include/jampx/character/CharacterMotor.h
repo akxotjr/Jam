@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <jampx/character/CharacterMovementTypes.h>
+#include <jampx/character/CharacterFilter.h>
 
 namespace physx
 {
@@ -64,7 +65,7 @@ namespace jam::px
         PxCapsuleController*                            m_controller    = nullptr;
         PxRigidDynamic*                                 m_hitbox        = nullptr;
 
-        QueryRequestFD                                  m_qrfd{};
+        RequestQueryFD                                  m_rqfd{};
         std::unique_ptr<PxQueryFilterCallback>          m_qryCallback   = nullptr;
         std::unique_ptr<PxControllerFilterCallback>     m_cctCallback   = nullptr;
 

@@ -24,7 +24,7 @@ namespace jam::px::prefab
         TemplateHandle                      FindHandleByName(const string& name) const;
         TemplateHandle                      FindHandleByKey(PrefabKey key) const; // PrefabKey.value == fnv1a64(template.name)
         const PrefabTemplateDef*            FindTemplateDef(TemplateHandle h) const;
-        ePrefabBodyKind                     GetBodyKind(PrefabKey key);
+        eMotionType                         GetMotionType(PrefabKey key);
 
 		PxMaterial*                         GetMaterial(MaterialHandle h) const;
 		PxTriangleMesh*                     GetTriangleMesh(MeshHandle h) const;

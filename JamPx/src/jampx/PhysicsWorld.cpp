@@ -4,42 +4,43 @@
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
 #include "jampx/prefab/PrefabAssetCreator.h"
 
+#include "jampx/character/CharacterFilter.h"
 
 namespace jam::px
 {
 	namespace
 	{
-		class CharacterControllerHitReport final : public PxUserControllerHitReport
-		{
-		public:
-			void onShapeHit(const PxControllerShapeHit& hit) override
-			{
-				PxRigidActor* actor = hit.actor;
-				if (!actor) return;
+		//class CharacterControllerHitReport final : public PxUserControllerHitReport
+		//{
+		//public:
+		//	void onShapeHit(const PxControllerShapeHit& hit) override
+		//	{
+		//		PxRigidActor* actor = hit.actor;
+		//		if (!actor) return;
 
-				PxRigidDynamic* dyn = actor->is<PxRigidDynamic>();
-				if (!dyn) return;
+		//		PxRigidDynamic* dyn = actor->is<PxRigidDynamic>();
+		//		if (!dyn) return;
 
-				if (dyn->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
-					return;
+		//		if (dyn->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
+		//			return;
 
-				// 아주 약하게 밀리는 정도
-				const PxVec3 dir = hit.dir;
-				if (dir.magnitudeSquared() <= 1e-6f)
-					return;
+		//		// 아주 약하게 밀리는 정도
+		//		const PxVec3 dir = hit.dir;
+		//		if (dir.magnitudeSquared() <= 1e-6f)
+		//			return;
 
-				const PxVec3 n = dir.getNormalized();
+		//		const PxVec3 n = dir.getNormalized();
 
-				// impulse 크기(원하는 느낌에 따라 조절)
-				constexpr float kPushImpulse = 0.25f;
-				dyn->addForce(n * kPushImpulse, PxForceMode::eIMPULSE, true);
-			}
+		//		// impulse 크기(원하는 느낌에 따라 조절)
+		//		constexpr float kPushImpulse = 0.25f;
+		//		dyn->addForce(n * kPushImpulse, PxForceMode::eIMPULSE, true);
+		//	}
 
-			void onControllerHit(const PxControllersHit&) override {}
-			void onObstacleHit(const PxControllerObstacleHit&) override {}
-		};
+		//	void onControllerHit(const PxControllersHit&) override {}
+		//	void onObstacleHit(const PxControllerObstacleHit&) override {}
+		//};
 
-		CharacterControllerHitReport g_characterControllerHitReport;
+		//CharacterControllerHitReport g_characterControllerHitReport;
 
 
 		inline PxRigidActor* CreateCharacterHitboxActor(
@@ -51,7 +52,7 @@ namespace jam::px
 			const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
 			if (!def) return nullptr;
 
-			if (def->kind != prefab::ePrefabBodyKind::CHARACTER)
+			if (def->kind != eBodyKind::CHARACTER)
 				return nullptr;
 
 			if (!def->cct.hasHitbox)
@@ -65,7 +66,7 @@ namespace jam::px
 
 			// Kinematic actor로 생성해서 follow할 대상
 			prefab::PrefabTemplateDef hitboxDef{};
-			hitboxDef.kind = prefab::ePrefabBodyKind::KINEMATIC;
+			hitboxDef.kind = eBodyKind::KINEMATIC;
 
 			PxRigidActor* actor = prefab::PrefabAssetCreator::CreateRigidActor(hitboxDef, shapes);
 			if (!actor) return nullptr;
@@ -94,16 +95,18 @@ namespace jam::px
 			m_pxScene = PhysicsCore::Instance().CreateScene();
 		}
 
-		m_simCallback = make_unique<SimCallback>();
+		m_simCallback = make_unique<SimulationEventCallback>();
 		m_pxScene->setSimulationEventCallback(m_simCallback.get());
 		m_controllerManager = PxCreateControllerManager(*m_pxScene, false);
+
+		m_characterBehaviorCB = new CharacterBehaviorCallbackT<>(DefaultCharacterBehaviorPolicy{});
+		m_characterReportCB   = new CharacterHitReportT<>(DefaultCharacterHitReportPolicy{});
 	}
 
 	void PhysicsWorld::Destroy()
 	{
 		if (m_controllerManager) { m_controllerManager->release(); m_controllerManager = nullptr; }
 		if (m_pxScene)           { m_pxScene->release();           m_pxScene = nullptr; }
-		m_simCallback.reset();
 	}
 
 	void PhysicsWorld::Simulate(float elapsed) const
@@ -138,7 +141,7 @@ namespace jam::px
 		PxRigidActor* inst = PHYSICS_PREFAB_REGISTRY.Instantiate(templateHandle, worldPose, userData);
 		if (!inst) return nullptr;
 
-		JAMNET_ASSERT(m_pxScene->addActor(*inst))
+		JAM_ASSERT(m_pxScene->addActor(*inst))
 
 		return inst;
 	}
@@ -152,14 +155,14 @@ namespace jam::px
 	}
 
 
-	PxCapsuleController* PhysicsWorld::CreateController(prefab::TemplateHandle handle, const PxVec3& pos, void* userData, MovementConfig& outMoveCfg)
+	PxCapsuleController* PhysicsWorld::CreateController(prefab::TemplateHandle handle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg)
 	{
 		if (!m_controllerManager) return nullptr;
 
 		const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
 		if (!def) return nullptr;
 
-		if (def->kind != prefab::ePrefabBodyKind::CHARACTER)
+		if (def->kind != eBodyKind::CHARACTER)
 			return nullptr;
 
 		const prefab::PrefabCCTDef& cct = def->cct;
@@ -175,8 +178,10 @@ namespace jam::px
 		desc.contactOffset		= cct.contactOffset;
 		desc.stepOffset			= cct.stepOffset;
 		desc.slopeLimit			= cct.slopeLimit;
-		desc.reportCallback		= &g_characterControllerHitReport;
+		desc.reportCallback		= m_characterReportCB;
+		desc.behaviorCallback	= m_characterBehaviorCB;
 		desc.userData			= userData;
+		
 
 		if (!desc.isValid())
 			return nullptr;
@@ -202,7 +207,7 @@ namespace jam::px
 		const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
 		if (!def) return out;
 
-		if (def->kind != prefab::ePrefabBodyKind::CHARACTER)
+		if (def->kind != eBodyKind::CHARACTER)
 			return out;
 
 		const prefab::PrefabCCTDef& cct = def->cct;
@@ -217,8 +222,10 @@ namespace jam::px
 		desc.contactOffset = cct.contactOffset;
 		desc.stepOffset = cct.stepOffset;
 		desc.slopeLimit = cct.slopeLimit;
-		desc.reportCallback = &g_characterControllerHitReport;
+		desc.reportCallback = m_characterReportCB;
+		desc.behaviorCallback = m_characterBehaviorCB;
 		desc.userData = userData;
+
 
 		if (!desc.isValid())
 			return out;
@@ -231,5 +238,17 @@ namespace jam::px
 		out.hitboxActor = CreateCharacterHitboxActor(*m_pxScene, handle, tf, userData);
 
 		return out;
+	}
+
+	std::vector<SimEvent> PhysicsWorld::ConsumeSimEvents()
+	{
+		if (!m_simCallback) return{};
+		return m_simCallback->ConsumeEvents();
+	}
+
+	std::vector<ObjectId> PhysicsWorld::ConsumeAdvancdActive()
+	{
+		if (!m_simCallback) return {};
+		return m_simCallback->ConsumeActiveList();
 	}
 }

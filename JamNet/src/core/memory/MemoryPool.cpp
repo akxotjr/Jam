@@ -35,7 +35,7 @@ namespace jam
 		}
 		else
 		{
-			JAMNET_ASSERT(memory->allocSize == 0);
+			JAM_ASSERT(memory->allocSize == 0);
 			m_reserveCount.fetch_sub(1);
 		}
 

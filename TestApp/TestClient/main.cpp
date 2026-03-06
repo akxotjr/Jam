@@ -185,21 +185,21 @@ static void WriteTestPrefabAndLevel()
         constexpr size_t mapTemplateIndex = 1;
 
         // ---- Character template ----
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, kName), "Character");
+        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_name), "Character");
         ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, kKind), vKindCharacter);
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, kSpawnPolicy), vSpawnBoth);
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, kAllowReplication), true);
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, kShapes), json::array());
+        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_spawnPolicy), k_spawnBoth);
+        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_allowReplication), true);
+        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_shapes), json::array());
 
         // cct
         ed.Set(MakeCctFieldPtr(characterTemplateIndex, kCctRadius), 0.35);
         ed.Set(MakeCctFieldPtr(characterTemplateIndex, kCctHeight), 1.8);
         ed.Set(MakeCctFieldPtr(characterTemplateIndex, kAllowCrouch), true);
 
-        ed.EnsureObject(MakeCctFieldPtr(characterTemplateIndex, kMaterial));
-        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, kMaterial).to_string() + "/" + kStaticFriction), 0.5);
-        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, kMaterial).to_string() + "/" + kDynamicFriction), 0.5);
-        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, kMaterial).to_string() + "/" + kRestitution), 0.1);
+        ed.EnsureObject(MakeCctFieldPtr(characterTemplateIndex, k_material));
+        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, k_material).to_string() + "/" + k_staticFriction), 0.5);
+        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, k_material).to_string() + "/" + k_dynamicFriction), 0.5);
+        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, k_material).to_string() + "/" + k_restitution), 0.1);
 
         ed.EnsureObject(MakeCctMovementPtr(characterTemplateIndex));
         ed.Set(MakeCctMovementFieldPtr(characterTemplateIndex, kWalkSpeed), 5.0);
@@ -211,73 +211,73 @@ static void WriteTestPrefabAndLevel()
 
         // character shape[0]
         constexpr size_t characterShapeIndex = 0;
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kType), vShapeCapsule);
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kShapeFlag), vShapeFlagSimulation);
+        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_shapeType), k_shapeCapsule);
+        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_shapeFlag), k_simulation);
 
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kLocalPose));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kLocalPose).to_string() + "/" + kP),
+        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_localPose));
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_localPose).to_string() + "/" + k_p),
             json::array({ 0.0, 0.9, 0.0 }));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kLocalPose).to_string() + "/" + kQ),
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_localPose).to_string() + "/" + k_q),
             json::array({ 0.0, 0.0, 0.0, 1.0 }));
 
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kMaterial));
-        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, kStaticFriction), 0.5);
-        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, kDynamicFriction), 0.5);
-        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, kRestitution), 0.0);
+        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_material));
+        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, k_staticFriction), 0.5);
+        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, k_dynamicFriction), 0.5);
+        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, k_restitution), 0.0);
 
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kSimFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kSimFilter).to_string() + "/" + kWord0), 1);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kSimFilter).to_string() + "/" + kWord1), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kSimFilter).to_string() + "/" + kWord2), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kSimFilter).to_string() + "/" + kWord3), 0);
+        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter));
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word0), 1);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word1), 0);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word2), 0);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word3), 0);
 
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kQryFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kQryFilter).to_string() + "/" + kWord0), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kQryFilter).to_string() + "/" + kWord1), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kQryFilter).to_string() + "/" + kWord2), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kQryFilter).to_string() + "/" + kWord3), 0u);
+        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter));
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word0), 0u);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word1), 0u);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word2), 0u);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word3), 0u);
 
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kRadius), 0.35);
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, kHalfHeight), 0.9);
+        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_radius), 0.35);
+        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_halfHeight), 0.9);
 
         // ---- Map template ----
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, kName), "Map");
+        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_name), "Map");
         ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, kKind), vKindStatic);
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, kSpawnPolicy), vSpawnLevelOnly);
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, kAllowReplication), false);
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, kShapes), json::array());
+        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_spawnPolicy), k_spawnLevelOnly);
+        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_allowReplication), false);
+        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_shapes), json::array());
 
         constexpr size_t mapShapeIndex = 0;
-        ed.Set(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kType), vShapeTriangleMesh);
-        ed.Set(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kShapeFlag), vShapeFlagSimulation);
+        ed.Set(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_shapeType), k_shapeTriangleMesh);
+        ed.Set(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_shapeFlag), k_simulation);
 
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kLocalPose));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kLocalPose).to_string() + "/" + kP),
+        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_localPose));
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_localPose).to_string() + "/" + k_p),
             json::array({ 0.0, 0.0, 0.0 }));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kLocalPose).to_string() + "/" + kQ),
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_localPose).to_string() + "/" + k_q),
             json::array({ 0.0, 0.0, 0.0, 1.0 }));
 
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kMaterial));
-        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, kStaticFriction), 0.6);
-        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, kDynamicFriction), 0.6);
-        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, kRestitution), 0.0);
+        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_material));
+        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, k_staticFriction), 0.6);
+        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, k_dynamicFriction), 0.6);
+        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, k_restitution), 0.0);
 
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kSimFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kSimFilter).to_string() + "/" + kWord0), 1);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kSimFilter).to_string() + "/" + kWord1), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kSimFilter).to_string() + "/" + kWord2), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kSimFilter).to_string() + "/" + kWord3), 0);
+        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter));
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word0), 1);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word1), 0);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word2), 0);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word3), 0);
 
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kQryFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kQryFilter).to_string() + "/" + kWord0), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kQryFilter).to_string() + "/" + kWord1), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kQryFilter).to_string() + "/" + kWord2), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kQryFilter).to_string() + "/" + kWord3), 0u);
+        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter));
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word0), 0u);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word1), 0u);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word2), 0u);
+        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word3), 0u);
 
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, kMesh));
-        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, kCooked), "Contents/ThridPersonMap.pxtri");
-        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, kMeshIndex), 0);
-        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, kPrimitiveIndex), 0);
+        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_mesh));
+        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, k_cooked), "Contents/ThridPersonMap.pxtri");
+        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, k_meshIndex), 0);
+        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, k_primitiveIndex), 0);
     }
 
     try

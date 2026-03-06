@@ -419,7 +419,7 @@ namespace jam::net
         return ctx.view.IsValid();
     }
 
-    JAMNET_FORCE_INLINE bool IncomingNetstatProcess(RecvContext& ctx)
+    JAM_FORCE_INLINE bool IncomingNetstatProcess(RecvContext& ctx)
     {
         return true;
     }

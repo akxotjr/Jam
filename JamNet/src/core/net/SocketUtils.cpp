@@ -11,12 +11,12 @@ namespace jam::net
 	void SocketUtils::Init()
 	{
 		WSADATA wsaData;
-		JAMNET_ASSERT(::WSAStartup(MAKEWORD(2, 2), OUT & wsaData) == 0);
+		JAM_ASSERT(::WSAStartup(MAKEWORD(2, 2), OUT & wsaData) == 0);
 
 		SOCKET dummySocket = CreateSocket(eProtocolType::TCP);
-		JAMNET_ASSERT(BindWindowsFunction(dummySocket, WSAID_CONNECTEX, reinterpret_cast<LPVOID*>(&ConnectEx)));
-		JAMNET_ASSERT(BindWindowsFunction(dummySocket, WSAID_DISCONNECTEX, reinterpret_cast<LPVOID*>(&DisconnectEx)));
-		JAMNET_ASSERT(BindWindowsFunction(dummySocket, WSAID_ACCEPTEX, reinterpret_cast<LPVOID*>(&AcceptEx)));
+		JAM_ASSERT(BindWindowsFunction(dummySocket, WSAID_CONNECTEX, reinterpret_cast<LPVOID*>(&ConnectEx)));
+		JAM_ASSERT(BindWindowsFunction(dummySocket, WSAID_DISCONNECTEX, reinterpret_cast<LPVOID*>(&DisconnectEx)));
+		JAM_ASSERT(BindWindowsFunction(dummySocket, WSAID_ACCEPTEX, reinterpret_cast<LPVOID*>(&AcceptEx)));
 		Close(dummySocket);
 	}
 

@@ -18,13 +18,13 @@ namespace jam::net
 
 	void SendBuffer::SetWriteSize(uint32 writeSize)
 	{
-		JAMNET_ASSERT(m_allocSize >= writeSize);
+		JAM_ASSERT(m_allocSize >= writeSize);
 		m_writeSize = writeSize;
 	}
 
 	void SendBuffer::Close(uint32 writeSize)
 	{
-		JAMNET_ASSERT(m_allocSize >= writeSize);
+		JAM_ASSERT(m_allocSize >= writeSize);
 		m_writeSize = writeSize;
 
 		m_owner->Close(writeSize);
@@ -32,8 +32,8 @@ namespace jam::net
 
 	void SendBuffer::CloseWithReserve(uint32 writeSize, uint32 reserveSize)
 	{
-		JAMNET_ASSERT(m_allocSize >= writeSize);
-		JAMNET_ASSERT(m_allocSize >= reserveSize);
+		JAM_ASSERT(m_allocSize >= writeSize);
+		JAM_ASSERT(m_allocSize >= reserveSize);
 		m_writeSize = writeSize;
 		m_owner->Close(reserveSize);
 	}
@@ -59,8 +59,8 @@ namespace jam::net
 
 	std::shared_ptr<SendBuffer> SendBufferChunk::Open(uint32 allocSize)
 	{
-		JAMNET_ASSERT(allocSize <= SEND_BUFFER_CHUNK_SIZE);
-		JAMNET_ASSERT(m_open == false);
+		JAM_ASSERT(allocSize <= SEND_BUFFER_CHUNK_SIZE);
+		JAM_ASSERT(m_open == false);
 
 		if (allocSize > FreeSize())
 			return nullptr;
@@ -72,7 +72,7 @@ namespace jam::net
 
 	void SendBufferChunk::Close(uint32 commitedSize)
 	{
-		JAMNET_ASSERT(m_open == true);
+		JAM_ASSERT(m_open == true);
 
 		m_open = false;
 		m_usedSize += commitedSize;
@@ -93,7 +93,7 @@ namespace jam::net
 			tl_SendBufferChunk->Reset();
 		}
 
-		JAMNET_ASSERT(tl_SendBufferChunk->IsOpen() == false);
+		JAM_ASSERT(tl_SendBufferChunk->IsOpen() == false);
 
 		if (tl_SendBufferChunk->FreeSize() < size)
 		{

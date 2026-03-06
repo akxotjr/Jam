@@ -12,7 +12,7 @@ namespace jam
 		m_config = config;
 		m_config.layout = m_config.autoTune ? AutoLayout(m_config.layoutCfg) : m_config.layout;
 
-		JAMNET_ASSERT(!m_config.layout.IsValid())
+		JAM_ASSERT(!m_config.layout.IsValid())
 
 		ShardDirectoryConfig dirCfg = {
 			.numShards	= m_config.layout.shards,

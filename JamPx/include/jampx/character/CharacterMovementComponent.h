@@ -11,16 +11,15 @@ namespace jam::px
     class CharacterMovementComponent
     {
     public:
-        explicit CharacterMovementComponent(const MovementConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox);
+        explicit CharacterMovementComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox);
 
-        void                            SetConfig(const MovementConfig& cfg) { m_cfg = cfg; }
-        const MovementConfig&           GetConfig() const { return m_cfg; }
+        void                            SetConfig(const CharacterMoveConfig& cfg) { m_cfg = cfg; }
+        const CharacterMoveConfig&      GetConfig() const { return m_cfg; }
 
-        void                            SetMoveState(const MovementState& state);
-        const MovementState&            GetMoveState() const { return m_state; }
+        void                            SetMoveState(const CharacterMoveState& state);
+        const CharacterMoveState&       GetMoveState() const { return m_state; }
 
         void                            Tick(float dt, const MoveIntent& intent);
-
 
         void                            GetCharacterState(CharacterState& state) const;
 
@@ -40,8 +39,8 @@ namespace jam::px
         bool                            CanSprint();
 
     private:
-        MovementConfig                              m_cfg{};
-        MovementState                               m_state{};
+        CharacterMoveConfig                         m_cfg{};
+        CharacterMoveState                          m_state{};
 
         std::unique_ptr<IAccelerator>               m_accelerator = nullptr;
         std::unique_ptr<ExternalMoveAccumulator>    m_accumulator = nullptr;

@@ -61,7 +61,7 @@ namespace jam::net
 			{
 				auto cs = m_world.get<px::CharacterState>(e);
 
-				sample.key		= MakeObjectKey(e);
+				sample.objectId		= MakeObjectId(e);
 				sample.isLocal	= (identity.netId == localNetId);
 				sample.cs		= cs;
 
@@ -74,7 +74,7 @@ namespace jam::net
 				auto rs = m_world.get<px::RigidState>(e);
 				rs.pose.p = TruncateToCm(rs.pose.p);
 
-				sample.key		= MakeObjectKey(e);
+				sample.objectId		= MakeObjectId(e);
 				sample.isLocal	= false;
 				sample.rs		= rs;
 			}

@@ -78,7 +78,7 @@ namespace jam
 	{
 		MemoryHeader* header = MemoryHeader::DetachHeader(ptr);
 		const int32 allocSize = header->allocSize;
-		JAMNET_ASSERT(allocSize > 0);
+		JAM_ASSERT(allocSize > 0);
 
 		if (allocSize > MAX_ALLOC_SIZE)
 		{

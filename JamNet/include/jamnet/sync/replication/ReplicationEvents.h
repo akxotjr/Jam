@@ -18,7 +18,7 @@ namespace jam::net
 	{
 		uint64				userId = 0;
 		uint32				spawnReqId = 0;
-		px::ObjectKey		key{};
+		uint32				objectId = 0;
 		bool				isLocal = false;  // 내가 조종하는 액터인지
 	};
 
@@ -26,7 +26,7 @@ namespace jam::net
 	struct RenderActorDespawnedEvent
 	{
 		uint64				userId = 0;
-		px::ObjectKey		key{};
+		uint32				objectId = 0;
 	};
 
 
@@ -34,7 +34,7 @@ namespace jam::net
 	{
 		struct ActorSample
 		{
-			px::ObjectKey					key{};
+			uint32							objectId = 0;
 			bool							isLocal = false;  
 
 			optional<px::RigidState>		rs{};

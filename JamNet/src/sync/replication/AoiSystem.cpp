@@ -278,7 +278,7 @@ namespace jam::net
 		if (!m_physics) return true;
 
 		const px::Vec3 eyeOffset{ 0.f, m_cfg.losEyeOffset, 0.f };
-		return m_physics->RaycastLos(userPos + eyeOffset, targetPos + eyeOffset);
+		return m_physics->RaycastLOS(userPos + eyeOffset, targetPos + eyeOffset);
 	}
 
 	// ============================================================

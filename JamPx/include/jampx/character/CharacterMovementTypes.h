@@ -8,6 +8,14 @@
 
 namespace jam::px
 {
+	struct CharacterUserData
+	{
+		ObjectId id = INVALID_OBJ_ID;
+		
+		bool isGhost = false;
+		bool isRemote = false;
+	};
+
 
 	struct MoveCollision
 	{
@@ -112,7 +120,7 @@ namespace jam::px
 
 
 
-	struct MovementConfig
+	struct CharacterMoveConfig
 	{
 		// -- Gravity --
 		
@@ -160,7 +168,7 @@ namespace jam::px
 	};
 
 
-	struct MovementState
+	struct CharacterMoveState
 	{
 		// pose
 		Vec3		position		= Vec3::Zero();

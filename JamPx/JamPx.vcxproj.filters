@@ -22,6 +22,18 @@
     <Filter Include="character">
       <UniqueIdentifier>{28b555e0-206c-4365-82c9-bcca11af581f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="kinematic">
+      <UniqueIdentifier>{6d7217ff-82f8-438b-9104-d1e92dd54a5e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="projectile">
+      <UniqueIdentifier>{8f329ddd-aff5-4846-9318-ed4f92a4d450}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="geometry">
+      <UniqueIdentifier>{6c0f51ea-addc-4843-bb46-37e6aa87367b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="geometry\curve">
+      <UniqueIdentifier>{c1725ea0-93de-4926-b93f-7592983e0c64}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\jampx\PhysicsCore.cpp">
@@ -74,6 +86,30 @@
     </ClCompile>
     <ClCompile Include="src\jampx\character\DefaultQuakeAccelerator.cpp">
       <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\kinematic\KinematicMoveComponent.cpp">
+      <Filter>kinematic</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\kinematic\DefaultKinematicDriver.cpp">
+      <Filter>kinematic</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\projectile\ProjectileMoveComponent.cpp">
+      <Filter>projectile</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\kinematic\KinematicDrivers.cpp">
+      <Filter>kinematic</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\geometry\Curve.cpp">
+      <Filter>geometry\curve</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\geometry\BSpline.cpp">
+      <Filter>geometry\curve</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\geometry\CatmullRom.cpp">
+      <Filter>geometry\curve</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\geometry\Bezier.cpp">
+      <Filter>geometry\curve</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -157,6 +193,45 @@
     </ClInclude>
     <ClInclude Include="include\jampx\PhysicsSimFilter.h">
       <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsQueryFilter.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\CharacterFilter.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\kinematic\KinematicMoveComponent.h">
+      <Filter>kinematic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\kinematic\IKinematicDriver.h">
+      <Filter>kinematic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\kinematic\DefaultKinematicDriver.h">
+      <Filter>kinematic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\projectile\ProjectileMoveComponent.h">
+      <Filter>projectile</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\kinematic\KinematicCommon.h">
+      <Filter>kinematic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsAsset.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\kinematic\KinematicDrivers.h">
+      <Filter>kinematic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\geometry\Curve.h">
+      <Filter>geometry\curve</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\geometry\BSpline.h">
+      <Filter>geometry\curve</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\geometry\CatmullRom.h">
+      <Filter>geometry\curve</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\geometry\Bezier.h">
+      <Filter>geometry\curve</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

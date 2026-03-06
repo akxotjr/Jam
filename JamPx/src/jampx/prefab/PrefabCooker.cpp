@@ -481,29 +481,29 @@ namespace jam::px::prefab
 
 		static bool IsTriangleMeshType(const string& type)
 		{
-			return type == prefab::vShapeTriangleMesh;
+			return type == prefab::k_shapeTriangleMesh;
 		}
 
 		static bool IsConvexMeshType(const string& type)
 		{
-			return type == prefab::vShapeConvexMesh;
+			return type == prefab::k_shapeConvexMesh;
 		}
 
 		static void CookShapeIfMesh(json& shape, const PxCookingParams& params)
 		{
-			const string type = shape.value(prefab::kType, "");
+			const string type = shape.value(prefab::k_shapeType, "");
 			if (!IsTriangleMeshType(type) && !IsConvexMeshType(type))
 				return;
 
-			if (!shape.contains(prefab::kMesh) || !shape.at(prefab::kMesh).is_object())
+			if (!shape.contains(prefab::k_mesh) || !shape.at(prefab::k_mesh).is_object())
 				throw std::runtime_error("mesh shape requires mesh object");
 
-			json& mj = shape.at(prefab::kMesh);
+			json& mj = shape.at(prefab::k_mesh);
 
-			const string src		= mj.value(prefab::kSrc, "");
-			const int32  meshIndex	= mj.value(prefab::kMeshIndex, 0);
-			const int32  primIndex	= mj.value(prefab::kPrimitiveIndex, 0);
-			const string cooked		= mj.value(prefab::kCooked, "");
+			const string src		= mj.value(prefab::k_src, "");
+			const int32  meshIndex	= mj.value(prefab::k_meshIndex, 0);
+			const int32  primIndex	= mj.value(prefab::k_primitiveIndex, 0);
+			const string cooked		= mj.value(prefab::k_cooked, "");
 
 			if (cooked.empty())
 				throw std::runtime_error("mesh.cooked is required");

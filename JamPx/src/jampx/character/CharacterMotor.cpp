@@ -15,7 +15,6 @@ namespace jam::px
 		}
 
 
-		using CctMoveQueryCallback = QueryFilterCallbackT<DefaultQueryPolicy>;
 	}
 
 	CharacterMotor::CharacterMotor(PxCapsuleController* controller, PxRigidActor* hitbox)
@@ -30,13 +29,15 @@ namespace jam::px
 				m_hitbox = dyn;
 		}
 
-		m_qrfd = MakeQueryRequestFD(
+		m_rqfd = MakeRequestQueryFD(
 			QueryCategory::WORLD, 
 			0, 0, 0, 
-			0, 
-			QueryRequest::MAP_DEFAULT);
+			0, 0, 0, 
+			RequestQueryFlag::MAP_DEFAULT);
 
-		m_qryCallback = std::make_unique<CctMoveQueryCallback>(DefaultQueryPolicy{}, QueryHitTypeMap{});
+
+		m_qryCallback = std::make_unique<QueryFilterCallbackT<>>(DefaultQueryPolicy{}, QueryHitTypeMap{});
+		m_cctCallback = std::make_unique<CharacterFilterCallbackT<>>(DefaultCharacterFilterPolicy{});
 	}
 
 	CharacterMotor::~CharacterMotor()
@@ -72,7 +73,7 @@ namespace jam::px
 		const PxExtendedVec3& before = m_controller->getPosition();
 		const PxVec3 disp = ToPhysX(displacement);
 
-		PxFilterData fd = m_qrfd.ToPx();
+		PxFilterData fd = m_rqfd.ToPx();
 		PxControllerFilters filters(&fd, m_qryCallback.get(), m_cctCallback.get());
 
 		const PxControllerCollisionFlags flags = m_controller->move(disp, EPSILON, dt, filters);

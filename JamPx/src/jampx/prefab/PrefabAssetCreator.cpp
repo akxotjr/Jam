@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "jampx/prefab/PrefabAssetCreator.h"
 #include "jampx/prefab/PrefabAssets.h"
 
@@ -140,11 +140,11 @@ namespace jam::px::prefab
 
 		switch (def.kind)
 		{
-		case ePrefabBodyKind::STATIC:
+		case eBodyKind::RIGID_STATIC:
 			actor = physics->createRigidStatic(PxTransform(PxIdentity));
 			break;
 
-		case ePrefabBodyKind::DYNAMIC:
+		case eBodyKind::RIGID_DYNAMIC:
 		{
 			PxRigidDynamic* dyn = physics->createRigidDynamic(PxTransform(PxIdentity));
 			if (!dyn) return nullptr;
@@ -154,12 +154,14 @@ namespace jam::px::prefab
 			dyn->setAngularDamping(def.dynamic.angularDamping);
 			dyn->setLinearVelocity(def.dynamic.linearVelocity);
 			dyn->setAngularVelocity(def.dynamic.angularVelocity);
+				
+				
 
 			actor = dyn;
 		}
 		break;
 
-		case ePrefabBodyKind::KINEMATIC:
+		case eBodyKind::KINEMATIC:
 		{
 			PxRigidDynamic* dyn = physics->createRigidDynamic(PxTransform(PxIdentity));
 			if (!dyn) return nullptr;
@@ -169,8 +171,8 @@ namespace jam::px::prefab
 		}
 		break;
 
-		case ePrefabBodyKind::CHARACTER:
-			// Registry¿¡¼­ CHARACTER´Â º°µµ ½Ã½ºÅÛ(CCT)·Î Ã³¸®ÇÏ´Â Á¤Ã¥
+		case eBodyKind::CHARACTER:
+			// Registryï¿½ï¿½ï¿½ï¿½ CHARACTERï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã½ï¿½ï¿½ï¿½(CCT)ï¿½ï¿½ Ã³ï¿½ï¿½ï¿½Ï´ï¿½ ï¿½ï¿½Ã¥
 			return nullptr;
 
 		default:

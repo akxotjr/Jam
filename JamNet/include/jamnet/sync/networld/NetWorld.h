@@ -11,7 +11,8 @@ namespace jam::net
 	{
 		px::SpawnDesc			desc{};
 
-		uint32					spawnId = 0;
+		uint32					objectId = 0;
+		uint32					spawnId  = 0;
 
 		bool					owned = true;
 		bool					controlled = false;

@@ -42,23 +42,14 @@ namespace jam::px::prefab
 	using ShapeHandle    = jam::Fnv1aHandle<struct PrefabShapeDef, uint32>;
 	using TemplateHandle = jam::Fnv1aHandle<struct PrefabTemplateDef, uint32>;
 
-    enum class ePrefabBodyKind : uint8_t
-    {
-        NONE,
-        STATIC,
-        DYNAMIC,
-        KINEMATIC,  // dynamic + eKINEMATIC
-        CHARACTER
-    };
-
-    enum class ePrefabSpawnPolicy : uint8_t
+    enum class ePrefabSpawnPolicy : uint8
     {
         LEVEL_ONLY,
         RUNTIME_ONLY,
         BOTH
     };
 
-    enum class eShapeType : uint8_t
+    enum class eShapeType : uint8
     {
         BOX,
         SPHERE,
@@ -67,8 +58,6 @@ namespace jam::px::prefab
 
         CONVEX_MESH,
         TRIANGLE_MESH,
-
-        HEIGHT_FIELD
     };
 
     inline bool IsPrimtiveShape(eShapeType type)
@@ -107,7 +96,6 @@ namespace jam::px::prefab
 
     struct PrefabShapeDef
     {
-        // required
         eShapeType              type = eShapeType::BOX;
         PxTransform             localPose{ PxIdentity };
         MaterialHandle          material{};
@@ -116,8 +104,6 @@ namespace jam::px::prefab
         QueryFD                 qryFD{};
         float                   contactOffset = 0.0f;
         float                   restOffset = 0.02f;
-        // ~required
-
 
         PxVec3                  boxHalfExtents{ 0.5f, 0.5f, 0.5f };
         float                   sphereRadius = 0.5f;
@@ -133,14 +119,12 @@ namespace jam::px::prefab
     // require all field
     struct PrefabDynamicBodyDef
     {
-        float                   density = 1.0f;
-        bool                    useGravity = true;
-        float                   linearDamping = 0.0f;
-        float                   angularDamping = 0.0f;
-        PxVec3                  linearVelocity{ PxZero };
-        PxVec3                  angularVelocity{ PxZero };
+        float                   density         = 1.0f;
+        float                   linearDamping   = 0.0f;
+        float                   angularDamping  = 0.0f;
+        PxVec3                  linearVelocity  = PxVec3(PxZero);
+        PxVec3                  angularVelocity = PxVec3(PxZero);
     };
-
 
 
     struct PrefabCCTDef
@@ -158,23 +142,25 @@ namespace jam::px::prefab
 
         bool                    hasHitbox = false;
 
-        MovementConfig          movement{};
+        CharacterMoveConfig          movement{};
     };
 
 
     struct PrefabTemplateDef
     {
         string                  name;
-        ePrefabBodyKind         kind = ePrefabBodyKind::STATIC;
+        eActorType              actorType   = eActorType::Generic;
+        eMotionType             motionType  = eMotionType::Static;
+        BodyFlag::Flags         bodyFlags   = BodyFlag::NONE;
+
         ePrefabSpawnPolicy      spawnPolicy = ePrefabSpawnPolicy::BOTH;
         bool                    allowReplication = true;
-        vector<ShapeHandle>     shapes;     // at least 1
+        
+    	vector<ShapeHandle>     shapes;     // at least 1
 
-        PrefabDynamicBodyDef    dynamic{};  // only use kind == ePrefabBodyKind::DYNAMIC 
-
-        PrefabCCTDef            cct{};      // only use kind == ePrefabBodyKind::CHARACTER. if it has cct then shapes mean hitboxes of character
+        PrefabDynamicBodyDef    dynamic{};  // only use kind == eBodyKind::RIGID_DYNAMIC 
+        PrefabCCTDef            cct{};      // only use kind == eBodyKind::CHARACTER. if it has cct then shapes mean hitboxes of character
     };
-
 
 
     static int32 QuantF(float v, float scale = 10000.f)
@@ -225,7 +211,6 @@ namespace jam::px::prefab
 
     JAM_FNV1A32_HASHABLE(PrefabDynamicBodyDef,
         &PrefabDynamicBodyDef::density,
-        &PrefabDynamicBodyDef::useGravity,
         &PrefabDynamicBodyDef::linearDamping,
         &PrefabDynamicBodyDef::angularDamping,
         &PrefabDynamicBodyDef::linearVelocity,
@@ -245,7 +230,9 @@ namespace jam::px::prefab
 
     JAM_FNV1A32_HASHABLE(PrefabTemplateDef,
         &PrefabTemplateDef::name,
-        &PrefabTemplateDef::kind,
+        &PrefabTemplateDef::actorType,
+        &PrefabTemplateDef::motionType,
+        &PrefabTemplateDef::bodyFlags,
         &PrefabTemplateDef::spawnPolicy,
         &PrefabTemplateDef::allowReplication,
         &PrefabTemplateDef::shapes,
@@ -283,7 +270,7 @@ namespace jam::px::prefab
 
     struct PrefabLevelAsset
     {
-        int32                           version = 1;
+        int32                               version = 1;
         std::vector<PrefabLevelInstanceDef> instances;
     };
 

@@ -191,7 +191,7 @@ namespace jam::net
         m_world.emplace<OwnershipTag>(e, OwnershipTag{ owner });
         m_world.emplace<ControlTag>(e, ControlTag{ controller });
 
-        const auto kind = m_physics->GetKind(prefabKey);
+        const auto kind = m_physics->GetBodyKind(prefabKey);
         m_world.emplace<NetActorBodyKind>(e, NetActorBodyKind{ kind });
 
         m_netIdToEntity.emplace(netId, e);
@@ -199,7 +199,7 @@ namespace jam::net
         RenderActorSpawnedEvent event{};
         event.userId    = m_userId;
         event.isLocal   = false;
-        event.key       = MakeObjectKey(e);
+        event.objectId       = MakeObjectId(e);
 
         GLOBAL_EVENTBUS_PUBLISH(event);
 
@@ -237,7 +237,7 @@ namespace jam::net
         RenderActorSpawnedEvent event{};
         event.userId        = m_userId;
         event.spawnReqId    = spawnReqId;
-        event.key           = MakeObjectKey(e);
+        event.objectId           = MakeObjectId(e);
         event.isLocal       = isLocal;
         GLOBAL_EVENTBUS_PUBLISH(event);
 

@@ -14,7 +14,7 @@ namespace jam::px::prefab
 
 		static PxVec3 ParseVec3(const json& j)
 		{
-			if (!j.is_array() || j.size() != kVec3Size)
+			if (!j.is_array() || j.size() != k_vec3Size)
 				throw std::runtime_error("vec3 must be array[3] [x, y, z]");
 
 			return { j[0].get<float>(), j[1].get<float>(), j[2].get<float>() };
@@ -33,7 +33,7 @@ namespace jam::px::prefab
 
 		static PxQuat ParseQuat(const json& j)
 		{
-			if (!j.is_array() || j.size() != kQuatSize)
+			if (!j.is_array() || j.size() != k_quatSize)
 				throw std::runtime_error("quat must be array[4] [x, y, z, w]");
 
 			PxQuat q{ j[0].get<float>(), j[1].get<float>(), j[2].get<float>(), j[3].get<float>() };
@@ -58,8 +58,8 @@ namespace jam::px::prefab
 				throw std::runtime_error("transform must be object");
 
 			PxTransform tf{ PxIdentity };
-			tf.p = ParseVec3(j.at(kP));
-			tf.q = ParseQuat(j.at(kQ));
+			tf.p = ParseVec3(j.at(k_p));
+			tf.q = ParseQuat(j.at(k_q));
 
 			return tf;
 		}
@@ -72,38 +72,54 @@ namespace jam::px::prefab
 			return ParseTransform(j.at(key));
 		}
 
+		static eActorType ParseActorType(const json& j)
+		{
+			const string s = j[k_actorType].get<string>();
 
+			if (s == k_genericActor)	return eActorType::Generic;
+			if (s == k_projectile)		return eActorType::Projectile;
+			if (s == k_character)		return eActorType::Character;
+
+			return eActorType::None;
+		}
+
+		static eMotionType ParseMotionType(const json& j)
+		{
+			const string s = j[k_motionType].get<string>();
+
+			if (s == k_static)		return eMotionType::Static;
+			if (s == k_dynamic)		return eMotionType::Dynamic;
+			if (s == k_kinematic)	return eMotionType::Kinematic;
+
+			return eMotionType::None;
+		}
+
+		static BodyFlag::Flags ParseBodyFlag(const json& j)
+		{
+			const uint32 flags = j[k_bodyFlags].get<uint32>();
+
+			return BodyFlag::Flags(flags);
+		}
 
 
 		static ePrefabSpawnPolicy ParseSpawnPolicy(const json& j)
 		{
-			const std::string s = j[kSpawnPolicy].get<string>();
+			const std::string s = j[k_spawnPolicy].get<string>();
 
-			if (s == vSpawnLevelOnly)	  return ePrefabSpawnPolicy::LEVEL_ONLY;
-			if (s == vSpawnRuntimeOnly)   return ePrefabSpawnPolicy::RUNTIME_ONLY;
-			if (s == vSpawnBoth)		  return ePrefabSpawnPolicy::BOTH;
+			if (s == k_spawnLevelOnly)	  return ePrefabSpawnPolicy::LEVEL_ONLY;
+			if (s == k_spawnRuntimeOnly)  return ePrefabSpawnPolicy::RUNTIME_ONLY;
+			if (s == k_spawnBoth)		  return ePrefabSpawnPolicy::BOTH;
 
 			throw std::runtime_error("template.spawn_policy must be one of: level_only / runtime_only / both");
 		}
 
-		static ePrefabBodyKind ParseBodyKind(const json& j)
-		{
-			const std::string s = j[kKind].get<string>();
-
-			if (s == vKindStatic)	 return ePrefabBodyKind::STATIC;
-			if (s == vKindDynamic)	 return ePrefabBodyKind::DYNAMIC;
-			if (s == vKindKinematic) return ePrefabBodyKind::KINEMATIC;
-			if (s == vKindCharacter) return ePrefabBodyKind::CHARACTER;
-
-			throw std::runtime_error("body.kind must be one of: static / dynamic / kinematic / character");
-		}
 
 		static PrefabMaterialDef ParseMaterialDef(const json& j)
 		{
 			PrefabMaterialDef def{};
-			def.staticFriction	= j[kStaticFriction].get<float>();
-			def.dynamicFriction = j[kDynamicFriction].get<float>();
-			def.restitution		= j[kRestitution].get<float>();
+			def.staticFriction	= j[k_staticFriction].get<float>();
+			def.dynamicFriction = j[k_dynamicFriction].get<float>();
+			def.restitution		= j[k_restitution].get<float>();
 			return def;
 		}
 
@@ -128,10 +144,10 @@ namespace jam::px::prefab
 		static PrefabMeshDef ParseMeshDef(const json& j)
 		{
 			PrefabMeshDef def{};
-			def.cookedPath				= j[kCooked].get<string>();
-			def.srcGltfPath				= j.value(kSrc, "");
-			def.srcGltfMeshIndex		= j.value(kMeshIndex, 0);
-			def.srcGltfPrimitiveIndex	= j.value(kPrimitiveIndex, 0);
+			def.cookedPath				= j[k_cooked].get<string>();
+			def.srcGltfPath				= j.value(k_src, "");
+			def.srcGltfMeshIndex		= j.value(k_meshIndex, 0);
+			def.srcGltfPrimitiveIndex	= j.value(k_primitiveIndex, 0);
 
 			return def;
 		}
@@ -155,52 +171,51 @@ namespace jam::px::prefab
 
 		static eShapeType ParseShapeType(const json& j)
 		{
-			const string s = j[kType].get<string>();
-			if (s == vShapeBox)				return eShapeType::BOX;
-			if (s == vShapeSphere)			return eShapeType::SPHERE;
-			if (s == vShapeCapsule)			return eShapeType::CAPSULE;
-			if (s == vShapePlane)			return eShapeType::PLANE;
-			if (s == vShapeTriangleMesh)	return eShapeType::TRIANGLE_MESH;
-			if (s == vShapeConvexMesh)		return eShapeType::CONVEX_MESH;
-			if (s == vShapeHeightField)		return eShapeType::HEIGHT_FIELD;
+			const string s = j[k_shapeType].get<string>();
+			if (s == k_shapeBox)			return eShapeType::BOX;
+			if (s == k_shapeSphere)			return eShapeType::SPHERE;
+			if (s == k_shapeCapsule)		return eShapeType::CAPSULE;
+			if (s == k_shapePlane)			return eShapeType::PLANE;
+			if (s == k_shapeTriangleMesh)	return eShapeType::TRIANGLE_MESH;
+			if (s == k_shapeConvexMesh)		return eShapeType::CONVEX_MESH;
 
 			throw std::runtime_error("shape.type is invalid");
 		}
 
 		static eShapeFlag ParseShapeFlag(const json& j)
 		{
-			const string s = j[kShapeFlag].get<string>();
-			if (s == vShapeFlagSimulation)		return eShapeFlag::SIMULATION;
-			if (s == vShapeFlagSimulationOnly) return eShapeFlag::SIMULATION_ONLY;
-			if (s == vShapeFlagTrigger)		return eShapeFlag::TRIGGER;
-			if (s == vShapeFlagTriggerOnly)	return eShapeFlag::TRIGGER_ONLY;
-			if (s == vShapeFlagQueryOnly)		return eShapeFlag::QUERY_ONLY;
+			const string s = j[k_shapeFlag].get<string>();
+			if (s == k_simulation)		return eShapeFlag::SIMULATION;
+			if (s == k_simulation_only)	return eShapeFlag::SIMULATION_ONLY;
+			if (s == k_trigger)			return eShapeFlag::TRIGGER;
+			if (s == k_trigger_only)		return eShapeFlag::TRIGGER_ONLY;
+			if (s == k_query_only)		return eShapeFlag::QUERY_ONLY;
 
 			throw std::runtime_error("shape.shapeFlag must be one of: simulation/simulation_only/trigger/trigger_only/query_only");
 		}
 
 		static SimFD ParseSimFD(const json& j)
 		{
-			const json& v = j.at(kSimFilter);
+			const json& v = j.at(k_simFilter);
 
 			PxFilterData fd{};
-			fd.word0 = v[kWord0].get<PxU32>();
-			fd.word1 = v[kWord1].get<PxU32>();
-			fd.word2 = v[kWord2].get<PxU32>();
-			fd.word3 = v[kWord3].get<PxU32>();
+			fd.word0 = v[k_word0].get<PxU32>();
+			fd.word1 = v[k_word1].get<PxU32>();
+			fd.word2 = v[k_word2].get<PxU32>();
+			fd.word3 = v[k_word3].get<PxU32>();
 
 			return SimFD::FromPx(fd);
 		}
 
 		static QueryFD ParseQueryFD(const json& j)
 		{
-			const json& v = j.at(kQryFilter);
+			const json& v = j.at(k_qryFilter);
 
 			PxFilterData fd{};
-			fd.word0 = v[kWord0].get<PxU32>();
-			fd.word1 = v[kWord1].get<PxU32>();
-			fd.word2 = v[kWord2].get<PxU32>();
-			fd.word3 = v[kWord3].get<PxU32>();
+			fd.word0 = v[k_word0].get<PxU32>();
+			fd.word1 = v[k_word1].get<PxU32>();
+			fd.word2 = v[k_word2].get<PxU32>();
+			fd.word3 = v[k_word3].get<PxU32>();
 
 			return QueryFD::FromPx(fd);
 		}
@@ -228,37 +243,36 @@ namespace jam::px::prefab
 			s.type = ParseShapeType(j);
 
 			{
-				const PrefabMaterialDef mat = ParseMaterialDef(j.at(kMaterial));
+				const PrefabMaterialDef mat = ParseMaterialDef(j.at(k_material));
 				s.material = InternMaterial(asset, mat);
 			}
 
-			s.localPose     = ParseTransform(j.at(kLocalPose));
+			s.localPose     = ParseTransform(j.at(k_localPose));
 			s.shapeFlag     = ParseShapeFlag(j);
 			s.simFD		    = ParseSimFD(j);
 			s.qryFD		    = ParseQueryFD(j);
-			s.contactOffset = j.value(kContactOffset, s.contactOffset);
-			s.restOffset    = j.value(kRestOffset, s.restOffset);
+			s.contactOffset = j.value(k_contactOffset, s.contactOffset);
+			s.restOffset    = j.value(k_restOffset, s.restOffset);
 
 			switch (s.type)
 			{
 			case eShapeType::BOX:
-				s.boxHalfExtents	= ParseVec3(j, kHalfExtents);
+				s.boxHalfExtents	= ParseVec3(j, k_halfExtents);
 				break;
 			case eShapeType::SPHERE:
-				s.sphereRadius		= j[kRadius].get<float>();
+				s.sphereRadius		= j[k_radius].get<float>();
 				break;
 			case eShapeType::CAPSULE:
-				s.capsuleRadius		= j[kRadius].get<float>();
-				s.capsuleHalfHeight = j[kHalfHeight].get<float>();
+				s.capsuleRadius		= j[k_radius].get<float>();
+				s.capsuleHalfHeight = j[k_halfHeight].get<float>();
 				break;
 			case eShapeType::PLANE:
 				break;
 
 			case eShapeType::TRIANGLE_MESH:
 			case eShapeType::CONVEX_MESH:
-			case eShapeType::HEIGHT_FIELD:
 			{
-				const PrefabMeshDef mesh = ParseMeshDef(j.at(kMesh));
+				const PrefabMeshDef mesh = ParseMeshDef(j.at(k_mesh));
 				s.mesh = InternMesh(asset, mesh);
 			}
 			break;
@@ -273,16 +287,15 @@ namespace jam::px::prefab
 		static PrefabDynamicBodyDef ParseDynamicBodyDef(const json& body)
 		{
 			PrefabDynamicBodyDef out{};
-			out.density			= body[kDensity].get<float>();
-			out.useGravity		= body[kUseGravity].get<bool>();
-			out.linearDamping	= body[kLinearDamping].get<float>();
-			out.angularDamping	= body[kAngularDamping].get<float>();
-			out.linearVelocity	= ParseVec3(body, kLinearVelocity);
-			out.angularVelocity = ParseVec3(body, kAngularVelocity);
+			out.density			= body[k_density].get<float>();
+			out.linearDamping	= body[k_linearDamping].get<float>();
+			out.angularDamping	= body[k_angularDamping].get<float>();
+			out.linearVelocity	= ParseVec3(body, k_linearVelocity);
+			out.angularVelocity = ParseVec3(body, k_angularVelocity);
 			return out;
 		}
 
-		static void ParseMovementConfig(const json& mv, OUT MovementConfig& cfg)
+		static void ParseMovementConfig(const json& mv, OUT CharacterMoveConfig& cfg)
 		{
 			//cfg.walkSpeed		 = mv.value(kWalkSpeed, cfg.walkSpeed);
 			//cfg.sprintSpeed		 = mv.value(kSprintSpeed, cfg.sprintSpeed);
@@ -317,7 +330,7 @@ namespace jam::px::prefab
 			out.height			= cj.value(kCctHeight, out.height);
 
 			{
-				const PrefabMaterialDef mat = ParseMaterialDef(cj.at(kMaterial));
+				const PrefabMaterialDef mat = ParseMaterialDef(cj.at(k_material));
 				out.material = InternMaterial(asset, mat);
 			}
 
@@ -377,34 +390,36 @@ namespace jam::px::prefab
 	PhysicsPrefabAsset PhysicsPrefabIO::LoadPrefabAssetFromJson(const json& root)
 	{
 		PhysicsPrefabAsset asset{};
-		asset.version = root[kVersion].get<int32>();
+		asset.version = root[k_version].get<int32>();
 		if (asset.version != 1)
 			throw std::runtime_error("Unsupported prefab version");
 
-		for (const json& t : root[kTemplates])
+		for (const json& t : root[k_templates])
 		{
 			PrefabTemplateDef out{};
-			out.name			 = t[kName].get<string>();
-			out.kind			 = ParseBodyKind(t);
+			out.name			 = t[k_name].get<string>();
+			out.actorType = ParseActorType(t);
+			out.motionType = ParseMotionType(t);
+			out.bodyFlags = ParseBodyFlag(t);
 			out.spawnPolicy		 = ParseSpawnPolicy(t);
-			out.allowReplication = t[kAllowReplication].get<bool>();
+			out.allowReplication = t[k_allowReplication].get<bool>();
 
-			if (out.kind == ePrefabBodyKind::DYNAMIC)
+			if (out.motionType == eMotionType::Dynamic || out.motionType == eMotionType::Kinematic)
 			{
-				out.dynamic = ParseDynamicBodyDef(t.at(kDynBody));
+				out.dynamic = ParseDynamicBodyDef(t.at(k_dynBody));
 			}
 
-			if (out.kind == ePrefabBodyKind::CHARACTER)
+			if (out.actorType == eActorType::Character)
 			{
-				const json& cj = t.value(kCct, json::object());
+				const json& cj = t.value(k_cct, json::object());
 				if (!cj.empty())
 					out.cct = ParseCCTDef(cj, asset);
 
-				if (out.cct.hasHitbox && !t.at(kShapes).empty())
+				if (out.cct.hasHitbox && !t.at(k_shapes).empty())
 					throw std::runtime_error("character template: cct.has_hitbox=true requires template.shapes to be empty");
 			}
 
-			for (const json& sj : t[kShapes])
+			for (const json& sj : t[k_shapes])
 			{
 				PrefabShapeDef s = ParseShapeDef(sj, asset);
 				const ShapeHandle sh = InternShape(asset, s);
@@ -456,7 +471,7 @@ namespace jam::px::prefab
 	PrefabLevelAsset PhysicsPrefabIO::LoadLevelAssetFromJson(const json& root)
 	{
 		PrefabLevelAsset out{};
-		out.version = root.at(kVersion).get<int32>();
+		out.version = root.at(k_version).get<int32>();
 		if (out.version != 1)
 			throw std::runtime_error("Unsupported level version");
 
@@ -480,14 +495,14 @@ namespace jam::px::prefab
 
 			const json& ov = ij.at("overrides");
 
-			if (ov.contains(kLinearVelocity))
-				inst.overrides.linearVelocity = ParseVec3(ov.at(kLinearVelocity));
-			if (ov.contains(kAngularVelocity))
-				inst.overrides.angularVelocity = ParseVec3(ov.at(kAngularVelocity));
-			if (ov.contains(kLinearDamping))
-				inst.overrides.linearDamping = ov[kLinearDamping].get<float>();
-			if (ov.contains(kAngularDamping))
-				inst.overrides.angularDamping = ov[kAngularDamping].get<float>();
+			if (ov.contains(k_linearVelocity))
+				inst.overrides.linearVelocity = ParseVec3(ov.at(k_linearVelocity));
+			if (ov.contains(k_angularVelocity))
+				inst.overrides.angularVelocity = ParseVec3(ov.at(k_angularVelocity));
+			if (ov.contains(k_linearDamping))
+				inst.overrides.linearDamping = ov[k_linearDamping].get<float>();
+			if (ov.contains(k_angularDamping))
+				inst.overrides.angularDamping = ov[k_angularDamping].get<float>();
 
 			out.instances.push_back(std::move(inst));
 		}

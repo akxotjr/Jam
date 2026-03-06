@@ -66,7 +66,7 @@ namespace jam::net
 
 	void TcpListener::Dispatch(IocpEvent* iocpEvent, int32 /*numOfBytes*/)
 	{
-		JAMNET_ASSERT(iocpEvent->m_eventType == eEventType::ACCEPT);
+		JAM_ASSERT(iocpEvent->m_eventType == eEventType::ACCEPT);
 		AcceptEvent* acceptEvent = static_cast<AcceptEvent*>(iocpEvent);
 		ProcessAccept(acceptEvent);
 	}
