@@ -89,18 +89,16 @@ namespace jam
 }
 
 
-#define CLOCK jam::Clock::Instance()
-#define NOW_NS() CLOCK.NowNs()
-#define NOW_US() CLOCK.NowUs()
-#define NOW_MS() CLOCK.NowMs()
-#define NOW_SEC() CLOCK.NowSec()
-
-#define ELAPSED_NS() CLOCK.ElapsedNs()
-#define ELAPSED_US() CLOCK.ElapsedUs()
-#define ELAPSED_MS() CLOCK.ElapsedMs()
-#define ELAPSED_SEC() CLOCK.ElapsedSec()
-
-#define NOW_FRACTIONAL_TICK() CLOCK.NowFractionalTick()
-#define ELAPSED_FRACTIONAL_TICK() CLOCK.ElapsedFractionalTick()
-#define NOW_CHRONO(Dur) CLOCK.NowChrono<Dur>()
-#define ELAPSED_CHRONO(Dur) CLOCK.ElapsedChrono<Dur>()
+#define CLOCK							jam::Clock::Instance()
+#define NOW_NS()						jam::Clock::Instance().NowNs()
+#define NOW_US()						jam::Clock::Instance().NowUs()
+#define NOW_MS()						jam::Clock::Instance().NowMs()
+#define NOW_SEC()						jam::Clock::Instance().NowSec()
+#define ELAPSED_NS()					jam::Clock::Instance().ElapsedNs()
+#define ELAPSED_US()					jam::Clock::Instance().ElapsedUs()
+#define ELAPSED_MS()					jam::Clock::Instance().ElapsedMs()
+#define ELAPSED_SEC()					jam::Clock::Instance().ElapsedSec()
+#define NOW_FRACTIONAL_TICK()			jam::Clock::Instance().NowFractionalTick()
+#define ELAPSED_FRACTIONAL_TICK()		jam::Clock::Instance().ElapsedFractionalTick()
+#define NOW_CHRONO(Dur)					jam::Clock::Instance().NowChrono<Dur>()
+#define ELAPSED_CHRONO(Dur)				jam::Clock::Instance().ElapsedChrono<Dur>()

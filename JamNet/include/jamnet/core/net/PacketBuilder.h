@@ -236,6 +236,7 @@ namespace jam::net
 		BufferWriter				writer;  // PacketHeader 후부터 쓰기 시작하도록 설정됨
 		uint32						headerSize = 0; // PacketHeader 실제 크기
 		uint32						totalSize = 0; // headerSize + payloadSize
+
 		bool						IsValid() const { return static_cast<bool>(buf); }
 	};
 

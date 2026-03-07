@@ -18,9 +18,12 @@ namespace jam::px
 
 	using PxVec2 					= physx::PxVec2;
 	using PxVec3 					= physx::PxVec3;
+	using PxVec4					= physx::PxVec4;
 	using PxQuat 					= physx::PxQuat;
 	using PxTransform 				= physx::PxTransform;
 	using PxExtendedVec3 			= physx::PxExtendedVec3;
+	using PxMat33					= physx::PxMat33;
+	using PxMat44					= physx::PxMat44;
 
 
 	// ---- foundation / core ----
@@ -59,7 +62,11 @@ namespace jam::px
 	// ---- geometry / mesh ----
 
 	using PxTriangleMesh 			= physx::PxTriangleMesh;
+	using PxTriangleMeshDesc		= physx::PxTriangleMeshDesc;
 	using PxConvexMesh 				= physx::PxConvexMesh;
+	using PxConvexMeshDesc			= physx::PxConvexMeshDesc;
+	using PxConvexFlags				= physx::PxConvexFlags;
+	using PxConvexFlag				= physx::PxConvexFlag;
 
 	using PxGeometry 				= physx::PxGeometry;
 	using PxBoxGeometry 			= physx::PxBoxGeometry;
@@ -110,6 +117,7 @@ namespace jam::px
 	
 	using PxQueryFilterCallback			= physx::PxQueryFilterCallback;
 
+
 	// ---- cct ----
 
 	using PxControllerManager			= physx::PxControllerManager;
@@ -142,5 +150,11 @@ namespace jam::px
 	using PxLightCpuTask 			= physx::PxLightCpuTask;
 
 
+	// ---- cooking ----
+
+	using PxCookingParams				= physx::PxCookingParams;
+	using PxConvexMeshCookingType		= physx::PxConvexMeshCookingType;
+	using PxConvexMeshCookingResult		= physx::PxConvexMeshCookingResult;
+	using PxTriangleMeshCookingResult	= physx::PxTriangleMeshCookingResult;
 
 }

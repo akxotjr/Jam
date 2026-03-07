@@ -499,11 +499,108 @@ namespace jam::px
 
 
 
+	FollowKinematicDriver::FollowKinematicDriver(KinematicCommon common, FollowSource src, TargetPoseResolver resolver)
+		: m_common(common), m_src(std::move(src)), m_resolver(std::move(resolver))
+	{
+	}
 
+	PxTransform FollowKinematicDriver::Tick(float dt)
+	{
+		std::optional<PxTransform> targetOpt;
+		if (m_resolver) targetOpt = m_resolver(m_src.targetId);
 
+		if (!targetOpt.has_value())
+		{
+			m_targetWasMissing = true;
+			return m_pose;
+		}
 
+		const PxTransform& targetPose = targetOpt.value();
 
+		const PxVec3 desiredPos = (m_src.offsetSpace == eFollowOffsetSpace::TargetLocal)
+			? targetPose.p + targetPose.q.rotate(m_src.offset)
+			: targetPose.p + m_src.offset;
 
+		const bool snap = !m_hasValidTarget || (m_targetWasMissing && m_src.snapIfTargetMissing);
+
+		m_hasValidTarget   = true;
+		m_targetWasMissing = false;
+
+		if (snap)
+		{
+			m_pose.p = desiredPos;
+			m_pose.q = ComputeTargetRotation(targetPose, desiredPos);
+			return m_pose;
+		}
+
+		// position follow
+		{
+			const PxVec3 delta = desiredPos - m_pose.p;
+			const float dist = delta.magnitude();
+
+			if (dist > 1e-6f)
+			{
+				const float step = physx::PxMin(physx::PxMin(m_src.positionFollowSpeed, m_src.maxLinearSpeed) * dt, dist);
+				m_pose.p += (delta / dist) * step;
+			}
+		}
+
+		// rotation follow
+		{
+			const PxQuat desiredRot = ComputeTargetRotation(targetPose, desiredPos);
+
+			// 현재 → 목표 사이의 회전 각도 (반각 cosine → full angle)
+			const float cosHalf = physx::PxAbs(
+				m_pose.q.x * desiredRot.x +
+				m_pose.q.y * desiredRot.y +
+				m_pose.q.z * desiredRot.z +
+				m_pose.q.w * desiredRot.w);
+			const float fullAngle = 2.f * physx::PxAcos(physx::PxClamp(cosHalf, 0.f, 1.f));
+
+			if (fullAngle > 1e-6f)
+			{
+				// rotationFollowSpeed와 maxAngularSpeed 양쪽으로 각도 제한
+				const float angleStep = physx::PxMin(physx::PxMin(m_src.rotationFollowSpeed, m_src.maxAngularSpeed) * dt, fullAngle);
+				const float alpha	  = physx::PxClamp(angleStep / fullAngle, 0.f, 1.f);
+
+				m_pose.q = Ease::Slerp(m_pose.q, desiredRot, alpha);
+			}
+		}
+
+		return m_pose;
+	}
+
+	PxQuat FollowKinematicDriver::ComputeTargetRotation(const PxTransform& targetPose, const PxVec3& desiredPos) const
+	{
+		switch (m_src.rotationMode)
+		{
+		case eFollowRotationMode::KeepWorldRotation:
+			return m_pose.q;
+
+		case eFollowRotationMode::MatchTargetRotation:
+			return targetPose.q;
+
+		case eFollowRotationMode::LookAtTarget:
+			{
+				// desiredPos(offset 적용 위치)에서 target center를 바라봄
+				const PxVec3 dir = targetPose.p - desiredPos;
+				const float  len = dir.magnitude();
+				if (len < 1e-6f) return m_pose.q;
+				return BuildLookRotation(dir / len, PxVec3(0.f, 1.f, 0.f));
+			}
+
+		case eFollowRotationMode::OrientAlongVelocity:
+			{
+				// 현재 pose에서 목표 위치를 향하는 방향을 속도 방향으로 사용
+				const PxVec3 vel = desiredPos - m_pose.p;
+				const float  len = vel.magnitude();
+				if (len < 1e-6f) return m_pose.q;
+				return BuildLookRotation(vel / len, PxVec3(0.f, 1.f, 0.f));
+			}
+		}
+
+		return m_pose.q;
+	}
 
 
 

@@ -209,9 +209,6 @@
     <ClInclude Include="include\jampx\kinematic\KinematicCommon.h">
       <Filter>kinematic</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\PhysicsAsset.h">
-      <Filter>px</Filter>
-    </ClInclude>
     <ClInclude Include="include\jampx\kinematic\KinematicDrivers.h">
       <Filter>kinematic</Filter>
     </ClInclude>
@@ -233,6 +230,9 @@
     <ClInclude Include="include\jampx\Easing.h">
       <Filter>px</Filter>
     </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsAsset.h">
+      <Filter>prefab</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="schema\physics_prefab.schema.json">
@@ -242,5 +242,8 @@
       <Filter>schema</Filter>
     </None>
     <None Include="..\character_movement.md" />
+    <None Include="schema\physics_asset.schema.json">
+      <Filter>schema</Filter>
+    </None>
   </ItemGroup>
 </Project>

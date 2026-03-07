@@ -25,14 +25,13 @@ namespace jam::px::prefab
 
     inline constexpr const char* k_name             = "name";
     inline constexpr const char* k_actorType        = "actor_type";
+    inline constexpr const char* k_representation   = "representation";
     inline constexpr const char* k_motionType       = "motion_type";
     inline constexpr const char* k_bodyFlags        = "body_flags";
     inline constexpr const char* k_spawnPolicy      = "spawn_policy";
     inline constexpr const char* k_allowReplication = "allow_replication";
-    inline constexpr const char* k_shapes           = "shapes";
 
-    inline constexpr const char* k_dynBody          = "dyn_body";
-    inline constexpr const char* k_cct              = "cct";
+
 
     // ---- actor type enum values ----
 
@@ -83,7 +82,6 @@ namespace jam::px::prefab
     inline constexpr const char* k_mesh              = "mesh";
 
     // ---- shape type enum values ----
-
     inline constexpr const char* k_shapeBox              = "box";
     inline constexpr const char* k_shapeSphere           = "sphere";
     inline constexpr const char* k_shapeCapsule          = "capsule";
@@ -92,12 +90,12 @@ namespace jam::px::prefab
     inline constexpr const char* k_shapeTriangleMesh     = "triangle_mesh";
 
     // ---- shape flag enum values ----
-
     inline constexpr const char* k_simulation           = "simulation";
     inline constexpr const char* k_simulation_only      = "simulation_only";
     inline constexpr const char* k_trigger              = "trigger";
     inline constexpr const char* k_trigger_only         = "trigger_only";
     inline constexpr const char* k_query_only           = "query_only";
+
 
     // ----------------------------
     //  MaterialDef
@@ -106,6 +104,7 @@ namespace jam::px::prefab
     inline constexpr const char* k_staticFriction       = "static_friction";
     inline constexpr const char* k_dynamicFriction      = "dynamic_friction";
     inline constexpr const char* k_restitution          = "restitution";
+
 
     // ----------------------------
     //  SimFilter / QryFilter
@@ -117,7 +116,6 @@ namespace jam::px::prefab
     inline constexpr const char* k_word3                = "word3";
 
 
-
     // ----------------------------
     //  MeshDef
     // ----------------------------
@@ -126,6 +124,7 @@ namespace jam::px::prefab
     inline constexpr const char* k_meshIndex            = "mesh_index";
     inline constexpr const char* k_primitiveIndex       = "primitive_index";
     inline constexpr const char* k_cooked               = "cooked";
+
 
     // ----------------------------
     //  DynBodyDef
@@ -137,18 +136,29 @@ namespace jam::px::prefab
     inline constexpr const char* k_linearVelocity       = "linear_velocity";
     inline constexpr const char* k_angularVelocity      = "angular_velocity";
 
+
     // ----------------------------
     //  CCTDef
     // ----------------------------
-    inline constexpr const char* kCctRadius         = "radius";
-    inline constexpr const char* kCctHeight         = "height";
-    inline constexpr const char* kAllowCrouch       = "allow_crouch";
-    inline constexpr const char* kAllowSlide        = "allow_slide";
-    inline constexpr const char* kCctContactOffset  = "contact_offset";
-    inline constexpr const char* kStepOffset        = "step_offset";
-    inline constexpr const char* kSlopeLimit        = "slope_limit";
-    inline constexpr const char* kHasHitbox         = "has_hitbox";
-    inline constexpr const char* kMovement          = "movement";
+
+    inline constexpr const char* k_cct_radius               = "radius";
+    inline constexpr const char* k_cct_height               = "height";
+    inline constexpr const char* k_cct_material             = "material";
+    inline constexpr const char* k_cct_density              = "density";
+    inline constexpr const char* k_cct_policy               = "policy";
+    inline constexpr const char* k_cct_slopeLimit           = "slope_limit";
+    inline constexpr const char* k_cct_invisibleWallHeight  = "invisible_wall_height";
+    inline constexpr const char* k_cct_maxJumpHeight        = "max_jump_height";
+    inline constexpr const char* k_cct_contactOffset        = "contact_offset";
+    inline constexpr const char* k_cct_stepOffset           = "step_offset";
+    inline constexpr const char* k_cct_scaleCoeff           = "scale_coeff";
+    inline constexpr const char* k_cct_volumeGrowth         = "volume_growth";
+
+    // ----------------------------
+	//  MoveProfileDef
+	// ----------------------------
+
+
 
 
     // ----------------------------
@@ -240,14 +250,14 @@ namespace jam::px::prefab
 		static json					LoadPrefabJsonFromFile(const std::string& path);
 		static void					SavePrefabJsonToFile(const std::string& path, const json& prefab);
 
-		static PhysicsPrefabAsset	LoadPrefabAssetFromFile(const std::string& path);
-		static PhysicsPrefabAsset	LoadPrefabAssetFromJson(const json& root);
+		static PhysicsAsset	        LoadPrefabAssetFromFile(const std::string& path);
+		static PhysicsAsset	        LoadPrefabAssetFromJson(const json& root);
 
         static json                 LoadLevelJsonFromFile(const std::string& path);
         static void                 SaveLevelJsonToFile(const std::string& path, const json& level);
 
-        static PrefabLevelAsset     LoadLevelAssetFromFile(const std::string& path);
-        static PrefabLevelAsset     LoadLevelAssetFromJson(const json& root);
+        static PhysicsLevelAsset     LoadLevelAssetFromFile(const std::string& path);
+        static PhysicsLevelAsset     LoadLevelAssetFromJson(const json& root);
 
 #if JAMPX_WITH_EDITOR
 		static const char*			PrefabSchemaPath();               // 경로 제공

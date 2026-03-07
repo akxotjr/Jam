@@ -98,7 +98,7 @@ namespace jam::px::prefab
         eShapeType              type = eShapeType::BOX;
         PxTransform             localPose{ PxIdentity };
         MaterialHandle          material{};
-        eShapeFlag              shapeFlag = eShapeFlag::SIMULATION;
+        eShapeFlag              shapeFlag = eShapeFlag::Simulation;
         SimFD                   simFD{};
         QueryFD                 qryFD{};
         float                   contactOffset = 0.0f;

@@ -7,9 +7,6 @@
     <Filter Include="core">
       <UniqueIdentifier>{5105503d-0b38-4adb-9022-612fbd366f25}</UniqueIdentifier>
     </Filter>
-    <Filter Include="core\base">
-      <UniqueIdentifier>{aaa8a668-42bd-4855-9843-f33a6e8ccec3}</UniqueIdentifier>
-    </Filter>
     <Filter Include="core\executor">
       <UniqueIdentifier>{8c365bbf-df18-4d76-aaca-3b5f4bbc2d6a}</UniqueIdentifier>
     </Filter>
@@ -68,12 +65,6 @@
     </ClInclude>
     <ClInclude Include="include\JamNetAPI.h">
       <Filter>Header</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\core\base\JamNetMacro.h">
-      <Filter>core\base</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\core\base\JamNetTypes.h">
-      <Filter>core\base</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\executor\ConcurrentPriorityQueue.h">
       <Filter>core\executor</Filter>

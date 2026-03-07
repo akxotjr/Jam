@@ -12,14 +12,14 @@ namespace jam::px::prefab
 
     struct PrefabDocument
     {
-        filesystem::path             path;
+	    std::filesystem::path             path;
         json                         doc;
         bool                         dirty = false;
 
         uint64                       revision = 0;              // doc가 "의미적으로" 변경될 때마다 증가
         uint64                       builtRevision = ~0ull;     // cachedAsset이 만들어진 revision
 
-        optional<PhysicsPrefabAsset> cachedAsset;  // doc->asset 빌드 결과 캐시(미리보기/PIE 등에 사용)
+	    std::optional<PhysicsPrefabAsset> cachedAsset;  // doc->asset 빌드 결과 캐시(미리보기/PIE 등에 사용)
 
         void Touch() noexcept
         {
@@ -139,7 +139,7 @@ namespace jam::px::prefab
     // ----------------------------
     struct PrefabLevelDocument
     {
-        filesystem::path     path;
+	    std::filesystem::path     path;
         json                 doc;
         bool                 dirty = false;
 

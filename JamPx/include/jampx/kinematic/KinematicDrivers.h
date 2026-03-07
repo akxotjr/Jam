@@ -113,24 +113,35 @@ namespace jam::px
 
 
 
-    // -----------------------------------------------------------
-    // Follow
-    // -----------------------------------------------------------
+    /** -----------------------------------------------------------
+    * Follow
+     -----------------------------------------------------------
+     */
+
+	/// Lookup callback: ObjectId -> PxTransform 
+	/// If target is not found, returns std::nullopt.
+    using TargetPoseResolver = std::function<std::optional<PxTransform>(ObjectId)>;
 
     class FollowKinematicDriver : public IKinematicDriver
     {
     public:
-        FollowKinematicDriver(KinematicCommon common, FollowSource src, IPhysicsFacade* facade);
+        FollowKinematicDriver(KinematicCommon common, FollowSource src, TargetPoseResolver resolver);
 
         PxTransform         Tick(float dt) override;
+        bool                IsDone() const override { return false; }
 
     private:
-        KinematicCommon     m_common;
-        FollowSource        m_src;
-        IPhysicsFacade*     m_facade = nullptr;
-        Transform           m_current{};
-    };
+        PxQuat              ComputeTargetRotation(const PxTransform& targetPose, const PxVec3& desiredPos) const;
 
+    private:
+        KinematicCommon     m_common            = {};
+        FollowSource        m_src               = {};
+        TargetPoseResolver  m_resolver          = nullptr;
+
+        PxTransform         m_pose              = PxTransform(physx::PxIdentity);
+        bool                m_hasValidTarget    = false;    // whether ever found a target
+        bool                m_targetWasMissing  = false;    // whether no target in the previous frame
+    };
 
     // -----------------------------------------------------------
 	// NetworkPose

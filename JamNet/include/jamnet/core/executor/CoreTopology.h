@@ -8,7 +8,7 @@ namespace jam
         uint32  offload = 1;
         uint32  spare   = 0;
 
-        bool IsValid()
+        bool IsValid() const
         {
             return shards <= 0 || offload <= 0;
         }

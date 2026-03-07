@@ -192,8 +192,8 @@ static void WriteTestPrefabAndLevel()
         ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_shapes), json::array());
 
         // cct
-        ed.Set(MakeCctFieldPtr(characterTemplateIndex, kCctRadius), 0.35);
-        ed.Set(MakeCctFieldPtr(characterTemplateIndex, kCctHeight), 1.8);
+        ed.Set(MakeCctFieldPtr(characterTemplateIndex, k_cct_radius), 0.35);
+        ed.Set(MakeCctFieldPtr(characterTemplateIndex, k_cct_height), 1.8);
         ed.Set(MakeCctFieldPtr(characterTemplateIndex, kAllowCrouch), true);
 
         ed.EnsureObject(MakeCctFieldPtr(characterTemplateIndex, k_material));

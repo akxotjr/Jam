@@ -2,6 +2,8 @@
 #include <variant>
 
 #include "api/PhysicsTypes.h"
+#include "kinematic/KinematicCommon.h"
+#include "prefab/PrefabAssets.h"
 
 
 namespace jam::px
@@ -24,6 +26,7 @@ namespace jam::px
 		Box,
 		Sphere,
 		Capsule,
+		Plane,
 
 		TriangleMesh,
 		ConvexMesh,
@@ -54,7 +57,7 @@ namespace jam::px
 		// optional
 		std::string		srcPath;					
 		int32			srcMeshIndex			= 0;	
-		int32			srcPriitiveIndex		= 0;	
+		int32			srcPrimitiveIndex		= 0;	
 	
 		bool operator==(const MeshDef&) const = default;
 	};
@@ -62,9 +65,9 @@ namespace jam::px
 	struct ShapeDef
 	{
 		eShapeType		type				= eShapeType::None;
-		PxTransform		localPose			= PxTransform(PxIdentity);
+		PxTransform		localPose			= PxTransform(physx::PxIdentity);
 		MaterialHandle	material			= {};
-		eShapeFlag		shapeFlag			= eShapeFlag::SIMULATION;
+		eShapeFlag		shapeFlag			= eShapeFlag::Simulation;
 	
 		SimFD			simFD				= {};
 		QueryFD			qryFD				= {};
@@ -87,8 +90,8 @@ namespace jam::px
 	struct DynamicBodyDef
 	{
 		float			density				= 1.0f;
-		PxVec3			linearVelocity		= PxVec3(PxZero);
-		PxVec3			angularVelocity		= PxVec3(PxZero);
+		PxVec3			linearVelocity		= PxVec3(physx::PxZero);
+		PxVec3			angularVelocity		= PxVec3(physx::PxZero);
 		float			linearDamping		= 0.0f;
 		float			angularDamping		= 0.05f;
 
@@ -129,10 +132,11 @@ namespace jam::px
 	{
 		CCTBodyHandle					cct			= {};
 
-		bool							hasHitbox	= false;
 		std::vector<ShapeHandle>		hitboxes;
 
 		bool operator==(const CharacterTemplate&) const = default;
+
+		bool HasHitbox() const { return !hitboxes.empty(); }
 	};
 
 
@@ -152,6 +156,8 @@ namespace jam::px
 		ePhyiscsRep			representation		= ePhyiscsRep::Rigid;
 		eMotionType			motionType			= eMotionType::Static;
 		BodyFlag::Flags		bodyFlags			= BodyFlag::NONE;
+		MoveProfileHandle   moveProfile			= {};
+
 		eSpawnPolicy		spawnPolicy			= eSpawnPolicy::Both;
 		bool				allowReplication	= true;
 
@@ -177,8 +183,26 @@ namespace jam::px
 	};
 
 
+	struct PhyiscsLevelOverrides
+	{
+		std::optional<PxVec3>        linearVelocity = std::nullopt;
+		std::optional<PxVec3>        angularVelocity = std::nullopt;
+		std::optional<float>         linearDamping = 0.0f;
+		std::optional<float>         angularDamping = 0.0f;
+	};
 
+	struct PhysicsLevelInstanceDef
+	{
+		std::string             templateName;
+		PxTransform             pose{physx::PxIdentity };
+		PhyiscsLevelOverrides    overrides{};
+	};
 
+	struct PhysicsLevelAsset
+	{
+		int32                               version = 1;
+		std::vector<PhysicsLevelInstanceDef> instances;
+	};
 
 
 	enum class eSpawnSource : uint8
@@ -212,8 +236,8 @@ namespace jam::px
 	{
 		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
 
-		PxVec3	linearVelocity		= PxVec3(PxZero);
-		PxVec3	angularVelocity		= PxVec3(PxZero);
+		PxVec3	linearVelocity		= PxVec3(physx::PxZero);
+		PxVec3	angularVelocity		= PxVec3(physx::PxZero);
 		float	linearDamping		= 0.0f;
 		float	angularDamping		= 0.0f;
 	};
@@ -230,7 +254,7 @@ namespace jam::px
 	struct SpawnDesc
 	{
 		TemplateHandle		tpl{};
-		PxTransform			pose		= PxTransform(PxIdentity);
+		PxTransform			pose		= PxTransform(physx::PxIdentity);
 		eSpawnSource		spawnSrc	= eSpawnSource::Level;
 
 		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;

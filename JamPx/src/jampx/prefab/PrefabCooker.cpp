@@ -14,11 +14,11 @@ namespace jam::px::prefab
 	{
 		struct ExtractedMesh
 		{
-			vector<PxVec3> positions;
-			vector<uint32> indices;
+			std::vector<PxVec3> positions;
+			std::vector<uint32> indices;
 		};
 
-		static bool WriteAllBytes(const string& path, const void* data, size_t size)
+		static bool WriteAllBytes(const std::string& path, const void* data, size_t size)
 		{
 			std::ofstream f(path, std::ios::binary);
 			if (!f) return false;
@@ -47,10 +47,10 @@ namespace jam::px::prefab
 				throw std::runtime_error("failed to create directories: " + parent.string());
 		}
 
-		static bool LoadGltfModel(const string& path, OUT tinygltf::Model& outModel, OUT string& outErr)
+		static bool LoadGltfModel(const std::string& path, OUT tinygltf::Model& outModel, OUT std::string& outErr)
 		{
 			tinygltf::TinyGLTF loader;
-			string err, warn;
+			std::string err, warn;
 
 			const bool isGlb = path.size() >= 4 && (path.substr(path.size() - 4) == ".glb" || path.substr(path.size() - 4) == ".GLB");
 
@@ -105,7 +105,7 @@ namespace jam::px::prefab
 			if (n.translation.size() == 3)
 				T = PxVec3(static_cast<float>(n.translation[0]), static_cast<float>(n.translation[1]), static_cast<float>(n.translation[2]));
 
-			PxQuat R(PxIdentity);
+			PxQuat R(physx::PxIdentity);
 			if (n.rotation.size() == 4)
 				R = PxQuat(static_cast<float>(n.rotation[0]), static_cast<float>(n.rotation[1]), static_cast<float>(n.rotation[2]), static_cast<float>(n.rotation[3]));
 
@@ -135,7 +135,7 @@ namespace jam::px::prefab
 
 
 
-		static bool ExtractPositions(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT vector<PxVec3>& out, OUT string& outErr)
+		static bool ExtractPositions(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT std::vector<PxVec3>& out, OUT std::string& outErr)
 		{
 			if (acc.type != TINYGLTF_TYPE_VEC3 || acc.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
 			{
@@ -170,7 +170,7 @@ namespace jam::px::prefab
 			return true;
 		}
 
-		static bool ExtractIndices(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT vector<uint32_t>& out, OUT string& outErr)
+		static bool ExtractIndices(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT std::vector<uint32_t>& out, OUT std::string& outErr)
 		{
 			if (acc.type != TINYGLTF_TYPE_SCALAR) { outErr = "indices accessor must be SCALAR"; return false; }
 
@@ -214,7 +214,7 @@ namespace jam::px::prefab
 			return true;
 		}
 
-		static bool ExtractSingleMesh(const string& gltfPath, int32 meshIndex, int32 primitiveIndex, OUT ExtractedMesh& out, OUT string& outErr)
+		static bool ExtractSingleMesh(const std::string& gltfPath, int32 meshIndex, int32 primitiveIndex, OUT ExtractedMesh& out, OUT std::string& outErr)
 		{
 			out = {};
 
@@ -276,7 +276,7 @@ namespace jam::px::prefab
 			return true;
 		}
 
-		static bool ExtractMergedSceneMesh(const string& gltfPath, OUT ExtractedMesh& out, OUT string& outErr)
+		static bool ExtractMergedSceneMesh(const std::string& gltfPath, OUT ExtractedMesh& out, OUT std::string& outErr)
 		{
 			out = {};
 
@@ -293,7 +293,7 @@ namespace jam::px::prefab
 			}
 
 			const auto& scene = model.scenes[sceneIndex];
-			const PxMat44 I(PxIdentity);
+			const PxMat44 I(physx::PxIdentity);
 
 			auto appendPrim = [&](const tinygltf::Primitive& prim, const PxMat44& nodeGlobal)
 				{
@@ -306,13 +306,13 @@ namespace jam::px::prefab
 
 					const auto& posAcc = model.accessors[itPos->second];
 
-					vector<PxVec3> positions;
-					string err;
+					std::vector<PxVec3> positions;
+					std::string err;
 					if (!ExtractPositions(model, posAcc, positions, err))
 						throw std::runtime_error(err);
 
 					const auto& idxAcc = model.accessors[prim.indices];
-					vector<uint32> indices;
+					std::vector<uint32> indices;
 					if (!ExtractIndices(model, idxAcc, indices, err))
 						throw std::runtime_error(err);
 
@@ -352,11 +352,11 @@ namespace jam::px::prefab
 			return true;
 		}
 
-		static PxCookingParams MakeDefaultCookingParams()
+		static physx::PxCookingParams MakeDefaultCookingParams()
 		{
 			PxTolerancesScale scale{};
-			PxCookingParams params(scale);
-			params.meshPreprocessParams |= PxMeshPreprocessingFlag::eWELD_VERTICES;
+			physx::PxCookingParams params(scale);
+			params.meshPreprocessParams |= physx::PxMeshPreprocessingFlag::eWELD_VERTICES;
 			params.meshWeldTolerance = EPSILON;
 			return params;
 		}
@@ -431,7 +431,7 @@ namespace jam::px::prefab
 			std::printf("  ic=%u (%.3f %.3f %.3f)\n", ic, c.x, c.y, c.z);
 		}
 
-		static void CookTriangleMeshToPxtri(const PxCookingParams& params, const ExtractedMesh& mesh, const string& outPath)
+		static void CookTriangleMeshToPxtri(const physx::PxCookingParams& params, const ExtractedMesh& mesh, const std::string& outPath)
 		{
 			DebugMeshStats(mesh);
 			DebugWorstTriangle(mesh);
@@ -445,7 +445,7 @@ namespace jam::px::prefab
 			desc.triangles.stride = sizeof(uint32_t) * 3;
 			desc.triangles.data = mesh.indices.data();
 
-			PxDefaultMemoryOutputStream stream;
+			physx::PxDefaultMemoryOutputStream stream;
 			PxTriangleMeshCookingResult::Enum result = PxTriangleMeshCookingResult::eFAILURE;
 
 			const bool ok = PxCookTriangleMesh(params, desc, stream, &result);
@@ -458,7 +458,7 @@ namespace jam::px::prefab
 				throw std::runtime_error("failed to write: " + outPath);
 		}
 
-		static void CookConvexMeshToPxcvx(const PxCookingParams& params, const ExtractedMesh& mesh, const string& outPath)
+		static void CookConvexMeshToPxcvx(const PxCookingParams& params, const ExtractedMesh& mesh, const std::string& outPath)
 		{
 			PxConvexMeshDesc desc;
 			desc.points.count = static_cast<PxU32>(mesh.positions.size());
@@ -466,7 +466,7 @@ namespace jam::px::prefab
 			desc.points.data = mesh.positions.data();
 			desc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
 
-			PxDefaultMemoryOutputStream stream;
+			physx::PxDefaultMemoryOutputStream stream;
 			PxConvexMeshCookingResult::Enum result = PxConvexMeshCookingResult::eFAILURE;
 
 			const bool ok = PxCookConvexMesh(params, desc, stream, &result);
@@ -479,19 +479,19 @@ namespace jam::px::prefab
 				throw std::runtime_error("failed to write: " + outPath);
 		}
 
-		static bool IsTriangleMeshType(const string& type)
+		static bool IsTriangleMeshType(const std::string& type)
 		{
 			return type == prefab::k_shapeTriangleMesh;
 		}
 
-		static bool IsConvexMeshType(const string& type)
+		static bool IsConvexMeshType(const std::string& type)
 		{
 			return type == prefab::k_shapeConvexMesh;
 		}
 
 		static void CookShapeIfMesh(json& shape, const PxCookingParams& params)
 		{
-			const string type = shape.value(prefab::k_shapeType, "");
+			const std::string type = shape.value(prefab::k_shapeType, "");
 			if (!IsTriangleMeshType(type) && !IsConvexMeshType(type))
 				return;
 
@@ -500,10 +500,10 @@ namespace jam::px::prefab
 
 			json& mj = shape.at(prefab::k_mesh);
 
-			const string src		= mj.value(prefab::k_src, "");
+			const std::string src		= mj.value(prefab::k_src, "");
 			const int32  meshIndex	= mj.value(prefab::k_meshIndex, 0);
 			const int32  primIndex	= mj.value(prefab::k_primitiveIndex, 0);
-			const string cooked		= mj.value(prefab::k_cooked, "");
+			const std::string cooked		= mj.value(prefab::k_cooked, "");
 
 			if (cooked.empty())
 				throw std::runtime_error("mesh.cooked is required");
@@ -515,7 +515,7 @@ namespace jam::px::prefab
 				return;
 
 			ExtractedMesh em;
-			string err;
+			std::string err;
 			if (!ExtractSingleMesh(src, meshIndex, primIndex, em, err))
 				throw std::runtime_error(err);
 
@@ -530,7 +530,7 @@ namespace jam::px::prefab
 	}
 
 
-	void PrefabCooker::CookTriangleMesh(const string& gltfPath, const string& outPxtriPath, int32 meshIndex, int32 primitiveIndex)
+	void PrefabCooker::CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath, int32 meshIndex, int32 primitiveIndex)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");
@@ -538,7 +538,7 @@ namespace jam::px::prefab
 			throw std::runtime_error("outPxtriPath is empty");
 
 		ExtractedMesh em;
-		string err;
+		std::string err;
 		if (!ExtractSingleMesh(gltfPath, meshIndex, primitiveIndex, em, err))
 			throw std::runtime_error(err);
 
@@ -546,7 +546,7 @@ namespace jam::px::prefab
 		CookTriangleMeshToPxtri(params, em, outPxtriPath);
 	}
 
-	void PrefabCooker::CookTriangleMesh(const string& gltfPath, const string& outPxtriPath)
+	void PrefabCooker::CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");
@@ -554,7 +554,7 @@ namespace jam::px::prefab
 			throw std::runtime_error("outPxtriPath is empty");
 
 		ExtractedMesh em;
-		string err;
+		std::string err;
 		if (!ExtractMergedSceneMesh(gltfPath, em, err))
 			throw std::runtime_error(err);
 
@@ -562,7 +562,7 @@ namespace jam::px::prefab
 		CookTriangleMeshToPxtri(params, em, outPxtriPath);
 	}
 
-	void PrefabCooker::CookConvexMesh(const string& gltfPath, const string& outPxcvxPath, int32 meshIndex, int32 primitiveIndex)
+	void PrefabCooker::CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvxPath, int32 meshIndex, int32 primitiveIndex)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");
@@ -570,14 +570,14 @@ namespace jam::px::prefab
 			throw std::runtime_error("outPxcvxPath is empty");
 
 		ExtractedMesh em;
-		if (string err; !ExtractSingleMesh(gltfPath, meshIndex, primitiveIndex, em, err))
+		if (std::string err; !ExtractSingleMesh(gltfPath, meshIndex, primitiveIndex, em, err))
 			throw std::runtime_error(err);
 
 		const PxCookingParams params = MakeDefaultCookingParams();
 		CookConvexMeshToPxcvx(params, em, outPxcvxPath);
 	}
 
-	void PrefabCooker::CookConvexMesh(const string& gltfPath, const string& outPxcvcPath)
+	void PrefabCooker::CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvcPath)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");
@@ -585,7 +585,7 @@ namespace jam::px::prefab
 			throw std::runtime_error("outPxcvxPath is empty");
 
 		ExtractedMesh em;
-		string err;
+		std::string err;
 		if (!ExtractMergedSceneMesh(gltfPath, em, err))
 			throw std::runtime_error(err);
 

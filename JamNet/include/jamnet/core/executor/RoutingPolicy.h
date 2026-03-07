@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include <string_view>
 
+#include "jamnet/core/utils/Clock.h"
+
 namespace jam
 {
 	struct RouteSeed

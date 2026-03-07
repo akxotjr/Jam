@@ -161,8 +161,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="include\JamNetAPI.h" />
-    <ClInclude Include="include\jamnet\core\base\JamNetMacro.h" />
-    <ClInclude Include="include\jamnet\core\base\JamNetTypes.h" />
     <ClInclude Include="include\jamnet\core\executor\ConcurrentPriorityQueue.h" />
     <ClInclude Include="include\jamnet\core\executor\ConcurrentQueueToken.h" />
     <ClInclude Include="include\jamnet\core\executor\CoreTopology.h" />

@@ -21,7 +21,7 @@ namespace jam::px
 
     enum class eWaypointLoop : uint8
     {
-        Once,            // A->B->C (stop)
+        Once,            // A->B->C 
         Loop,            // A->B->C->A
         PingPong,        // A->B->C->B->A
     };
@@ -155,11 +155,39 @@ namespace jam::px
 	// Follow Source : target-driven
 	// ---------------------------------------------------------------
 
+    enum class eFollowOffsetSpace : uint8
+    {
+	    TargetLocal,
+        World
+    };
+
+    enum class eFollowRotationMode : uint8
+    {
+	    KeepWorldRotation,             
+        MatchTargetRotation,
+        LookAtTarget,
+        OrientAlongVelocity
+    };
+
     struct FollowSource
     {
-        ObjectId    targetId        = INVALID_OBJ_ID;
-        Vec3        offset          = Vec3::Zero();         // local offset
-        float       lerpSpeed       = 10.f;
+        ObjectId            targetId                = INVALID_OBJ_ID;
+
+        PxVec3              offset                  = PxVec3(physx::PxZero);
+        eFollowOffsetSpace  offsetSpace             = eFollowOffsetSpace::TargetLocal;
+
+        float               positionFollowSpeed     = 10.f;
+        float               rotationFollowSpeed     = 10.f;
+
+        float               maxLinearSpeed          = 1000.f;
+        float               maxAngularSpeed         = physx::PxPi;
+
+        eFollowRotationMode rotationMode            = eFollowRotationMode::KeepWorldRotation;
+
+        bool                snapIfTargetMissing     = false;
+        bool                keepLastPoseIfMissing   = true;
+
+        bool                computeDerivedVelocity = true;
     };
 
 
@@ -169,7 +197,7 @@ namespace jam::px
 
     struct NetworkPoseSource
     {
-        bool        computeDerivedVelocity = false;
+        bool                computeDerivedVelocity = false;
     };
 
 

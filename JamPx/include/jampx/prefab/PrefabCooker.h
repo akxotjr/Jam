@@ -12,16 +12,16 @@ namespace jam::px::prefab
 	public:
 		
 		///@brief cook single triangle mesh from *.gltf or *.glb
-		static void CookTriangleMesh(const string& gltfPath, const string& outPxtriPath, int32 meshIndex, int32 primitiveIndex);
+		static void CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath, int32 meshIndex, int32 primitiveIndex);
 		
 		///@brief cook scene-merged triangle mesh from *.gltf or *.glb
-		static void CookTriangleMesh(const string& gltfPath, const string& outPxtriPath);
+		static void CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath);
 
 		///@brief cook single convex mesh from *.gltf or *.glb
-		static void CookConvexMesh(const string& gltfPath, const string& outPxcvxPath, int32 meshIndex, int32 primitiveIndex);
+		static void CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvxPath, int32 meshIndex, int32 primitiveIndex);
 	
 		///@brief cook scene-merged convex mesh from *.gltf or *.glb
-		static void CookConvexMesh(const string& gltfPath, const string& outPxcvcPath);
+		static void CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvcPath);
 	};
 
 }

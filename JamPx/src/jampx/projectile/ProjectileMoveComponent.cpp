@@ -40,8 +40,8 @@ namespace jam::px
 		bool hasSweepShape = actor->getNbShapes() > 0 && actor->getShapes(&shape, 1) > 0 && shape != nullptr;
 
 		bool	 hit	   = false;
-		PxVec3	 hitPos	   = PxVec3(PxZero);
-		PxVec3	 hitNormal = PxVec3(PxZero);
+		PxVec3	 hitPos	   = PxVec3(physx::PxZero);
+		PxVec3	 hitNormal = PxVec3(physx::PxZero);
 		ObjectId hitId     = INVALID_OBJ_ID;
 
 		if (hasSweepShape)

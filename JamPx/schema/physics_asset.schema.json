@@ -1,0 +1,639 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jampx://schema/physics_prefab.schema.json",
+  "title": "JamPx PhysicsAsset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2
+    },
+    "materials": {
+      "$ref": "#/$defs/materialMap"
+    },
+    "meshes": {
+      "$ref": "#/$defs/meshMap"
+    },
+    "shapes": {
+      "$ref": "#/$defs/shapeMap"
+    },
+    "dynBodies": {
+      "$ref": "#/$defs/dynamicBodyMap"
+    },
+    "cctBodies": {
+      "$ref": "#/$defs/cctBodyMap"
+    },
+    "templates": {
+      "$ref": "#/$defs/templateMap"
+    }
+  },
+  "$defs": {
+    "u32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "i32": {
+      "type": "integer",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "handleRef": {
+      "description": "Serialized handle reference. In JSON this is typically a symbolic key/name or a precomputed hashed handle string.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "$ref": "#/$defs/u32"
+        }
+      ]
+    },
+    "vec2": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "number"
+      }
+    },
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "number"
+      }
+    },
+    "quat": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "number"
+      }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "p",
+        "q"
+      ],
+      "properties": {
+        "p": {
+          "$ref": "#/$defs/vec3"
+        },
+        "q": {
+          "$ref": "#/$defs/quat"
+        }
+      }
+    },
+    "simFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "word0",
+        "word1",
+        "word2",
+        "word3"
+      ],
+      "properties": {
+        "word0": {
+          "$ref": "#/$defs/u32"
+        },
+        "word1": {
+          "$ref": "#/$defs/u32"
+        },
+        "word2": {
+          "$ref": "#/$defs/u32"
+        },
+        "word3": {
+          "$ref": "#/$defs/u32"
+        }
+      }
+    },
+    "queryFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "word0",
+        "word1",
+        "word2",
+        "word3"
+      ],
+      "properties": {
+        "word0": {
+          "$ref": "#/$defs/u32"
+        },
+        "word1": {
+          "$ref": "#/$defs/u32"
+        },
+        "word2": {
+          "$ref": "#/$defs/u32"
+        },
+        "word3": {
+          "$ref": "#/$defs/u32"
+        }
+      }
+    },
+    "materialDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "static_friction",
+        "dynamic_friction",
+        "restitution"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "static_friction": {
+          "type": "number",
+          "default": 0.5
+        },
+        "dynamic_friction": {
+          "type": "number",
+          "default": 0.5
+        },
+        "restitution": {
+          "type": "number",
+          "default": 0.1
+        }
+      }
+    },
+    "meshDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cooked_path"
+      ],
+      "properties": {
+        "cooked_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "src_path": {
+          "type": "string"
+        },
+        "src_mesh_index": {
+          "$ref": "#/$defs/i32",
+          "default": 0
+        },
+        "src_primitive_index": {
+          "$ref": "#/$defs/i32",
+          "default": 0
+        }
+      }
+    },
+    "shapeType": {
+      "type": "string",
+      "enum": [
+        "none",
+        "box",
+        "sphere",
+        "capsule",
+        "plane",
+        "triangle_mesh",
+        "convex_mesh"
+      ]
+    },
+    "shapeFlag": {
+      "type": "string",
+      "enum": [
+        "simulation",
+        "simulation_only",
+        "trigger",
+        "trigger_only",
+        "query_only"
+      ]
+    },
+    "shapeDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "local_pose",
+        "material",
+        "shape_flag",
+        "sim_filter",
+        "qry_filter"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/shapeType"
+        },
+        "local_pose": {
+          "$ref": "#/$defs/transform"
+        },
+        "material": {
+          "$ref": "#/$defs/handleRef"
+        },
+        "shape_flag": {
+          "$ref": "#/$defs/shapeFlag"
+        },
+        "sim_filter": {
+          "$ref": "#/$defs/simFilter"
+        },
+        "qry_filter": {
+          "$ref": "#/$defs/queryFilter"
+        },
+        "contact_offset": {
+          "type": "number",
+          "default": 0.0
+        },
+        "rest_offset": {
+          "type": "number",
+          "default": 0.02
+        },
+        "half_extents": {
+          "$ref": "#/$defs/vec3"
+        },
+        "radius": {
+          "type": "number",
+          "default": 0.5
+        },
+        "half_height": {
+          "type": "number",
+          "default": 0.5
+        },
+        "mesh": {
+          "$ref": "#/$defs/handleRef"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "box"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "half_extents"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "sphere"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "radius"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "capsule"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "radius",
+              "half_height"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "triangle_mesh",
+                  "convex_mesh"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "mesh"
+            ]
+          }
+        }
+      ]
+    },
+    "dynamicBodyDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "density"
+      ],
+      "properties": {
+        "density": {
+          "type": "number",
+          "default": 1.0
+        },
+        "linear_velocity": {
+          "$ref": "#/$defs/vec3"
+        },
+        "angular_velocity": {
+          "$ref": "#/$defs/vec3"
+        },
+        "linear_damping": {
+          "type": "number",
+          "default": 0.0
+        },
+        "angular_damping": {
+          "type": "number",
+          "default": 0.05
+        }
+      }
+    },
+    "cctPolicy": {
+      "type": "string",
+      "enum": [
+        "default"
+      ]
+    },
+    "cctBodyDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "radius",
+        "height",
+        "material",
+        "density",
+        "policy"
+      ],
+      "properties": {
+        "radius": {
+          "type": "number",
+          "default": 0.5
+        },
+        "height": {
+          "type": "number",
+          "default": 0.75
+        },
+        "material": {
+          "$ref": "#/$defs/handleRef"
+        },
+        "density": {
+          "type": "number",
+          "default": 10.0
+        },
+        "policy": {
+          "$ref": "#/$defs/cctPolicy"
+        },
+        "slope_limit": {
+          "type": "number",
+          "default": 0.707
+        },
+        "invisible_wall_height": {
+          "type": "number",
+          "default": 0.0
+        },
+        "max_jump_height": {
+          "type": "number",
+          "default": 0.0
+        },
+        "contact_offset": {
+          "type": "number",
+          "default": 0.1
+        },
+        "step_offset": {
+          "type": "number",
+          "default": 0.5
+        },
+        "scale_coeff": {
+          "type": "number",
+          "default": 0.8
+        },
+        "volume_growth": {
+          "type": "number",
+          "default": 1.5
+        }
+      }
+    },
+    "rigidTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shapes"
+      ],
+      "properties": {
+        "shapes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/handleRef"
+          }
+        },
+        "dynamic": {
+          "$ref": "#/$defs/handleRef"
+        }
+      }
+    },
+    "characterTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cct",
+        "hitboxes"
+      ],
+      "properties": {
+        "cct": {
+          "$ref": "#/$defs/handleRef"
+        },
+        "hitboxes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/handleRef"
+          }
+        }
+      }
+    },
+    "actorType": {
+      "type": "string",
+      "enum": [
+        "generic",
+        "character",
+        "projectile"
+      ]
+    },
+    "physicsRep": {
+      "type": "string",
+      "enum": [
+        "rigid",
+        "character"
+      ]
+    },
+    "motionType": {
+      "type": "string",
+      "enum": [
+        "none",
+        "static",
+        "dynamic",
+        "kinematic"
+      ]
+    },
+    "bodyFlags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "disable_gravity",
+          "enable_ccd",
+          "lock_linear_x",
+          "lock_linear_y",
+          "lock_linear_z",
+          "lock_angular_x",
+          "lock_angular_y",
+          "lock_angular_z"
+        ]
+      },
+      "default": []
+    },
+    "spawnPolicy": {
+      "type": "string",
+      "enum": [
+        "level_only",
+        "runtime_only",
+        "both"
+      ]
+    },
+    "actorTemplateDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "actor_type",
+        "representation",
+        "motion_type",
+        "body_flags",
+        "spawn_policy",
+        "allow_replication",
+        "body"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actor_type": {
+          "$ref": "#/$defs/actorType"
+        },
+        "representation": {
+          "$ref": "#/$defs/physicsRep"
+        },
+        "motion_type": {
+          "$ref": "#/$defs/motionType"
+        },
+        "body_flags": {
+          "$ref": "#/$defs/bodyFlags"
+        },
+        "spawn_policy": {
+          "$ref": "#/$defs/spawnPolicy",
+          "default": "Both"
+        },
+        "allow_replication": {
+          "type": "boolean",
+          "default": true
+        },
+        "body": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/rigidTemplate"
+            },
+            {
+              "$ref": "#/$defs/characterTemplate"
+            }
+          ]
+        }
+      }
+    },
+    "namedObjectMap": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": true
+    },
+    "materialMap": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/materialDef"
+      },
+      "default": {}
+    },
+    "meshMap": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/meshDef"
+      },
+      "default": {}
+    },
+    "shapeMap": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/shapeDef"
+      },
+      "default": {}
+    },
+    "dynamicBodyMap": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/dynamicBodyDef"
+      },
+      "default": {}
+    },
+    "cctBodyMap": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/cctBodyDef"
+      },
+      "default": {}
+    },
+    "templateMap": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/actorTemplateDef"
+      },
+      "default": {}
+    }
+  }
+}

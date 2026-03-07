@@ -8,42 +8,42 @@ namespace jam::px
 
     enum class eShapeFlag : uint8_t
     {
-        SIMULATION,
-        SIMULATION_ONLY,
-        TRIGGER,
-        TRIGGER_ONLY,
-        QUERY_ONLY
+        Simulation,
+        SimulationOnly,
+        Trigger,
+        TriggerOnly,
+        QueryOnly
     };
 
     inline void SetupShapeFlags(PxShape& shape, eShapeFlag flag)
     {
         switch (flag)
         {
-        case eShapeFlag::SIMULATION:
+        case eShapeFlag::Simulation:
             shape.setFlag(PxShapeFlag::eSIMULATION_SHAPE, true);
             shape.setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, true);
             shape.setFlag(PxShapeFlag::eTRIGGER_SHAPE, false);
             return;
 
-        case eShapeFlag::SIMULATION_ONLY:
+        case eShapeFlag::SimulationOnly:
             shape.setFlag(PxShapeFlag::eSIMULATION_SHAPE, true);
             shape.setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, false);
             shape.setFlag(PxShapeFlag::eTRIGGER_SHAPE, false);
             return;
 
-        case eShapeFlag::TRIGGER:
+        case eShapeFlag::Trigger:
             shape.setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
             shape.setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, true);
             shape.setFlag(PxShapeFlag::eTRIGGER_SHAPE, true);
             return;
 
-        case eShapeFlag::TRIGGER_ONLY:
+        case eShapeFlag::TriggerOnly:
             shape.setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
             shape.setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, false);
             shape.setFlag(PxShapeFlag::eTRIGGER_SHAPE, true);
             return;
 
-        case eShapeFlag::QUERY_ONLY:
+        case eShapeFlag::QueryOnly:
             shape.setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
             shape.setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, true);
             shape.setFlag(PxShapeFlag::eTRIGGER_SHAPE, false);

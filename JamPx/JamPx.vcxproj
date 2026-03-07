@@ -94,6 +94,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\character_movement.md" />
+    <None Include="schema\physics_asset.schema.json" />
     <None Include="schema\physics_prefab.schema.json" />
     <None Include="schema\physics_prefab_level.schema.json" />
   </ItemGroup>
