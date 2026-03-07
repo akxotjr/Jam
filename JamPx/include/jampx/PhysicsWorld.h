@@ -42,7 +42,7 @@ namespace jam::px
 		{
 			PxCapsuleController*		controller = nullptr;
 			PxRigidActor*				hitboxActor = nullptr;
-			CharacterMoveConfig				moveCfg{};
+			CharacterMoveConfig			moveCfg{};
 		};
 
 		CreatedCharacter				CreateCharacter(prefab::TemplateHandle templateHandle, const PxVec3& pos, void* userData);

@@ -13,47 +13,67 @@ namespace jam::px
     };
 
 
+
     // ---------------------------------------------------------------
-    // Pose Sources
-    // ---------------------------------------------------------------
+	// Waipoint Source : path-driven
+	// ---------------------------------------------------------------
+
 
     enum class eWaypointLoop : uint8
     {
-	    Once,
-        Loop,
-        PingPong,
+        Once,            // A->B->C (stop)
+        Loop,            // A->B->C->A
+        PingPong,        // A->B->C->B->A
     };
 
     struct KinematicWaypoint
     {
-        PxTransform     pose            = PxTransform(PxIdentity);
-        float           pauseDuration   = 0.f;
+        PxTransform         pose            = PxTransform(physx::PxIdentity);
+        float               pauseDuration   = 0.f;
     };
 
     struct WaypointSource
     {
         std::vector<KinematicWaypoint> waypoints;
 
-        float           speed       = 5.f;
-        eWaypointLoop   loopMode    = eWaypointLoop::Loop;
+        float               speed           = 5.f;
+        eWaypointLoop       loopMode        = eWaypointLoop::Loop;
+
+        // Ease per segment
+        bool                useEaseProfile  = false;
+        eEaseType           easeType        = eEaseType::Linear;
+        EaseProfile         easeProfile     = {};
     };
 
 
+    // ---------------------------------------------------------------
+    // Curve Source : path-driven
+    // ---------------------------------------------------------------
 
-
-    struct SplineSource
+    struct CurveSource
     {
         std::vector<PxVec3> controlPoints; 
         eCurveType          type            = eCurveType::CatmullRom;
         float               speed           = 5.f;
+        float               duration        = 3.f;
         bool                loop            = true;
         uint32              buildSegments   = 64;
+
+        bool                useEaseProfile  = false;
+        eEaseType           easeType        = eEaseType::SmoothStep;
+        EaseProfile         easeProfile     = {};
 
         float               alpha           = 0.5f;     // only CatmullRom : alpha(0 = uniform, 0.5 = centripetal, 1 = chordal)
 
         uint32              degree          = 3;        // only BSpline : degree
     };
 
+
+
+
+    // ---------------------------------------------------------------
+	// Orbit Source : path-driven
+	// ---------------------------------------------------------------
 
     enum class eOrbitPlaneMode : uint8
     {
@@ -91,50 +111,49 @@ namespace jam::px
 
     struct OrbitSource
     {
-        Vec3        center          = Vec3::Zero();
-        float       angularSpeed    = 1.f;       // rad/s
-        Vec3        axis            = { 0, 1, 0 };    // axis of revolution
-        float       startAngle      = 0.f;     // rad
-
-
         // ---- center ----
-        eOrbitCenterMode centerMode = eOrbitCenterMode::FixedPoint;
-        PxVec3 fixedCenter = PxVec3(PxZero);
-        PxVec3 targetOffset = PxVec3(PxZero);   // using centerMode = FollowTarget
+        eOrbitCenterMode        centerMode          = eOrbitCenterMode::FixedPoint;
+        PxVec3                  fixedCenter         = PxVec3(physx::PxZero);
+        PxVec3                  targetOffset        = PxVec3(physx::PxZero);   // using centerMode = FollowTarget
 
         // ---- plane ----
-        eOrbitPlaneMode planeMode = eOrbitPlaneMode::XZ;
-        PxVec3 customPlaneNormal = PxVec3(0.f, 1.f, 0.f);
+        eOrbitPlaneMode         planeMode           = eOrbitPlaneMode::XZ;
+        PxVec3                  customPlaneNormal   = PxVec3(0.f, 1.f, 0.f);
 
         // ---- radius ----
-        eOrbitRadiusMode radiusMode = eOrbitRadiusMode::Circle;
-        float   radius = 3.0f;
-        PxVec2 ellipseRadius = PxVec2(3.0f, 2.0f);
+        eOrbitRadiusMode        radiusMode          = eOrbitRadiusMode::Circle;
+        float                   radius              = 3.0f;
+        PxVec2                  ellipseRadius       = PxVec2(3.0f, 2.0f);
 
         // ---- angle progression ----
-        float initialAngleRad = 0.0f;
-        float angularSpeedRad = 1.0f;
+        float                   initialAngleRad     = 0.0f;
+        float                   angularSpeedRad     = 1.0f;
 
         // ---- end mode ----
-        eOrbitEndMode endMode = eOrbitEndMode::Loop;
+        eOrbitEndMode           endMode             = eOrbitEndMode::Loop;
 
 
         // PingPong/Clamp의 각도 범위
-        float            minAngleRad = 0.0f;
-        float            maxAngleRad = PxTwoPi;
+        float                   minAngleRad         = 0.0f;
+        float                   maxAngleRad         = physx::PxTwoPi;
 
         // ---- orientation ----
-        eOrbitOrientationMode orientationMode = eOrbitOrientationMode::OrientAlongVelocity;
-        PxQuat                initialRotation = PxQuat(PxIdentity);
+        eOrbitOrientationMode   orientationMode     = eOrbitOrientationMode::OrientAlongVelocity;
+        PxQuat                  initialRotation     = PxQuat(physx::PxIdentity);
 
+        // PingPong/Clamp 모드에서 끝점 부근 ease
+        bool                    useEaseAtEnds       = false;
+        EaseProfile             endEaseProfile      = {};
 
         // ---- options ----
-        bool computeDerivedVelocity = true;
+        bool                    computeDerivedVelocity = true;
     };
 
 
 
-
+    // ---------------------------------------------------------------
+	// Follow Source : target-driven
+	// ---------------------------------------------------------------
 
     struct FollowSource
     {
@@ -144,17 +163,26 @@ namespace jam::px
     };
 
 
-    struct RootMotionSource
-    {
-        std::string clipId;
-        float       playbackSpeed   = 1.f;
-    };
+    // ---------------------------------------------------------------
+    // Network Source : target-driven
+    // ---------------------------------------------------------------
 
     struct NetworkPoseSource
     {
-        float       interpSpeed     = 20.f;
+        bool        computeDerivedVelocity = false;
     };
 
+
+
+
+    //todo
+    struct RootMotionSource
+    {
+        std::string clipId;
+        float       playbackSpeed = 1.f;
+    };
+
+    //todo
     struct ScriptTimelineSource
     {
         std::string timelineAssetId;
@@ -162,9 +190,11 @@ namespace jam::px
         bool        loop            = false;
     };
 
+
+
     using PoseSource = std::variant<
 	    WaypointSource, 
-	    SplineSource, 
+	    CurveSource, 
 	    OrbitSource, 
 	    FollowSource,
 	    RootMotionSource,

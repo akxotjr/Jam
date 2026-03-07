@@ -15,21 +15,21 @@ namespace jam::px
 
 		PxPhysics*						Physics()	 const { return m_physics; }
 		PxFoundation*					Foundation() const { return m_foundation; }
-		PxDefaultCpuDispatcher*			Dispatcher() const { return m_dispatcher; }
+		physx::PxDefaultCpuDispatcher*	Dispatcher() const { return m_dispatcher; }
 
 		PxSceneDesc						MakeDefaultSceneDesc() const;
 
 	private:
-		PxDefaultAllocator				m_allocator;
-		PxDefaultErrorCallback			m_errorCallback;
+		physx::PxDefaultAllocator		m_allocator;
+		physx::PxDefaultErrorCallback	m_errorCallback;
 		PxFoundation*					m_foundation	= nullptr;
 		PxPhysics*						m_physics		= nullptr;
 		
-		PxDefaultCpuDispatcher*			m_dispatcher	= nullptr;
+		physx::PxDefaultCpuDispatcher*	m_dispatcher	= nullptr;
 
 		// PVD
-		PxPvd*							m_pvd			= nullptr;
-		PxPvdTransport*					m_pvdTransport	= nullptr;
+		physx::PxPvd*					m_pvd			= nullptr;
+		physx::PxPvdTransport*			m_pvdTransport	= nullptr;
 	};
 
 }

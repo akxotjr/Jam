@@ -1,14 +1,10 @@
 ﻿#pragma once
 
-#include <jambase/EnumUtils.h>
-
 #include "jampx/PhysicsSimFilter.h"
 #include "jampx/PhysicsQueryFilter.h"
 
 namespace jam::px
 {
-    using namespace ::physx;
-
 
     enum class eShapeFlag : uint8_t
     {

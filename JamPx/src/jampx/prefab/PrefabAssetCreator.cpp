@@ -9,7 +9,7 @@ namespace jam::px::prefab
 {
 	namespace
 	{
-		static bool ReadAllBytes(const string& path, OUT vector<uint8>& out)
+		static bool ReadAllBytes(const std::string& path, OUT std::vector<uint8>& out)
 		{
 			std::ifstream f(path, std::ios::binary);
 			if (!f)
@@ -33,9 +33,9 @@ namespace jam::px::prefab
 		return mat;
 	}
 
-	PxTriangleMesh* PrefabAssetCreator::CreateTriangleMesh(const string& path)
+	PxTriangleMesh* PrefabAssetCreator::CreateTriangleMesh(const std::string& path)
 	{
-		vector<uint8> bytes;
+		std::vector<uint8> bytes;
 		if (!ReadAllBytes(path, bytes) || bytes.empty())
 			return nullptr;
 
@@ -43,13 +43,13 @@ namespace jam::px::prefab
 		if (!physics)
 			return nullptr;
 
-		PxDefaultMemoryInputData input(reinterpret_cast<PxU8*>(bytes.data()), bytes.size());
+		physx::PxDefaultMemoryInputData input(reinterpret_cast<PxU8*>(bytes.data()), bytes.size());
 		return physics->createTriangleMesh(input);
 	}
 
-	PxConvexMesh* PrefabAssetCreator::CreateConvexMesh(const string& path)
+	PxConvexMesh* PrefabAssetCreator::CreateConvexMesh(const std::string& path)
 	{
-		vector<uint8> bytes;
+		std::vector<uint8> bytes;
 		if (!ReadAllBytes(path, bytes) || bytes.empty())
 			return nullptr;
 
@@ -57,7 +57,7 @@ namespace jam::px::prefab
 		if (!physics)
 			return nullptr;
 
-		PxDefaultMemoryInputData input(reinterpret_cast<PxU8*>(bytes.data()), bytes.size());
+		physx::PxDefaultMemoryInputData input(reinterpret_cast<PxU8*>(bytes.data()), bytes.size());
 		return physics->createConvexMesh(input);
 	}
 
@@ -130,7 +130,7 @@ namespace jam::px::prefab
 	}
 
 
-	PxRigidActor* PrefabAssetCreator::CreateRigidActor(const PrefabTemplateDef& def, const vector<PxShape*>& shapes)
+	PxRigidActor* PrefabAssetCreator::CreateRigidActor(const PrefabTemplateDef& def, const std::vector<PxShape*>& shapes)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
@@ -141,7 +141,7 @@ namespace jam::px::prefab
 		switch (def.kind)
 		{
 		case eBodyKind::RIGID_STATIC:
-			actor = physics->createRigidStatic(PxTransform(PxIdentity));
+			actor = physics->createRigidStatic(PxTransform(physx::PxIdentity));
 			break;
 
 		case eBodyKind::RIGID_DYNAMIC:
@@ -172,7 +172,6 @@ namespace jam::px::prefab
 		break;
 
 		case eBodyKind::CHARACTER:
-			// Registry���� CHARACTER�� ���� �ý���(CCT)�� ó���ϴ� ��å
 			return nullptr;
 
 		default:

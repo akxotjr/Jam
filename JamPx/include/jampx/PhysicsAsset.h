@@ -39,22 +39,22 @@ namespace jam::px
 
 	struct MaterialDef
 	{
-		string	name;
-		float	staticFriction			= 0.5f;
-		float	dynamicFriction			= 0.5f;
-		float	restitution				= 0.1f;
+		std::string		name;
+		float			staticFriction			= 0.5f;
+		float			dynamicFriction			= 0.5f;
+		float			restitution				= 0.1f;
 	
 		bool operator==(const MaterialDef&) const = default;
 	};
 
 	struct MeshDef
 	{
-		string	cookedPath;
+		std::string		cookedPath;
 
 		// optional
-		string	srcPath;					
-		int32	srcMeshIndex			= 0;	
-		int32	srcPriitiveIndex		= 0;	
+		std::string		srcPath;					
+		int32			srcMeshIndex			= 0;	
+		int32			srcPriitiveIndex		= 0;	
 	
 		bool operator==(const MeshDef&) const = default;
 	};
@@ -63,11 +63,11 @@ namespace jam::px
 	{
 		eShapeType		type				= eShapeType::None;
 		PxTransform		localPose			= PxTransform(PxIdentity);
-		MaterialHandle	material{};
+		MaterialHandle	material			= {};
 		eShapeFlag		shapeFlag			= eShapeFlag::SIMULATION;
 	
-		SimFD			simFD{};
-		QueryFD			qryFD{};
+		SimFD			simFD				= {};
+		QueryFD			qryFD				= {};
 
 		// advance
 		float			contactOffset		= 0.0f;
@@ -79,7 +79,7 @@ namespace jam::px
 		float			halfHeight			= 0.5f;								// capsule
 
 		// mesh geometry params
-		MeshHandle		mesh{};
+		MeshHandle		mesh				= {};
 	};
 
 
@@ -104,10 +104,9 @@ namespace jam::px
 	{
 		float			radius				= 0.5f;
 		float			height				= 0.75f;
-		MaterialHandle	material{};
+		MaterialHandle	material			= {};
 		float			density				= 10.0f;
 		eCCTPolicy		policy				= eCCTPolicy::Default;
-
 
 		// advance
 		float			slopeLimit			= 0.707f;
@@ -121,17 +120,17 @@ namespace jam::px
 
 	struct RigidTemplate
 	{
-		vector<ShapeHandle>		shapes; // at least 1
+		std::vector<ShapeHandle>		shapes;				// at least 1
 
-		DynamicBodyHandle		dynamic{};	// only meaningful if moitionType is Dynamic/Kinematic
+		DynamicBodyHandle				dynamic		= {};	// only meaningful if moitionType is Dynamic/Kinematic
 	};
 
 	struct CharacterTemplate
 	{
-		CCTBodyHandle			cct{};
+		CCTBodyHandle					cct			= {};
 
-		bool					hasHitbox = false;
-		vector<ShapeHandle>		hitboxes;
+		bool							hasHitbox	= false;
+		std::vector<ShapeHandle>		hitboxes;
 
 		bool operator==(const CharacterTemplate&) const = default;
 	};
@@ -148,7 +147,7 @@ namespace jam::px
 
 	struct ActorTemplateDef
 	{
-		string				name;
+		std::string			name;
 		eActorType			actorType			= eActorType::Generic;
 		ePhyiscsRep			representation		= ePhyiscsRep::Rigid;
 		eMotionType			motionType			= eMotionType::Static;
@@ -156,7 +155,7 @@ namespace jam::px
 		eSpawnPolicy		spawnPolicy			= eSpawnPolicy::Both;
 		bool				allowReplication	= true;
 
-		variant<RigidTemplate, CharacterTemplate> body;
+		std::variant<RigidTemplate, CharacterTemplate> body;
 
 		bool IsRigid()		const noexcept { return std::holds_alternative<RigidTemplate>(body); }
 		bool IsCharacter()	const noexcept { return std::holds_alternative<CharacterTemplate>(body); }
@@ -167,14 +166,14 @@ namespace jam::px
 	{
 		int32 version = 2;
 
-		unordered_map<MaterialHandle, MaterialDef>			materials;
-		unordered_map<MeshHandle, MeshDef>					meshes;
-		unordered_map<ShapeHandle, ShapeDef>				shapes;
-		
-		unordered_map<DynamicBodyHandle, DynamicBodyDef>	dynBodies;
-		unordered_map<CCTBodyHandle, CCTBodyDef>			cctBodies;
+		std::unordered_map<MaterialHandle, MaterialDef>			materials;
+		std::unordered_map<MeshHandle, MeshDef>					meshes;
+		std::unordered_map<ShapeHandle, ShapeDef>				shapes;
 
-		unordered_map<TemplateHandle, ActorTemplateDef>		templates;
+		std::unordered_map<DynamicBodyHandle, DynamicBodyDef>	dynBodies;
+		std::unordered_map<CCTBodyHandle, CCTBodyDef>			cctBodies;
+
+		std::unordered_map<TemplateHandle, ActorTemplateDef>	templates;
 	};
 
 
@@ -194,14 +193,14 @@ namespace jam::px
 	{
 		enum Enum
 		{
-			NONE = 0,
-			LINEAR_VEL = 1 << 0,
-			ANGULAR_VEL = 1 << 1,
-			LINEAR_DAMP = 1 << 2,
-			ANGULAR_DAMP = 1 << 3,
+			NONE			= 0,
+			LINEAR_VEL		= 1 << 0,
+			ANGULAR_VEL		= 1 << 1,
+			LINEAR_DAMP		= 1 << 2,
+			ANGULAR_DAMP	= 1 << 3,
 
-			VIEW = 1 << 8,
-			CHAR_VEL = 1 << 9,
+			VIEW			= 1 << 8,
+			CHAR_VEL		= 1 << 9,
 			
 		};
 
@@ -223,8 +222,8 @@ namespace jam::px
 	{
 		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
 
-		float	yaw		= 0.0f;
-		float	pitch	= 0.0f;
+		float	yaw					= 0.0f;
+		float	pitch				= 0.0f;
 	};
 
 
@@ -234,7 +233,7 @@ namespace jam::px
 		PxTransform			pose		= PxTransform(PxIdentity);
 		eSpawnSource		spawnSrc	= eSpawnSource::Level;
 
-		variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
+		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
 
 		bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
 		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterSpawnOverrides>(overrides); }

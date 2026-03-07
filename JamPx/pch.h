@@ -5,6 +5,5 @@
 
 #include <physx/PxPhysicsAPI.h>
 
-using namespace physx;
 
 #include "jampx/JamPx.h"

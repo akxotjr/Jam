@@ -8,7 +8,7 @@ namespace jam::px
 	public:
 		virtual ~IKinematicDriver() = default;
 
-		virtual PxTransform	Tick(float dt) = 0;
+		virtual physx::PxTransform	Tick(float dt) = 0;
 		virtual bool		IsDone() const { return false; }
 	};
 }

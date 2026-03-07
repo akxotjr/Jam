@@ -53,7 +53,7 @@ namespace jam::px
 		}
 
 
-		inline void ApplySpawnPackedIdToActorShapes(const PxRigidActor& actor, optional<uint16_t> teamId, optional<uint8_t> partId, optional<uint8_t> roleId)
+		inline void ApplySpawnPackedIdToActorShapes(const PxRigidActor& actor, std::optional<uint16_t> teamId, std::optional<uint8_t> partId, std::optional<uint8_t> roleId)
 		{
 			if (!teamId.has_value() && !partId.has_value() && !roleId.has_value())
 				return;
@@ -141,7 +141,7 @@ namespace jam::px
 			m_dispacter = std::make_unique<ShardPxCpuDispacter>(*bridge);
 	}
 
-	bool PhysicsFacade::LoadLevel(const string& path)
+	bool PhysicsFacade::LoadLevel(const std::string& path)
 	{
 		if (!m_inited.load(std::memory_order_relaxed) || !m_world || !m_levelLoader) return false;
 

@@ -95,7 +95,7 @@ namespace jam::px
 			m_pxScene = PhysicsCore::Instance().CreateScene();
 		}
 
-		m_simCallback = make_unique<SimulationEventCallback>();
+		m_simCallback = std::make_unique<SimulationEventCallback>();
 		m_pxScene->setSimulationEventCallback(m_simCallback.get());
 		m_controllerManager = PxCreateControllerManager(*m_pxScene, false);
 

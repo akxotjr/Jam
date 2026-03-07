@@ -23,7 +23,7 @@
 {									        \
 	if (!(expr))					        \
 	{								        \
-		JAMNET_CRASH("ASSERT_CRASH");		\
+		JAM_CRASH("ASSERT_CRASH");		    \
 		__analysis_assume(expr);	        \
 	}								        \
 }

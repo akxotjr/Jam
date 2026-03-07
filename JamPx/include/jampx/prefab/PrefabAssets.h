@@ -35,7 +35,6 @@ namespace jam
 
 namespace jam::px::prefab
 {
-    using namespace std;
 
     using MaterialHandle = jam::Fnv1aHandle<struct PrefabMaterialDef, uint32>;
 	using MeshHandle     = jam::Fnv1aHandle<struct PrefabMeshDef, uint32>;

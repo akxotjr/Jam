@@ -9,7 +9,6 @@
 
 namespace jam::px
 {
-    using namespace physx;
 
     struct QueryCategory
     {
@@ -131,7 +130,7 @@ namespace jam::px
 
     inline bool IsTriggerAttrs(PxFilterObjectAttributes attrs)
     {
-        return PxFilterObjectIsTrigger(attrs);
+        return physx::PxFilterObjectIsTrigger(attrs);
     }
 
 

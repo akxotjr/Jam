@@ -12,11 +12,11 @@ namespace jam::px
 
 	PxVec3 CatmullRom::Evaluate(float t) const
 	{
-        const int32 n = static_cast<int32>(m_waypoints.size());
-        if (n == 0)     return { PxZero };
-        if (n == 1)     return m_waypoints[0];
-        if (t <= 0.f)   return m_waypoints.front();
-        if (t >= 1.f)   return m_waypoints.back();
+        const int32 n = static_cast<int32>(m_controlPoints.size());
+        if (n == 0)     return {physx::PxZero };
+        if (n == 1)     return m_controlPoints[0];
+        if (t <= 0.f)   return m_controlPoints.front();
+        if (t >= 1.f)   return m_controlPoints.back();
 
         const int   numSegments = n - 1;
         const float scaled      = t * static_cast<float>(numSegments);
@@ -27,7 +27,7 @@ namespace jam::px
 
         auto getWaypoint = [&](int i) -> const PxVec3&
             {
-                return m_waypoints[static_cast<size_t>(PxClamp(i, 0, n - 1))];
+                return m_controlPoints[static_cast<size_t>(physx::PxClamp(i, 0, n - 1))];
             };
 
         return EvaluateSegment(
@@ -41,7 +41,7 @@ namespace jam::px
 	void CatmullRom::Build(uint32 segments)
 	{
         m_nodes.clear();
-        if (m_waypoints.size() < 2 || segments == 0)
+        if (m_controlPoints.size() < 2 || segments == 0)
             return;
 
         m_nodes.reserve(segments + 1);

@@ -4,19 +4,19 @@
 
 namespace jam::px
 {
-	void Curve::AddWaypoint(const PxVec3& waypoint)
+	void Curve::AddControlPoints(const PxVec3& waypoint)
 	{
-		m_waypoints.push_back(waypoint);
+		m_controlPoints.push_back(waypoint);
 	}
 
-	void Curve::SetWaypoint(const vector<PxVec3>& waypoints)
+	void Curve::SetControlPoints(const std::vector<PxVec3>& waypoints)
 	{
-		m_waypoints = waypoints;
+		m_controlPoints = waypoints;
 	}
 
-	void Curve::ClearWaypoints()
+	void Curve::ClearControlPoints()
 	{
-		m_waypoints.clear();
+		m_controlPoints.clear();
 		m_nodes.clear();
 	}
 } // namespace jam::px

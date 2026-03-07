@@ -3,9 +3,6 @@
 
 #include <algorithm>
 
-#include <physx/extensions/PxSimpleFactory.h>
-#include <physx/extensions/PxSamplingExt.h>
-
 #include "jampx/geometry/Bezier.h"
 #include "jampx/geometry/BSpline.h"
 #include "jampx/geometry/CatmullRom.h"
@@ -60,10 +57,12 @@ namespace jam::px
 		}
 		else
 		{
-			m_pose.p = Vec3::Lerp(from.p, to.p, m_segProgress);
-			m_pose.q = Quat::Lerp(from.q, to.q, m_segProgress);
+			const float easedProgress = m_src.useEaseProfile
+				? Ease::ApplyProfile(m_segProgress, 1.f, m_src.easeProfile)
+				: Ease::Evaluate(m_src.easeType, m_segProgress);
 
-			m_pose.p = 
+			m_pose.p = Ease::LerpEase<PxVec3>(from.p, to.p, easedProgress, m_src.easeType);
+			m_pose.q = Ease::Slerp(from.q, to.q, easedProgress);
 		}
 
 		return m_pose;
@@ -117,28 +116,28 @@ namespace jam::px
 
 	namespace 
 	{
-		unique_ptr<Curve> MakeCurve(const SplineSource& src)
+		std::unique_ptr<Curve> MakeCurve(const CurveSource& src)
 		{
 			switch (src.type)
 			{
 			case eCurveType::CatmullRom:
 				{
 					auto c = std::make_unique<CatmullRom>(src.alpha);
-					c->SetWaypoint(src.controlPoints);
+					c->SetControlPoints(src.controlPoints);
 					c->Build(src.buildSegments);
 					return c;
 				}
 			case eCurveType::BSpline:
 				{
 					auto c = std::make_unique<BSpline>(src.degree);
-					c->SetWaypoint(src.controlPoints);
+					c->SetControlPoints(src.controlPoints);
 					c->Build(src.buildSegments);
 					return c;
 				}
 			case eCurveType::Bezier:
 				{
 					auto c = std::make_unique<Bezier>();
-					c->SetWaypoint(src.controlPoints);
+					c->SetControlPoints(src.controlPoints);
 					c->Build(src.buildSegments);
 					return c;
 				}
@@ -149,94 +148,127 @@ namespace jam::px
 	}
 
 
-	SplineKinematicDriver::SplineKinematicDriver(KinematicCommon common, SplineSource src)
+	CurveKinematicDriver::CurveKinematicDriver(KinematicCommon common, CurveSource src)
 		: m_common(common), m_src(std::move(src)), m_curve(MakeCurve(m_src))
 	{
 		BuildArchLengthLUT();
+
+		if (m_src.duration <= 1e-6f && m_src.speed > 1e-6f && m_totalLength > 1e-6f)
+			m_src.duration = m_totalLength / m_src.speed;
+
+		if (m_curve)
+			m_pose.p = m_curve->Evaluate(0.f);
 	}
 
-	PxTransform SplineKinematicDriver::Tick(float dt)
+	PxTransform CurveKinematicDriver::Tick(float dt)
 	{
 		if (!m_curve || m_totalLength < 1e-7f)
 			return {};
 
-		m_arcPos += m_src.speed * dt;
+		m_elapsedTime += dt;
+
+		float progress = (m_src.duration > 1e-6f) ? (m_elapsedTime / m_src.duration) : 1.f;
 
 		if (m_src.loop)
 		{
-			// 루프: 전체 길이로 wrap
-			while (m_arcPos >= m_totalLength)
-				m_arcPos -= m_totalLength;
+			progress = progress - std::floor(progress);
 		}
 		else
 		{
-			m_arcPos = PxMin(m_arcPos, m_totalLength);
+			progress = physx::PxClamp(progress, 0.f, 1.0f);
+
+			// done 플래그는 이번 프레임 pose를 끝점으로 계산한 뒤 다음 Tick에서 반환되도록
+			// 이번 Tick 안에서 계산은 계속 진행하고, 마지막에 m_done 처리
 		}
+		const float distRatio = m_src.useEaseProfile
+			? Ease::ApplyProfile(progress, m_src.duration, m_src.easeProfile)
+			: Ease::Evaluate(m_src.easeType, progress);
 
-		const float t = ArcLengthToT(m_arcPos);
+		m_arcPos = distRatio * m_totalLength;
 
-		// 현재 위치
+		const float  t	 = ArcLengthToT(m_arcPos);
 		const PxVec3 pos = m_curve->Evaluate(t);
 
-		// 진행 방향 → 회전 (tangent 근사)
-		constexpr float kEps	= 1e-3f;
-		const float     tFwd	= PxMin(t + kEps, 1.f);
-		const PxVec3    fwd		= (m_curve->Evaluate(tFwd) - pos);
-		const float     fwdLen	= fwd.magnitude();
+		constexpr float kEps = 1e-3f;
+		float tFwd = t + kEps;
 
-		PxTransform result{};
-		result.p = { pos.x, pos.y, pos.z };
+		if (m_src.loop)
+		{
+			if (tFwd > 1.f) tFwd -= 1.f;
+		}
+		else
+		{
+			tFwd = physx::PxMin(tFwd, 1.f);
+		}
+
+		const PxVec3 posFwd = m_curve->Evaluate(tFwd);
+		const PxVec3 fwd    = posFwd - pos;
+		const float  fwdLen = fwd.magnitude();
+
+		m_pose.p = pos;
+		m_pose.q = PxQuat(physx::PxIdentity);
 
 		if (fwdLen > 1e-6f)
 		{
-			const PxVec3 dir	= fwd / fwdLen;
-			// Y-up 기준 look-rotation
-			const PxVec3 up		= { 0, 1, 0 };
-			const PxVec3 right	= up.cross(dir).getNormalized();
-			const PxVec3 realUp = dir.cross(right).getNormalized();
+			const PxVec3 dir	 = fwd / fwdLen;
+			const PxVec3 worldUp = PxVec3(0.f, 1.f, 0.f);
 
-			// 3x3 → quaternion
-			const float trace = right.x + realUp.y + dir.z;
-			if (trace > 0.f)
-			{
-				const float s = 0.5f / sqrtf(trace + 1.f);
-				result.q = { (realUp.z - dir.y) * s, (dir.x - right.z) * s, (right.y - realUp.x) * s, 0.25f / s };
-			}
+			PxVec3 right = worldUp.cross(dir);
+			if (right.magnitudeSquared() < 1e-8f)
+				right = PxVec3(1.f, 0.f, 0.f);
+			else
+				right = right.getNormalized();
+
+			const PxVec3   up = dir.cross(right).getNormalized();
+			physx::PxMat33 basis(right, up, dir);
+			m_pose.q = physx::PxQuat(basis);
 		}
 
-		return result;
+		// 끝점 도달 시 m_pose 캐시 완료 후 done 처리
+		if (!m_src.loop && progress >= 1.f)
+			m_done = true;
+
+		return m_pose;
 	}
 
-	void SplineKinematicDriver::BuildArchLengthLUT()
+	void CurveKinematicDriver::BuildArchLengthLUT()
 	{
-		const vector<PxVec3>& nodes = m_curve->GetNodes();
+		m_lut.clear();
+		m_totalLength = 0.f;
+
+		if (!m_curve) return;
+
+		const std::vector<PxVec3>& nodes = m_curve->GetNodes();
+		if (nodes.size() < 2) return;
+
 		m_lut.resize(nodes.size(), 0.f);
 
 		for (size_t i = 1; i < nodes.size(); ++i)
 			m_lut[i] = m_lut[i - 1] + (nodes[i] - nodes[i - 1]).magnitude();
 
-		m_totalLength = m_lut.empty() ? 0.f : m_lut.back();
+		m_totalLength = m_lut.back();
 	}
 
-	float SplineKinematicDriver::ArcLengthToT(float arcLen) const
+	float CurveKinematicDriver::ArcLengthToT(float arcLen) const
 	{
 		if (m_lut.size() < 2 || m_totalLength < 1e-7f)
 			return 0.f;
 
-		// 이진 탐색으로 구간 찾기
-		const auto it = ranges::lower_bound(m_lut, arcLen);
-		if (it == m_lut.end())
-			return 1.f;
+		arcLen = physx::PxClamp(arcLen, 0.f, m_totalLength);
+
+		const auto it = std::ranges::lower_bound(m_lut, arcLen);
+		if (it == m_lut.end()) return 1.f;
 
 		const size_t i = std::distance(m_lut.begin(), it);
-		if (i == 0)
-			return 0.f;
+		if (i == 0) return 0.f;
 
-		const float segLen = m_lut[i] - m_lut[i - 1];
-		const float localT = (segLen < 1e-7f) ? 0.f : (arcLen - m_lut[i - 1]) / segLen;
+		const float segStart = m_lut[i - 1];
+		const float segEnd   = m_lut[i];
+		const float segLen   = segEnd - segStart;
+		const float localT   = (segLen > 1e-7f) ? ((arcLen - segStart) / segLen) : 0.f;
 
 		const float tPerNode = 1.f / static_cast<float>(m_lut.size() - 1);
-		return ((i - 1) + localT) * tPerNode;
+		return physx::PxClamp((static_cast<float>(i - 1) + localT) * tPerNode, 0.f, 1.f);
 	}
 
 
@@ -244,7 +276,7 @@ namespace jam::px
 
 
 	// -----------------------------------------------------------
-	// Spline
+	// Orbit
 	// -----------------------------------------------------------
 
 	namespace 
@@ -289,12 +321,14 @@ namespace jam::px
 
 		PxQuat BuildLookRotation(const PxVec3& fwd, const PxVec3& up)
 		{
-			const PxVec3 right = up.cross(fwd).getNormalized();
+			const PxVec3 right  = up.cross(fwd).getNormalized();
 			const PxVec3 realUp = fwd.cross(right).getNormalized();
 			return MatToQuat(right, realUp, fwd);
 		}
 
 	}
+
+
 
 	OrbitKinematicDriver::OrbitKinematicDriver(KinematicCommon common, OrbitSource src)
 		: m_common(common), m_src(src), m_angle(src.initialAngleRad)
@@ -304,29 +338,42 @@ namespace jam::px
 
 		const PxVec3 arbitrary = (fabsf(m_axisN.dot({ 0, 1, 0 })) < 0.99f)
 			? PxVec3{ 0, 1, 0 }
-		: PxVec3{ 1, 0, 0 };
+			: PxVec3{ 1, 0, 0 };
 
 		m_basisR = (arbitrary - m_axisN * m_axisN.dot(arbitrary)).getNormalized();
 		m_basisF = m_axisN.cross(m_basisR).getNormalized();
 
-		// FollowTarget 모드에서 SetDynamicCenter 호출 전 fallback
 		m_dynamicCenter = m_src.fixedCenter;
+
+		m_pose.p = ComputePosition(m_angle);
+		m_pose.q = ComputeRotation(m_angle, m_pose.p);
 	}
 
 	PxTransform OrbitKinematicDriver::Tick(float dt)
 	{
-		if (m_done)
-			return ComputePosition(m_angle);    // done 상태에서도 마지막 pose 유지
+		if (m_done) return m_pose;
 
 		AdvanceAngle(dt);
 
+		// PingPong 끝점 ease: [min,max] → [0,1] 정규화 후 remap
+		float renderAngle = m_angle;
+		if (m_src.useEaseAtEnds && m_src.endMode == eOrbitEndMode::PingPong)
+		{
+			const float range = m_src.maxAngleRad - m_src.minAngleRad;
+			if (range > 1e-7f)
+			{
+				const float norm  = (m_angle - m_src.minAngleRad) / range;   // [0,1]
+				const float eased = Ease::ApplyProfile(norm, 1.f, m_src.endEaseProfile);
+				renderAngle = m_src.minAngleRad + eased * range;
+			}
+		}
+
 		const PxVec3 pos = ComputePosition(m_angle);
 
-		PxTransform result{};
-		result.p = { pos.x, pos.y, pos.z };
-		result.q = ComputeRotation(m_angle, pos);
+		m_pose.p = pos;
+		m_pose.q = ComputeRotation(renderAngle, pos);
 
-		return result;
+		return m_pose;
 	}
 
 
@@ -335,10 +382,8 @@ namespace jam::px
 	{
 		switch (m_src.centerMode)
 		{
-		case eOrbitCenterMode::FixedPoint:
-			return m_src.fixedCenter;
-		case eOrbitCenterMode::FollowTarget:
-			return m_dynamicCenter + m_src.targetOffset;
+		case eOrbitCenterMode::FixedPoint:    return m_src.fixedCenter;
+		case eOrbitCenterMode::FollowTarget:  return m_dynamicCenter + m_src.targetOffset;
 		}
 		return m_src.fixedCenter;
 	}
@@ -375,8 +420,7 @@ namespace jam::px
 			dPos = m_basisF * cosA - m_basisR * sinA;
 			break;
 		case eOrbitRadiusMode::Ellipse:
-			dPos = m_basisF * (m_src.ellipseRadius.y * cosA)
-				- m_basisR * (m_src.ellipseRadius.x * sinA);
+			dPos = m_basisF * (m_src.ellipseRadius.y * cosA) - m_basisR * (m_src.ellipseRadius.x * sinA);
 			break;
 		}
 
@@ -391,23 +435,21 @@ namespace jam::px
 		switch (m_src.orientationMode)
 		{
 		case eOrbitOrientationMode::KeepRotation:
-		{
-			const PxQuat& pq = m_src.initialRotation;
-			return { pq.x, pq.y, pq.z, pq.w };
-		}
+			return m_src.initialRotation;
+
 		case eOrbitOrientationMode::FaceCenter:
-		{
-			// center → pos 방향: center와 pos 모두 궤도 평면 위이므로 axisN과 항상 수직
-			const PxVec3 toCenter = ComputeCenter() - pos;
-			if (toCenter.magnitude() < 1e-7f) break;
-			return BuildLookRotation(toCenter.getNormalized(), m_axisN);
-		}
+			{
+				// center → pos 방향: center와 pos 모두 궤도 평면 위이므로 axisN과 항상 수직
+				const PxVec3 toCenter = ComputeCenter() - pos;
+				if (toCenter.magnitude() < 1e-7f) break;
+				return BuildLookRotation(toCenter.getNormalized(), m_axisN);
+			}
+
 		case eOrbitOrientationMode::OrientAlongVelocity:
 			return BuildLookRotation(ComputeTangent(angle), m_axisN);
 		}
 
-		const PxQuat& pq = m_src.initialRotation;
-		return { pq.x, pq.y, pq.z, pq.w };
+		return m_src.initialRotation;
 	}
 
 	void OrbitKinematicDriver::AdvanceAngle(float dt)
@@ -417,38 +459,52 @@ namespace jam::px
 		switch (m_src.endMode)
 		{
 		case eOrbitEndMode::Loop:
-		{
-			m_angle += delta;
-			const float range = m_src.maxAngleRad - m_src.minAngleRad;
-			if (range > 1e-7f)
 			{
-				while (m_angle > m_src.maxAngleRad)  m_angle -= range;
-				while (m_angle < m_src.minAngleRad)  m_angle += range;
+				m_angle += delta;
+				const float range = m_src.maxAngleRad - m_src.minAngleRad;
+				if (range > 1e-7f)
+				{
+					while (m_angle > m_src.maxAngleRad)  m_angle -= range;
+					while (m_angle < m_src.minAngleRad)  m_angle += range;
+				}
+				break;
 			}
-			break;
-		}
+
 		case eOrbitEndMode::PingPong:
-		{
-			m_angle += delta;
-			if (m_angle >= m_src.maxAngleRad)
 			{
-				m_angle = m_src.maxAngleRad;
-				m_dir = -1.f;
+				m_angle += delta;
+				if (m_angle >= m_src.maxAngleRad)
+				{
+					m_angle = m_src.maxAngleRad;
+					m_dir	= -1.f;
+				}
+				else if (m_angle <= m_src.minAngleRad)
+				{
+					m_angle = m_src.minAngleRad;
+					m_dir	= 1.f;
+				}
+				break;
 			}
-			else if (m_angle <= m_src.minAngleRad)
-			{
-				m_angle = m_src.minAngleRad;
-				m_dir = 1.f;
-			}
-			break;
-		}
+
 		case eOrbitEndMode::Clamp:
-		{
-			m_angle = PxClamp(m_angle + delta, m_src.minAngleRad, m_src.maxAngleRad);
-			if (m_angle >= m_src.maxAngleRad || m_angle <= m_src.minAngleRad)
-				m_done = true;
-			break;
-		}
+			{
+				m_angle = physx::PxClamp(m_angle + delta, m_src.minAngleRad, m_src.maxAngleRad);
+				if (m_angle >= m_src.maxAngleRad || m_angle <= m_src.minAngleRad)
+					m_done = true;
+				break;
+			}
 		}
 	}
+
+
+
+
+
+
+
+
+
+
+
+
 } // namespace jam::px

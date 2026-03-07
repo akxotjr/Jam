@@ -9,7 +9,7 @@ namespace jam::px
     public:
         explicit CatmullRom(float alpha = 0.5f);
 
-        void    SetAlpha(float alpha) { m_alpha = PxClamp(alpha, 0.f, 1.f); }
+        void    SetAlpha(float alpha) { m_alpha = physx::PxClamp(alpha, 0.f, 1.f); }
         float   GetAlpha() const noexcept { return m_alpha; }
 
         PxVec3  Evaluate(float t) const override;

@@ -27,40 +27,45 @@ namespace jam::px
         KinematicCommon     m_common      = {};
         WaypointSource      m_src         = {};
 
+        bool                m_done        = false;
+        PxTransform         m_pose        = PxTransform(physx::PxIdentity);
+
         int32               m_segIndex    = 0;
         int32               m_dir         = 1;      // +1 / -1 (only using PingPong)
         float               m_segProgress = 0.f;    // [0, 1]
         float               m_pauseTimer  = 0.f;
-        bool                m_done        = false;
-        PxTransform         m_pose        = PxTransform(PxIdentity);
     };
 
 
 
 
     // -----------------------------------------------------------
-    // Spline
+    // Curve
     // -----------------------------------------------------------
 
-    class SplineKinematicDriver : public IKinematicDriver
+    class CurveKinematicDriver : public IKinematicDriver
     {
-        explicit SplineKinematicDriver(KinematicCommon common, SplineSource src);
+        explicit CurveKinematicDriver(KinematicCommon common, CurveSource src);
 
-        PxTransform         Tick(float dt) override;
-
-    private:
-        void                BuildArchLengthLUT();
-
-        float               ArcLengthToT(float arcLen) const;
+        PxTransform             Tick(float dt) override;
+        bool                    IsDone() const override { return m_done; }
 
     private:
-        KinematicCommon     m_common        = {};
-        SplineSource        m_src           = {};
+        void                    BuildArchLengthLUT();
+        float                   ArcLengthToT(float arcLen) const;
 
-        unique_ptr<Curve>   m_curve;                    // CatmullRom / BSpline / Bezier
-        vector<float>       m_lut;                      // accumulative distance LUT based on m_nodes [0...n]
-        float               m_totalLength   = 0.f;      
-        float               m_arcPos        = 0.f;      // current distance
+    private:
+        KinematicCommon         m_common        = {};
+        CurveSource             m_src           = {};
+
+        std::unique_ptr<Curve>  m_curve;                    // CatmullRom / BSpline / Bezier
+        std::vector<float>      m_lut;                      // accumulative distance LUT based on m_nodes [0...n]
+        
+        bool                    m_done          = false;
+        PxTransform             m_pose          = PxTransform(physx::PxIdentity);
+        float                   m_elapsedTime   = 0.f;
+    	float                   m_totalLength   = 0.f;      
+        float                   m_arcPos        = 0.f;      // current distance
     };
 
 
@@ -92,6 +97,7 @@ namespace jam::px
         OrbitSource         m_src           = {};
 
         bool                m_done          = false;
+        PxTransform         m_pose          = PxTransform(physx::PxIdentity);
 
         float               m_angle         = 0.f;
         float               m_dir           = 1.0f;     // +1.f / -1.f : for PingPong 
@@ -101,11 +107,14 @@ namespace jam::px
         PxVec3              m_basisR        = { 1.f, 0.f, 0.f };    // angle = 0 
         PxVec3              m_basisF        = { 0.f, 0.f, 1.f };    // angle = pi/2
 
-        PxVec3              m_dynamicCenter = PxVec3(PxZero);   // only FollowTarget
+        PxVec3              m_dynamicCenter = PxVec3(physx::PxZero);   // only FollowTarget
     };
 
+
+
+
     // -----------------------------------------------------------
-    // Orbit
+    // Follow
     // -----------------------------------------------------------
 
     class FollowKinematicDriver : public IKinematicDriver
@@ -122,5 +131,28 @@ namespace jam::px
         Transform           m_current{};
     };
 
+
+    // -----------------------------------------------------------
+	// NetworkPose
+	// -----------------------------------------------------------
+
+    class NetworkPoseKinematicDriver : public IKinematicDriver
+    {
+    public:
+        NetworkPoseKinematicDriver(KinematicCommon common, NetworkPoseSource src);
+
+        PxTransform         Tick(float dt) override { return m_pose; }
+
+        void                SetAuthoritativePose(const PxTransform& pose) { m_pose = pose; }
+        void                SetAuthoritativeLinearVelocity(const PxVec3& v) { m_linearVel = v; }
+        void                SetAuthoritativeAngularVelocity(const PxVec3& w) { m_angularVel = w; }
+
+    private:
+        KinematicCommon     m_common     = {};
+        NetworkPoseSource   m_src        = {};
+        PxTransform         m_pose       = PxTransform(physx::PxIdentity);
+        PxVec3              m_linearVel  = PxVec3(physx::PxZero);
+        PxVec3              m_angularVel = PxVec3(physx::PxZero);
+    };
 
 } // namespace jam::px

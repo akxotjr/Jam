@@ -8,13 +8,13 @@
 namespace jam::px::prefab
 {
 
-	void PrefabLevelLoader::Load(const string& layer, const string& levelPath)
+	void PrefabLevelLoader::Load(const std::string& layer, const std::string& levelPath)
 	{
 		m_layerToPath[layer] = levelPath;
 		LoadImpl(layer, levelPath);
 	}
 
-	void PrefabLevelLoader::Unload(const string& layer)
+	void PrefabLevelLoader::Unload(const std::string& layer)
 	{
 		if (!m_physicsWorld) return;
 
@@ -37,7 +37,7 @@ namespace jam::px::prefab
 	{
 		if (!m_physicsWorld) return;
 
-		for (auto& actors : m_layerActors | views::values)
+		for (auto& actors : m_layerActors | std::views::values)
 		{
 			for (auto* actor : actors)
 			{

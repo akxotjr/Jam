@@ -9,26 +9,24 @@ namespace physx
 
 namespace jam::px::prefab
 {
-	using namespace std;
-
 
 	class PrefabLevelLoader
 	{
 	public:
 
-		void							Load(const string& layer, const string& levelPath);
-		void							Unload(const string& layer);
+		void							Load(const std::string& layer, const std::string& levelPath);
+		void							Unload(const std::string& layer);
 		void							UnloadAll();
 
 		void							SetPhysicsWorld(PhysicsWorld* world);
 
 	private:
-		void							LoadImpl(const string& layer, const string& levelPath);
+		void							LoadImpl(const std::string& layer, const std::string& levelPath);
 
 	private:
 		PhysicsWorld*									m_physicsWorld = nullptr;
 
-		unordered_map<string, string>					m_layerToPath;
-		unordered_map<string, vector<PxRigidActor*>>	m_layerActors;
+		std::unordered_map<std::string, std::string>					m_layerToPath;
+		std::unordered_map<std::string, std::vector<PxRigidActor*>>	m_layerActors;
 	};
 }

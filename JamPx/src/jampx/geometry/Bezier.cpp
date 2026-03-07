@@ -11,10 +11,10 @@ namespace jam::px
 
 	PxVec3 Bezier::Evaluate(float t) const
 	{
-		if (m_waypoints.empty())	 return { PxZero };
-		if (m_waypoints.size() == 1) return m_waypoints[0];
+		if (m_controlPoints.empty())	 return {physx::PxZero };
+		if (m_controlPoints.size() == 1) return m_controlPoints[0];
 
-		vector<PxVec3> pts = m_waypoints;
+		std::vector<PxVec3> pts = m_controlPoints;
 		const int32 n = static_cast<int32>(pts.size());
 		for (int32 r = 1; r < n; ++r)
 			for (int32 i = 0; i < n - r; ++i)
@@ -26,7 +26,7 @@ namespace jam::px
 	void Bezier::Build(uint32 segments)
 	{
 		m_nodes.clear();
-		if (m_waypoints.size() < 2 || segments == 0)
+		if (m_controlPoints.size() < 2 || segments == 0)
 			return;
 
 		m_nodes.reserve(segments + 1);

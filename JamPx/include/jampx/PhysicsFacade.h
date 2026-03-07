@@ -18,7 +18,6 @@
 
 namespace jam::px
 {
-	using namespace std;
 
 	static PrefabKey MakePrefabKey(std::string_view name)
 	{
@@ -37,7 +36,7 @@ namespace jam::px
 
 		void								SetJobBridge(IPhysicsJobBridge* bridge) override;
 
-		bool								LoadLevel(const string& path) override;
+		bool								LoadLevel(const std::string& path) override;
 
 		void								Step(float dt) override;
 		bool								BeginStep(float dt, uint64 awaitKey) override;
@@ -93,7 +92,7 @@ namespace jam::px
 			RigidState						state{};
 			bool							isKinematic = false;
 
-			unique_ptr<KinematicMoveComponent> mover;
+			std::unique_ptr<KinematicMoveComponent> mover;
 		};
 
 		struct CharacterEntry
@@ -108,7 +107,7 @@ namespace jam::px
 			PxRigidActor*					hitbox = nullptr;
 
 			MoveIntent						lastIntent{};
-			unique_ptr<CharacterMovementComponent> mover;
+			std::unique_ptr<CharacterMovementComponent> mover;
 		};
 
 		/// @brief ANALYTIC / DYN_SIM 투사체 항목.
@@ -126,31 +125,31 @@ namespace jam::px
 			float							traveledDist = 0.f;
 			uint16_t						teamId = 0;
 
-			unique_ptr<ProjectileMoveComponent> mover;
+			std::unique_ptr<ProjectileMoveComponent> mover;
 		};
 
 	private:
-		atomic<bool>							m_inited{false};
+		std::atomic<bool>									m_inited			= false;
 
-		unique_ptr<PhysicsWorld>				m_world = nullptr;
-		unique_ptr<prefab::PrefabLevelLoader>	m_levelLoader = nullptr;
+		std::unique_ptr<PhysicsWorld>						m_world				= nullptr;
+		std::unique_ptr<prefab::PrefabLevelLoader>			m_levelLoader		= nullptr;
 
-		PxTaskManager*							m_taskManager = nullptr;
-		IPhysicsJobBridge*						m_bridge = nullptr;
-		unique_ptr<ShardPxCpuDispacter>			m_dispacter; 
-		PhysicsCompletionTask					m_completionTask;
-		bool									m_stepPending = false;
+		PxTaskManager*										m_taskManager		= nullptr;
+		IPhysicsJobBridge*									m_bridge			= nullptr;
+		std::unique_ptr<ShardPxCpuDispacter>				m_dispacter; 
+		PhysicsCompletionTask								m_completionTask;
+		bool												m_stepPending		= false;
 
-		unordered_map<ObjectId, RigidEntry>			m_rigidEntries;
-		unordered_map<ObjectId, CharacterEntry>		m_characterEntries;
+		std::unordered_map<ObjectId, RigidEntry>			m_rigidEntries;
+		std::unordered_map<ObjectId, CharacterEntry>		m_characterEntries;
 
-		unordered_map<ObjectId, ProjectileEntry>	m_projectileEntries;
+		std::unordered_map<ObjectId, ProjectileEntry>		m_projectileEntries;
 
 		// ANALYTIC 투사체 히트 등 수동 push 이벤트
-		std::vector<SimEvent>					m_pendingSimEvents;
+		std::vector<SimEvent>								m_pendingSimEvents;
 
 		// kinematic body / setGlobalPose / character move에 의한 수동 dirty tracking
 // onAdvance로 검출되지 않는 위치 변경을 보완함
-		unordered_set<ObjectId>					m_dirtySet;
+		std::unordered_set<ObjectId>						m_dirtySet;
 	};
 }

@@ -90,9 +90,6 @@
     <ClCompile Include="src\jampx\kinematic\KinematicMoveComponent.cpp">
       <Filter>kinematic</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\kinematic\DefaultKinematicDriver.cpp">
-      <Filter>kinematic</Filter>
-    </ClCompile>
     <ClCompile Include="src\jampx\projectile\ProjectileMoveComponent.cpp">
       <Filter>projectile</Filter>
     </ClCompile>
@@ -206,9 +203,6 @@
     <ClInclude Include="include\jampx\kinematic\IKinematicDriver.h">
       <Filter>kinematic</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\kinematic\DefaultKinematicDriver.h">
-      <Filter>kinematic</Filter>
-    </ClInclude>
     <ClInclude Include="include\jampx\projectile\ProjectileMoveComponent.h">
       <Filter>projectile</Filter>
     </ClInclude>
@@ -232,6 +226,12 @@
     </ClInclude>
     <ClInclude Include="include\jampx\geometry\Bezier.h">
       <Filter>geometry\curve</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysXTypes.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\Easing.h">
+      <Filter>px</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

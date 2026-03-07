@@ -18,19 +18,19 @@ namespace jam::px
 
 	PxVec3 BSpline::Evaluate(float t) const
 	{
-		const int32 n = static_cast<int32>(m_waypoints.size());
+		const int32 n = static_cast<int32>(m_controlPoints.size());
 		const int32 p = static_cast<int32>(m_degree);
 
 		if (n <= p)   return { PxZero };
-		if (t <= 0.f) return m_waypoints.front();
-		if (t >= 1.f) return m_waypoints.back();
+		if (t <= 0.f) return m_controlPoints.front();
+		if (t >= 1.f) return m_controlPoints.back();
 
-		if (static_cast<int>(m_knots.size()) != n + p + 1)
+		if (static_cast<int32>(m_knots.size()) != n + p + 1)
 			BuildKnots();
 
 		PxVec3 result(0.f, 0.f, 0.f);
-		for (int i = 0; i < n; ++i)
-			result += m_waypoints[i] * BasisFunc(i, p, t);
+		for (int32 i = 0; i < n; ++i)
+			result += m_controlPoints[i] * BasisFunc(i, p, t);
 
 		return result;
 	}
@@ -38,7 +38,7 @@ namespace jam::px
 	void BSpline::Build(uint32 segments)
 	{
 		m_nodes.clear();
-		const int32 n = static_cast<int32>(m_waypoints.size());
+		const int32 n = static_cast<int32>(m_controlPoints.size());
 		const int32 p = static_cast<int32>(m_degree);
 
 		if (n <= p || segments == 0)
@@ -53,19 +53,19 @@ namespace jam::px
 
 	void BSpline::BuildKnots() const
 	{
-		const int32 n = static_cast<int32>(m_waypoints.size()) - 1;
+		const int32 n = static_cast<int32>(m_controlPoints.size()) - 1;
 		const int32 p = static_cast<int32>(m_degree);
 		const int32 m = n + p + 1;
 		m_knots.resize(m + 1);
 
-		for (int i = 0; i <= p; ++i)
+		for (int32 i = 0; i <= p; ++i)
 			m_knots[i] = 0.f;
 
-		const int interior = m - 2 * p;
-		for (int i = 1; i < interior; ++i)
+		const int32 interior = m - 2 * p;
+		for (int32 i = 1; i < interior; ++i)
 			m_knots[p + i] = static_cast<float>(i) / static_cast<float>(interior);
 
-		for (int i = m - p; i <= m; ++i)
+		for (int32 i = m - p; i <= m; ++i)
 			m_knots[i] = 1.f;
 	}
 

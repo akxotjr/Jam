@@ -154,7 +154,7 @@ namespace jam::px
 
     inline bool IsTriggerPair(PxFilterObjectAttributes attrs0, PxFilterObjectAttributes attrs1)
     {
-        return PxFilterObjectIsTrigger(attrs0) || PxFilterObjectIsTrigger(attrs1);
+        return physx::PxFilterObjectIsTrigger(attrs0) || physx::PxFilterObjectIsTrigger(attrs1);
     }
 
     inline PxU32 ExtractSimUserBits(const PxFilterData& fd0, const PxFilterData& fd1) noexcept
@@ -454,8 +454,8 @@ namespace jam::px
 
     struct SimContactPoint
     {
-        PxVec3      position   = PxVec3(PxZero);
-        PxVec3      normal     = PxVec3(PxZero);
+        PxVec3      position   = PxVec3(physx::PxZero);
+        PxVec3      normal     = PxVec3(physx::PxZero);
         PxReal      separation = 0.f;
     };
 
@@ -513,7 +513,7 @@ namespace jam::px
 
         // ---- unused by default ----
 
-        void onConstraintBreak(PxConstraintInfo*, PxU32) override {}
+        void onConstraintBreak(physx::PxConstraintInfo*, PxU32) override {}
         void onWake(PxActor**, PxU32) override {}
         void onSleep(PxActor**, PxU32) override {}
 

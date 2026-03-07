@@ -1,6 +1,5 @@
 ﻿#pragma once
 #include "IKinematicDriver.h"
-#include "KinematicCommon.h"
 
 namespace jam::px
 {

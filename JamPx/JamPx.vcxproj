@@ -33,7 +33,6 @@
     <ClCompile Include="src\jampx\geometry\BSpline.cpp" />
     <ClCompile Include="src\jampx\geometry\CatmullRom.cpp" />
     <ClCompile Include="src\jampx\geometry\Curve.cpp" />
-    <ClCompile Include="src\jampx\kinematic\DefaultKinematicDriver.cpp" />
     <ClCompile Include="src\jampx\kinematic\KinematicDrivers.cpp" />
     <ClCompile Include="src\jampx\kinematic\KinematicMoveComponent.cpp" />
     <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp" />
@@ -61,12 +60,12 @@
     <ClInclude Include="include\jampx\character\DefaultQuakeAccelerator.h" />
     <ClInclude Include="include\jampx\character\ExternalMoveAccumulator.h" />
     <ClInclude Include="include\jampx\character\IAccelerator.h" />
+    <ClInclude Include="include\jampx\Easing.h" />
     <ClInclude Include="include\jampx\geometry\Bezier.h" />
     <ClInclude Include="include\jampx\geometry\BSpline.h" />
     <ClInclude Include="include\jampx\geometry\CatmullRom.h" />
     <ClInclude Include="include\jampx\geometry\Curve.h" />
     <ClInclude Include="include\jampx\JamPx.h" />
-    <ClInclude Include="include\jampx\kinematic\DefaultKinematicDriver.h" />
     <ClInclude Include="include\jampx\kinematic\IKinematicDriver.h" />
     <ClInclude Include="include\jampx\kinematic\KinematicCommon.h" />
     <ClInclude Include="include\jampx\kinematic\KinematicDrivers.h" />
@@ -80,6 +79,7 @@
     <ClInclude Include="include\jampx\PhysicsSimFilter.h" />
     <ClInclude Include="include\jampx\PhysicsUtils.h" />
     <ClInclude Include="include\jampx\PhysicsWorld.h" />
+    <ClInclude Include="include\jampx\PhysXTypes.h" />
     <ClInclude Include="include\jampx\prefab\PhysicsPrefabIO.h" />
     <ClInclude Include="include\jampx\prefab\PhysicsPrefabRegistry.h" />
     <ClInclude Include="include\jampx\prefab\PrefabAssetCreator.h" />

@@ -7,21 +7,6 @@
 
 namespace jam::px
 {
-    namespace
-    {
-        PxFilterFlags DefaultFilterShader(
-            PxFilterObjectAttributes attributes0, PxFilterData filterData0,
-            PxFilterObjectAttributes attributes1, PxFilterData filterData1,
-            PxPairFlags& pairFlags, const void* constantBlock, PxU32 constantBlockSize)
-        {
-            return SimulationFilterShader<>(
-				attributes0, filterData0,
-                attributes1, filterData1,
-                pairFlags, constantBlock, constantBlockSize
-            );
-        }
-    }
-
 
 	void PhysicsCore::Init()
 	{
@@ -33,10 +18,10 @@ namespace jam::px
         if (m_pvd)
         {
             // PVD 앱 기본 포트가 5425
-            m_pvdTransport = PxDefaultPvdSocketTransportCreate("127.0.0.1", 5425, 10);
+            m_pvdTransport = physx::PxDefaultPvdSocketTransportCreate("127.0.0.1", 5425, 10);
             if (m_pvdTransport)
             {
-                const PxPvdInstrumentationFlags flags = PxPvdInstrumentationFlag::eALL; // debug/visualize용은 ALL이 편함
+                const physx::PxPvdInstrumentationFlags flags = physx::PxPvdInstrumentationFlag::eALL; // debug/visualize용은 ALL이 편함
 
                 m_pvd->connect(*m_pvdTransport, flags);
             }
@@ -47,7 +32,7 @@ namespace jam::px
         if (!m_physics) throw std::runtime_error("PhysicsCore::Init(), PxCreatePhysics failed");
 
         const unsigned threads = std::max(1u, std::thread::hardware_concurrency() / 2);
-        m_dispatcher = PxDefaultCpuDispatcherCreate(threads);
+        m_dispatcher = physx::PxDefaultCpuDispatcherCreate(threads);
         if (!m_dispatcher) throw std::runtime_error("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
 
 	}
@@ -103,7 +88,7 @@ namespace jam::px
 
         desc.gravity = PxVec3(0.0f, -9.81f, 0.0f);
         desc.cpuDispatcher = m_dispatcher;
-        desc.filterShader = DefaultFilterShader;
+        desc.filterShader = SimulationFilterShader<>;
         desc.flags |= PxSceneFlag::eENABLE_ACTIVE_ACTORS | PxSceneFlag::eENABLE_CCD | PxSceneFlag::eENABLE_STABILIZATION;
 
         return desc;

@@ -5,9 +5,6 @@
 
 namespace jam::px::prefab
 {
-    using namespace std;
-
-
     class PhysicsPrefabRegistry final
     {
 		DECLARE_SINGLETON(PhysicsPrefabRegistry)
