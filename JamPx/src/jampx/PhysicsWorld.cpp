@@ -4,7 +4,7 @@
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
 #include "jampx/prefab/PrefabAssetCreator.h"
 
-#include "jampx/character/CharacterFilter.h"
+#include "jampx/actor/character/locomotion/CharacterFilter.h"
 
 namespace jam::px
 {
@@ -159,7 +159,7 @@ namespace jam::px
 	{
 		if (!m_controllerManager) return nullptr;
 
-		const TemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
+		const ActorTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
 		if (!def) return nullptr;
 
 		if (def->kind != eBodyKind::CHARACTER)
@@ -198,7 +198,7 @@ namespace jam::px
 		controller->release();
 	}
 
-	PhysicsWorld::CreatedCharacter PhysicsWorld::CreateCharacter(prefab::TemplateHandle handle, const PxVec3& pos, void* userData)
+	PhysicsWorld::CreatedCharacter PhysicsWorld::CreateCharacter(TemplateHandle handle, const PxVec3& pos, void* userData)
 	{
 		CreatedCharacter out{};
 

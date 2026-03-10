@@ -361,4 +361,4 @@ namespace jam::px
 
     };
 
-}
+} // namespace jam::px

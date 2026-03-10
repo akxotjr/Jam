@@ -1,8 +1,6 @@
-#pragma once
+﻿#pragma once
 
 #include "jampx/api/IPhysicsJobBridge.h"
-
-#include <physx/task/PxTask.h>
 
 namespace jam::px
 {
@@ -20,4 +18,6 @@ namespace jam::px
 		IPhysicsJobBridge*		m_bridge = nullptr;
 		uint64					m_awaitKey = 0;
 	};
-}
+
+
+} // namespace jam::px

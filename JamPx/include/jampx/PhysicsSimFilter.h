@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 
 namespace jam::px
@@ -632,4 +632,4 @@ namespace jam::px
     }
 
 
-}
+} // namespace jam::px

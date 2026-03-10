@@ -13,16 +13,16 @@
 namespace jam::px
 {
 
-	using MaterialHandle	= jam::Fnv1aHandle<struct MaterialDef, uint32>;
-	using MeshHandle		= jam::Fnv1aHandle<struct MeshDef, uint32>;
-	using ShapeHandle		= jam::Fnv1aHandle<struct ShapeDef, uint32>;
+	using MaterialHandle	= Fnv1aHandle<struct MaterialDef, uint32>;
+	using MeshHandle		= Fnv1aHandle<struct MeshDef, uint32>;
+	using ShapeHandle		= Fnv1aHandle<struct ShapeDef, uint32>;
 
-	using DynamicBodyHandle = jam::Fnv1aHandle<struct DynamicBodyDef, uint32>;
-	using CCTBodyHandle		= jam::Fnv1aHandle<struct CCTBodyDef, uint32>;
+	using DynamicBodyHandle = Fnv1aHandle<struct DynamicBodyDef, uint32>;
+	using CCTBodyHandle		= Fnv1aHandle<struct CCTBodyDef, uint32>;
 
-	using MoveProfileHandle = jam::Fnv1aHandle<struct MoveProfileDef, uint32>;
+	using MoveProfileHandle = Fnv1aHandle<struct MoveProfileDef, uint32>;
 
-	using TemplateHandle	= jam::Fnv1aHandle<struct ActorTemplateDef, uint32>;
+	using TemplateHandle	= Fnv1aHandle<struct ActorTemplateDef, uint32>;
 
 	enum class eShapeType
 	{
@@ -156,7 +156,7 @@ namespace jam::px
 	};
 
 
-	using MoveModel = std::variant<CharacterMoveConfig, KinematicDriverConfig, ProjectileConfig>;
+	using MoveModel = std::variant<struct CharacterMoveConfig, KinematicDriverConfig, ProjectileConfig>;
 
 	struct MoveProfileDef
 	{
@@ -171,7 +171,7 @@ namespace jam::px
 		eActorType			actorType			= eActorType::Generic;
 		eBodyType			representation		= eBodyType::Rigid;
 		eMotionType			motionType			= eMotionType::Static;
-		MotionFlag::Flags		bodyFlags			= BodyFlag::NONE;
+		MotionFlag::Flags	motionFlags			= MotionFlag::NONE;
 		MoveProfileHandle   moveProfile			= {};
 
 		eSpawnPolicy		spawnPolicy			= eSpawnPolicy::Both;

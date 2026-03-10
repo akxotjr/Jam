@@ -152,7 +152,7 @@ namespace jam::px
 			case eEaseType::InCubic:       return InCubic(t);
 			case eEaseType::OutCubic:      return OutCubic(t);
 			case eEaseType::InOutCubic:    return InOutCubic(t);
-			default:                      return Linear(t);
+			default:                       return Linear(t);
 			}
 		}
 
@@ -393,4 +393,5 @@ namespace jam::px
 			return Slerp(a, b, ApplyProfile(t, totalTime, profile));
 		}
 	};
-}
+
+} // namespace jam::px

@@ -2,7 +2,7 @@
 
 
 #include "jampx/ShardPxCpuDispacter.h"
-#include "jampx/character/CharacterMovementTypes.h"
+#include "jampx/actor/character/CharacterMovementTypes.h"
 
 
 

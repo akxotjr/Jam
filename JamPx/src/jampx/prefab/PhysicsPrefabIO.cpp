@@ -367,7 +367,7 @@ namespace jam::px
 			out.name				= t[k_name].get<std::string>();
 			out.actorType			= ParseActorType(t);
 			out.motionType			= ParseMotionType(t);
-			out.bodyFlags			= ParseBodyFlag(t);
+			out.motionFlags			= ParseBodyFlag(t);
 			out.spawnPolicy			= ParseSpawnPolicy(t);
 			out.allowReplication	= t[k_allowReplication].get<bool>();
 
