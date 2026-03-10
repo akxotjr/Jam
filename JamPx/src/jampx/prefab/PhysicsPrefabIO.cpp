@@ -6,7 +6,7 @@
 
 #include "jampx/PhysicsAsset.h"
 
-namespace jam::px::prefab
+namespace jam::px
 {
 	namespace
 	{
@@ -94,11 +94,11 @@ namespace jam::px::prefab
 			return eMotionType::None;
 		}
 
-		BodyFlag::Flags ParseBodyFlag(const json& j)
+		MotionFlag::Flags ParseBodyFlag(const json& j)
 		{
 			const uint32 flags = j[k_bodyFlags].get<uint32>();
 
-			return BodyFlag::Flags(flags);
+			return MotionFlag::Flags(flags);
 		}
 
 		eSpawnPolicy ParseSpawnPolicy(const json& j)

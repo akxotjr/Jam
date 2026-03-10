@@ -95,6 +95,18 @@ namespace jam::px
 
 	WishMovement DefaultQuakeAccelerator::BuildWishMovement(const MoveIntent& intent) const
 	{
+        WishMovement w{};
+
+        // AI path: world-space dir 이 직접 제공된 경우 local 변환 스킵
+        if (intent.wishDir.has_value())
+        {
+	        w.dir   = intent.wishDir.value().GetNormalized();
+            w.speed = Saturate(intent.moveMag);
+
+            return w;
+        }
+
+        // Player path: local 축 -> world 변환
         // moveX=right, moveY=forward (local)
         Vec2 local(intent.moveX, intent.moveY);
         const float axisMag = std::min(1.0f, local.Magnitude());
@@ -108,7 +120,6 @@ namespace jam::px
 
         const Vec3 wishVel = forward * local.y + right * local.x;
 
-        WishMovement w{};
         w.dir   = wishVel.GetNormalized();
         w.speed = Saturate(axisMag * Saturate(intent.moveMag)); // 0..1
 

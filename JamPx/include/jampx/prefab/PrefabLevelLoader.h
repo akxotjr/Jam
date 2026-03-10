@@ -7,7 +7,7 @@ namespace physx
 	class PxRigidActor;
 }
 
-namespace jam::px::prefab
+namespace jam::px
 {
 
 	class PrefabLevelLoader

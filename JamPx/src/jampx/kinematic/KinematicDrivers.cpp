@@ -602,6 +602,28 @@ namespace jam::px
 		return m_pose.q;
 	}
 
+	ProjectileKinematicDriver::ProjectileKinematicDriver(KinematicCommon common, ProjectileSource src)
+		: m_common(common), m_src(src)
+	{
+		m_pose = m_src.initialPose;
+		m_vel = m_src.initialVel;
+	}
 
+	PxTransform ProjectileKinematicDriver::Tick(float dt)
+	{
+		if (m_done) return m_pose;
 
+		m_vel.y -= m_src.gravity * m_src.gravityScale * dt;
+
+		const PxVec3 disp = m_vel * dt;
+		const float dist = disp.magnitude();
+
+		m_pose.p += disp;
+		m_traveledDist += dist;
+
+		if (m_traveledDist >= m_src.maxRange)
+			m_done = true;
+
+		return m_pose;
+	}
 } // namespace jam::px

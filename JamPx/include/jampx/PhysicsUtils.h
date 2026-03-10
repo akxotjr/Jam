@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#include "character/CharacterMovementTypes.h"
-#include "jampx/api/PhysicsTypes.h"
 #include "Easing.h"
 
 namespace jam::px
@@ -52,12 +50,6 @@ namespace jam::px
 		return static_cast<ObjectId>(reinterpret_cast<uintptr_t>(actor->userData));
 	}
 
-
-	static CharacterUserData* GetCharacterUserData(const PxController& cct)
-	{
-		return static_cast<CharacterUserData*>(cct.getUserData());
-	}
-	
 
 	static PxVec3 GetLinearVelocity(const PxVec3& a, const PxVec3& b, float dt)
 	{

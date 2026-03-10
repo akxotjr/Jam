@@ -4,10 +4,8 @@
 #include <algorithm>
 #include <ranges>
 
-#include "jampx/PhysicsCore.h"
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
-#include "jampx/prefab/PrefabLevelLoader.h"
-#include "jampx/projectile/ProjectileMoveComponent.h"
+#include "jampx/projectile/ProjectileComponent.h"
 
 
 namespace jam::px
@@ -16,7 +14,7 @@ namespace jam::px
 	{
 
 
-		inline prefab::TemplateHandle ToTemplateHandle(PrefabKey k)
+		inline TemplateHandle ToTemplateHandle(PrefabKey k)
 		{
 			return PHYSICS_PREFAB_REGISTRY.FindHandleByKey(k);
 		}
@@ -105,7 +103,7 @@ namespace jam::px
 
 		m_taskManager = m_world->GetTaskManager();
 
-		m_levelLoader = std::make_unique<prefab::PrefabLevelLoader>();
+		m_levelLoader = std::make_unique<PrefabLevelLoader>();
 		m_levelLoader->SetPhysicsWorld(m_world.get());
 
 		m_inited.store(true, std::memory_order_relaxed);
@@ -153,7 +151,7 @@ namespace jam::px
 	{
 		if (!m_inited.load(std::memory_order_relaxed) || !m_world) return;
 
-		MoveCharacter(dt);
+		StepCharacters(dt);
 		StepProjectiles(dt);
 		m_world->Simulate(dt);
 	}
@@ -162,7 +160,7 @@ namespace jam::px
 	{
 		if (!m_world) return false;
 
-		MoveCharacter(dt);
+		StepCharacters(dt);
 		StepProjectiles(dt);
 
 		if (!m_dispacter || awaitKey == 0)
@@ -202,9 +200,9 @@ namespace jam::px
 		if (auto it = m_characterEntries.find(id); it != m_characterEntries.end())
 			return it->second.physicsHandle;
 
-		const prefab::TemplateHandle templateHandle = ToTemplateHandle(desc.prefab);
+		const TemplateHandle templateHandle = ToTemplateHandle(desc.prefab);
 
-		const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(templateHandle);
+		const ActorTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(templateHandle);
 		if (!def) return {};
 
 		void* userData = nullptr;
@@ -232,7 +230,7 @@ namespace jam::px
 				ApplySpawnPackedIdToActorShapes(*entry.hitbox, desc.teamId, desc.partId, desc.user8);
 
 			entry.physicsHandle = PhysicsHandle{ reinterpret_cast<uint64_t>(entry.controller) };
-			entry.mover = std::make_unique<CharacterMovementComponent>(def->cct.movement, entry.controller, entry.hitbox);
+			entry.mover = std::make_unique<LocomotionComponent>(def->cct.movement, entry.controller, entry.hitbox);
 			entry.state = cs;
 
 			SetCharacterState(id, cs);
@@ -311,25 +309,6 @@ namespace jam::px
 		}
 	}
 
-	eActorType PhysicsFacade::GetActorType(ObjectId id) const
-	{
-		if (auto it = m_characterEntries.find(id); it != m_characterEntries.end())
-		{
-			if (it->second.controller)
-				return eActorType::Character;
-		}
-
-		if (m_projectileEntries.contains(id))
-			return eActorType::Projectile;
-
-		if (auto it = m_rigidEntries.find(id); it != m_rigidEntries.end())
-		{
-			const auto* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(it->second.templateHandle);
-			return def ? def->actorType : eActorType::Generic;
-		}
-
-		return eActorType::Generic;
-	}
 
 	eMotionType PhysicsFacade::GetMotionType(ObjectId id) const
 	{
@@ -360,12 +339,7 @@ namespace jam::px
 		return eMotionType::None;
 	}
 
-	eActorType PhysicsFacade::FindActorType(PrefabKey key) const
-	{
-		const prefab::TemplateHandle h = PHYSICS_PREFAB_REGISTRY.FindHandleByKey(key);
-		const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(h);
-		return def ? def->actorType : eActorType::Generic;
-	}
+
 
 	eMotionType PhysicsFacade::FindMotionType(PrefabKey key) const
 	{
@@ -512,21 +486,7 @@ namespace jam::px
 		entry.state.facingPitch = input.facingPitch;
 	}
 
-	void PhysicsFacade::AttachKinematicDriver(ObjectId id, std::unique_ptr<IKinematicDriver> driver)
-	{
-		auto it = m_rigidEntries.find(id);
-		if (it == m_rigidEntries.end() || !it->second.isKinematic) return;
 
-		it->second.mover = std::make_unique<KinematicMoveComponent>(std::move(driver));
-	}
-
-	void PhysicsFacade::DetachKinematicDriver(ObjectId id)
-	{
-		auto it = m_rigidEntries.find(id);
-		if (it == m_rigidEntries.end()) return;
-
-		it->second.mover.reset();
-	}
 
 	bool PhysicsFacade::RaycastLOS(const Vec3& from, const Vec3& to) const
 	{
@@ -555,22 +515,6 @@ namespace jam::px
 		return !scene->raycast(origin, dir, dist, buf, PxHitFlag::eDEFAULT, fd, &cb);
 	}
 
-	// todo
-	void PhysicsFacade::MoveKinematic(ObjectId id, const Transform& target)
-	{
-		auto it = m_rigidEntries.find(id);
-		if (it == m_rigidEntries.end()) return;
-
-		RigidEntry& e = it->second;
-		if (!e.isKinematic) return;
-
-		if (auto* dyn = e.actor->is<PxRigidDynamic>())
-		{
-			dyn->setKinematicTarget(ToPhysX(target));
-			e.state.pose = target;
-			MarkDirty(id);
-		}
-	}
 
 	PhysicsHandle PhysicsFacade::SpawnProjectile(ObjectId id, const ProjectileSpawnDesc& desc)
 	{
@@ -578,7 +522,7 @@ namespace jam::px
 		if (m_projectileEntries.contains(id)) return m_projectileEntries[id].physicsHandle;
 		if (desc.kind == eProjectileKind::HITSCAN) return {};
 
-		const prefab::TemplateHandle templateHandle = ToTemplateHandle(desc.prefab);
+		const TemplateHandle templateHandle = ToTemplateHandle(desc.prefab);
 		if (!PHYSICS_PREFAB_REGISTRY.HasTemplate(templateHandle)) return {};
 
 		void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(id));
@@ -605,11 +549,11 @@ namespace jam::px
 			if (auto* dyn = actor->is<PxRigidDynamic>())
 				dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 
-			ProjectileMoveConfig cfg{};
+			ProjectileConfig cfg{};
 			cfg.gravityScale = desc.gravityScale;
 			cfg.maxRange	 = desc.maxRange;
 
-			entry.mover = std::make_unique<ProjectileMoveComponent>(cfg, desc.velocity);
+			entry.mover = std::make_unique<ProjectileComponent>(cfg, desc.velocity);
 		}
 
 		entry.physicsHandle = PhysicsHandle{ reinterpret_cast<uint64_t>(actor) };
@@ -631,6 +575,8 @@ namespace jam::px
 		}
 		m_projectileEntries.erase(it);
 	}
+
+
 
 	HitscanResult PhysicsFacade::Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const
 	{
@@ -692,27 +638,33 @@ namespace jam::px
 
 		m_dirtySet.clear();
 
-		ranges::sort(list);
-		list.erase(ranges::unique(list).begin(), list.end());
+		std::ranges::sort(list);
+		list.erase(std::ranges::unique(list).begin(), list.end());
 
 		return list;
-	}
-
-	void PhysicsFacade::MoveCharacter(float dt)
-	{
-		for (auto& [id, entry] : m_characterEntries)
-		{
-			if (!entry.controller || !entry.mover || entry.isKinematic) continue;
-
-			entry.mover->Tick(dt, entry.lastIntent);
-
-			MarkDirty(id);
-		}
 	}
 
 	void PhysicsFacade::MarkDirty(ObjectId id)
 	{
 		m_dirtySet.insert(id);
+	}
+
+	void PhysicsFacade::StepCharacters(float dt)
+	{
+		for (auto& [id, body] : m_cctMap)
+		{
+			body.Tick(dt);
+			MarkDirty(id);
+		}
+	}
+
+	void PhysicsFacade::StepKinematics(float dt)
+	{
+		for (auto& [id, body] : m_kinematicMap)
+		{
+			body.Tick(dt);
+			MarkDirty(id);
+		}
 	}
 
 	void PhysicsFacade::StepProjectiles(float dt)
@@ -762,19 +714,5 @@ namespace jam::px
 			DespawnProjectile(rmId);
 	}
 
-	void PhysicsFacade::StepKinematics(float dt)
-	{
-		for (auto& [id, entry] : m_rigidEntries)
-		{
-			if (!entry.isKinematic || !entry.mover) continue;
 
-			auto* dyn = entry.actor ? entry.actor->is<PxRigidDynamic>() : nullptr;
-			if (!dyn) continue;
-
-			const Transform target = entry.mover->Tick(dt);
-			dyn->setKinematicTarget(ToPhysX(target));
-			entry.state.pose = target;
-			MarkDirty(id);
-		}
-	}
 }

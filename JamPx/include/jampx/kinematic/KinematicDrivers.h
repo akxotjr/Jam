@@ -166,4 +166,38 @@ namespace jam::px
         PxVec3              m_angularVel = PxVec3(physx::PxZero);
     };
 
+
+
+
+    // -----------------------------------------------------------
+    // Projectile
+    // -----------------------------------------------------------
+
+    class ProjectileKinematicDriver : public IKinematicDriver
+    {
+    public:
+        explicit ProjectileKinematicDriver(KinematicCommon common, ProjectileSource src);
+
+        PxTransform         Tick(float dt) override;
+        bool                IsDone() const override { return m_done; }
+
+        PxVec3              GetVelocity() const { return m_vel; }
+        float               GetTraveledDist() const { return m_traveledDist; }
+        void                SetVelocity(const PxVec3& v) { m_vel = v; }
+        void                SetTraveledDist(float d) { m_traveledDist = d; }
+
+    private:
+        KinematicCommon     m_common        = {};
+        ProjectileSource    m_src           = {};
+        PxTransform         m_pose          = PxTransform(physx::PxIdentity);
+        PxVec3              m_vel           = PxVec3(physx::PxZero);
+        float               m_traveledDist  = 0.f;
+        bool                m_done          = false;
+    };
+    
+
+
+
+
+
 } // namespace jam::px

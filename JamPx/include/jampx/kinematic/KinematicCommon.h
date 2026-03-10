@@ -201,6 +201,23 @@ namespace jam::px
     };
 
 
+    // -----------------------------------------------------------
+	// Projectile Source : physics-driven ballistic
+	// -----------------------------------------------------------
+
+    struct ProjectileSource
+    {
+        PxTransform         initialPose     = PxTransform(physx::PxIdentity);
+        PxVec3              initialVel      = PxVec3(physx::PxZero);
+        float               gravity         = -9.81f; // baked in: scene->getGravity().y
+        float               gravityScale    = 1.f;
+        float               maxRange        = 1000.f;
+    };
+
+
+
+
+
 
 
     //todo
@@ -230,7 +247,7 @@ namespace jam::px
 	    ScriptTimelineSource
     >;
 
-    struct KinematicMoveConfig
+    struct KinematicDriverConfig
     {
         KinematicCommon common;
         PoseSource      source;

@@ -3,9 +3,9 @@
 #include "jampx/prefab/PhysicsPrefabIO.h"
 #include "jampx/prefab/PrefabAssetCreator.h"
 
-namespace jam::px::prefab
+namespace jam::px
 {
-	void PhysicsPrefabRegistry::Init(const string& prefabPath)
+	void PhysicsPrefabRegistry::Init(const std::string& prefabPath)
 	{
 		Clear();
 		
@@ -21,15 +21,15 @@ namespace jam::px::prefab
 
 	void PhysicsPrefabRegistry::Clear()
 	{
-		for (auto& s : m_shapeCache | views::values)
+		for (auto& s : m_shapeCache | std::views::values)
 			if (s) s->release();
 		m_shapeCache.clear();
 
-		for (auto& m : m_materialCache | views::values)
+		for (auto& m : m_materialCache | std::views::values)
 			if (m) m->release();
 		m_materialCache.clear();
 
-		for (auto& r : m_rigidCache | views::values)
+		for (auto& r : m_rigidCache | std::views::values)
 			if (r) r->release();
 		m_rigidCache.clear();
 
@@ -56,7 +56,7 @@ namespace jam::px::prefab
 		{
 			switch (meshDef.type)
 			{
-			case eShapeType::TRIANGLE_MESH:
+			case eMeshType::Triangle:
 			{
 				PxTriangleMesh* tri = PrefabAssetCreator::CreateTriangleMesh(meshDef.cookedPath);
 				if (!tri) throw std::runtime_error("CreateTriangleMesh failed: " + meshDef.cookedPath);
@@ -64,16 +64,13 @@ namespace jam::px::prefab
 			}
 			break;
 
-			case eShapeType::CONVEX_MESH:
+			case eMeshType::Convex:
 			{
 				PxConvexMesh* cvx = PrefabAssetCreator::CreateConvexMesh(meshDef.cookedPath);
 				if (!cvx) throw std::runtime_error("CreateConvexMesh failed: " + meshDef.cookedPath);
 				m_cvxMeshCache.emplace(h, cvx);
 			}
 			break;
-
-			default:
-				break;
 			}
 		}
 
@@ -84,15 +81,15 @@ namespace jam::px::prefab
 
 			PxShape* shape = nullptr;
 
-			if (IsPrimtiveShape(shapeDef.type))
+			if (IsPrimitiveShape(shapeDef.type))
 			{
 				shape = PrefabAssetCreator::CreatePrimitiveShape(shapeDef, *mat);
 			}
-			else if (shapeDef.type == eShapeType::TRIANGLE_MESH)
+			else if (shapeDef.type == eShapeType::TriangleMesh)
 			{
 				shape = PrefabAssetCreator::CreateTriangleMeshShape(shapeDef, *mat, GetTriangleMesh(shapeDef.mesh));
 			}
-			else if (shapeDef.type == eShapeType::CONVEX_MESH)
+			else if (shapeDef.type == eShapeType::ConvexMesh)
 			{
 				shape = PrefabAssetCreator::CreateConvexMeshShape(shapeDef, *mat, GetConvexMesh(shapeDef.mesh));
 			}
@@ -118,7 +115,7 @@ namespace jam::px::prefab
 			if (tmpDef.actorType == eActorType::Character)
 				continue; // 별도 시스템에서 처리
 
-			vector<PxShape*> shapes;
+			std::vector<PxShape*> shapes;
 			GetShapes(tmpDef.shapes, shapes);
 
 			PxRigidActor* actor = PrefabAssetCreator::CreateRigidActor(tmpDef, shapes);
@@ -134,7 +131,7 @@ namespace jam::px::prefab
 		return m_asset.templates.contains(h);
 	}
 
-	TemplateHandle PhysicsPrefabRegistry::FindHandleByName(const string& name) const
+	TemplateHandle PhysicsPrefabRegistry::FindHandleByName(const std::string& name) const
 	{
 		auto it = m_nameToHandle.find(name);
 		return it != m_nameToHandle.end() ? it->second : TemplateHandle{};
@@ -149,7 +146,7 @@ namespace jam::px::prefab
 		return it != m_keyToHandle.end() ? it->second : TemplateHandle{};
 	}
 
-	const PrefabTemplateDef* PhysicsPrefabRegistry::FindTemplateDef(TemplateHandle h) const
+	const ActorTemplateDef* PhysicsPrefabRegistry::FindTemplateDef(TemplateHandle h) const
 	{
 		auto it = m_asset.templates.find(h);
 		return it != m_asset.templates.end() ? &it->second : nullptr;
@@ -199,7 +196,7 @@ namespace jam::px::prefab
 		return it->second;
 	}
 
-	void PhysicsPrefabRegistry::GetShapes(const vector<ShapeHandle>& handles, OUT vector<PxShape*>& shapes) const
+	void PhysicsPrefabRegistry::GetShapes(const std::vector<ShapeHandle>& handles, OUT std::vector<PxShape*>& shapes) const
 	{
 		shapes.clear();
 		shapes.reserve(handles.size());
@@ -207,7 +204,7 @@ namespace jam::px::prefab
 			shapes.push_back(GetShape(h));
 	}
 
-	PxRigidActor* PhysicsPrefabRegistry::Instantiate(const PrefabLevelInstanceDef& inst)
+	PxRigidActor* PhysicsPrefabRegistry::Instantiate(const PhysicsLevelInstanceDef& inst)
 	{
 		const TemplateHandle h = FindHandleByName(inst.templateName);
 		if (!h || !HasTemplate(h))
@@ -217,7 +214,7 @@ namespace jam::px::prefab
 		if (!def)
 			throw std::runtime_error("template def not found. template= " + inst.templateName);
 
-		if (def->spawnPolicy == ePrefabSpawnPolicy::RUNTIME_ONLY)
+		if (def->spawnPolicy == ePSpawnPolicy::RUNTIME_ONLY)
 			throw std::runtime_error("template is runtime-only. template= " + inst.templateName);
 
 		const auto it = m_rigidCache.find(h);
@@ -276,7 +273,7 @@ namespace jam::px::prefab
 		return out;
 	}
 
-	PxRigidActor* PhysicsPrefabRegistry::Instantiate(const string& name, const PxTransform& worldPose, void* userData)
+	PxRigidActor* PhysicsPrefabRegistry::Instantiate(const std::string& name, const PxTransform& worldPose, void* userData)
 	{
 		const TemplateHandle h = FindHandleByName(name);
 		return h ? Instantiate(h, worldPose, userData) : nullptr;

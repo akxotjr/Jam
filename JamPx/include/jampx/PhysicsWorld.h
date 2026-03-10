@@ -1,8 +1,7 @@
 ﻿#pragma once
 
 
-#include "ShardPxCpuDispacter.h"
-#include "jampx/api/PhysicsTypes.h"
+#include "jampx/ShardPxCpuDispacter.h"
 #include "jampx/character/CharacterMovementTypes.h"
 
 
@@ -31,10 +30,10 @@ namespace jam::px
 		void							BeginSimulate(float elapsed, PxBaseTask* completionTask) const;
 		void							EndSimulate() const;
 
-		PxRigidActor*					CreateActor(prefab::TemplateHandle templateHandle, const PxTransform& worldPose, void* userData);
+		PxRigidActor*					CreateActor(TemplateHandle templateHandle, const PxTransform& worldPose, void* userData);
 		void							RemoveActor(PxRigidActor* actor) const;
 
-		PxCapsuleController*			CreateController(prefab::TemplateHandle templateHandle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg);
+		PxCapsuleController*			CreateController(TemplateHandle templateHandle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg);
 		void							RemoveController(PxController* controller);
 
 	public:
@@ -45,7 +44,7 @@ namespace jam::px
 			CharacterMoveConfig			moveCfg{};
 		};
 
-		CreatedCharacter				CreateCharacter(prefab::TemplateHandle templateHandle, const PxVec3& pos, void* userData);
+		CreatedCharacter				CreateCharacter(TemplateHandle templateHandle, const PxVec3& pos, void* userData);
 
 		std::vector<SimEvent>			ConsumeSimEvents();
 		std::vector<ObjectId>			ConsumeAdvancdActive();

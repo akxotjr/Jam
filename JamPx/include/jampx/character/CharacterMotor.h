@@ -1,7 +1,7 @@
 ﻿#pragma once
 
-#include <jampx/character/CharacterMovementTypes.h>
-#include <jampx/character/CharacterFilter.h>
+#include "jampx/character/CharacterMovementTypes.h"
+#include "jampx/character/CharacterFilter.h"
 
 namespace physx
 {

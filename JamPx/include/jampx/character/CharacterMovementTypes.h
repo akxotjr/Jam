@@ -1,9 +1,5 @@
 ﻿#pragma once
 
-#include <jambase/EnumUtils.h>
-#include <jambase/Fnv1a.h>
-
-#include "jampx/api/PhysicsTypes.h"
 
 
 namespace jam::px
@@ -15,6 +11,11 @@ namespace jam::px
 		bool isGhost = false;
 		bool isRemote = false;
 	};
+
+	static CharacterUserData* GetCharacterUserData(const PxController& cct)
+	{
+		return static_cast<CharacterUserData*>(cct.getUserData());
+	}
 
 
 	struct MoveCollision
@@ -157,6 +158,9 @@ namespace jam::px
 		float				moveY			= 0.0f;			// local y. [-1, 1]
 		float				moveYaw			= 0.0f;			// world yaw. rad
 		float				moveMag			= 1.0f;			// input intensity. keyboard is always '1' and gamepad is [0, 1] 
+
+		// --- AI path: world-space 직접 지정 (nullopt 이 아니라면 local 변환 스킵) ---
+		std::optional<Vec3>	wishDir			= std::nullopt;	// world-space normalized dir
 
 		eStance				stanceRequest	= eStance::Standing;
 		eGait				gaitRequest		= eGait::Walk;

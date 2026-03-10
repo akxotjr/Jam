@@ -1,12 +1,5 @@
 #pragma once
 
-#include <jambase/EnumUtils.h>
-
-#include "PhysicsUtils.h"
-#include "api/PhysicsTypes.h"
-#include "jambase/Fnv1a.h"
-
-
 
 namespace jam::px
 {

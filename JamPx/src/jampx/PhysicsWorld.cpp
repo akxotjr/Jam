@@ -130,7 +130,7 @@ namespace jam::px
 	}
 
 
-	PxRigidActor* PhysicsWorld::CreateActor(prefab::TemplateHandle templateHandle, const PxTransform& worldPose, void* userData)
+	PxRigidActor* PhysicsWorld::CreateActor(TemplateHandle templateHandle, const PxTransform& worldPose, void* userData)
 	{
 		if (!m_pxScene)
 			return nullptr;
@@ -155,11 +155,11 @@ namespace jam::px
 	}
 
 
-	PxCapsuleController* PhysicsWorld::CreateController(prefab::TemplateHandle handle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg)
+	PxCapsuleController* PhysicsWorld::CreateController(TemplateHandle handle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg)
 	{
 		if (!m_controllerManager) return nullptr;
 
-		const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
+		const TemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
 		if (!def) return nullptr;
 
 		if (def->kind != eBodyKind::CHARACTER)

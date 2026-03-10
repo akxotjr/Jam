@@ -3,13 +3,13 @@
 
 namespace jam::px
 {
-	struct ProjectileMoveConfig
+	struct ProjectileConfig
 	{
 		float		gravityScale	= 1.f;
 		float		maxRange		= 1000.f;
 	};
 
-	struct ProjectileMoveState
+	struct ProjectileState
 	{
 		Vec3		velocity		= Vec3::Zero();
 		float		traveledDist	= 0.f;
@@ -27,19 +27,19 @@ namespace jam::px
 	};
 
 	/// @brief Anaytic Projectile component
-	class ProjectileMoveComponent
+	class ProjectileComponent
 	{
 	public:
-		explicit ProjectileMoveComponent(const ProjectileMoveConfig& cfg, const Vec3& initialVel);
+		explicit ProjectileComponent(const ProjectileConfig& cfg, const Vec3& initialVel);
 
 		ProjectileHitResult			Tick(float dt, PxScene* scene, PxRigidDynamic* actor, uint16 teamId);
 
-		const ProjectileMoveState&	GetState() const { return m_state; }
-		void						SetState(const ProjectileMoveState& state) { m_state = state; }
+		const ProjectileState&		GetState() const { return m_state; }
+		void						SetState(const ProjectileState& state) { m_state = state; }
 
 	private:
-		ProjectileMoveConfig		m_config{};
-		ProjectileMoveState			m_state{};
+		ProjectileConfig			m_config = {};
+		ProjectileState				m_state  = {};
 	};
 
 }

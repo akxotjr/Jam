@@ -5,7 +5,7 @@
 #include "jampx/PhysicsWorld.h"
 
 
-namespace jam::px::prefab
+namespace jam::px
 {
 
 	void PrefabLevelLoader::Load(const std::string& layer, const std::string& levelPath)
@@ -64,7 +64,7 @@ namespace jam::px::prefab
 		if (!scene) throw std::runtime_error("PrefabLevelLoader::Load - physics scene is null");
 
 		// 파일=레이어 정책: UnloadLayer/UnloadAll 전까지 append
-		const PrefabLevelAsset level = PhysicsPrefabIO::LoadLevelAssetFromFile(levelPath);
+		const PhysicsLevelAsset level = PhysicsPrefabIO::LoadLevelAssetFromFile(levelPath);
 
 		auto& spawned = m_layerActors[layer];
 		spawned.reserve(spawned.size() + level.instances.size());

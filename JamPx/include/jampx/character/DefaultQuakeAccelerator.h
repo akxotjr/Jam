@@ -9,10 +9,10 @@ namespace jam::px
 	public:
 		explicit DefaultQuakeAccelerator(const CharacterMoveConfig& cfg);
 
-		WishMovement	BuildWishMovement(const MoveIntent& intent) const override;
-		void			Integrate(CharacterMoveState& st, const WishMovement& wish, float dt) const override;
+		WishMovement			BuildWishMovement(const MoveIntent& intent) const override;
+		void					Integrate(CharacterMoveState& st, const WishMovement& wish, float dt) const override;
 
 	private:
-		CharacterMoveConfig	m_cfg{};
+		CharacterMoveConfig		m_cfg{};
 	};
 }

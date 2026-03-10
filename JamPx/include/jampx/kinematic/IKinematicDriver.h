@@ -1,4 +1,5 @@
 #pragma once
+#include "jampx/PhysXTypes.h"
 
 
 namespace jam::px
@@ -8,7 +9,7 @@ namespace jam::px
 	public:
 		virtual ~IKinematicDriver() = default;
 
-		virtual physx::PxTransform	Tick(float dt) = 0;
-		virtual bool		IsDone() const { return false; }
+		virtual PxTransform		Tick(float dt) = 0;
+		virtual bool			IsDone() const { return false; }
 	};
 }

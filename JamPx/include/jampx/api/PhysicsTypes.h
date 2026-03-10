@@ -296,13 +296,13 @@ namespace jam::px
 
 	struct CharacterState
 	{
-		Vec3		pos = Vec3::Zero();
-		float		facingYaw = 0.f;
-		float		facingPitch = 0.f;
-		float		verticalSpeed = 0.f;
+		Vec3		pos				= Vec3::Zero();
+		float		facingYaw		= 0.f;
+		float		facingPitch		= 0.f;
+		float		verticalSpeed	= 0.f;
 		float		horizontalSpeed = 0.f;
-		Vec2		moveDir = Vec2::Zero();
-		uint32_t	stateFlags = 0;
+		Vec2		moveDir			= Vec2::Zero();
+		uint32_t	stateFlags		= 0;
 
 		bool operator==(const CharacterState&) const = default;
 
@@ -332,7 +332,7 @@ namespace jam::px
 		Character   = 3,
 	};
 
-	enum class ePhyiscsRep : uint8
+	enum class eBodyType : uint8
 	{
 		Rigid,
 		Character,
@@ -341,12 +341,14 @@ namespace jam::px
 	enum class eMotionType : uint8
 	{
 		None		= 0,
-		Static		= 1,
-		Dynamic		= 2,
-		Kinematic	= 3,
+		Static		= 1,		// rigid
+		Dynamic		= 2,		// rigid
+		Kinematic	= 3,		// rigid
+		CCT			= 4,		// character
+		RemoteCCT	= 5,		// character
 	};
 
-	struct BodyFlag
+	struct MotionFlag
 	{
 		enum Enum : uint32
 		{
@@ -370,7 +372,7 @@ namespace jam::px
 		using Flags = FlagsT<Enum>;
 	};
 
-	inline void HashAppend(jam::Fnv1a32& h, const BodyFlag::Flags& bodyFlag) noexcept
+	inline void HashAppend(jam::Fnv1a32& h, const MotionFlag::Flags& bodyFlag) noexcept
 	{
 		HashAppend(h, bodyFlag.bits());
 	}
@@ -392,22 +394,76 @@ namespace jam::px
 	};
 
 
+	enum class eSpawnSource : uint8
+	{
+		Level = 0,
+		Runtime = 1,
+		Network = 2,
+		Tool = 3,
+	};
+
+	struct SpawnOverrideMask
+	{
+		enum Enum
+		{
+			NONE			= 0,
+			LINEAR_VEL		= 1 << 0,
+			ANGULAR_VEL		= 1 << 1,
+			LINEAR_DAMP		= 1 << 2,
+			ANGULAR_DAMP	= 1 << 3,
+
+			VIEW_YAW		= 1 << 8,
+			VIEW_PITCH		= 1 << 9,
+		};
+
+		using Flag = FlagsT<Enum>;
+	};
+
+
+	struct RigidSpawnOverrides
+	{
+		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
+
+		Vec3				linearVelocity  = Vec3::Zero();
+		Vec3				angularVelocity = Vec3::Zero();
+		float				linearDamping   = 0.0f;
+		float				angularDamping  = 0.0f;
+	};
+
+	struct CharacterSpawnOverrides
+	{
+		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
+
+		float				yaw   = 0.0f;
+		float				pitch = 0.0f;
+	};
+
+
 	struct SpawnDesc
 	{
 		PrefabKey			prefab{};
-		bool				isKinematic = false;
+		Transform			pose{};
+		eSpawnSource		spawnSrc = eSpawnSource::Level;
 
-		std::optional<RigidState>		rs = std::nullopt;
-		std::optional<CharacterState>	cs = std::nullopt;
-		std::optional<uint16>			teamId = std::nullopt;
-		std::optional<uint8>			partId = std::nullopt;
-		std::optional<uint8>			user8 = std::nullopt;
+		uint16				team = 0;
+		uint8				part = 0;
+		uint8				role = 0;
 
-		bool IsValid() const
-		{
-			return prefab.IsValid() && !(rs.has_value() && cs.has_value());
-		}
+		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
+
+		bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
+		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterSpawnOverrides>(overrides); }
 	};
+
+
+	struct PhysicsState
+	{
+		std::variant<RigidState, CharacterState> state;
+
+		bool IsRigid() const noexcept { return std::holds_alternative<RigidState>(state); }
+		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterState>(state); }
+	};
+
 
 
 	using ObjectId = uint32;
@@ -435,7 +491,7 @@ namespace jam::px
 
 	struct CharacterInput
 	{
-		uint32_t		inputFlags = 0;
+		uint32_t	inputFlags = 0;
 		float		facingYaw = 0.f;
 		float		facingPitch = 0.f;
 	};

@@ -1,9 +1,13 @@
 #pragma once
 #include <variant>
 
-#include "api/PhysicsTypes.h"
-#include "kinematic/KinematicCommon.h"
-#include "prefab/PrefabAssets.h"
+
+#include "jampx/PhysXTypes.h"
+
+#include "jampx/PhysicsFilter.h"
+
+#include "jampx/kinematic/KinematicCommon.h"
+#include "jampx/projectile/ProjectileComponent.h"
 
 
 namespace jam::px
@@ -32,6 +36,17 @@ namespace jam::px
 		ConvexMesh,
 	};
 
+	static bool IsPrimitiveShape(eShapeType type)
+	{
+		return type == eShapeType::Box | type == eShapeType::Sphere | type == eShapeType::Sphere | type == eShapeType::Capsule | type == eShapeType::Plane;
+	}
+
+	enum class eMeshType
+	{
+		Triangle,
+		Convex
+	};
+
 	enum class eSpawnPolicy : uint8
 	{
 		LevelOnly,
@@ -52,6 +67,7 @@ namespace jam::px
 
 	struct MeshDef
 	{
+		eMeshType		type					= eMeshType::Triangle;
 		std::string		cookedPath;
 
 		// optional
@@ -140,7 +156,7 @@ namespace jam::px
 	};
 
 
-	using MoveModel = std::variant<CharacterMoveConfig, KinematicMoveConfig, ProjectileMoveConfig>;
+	using MoveModel = std::variant<CharacterMoveConfig, KinematicDriverConfig, ProjectileConfig>;
 
 	struct MoveProfileDef
 	{
@@ -153,9 +169,9 @@ namespace jam::px
 	{
 		std::string			name;
 		eActorType			actorType			= eActorType::Generic;
-		ePhyiscsRep			representation		= ePhyiscsRep::Rigid;
+		eBodyType			representation		= eBodyType::Rigid;
 		eMotionType			motionType			= eMotionType::Static;
-		BodyFlag::Flags		bodyFlags			= BodyFlag::NONE;
+		MotionFlag::Flags		bodyFlags			= BodyFlag::NONE;
 		MoveProfileHandle   moveProfile			= {};
 
 		eSpawnPolicy		spawnPolicy			= eSpawnPolicy::Both;
@@ -193,9 +209,9 @@ namespace jam::px
 
 	struct PhysicsLevelInstanceDef
 	{
-		std::string             templateName;
-		PxTransform             pose{physx::PxIdentity };
-		PhyiscsLevelOverrides    overrides{};
+		std::string					templateName;
+		PxTransform					pose{ physx::PxIdentity };
+		PhyiscsLevelOverrides		overrides{};
 	};
 
 	struct PhysicsLevelAsset
@@ -205,81 +221,6 @@ namespace jam::px
 	};
 
 
-	enum class eSpawnSource : uint8
-	{
-		Level		= 0,
-		Runtime		= 1,
-		Network		= 2,
-		Tool		= 3,
-	};
-
-	struct SpawnOverrideMask
-	{
-		enum Enum
-		{
-			NONE			= 0,
-			LINEAR_VEL		= 1 << 0,
-			ANGULAR_VEL		= 1 << 1,
-			LINEAR_DAMP		= 1 << 2,
-			ANGULAR_DAMP	= 1 << 3,
-
-			VIEW			= 1 << 8,
-			CHAR_VEL		= 1 << 9,
-			
-		};
-
-		using Flag = FlagsT<Enum>;
-	};
-
-
-	struct RigidSpawnOverrides
-	{
-		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
-
-		PxVec3	linearVelocity		= PxVec3(physx::PxZero);
-		PxVec3	angularVelocity		= PxVec3(physx::PxZero);
-		float	linearDamping		= 0.0f;
-		float	angularDamping		= 0.0f;
-	};
-
-	struct CharacterSpawnOverrides
-	{
-		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
-
-		float	yaw					= 0.0f;
-		float	pitch				= 0.0f;
-	};
-
-
-	struct SpawnDesc
-	{
-		TemplateHandle		tpl{};
-		PxTransform			pose		= PxTransform(physx::PxIdentity);
-		eSpawnSource		spawnSrc	= eSpawnSource::Level;
-
-		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
-
-		bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
-		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterSpawnOverrides>(overrides); }
-	};
-
-
-
-
-	struct PhysicsState
-	{
-		TemplateHandle tpl{};
-		std::variant<RigidState, CharacterState> state;
-
-		bool IsRigid() const noexcept { return std::holds_alternative<RigidState>(state); }
-		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterState>(state); }
-	};
-
-	struct PhysicsRuntimeRefs
-	{
-		PxRigidActor* actor = nullptr; // rigid
-		PxController* cct	= nullptr; // character
-	};
 
 
 } // namespace jam::px

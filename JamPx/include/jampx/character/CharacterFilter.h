@@ -1,5 +1,4 @@
 #pragma once
-#include <entt/entity/entity.hpp>
 
 
 namespace jam::px
@@ -132,8 +131,8 @@ namespace jam::px
         const PxShape*          shape       = nullptr;
         const PxActor*          actor       = nullptr;
 
-        PxVec3                  worldPos    = PxVec3(PxZero);
-        PxVec3                  worldNormal = PxVec3(PxZero);
+        PxVec3                  worldPos    = PxVec3(physx::PxZero);
+        PxVec3                  worldNormal = PxVec3(physx::PxZero);
         PxF32                   length      = 0.0f;
 
         // (optional)
@@ -144,7 +143,7 @@ namespace jam::px
     {
         const PxController*     a           = nullptr;
         const PxController*     b           = nullptr;
-        PxVec3                  worldNormal = PxVec3(PxZero);
+        PxVec3                  worldNormal = PxVec3(physx::PxZero);
     };
 
     struct ICharacterHitSink

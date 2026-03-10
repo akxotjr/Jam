@@ -5,7 +5,7 @@ namespace jam::px
 {
 	namespace
 	{
-		inline MoveCollision::Flags ToFlags(const PxControllerCollisionFlags& f)
+		inline MoveCollision::Flags ToFlags(const physx::PxControllerCollisionFlags& f)
 		{
 			MoveCollision::Flags out;
 			if (f & PxControllerCollisionFlag::eCOLLISION_SIDES) out.set(MoveCollision::SIDES);

@@ -3,18 +3,17 @@
 #include <atomic>
 #include <unordered_set>
 
-#include "PhysicsCompletionTask.h"
-#include "PhysicsWorld.h"
-#include "ShardPxCpuDispacter.h"
+#include "jampx/PhysicsCompletionTask.h"
+#include "jampx/ShardPxCpuDispacter.h"
+
+#include "jampx/PhysicsWorld.h"
+
+#include "jampx/RigidBody.h"
+#include "jampx/CharacterBody.h"
+
 #include "jampx/prefab/PrefabLevelLoader.h"
 
-#include "jampx/character/CharacterMovementComponent.h"
-#include "jampx/api/IPhysicsFacade.h"
-#include "jampx/api/PhysicsTypes.h"
 
-#include "jampx/PhysicsUtils.h"
-#include "kinematic/KinematicMoveComponent.h"
-#include "projectile/ProjectileMoveComponent.h"
 
 namespace jam::px
 {
@@ -39,16 +38,14 @@ namespace jam::px
 		bool								LoadLevel(const std::string& path) override;
 
 		void								Step(float dt) override;
+
 		bool								BeginStep(float dt, uint64 awaitKey) override;
 		void								EndStep() override;
 
 		PhysicsHandle						Spawn(ObjectId id, const SpawnDesc& desc) override;
 		void								Despawn(ObjectId id) override;
 
-		eActorType							GetActorType(ObjectId id) const override;
 		eMotionType							GetMotionType(ObjectId id) const override;
-
-		eActorType							FindActorType(PrefabKey key) const override;
 		eMotionType							FindMotionType(PrefabKey key) const override;
 
 		bool								GetCharacterState(ObjectId id, CharacterState& state) const override;
@@ -59,13 +56,9 @@ namespace jam::px
 
 		void								ApplyCharacterInput(ObjectId id, const CharacterInput& input) override;
 
-		void								AttachKinematicDriver(ObjectId id, std::unique_ptr<IKinematicDriver> driver) override;
-		void								DetachKinematicDriver(ObjectId id) override;
-
 
 		bool								RaycastLOS(const Vec3& from, const Vec3& to) const override;
 
-		void								MoveKinematic(ObjectId id, const Transform& target) override;
 		PhysicsHandle						SpawnProjectile(ObjectId id, const ProjectileSpawnDesc& desc) override;
 		void								DespawnProjectile(ObjectId id) override;
 
@@ -76,39 +69,16 @@ namespace jam::px
 		std::vector<ObjectId>				PopActiveList() override;
 
 	private:
-		void								MoveCharacter(float dt);
 		void								MarkDirty(ObjectId id);
 
-		void								StepProjectiles(float dt);
+		void								StepCharacters(float dt);
 		void								StepKinematics(float dt);
+
+		void								StepProjectiles(float dt);
+
 
 	private:
 
-		struct RigidEntry
-		{
-			PhysicsHandle					physicsHandle{};
-			PxRigidActor*					actor = nullptr;
-			prefab::TemplateHandle			templateHandle{};
-			RigidState						state{};
-			bool							isKinematic = false;
-
-			std::unique_ptr<KinematicMoveComponent> mover;
-		};
-
-		struct CharacterEntry
-		{
-			PhysicsHandle					physicsHandle{};
-			PxCapsuleController*			controller = nullptr;
-			prefab::TemplateHandle			templateHandle{};
-			CharacterState					state{};
-
-			bool							isKinematic = false;
-
-			PxRigidActor*					hitbox = nullptr;
-
-			MoveIntent						lastIntent{};
-			std::unique_ptr<CharacterMovementComponent> mover;
-		};
 
 		/// @brief ANALYTIC / DYN_SIM 투사체 항목.
 		/// HITSCAN은 영속 항목 없이 즉발 처리.
@@ -117,7 +87,7 @@ namespace jam::px
 			eProjectileKind					kind{};
 			PhysicsHandle					physicsHandle{};
 			PxRigidActor*					actor = nullptr;
-			prefab::TemplateHandle			templateHandle{};
+			TemplateHandle					templateHandle{};
 
 			Vec3							velocity{};
 			float							gravityScale = 1.f;
@@ -125,14 +95,14 @@ namespace jam::px
 			float							traveledDist = 0.f;
 			uint16_t						teamId = 0;
 
-			std::unique_ptr<ProjectileMoveComponent> mover;
+			std::unique_ptr<ProjectileComponent> mover;
 		};
 
 	private:
 		std::atomic<bool>									m_inited			= false;
 
 		std::unique_ptr<PhysicsWorld>						m_world				= nullptr;
-		std::unique_ptr<prefab::PrefabLevelLoader>			m_levelLoader		= nullptr;
+		std::unique_ptr<PrefabLevelLoader>					m_levelLoader		= nullptr;
 
 		PxTaskManager*										m_taskManager		= nullptr;
 		IPhysicsJobBridge*									m_bridge			= nullptr;
@@ -140,10 +110,21 @@ namespace jam::px
 		PhysicsCompletionTask								m_completionTask;
 		bool												m_stepPending		= false;
 
-		std::unordered_map<ObjectId, RigidEntry>			m_rigidEntries;
-		std::unordered_map<ObjectId, CharacterEntry>		m_characterEntries;
-
 		std::unordered_map<ObjectId, ProjectileEntry>		m_projectileEntries;
+
+		// None / Static / Dynamic -> PhysX Simulate
+		std::unordered_map<ObjectId, RigidBody>				m_rigidMap;
+
+		// Kinematic -> StepKinematics()
+		std::unordered_map<ObjectId, RigidBody>				m_kinematicMap;
+
+		// Local/AI character -> MoveCharacters()
+		std::unordered_map<ObjectId, CharacterBody>			m_cctMap;
+
+		// Remote character -> SetCharacterState()'s Teleport. no tick
+		std::unordered_map<ObjectId, CharacterBody>			m_remoteCctMap;
+
+
 
 		// ANALYTIC 투사체 히트 등 수동 push 이벤트
 		std::vector<SimEvent>								m_pendingSimEvents;

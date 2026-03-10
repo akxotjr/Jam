@@ -25,16 +25,21 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">pch.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="src\jampx\actor\KinematicRigidBehavior.cpp" />
+    <ClCompile Include="src\jampx\CharacterBody.cpp" />
+    <ClCompile Include="src\jampx\character\AIControllerComponent.cpp" />
+    <ClCompile Include="src\jampx\character\AIDecisionModels.cpp" />
     <ClCompile Include="src\jampx\character\CharacterMotor.cpp" />
-    <ClCompile Include="src\jampx\character\CharacterMovementComponent.cpp" />
+    <ClCompile Include="src\jampx\character\LocomotionComponent.cpp" />
     <ClCompile Include="src\jampx\character\DefaultQuakeAccelerator.cpp" />
     <ClCompile Include="src\jampx\character\ExternalMoveAccumulator.cpp" />
+    <ClCompile Include="src\jampx\character\PlayerControllerComponent.cpp" />
     <ClCompile Include="src\jampx\geometry\Bezier.cpp" />
     <ClCompile Include="src\jampx\geometry\BSpline.cpp" />
     <ClCompile Include="src\jampx\geometry\CatmullRom.cpp" />
     <ClCompile Include="src\jampx\geometry\Curve.cpp" />
     <ClCompile Include="src\jampx\kinematic\KinematicDrivers.cpp" />
-    <ClCompile Include="src\jampx\kinematic\KinematicMoveComponent.cpp" />
+    <ClCompile Include="src\jampx\kinematic\KinematicDriverComponent.cpp" />
     <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp" />
     <ClCompile Include="src\jampx\PhysicsCore.cpp" />
     <ClCompile Include="src\jampx\PhysicsFacade.cpp" />
@@ -45,31 +50,40 @@
     <ClCompile Include="src\jampx\prefab\PrefabCooker.cpp" />
     <ClCompile Include="src\jampx\prefab\PrefabDocument.cpp" />
     <ClCompile Include="src\jampx\prefab\PrefabLevelLoader.cpp" />
-    <ClCompile Include="src\jampx\projectile\ProjectileMoveComponent.cpp" />
+    <ClCompile Include="src\jampx\projectile\ProjectileComponent.cpp" />
+    <ClCompile Include="src\jampx\RigidBody.cpp" />
     <ClCompile Include="src\jampx\ShardPxCpuDispacter.cpp" />
     <ClCompile Include="src\jampx\third_party\tinygltf_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\jampx\actor\KinematicRigidBehavior.h" />
     <ClInclude Include="include\jampx\api\IPhysicsFacade.h" />
     <ClInclude Include="include\jampx\api\IPhysicsJobBridge.h" />
     <ClInclude Include="include\jampx\api\PhysicsTypes.h" />
+    <ClInclude Include="include\jampx\CharacterBody.h" />
+    <ClInclude Include="include\jampx\character\AIControllerComponent.h" />
+    <ClInclude Include="include\jampx\character\AIDecisionModels.h" />
     <ClInclude Include="include\jampx\character\CharacterFilter.h" />
     <ClInclude Include="include\jampx\character\CharacterMotor.h" />
-    <ClInclude Include="include\jampx\character\CharacterMovementComponent.h" />
+    <ClInclude Include="include\jampx\character\IAIDecisionModel.h" />
+    <ClInclude Include="include\jampx\character\ICharacterController.h" />
+    <ClInclude Include="include\jampx\character\LocomotionComponent.h" />
     <ClInclude Include="include\jampx\character\CharacterMovementTypes.h" />
     <ClInclude Include="include\jampx\character\DefaultQuakeAccelerator.h" />
     <ClInclude Include="include\jampx\character\ExternalMoveAccumulator.h" />
     <ClInclude Include="include\jampx\character\IAccelerator.h" />
+    <ClInclude Include="include\jampx\character\PlayerControllerComponent.h" />
     <ClInclude Include="include\jampx\Easing.h" />
     <ClInclude Include="include\jampx\geometry\Bezier.h" />
     <ClInclude Include="include\jampx\geometry\BSpline.h" />
     <ClInclude Include="include\jampx\geometry\CatmullRom.h" />
     <ClInclude Include="include\jampx\geometry\Curve.h" />
+    <ClInclude Include="include\jampx\IRigidBehavior.h" />
     <ClInclude Include="include\jampx\JamPx.h" />
     <ClInclude Include="include\jampx\kinematic\IKinematicDriver.h" />
     <ClInclude Include="include\jampx\kinematic\KinematicCommon.h" />
     <ClInclude Include="include\jampx\kinematic\KinematicDrivers.h" />
-    <ClInclude Include="include\jampx\kinematic\KinematicMoveComponent.h" />
+    <ClInclude Include="include\jampx\kinematic\KinematicDriverComponent.h" />
     <ClInclude Include="include\jampx\PhysicsAsset.h" />
     <ClInclude Include="include\jampx\PhysicsCompletionTask.h" />
     <ClInclude Include="include\jampx\PhysicsCore.h" />
@@ -83,11 +97,11 @@
     <ClInclude Include="include\jampx\prefab\PhysicsPrefabIO.h" />
     <ClInclude Include="include\jampx\prefab\PhysicsPrefabRegistry.h" />
     <ClInclude Include="include\jampx\prefab\PrefabAssetCreator.h" />
-    <ClInclude Include="include\jampx\prefab\PrefabAssets.h" />
     <ClInclude Include="include\jampx\prefab\PrefabCooker.h" />
     <ClInclude Include="include\jampx\prefab\PrefabDocument.h" />
     <ClInclude Include="include\jampx\prefab\PrefabLevelLoader.h" />
-    <ClInclude Include="include\jampx\projectile\ProjectileMoveComponent.h" />
+    <ClInclude Include="include\jampx\projectile\ProjectileComponent.h" />
+    <ClInclude Include="include\jampx\RigidBody.h" />
     <ClInclude Include="include\jampx\ShardPxCpuDispacter.h" />
     <ClInclude Include="include\jampx\third_party\tinygltf_impl.h" />
     <ClInclude Include="pch.h" />

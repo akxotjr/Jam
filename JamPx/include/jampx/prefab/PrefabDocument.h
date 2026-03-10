@@ -4,15 +4,14 @@
 
 #include <nlohmann/json.hpp>
 
-#include "jampx/prefab/PrefabAssets.h"   // PhysicsPrefabAsset
 #include "jampx/prefab/PhysicsPrefabIO.h"
 
-namespace jam::px::prefab
+namespace jam::px
 {
 
     struct PrefabDocument
     {
-	    std::filesystem::path             path;
+	    std::filesystem::path        path;
         json                         doc;
         bool                         dirty = false;
 
@@ -45,6 +44,7 @@ namespace jam::px::prefab
         d.dirty         = false;
         d.revision      = 0;
         d.builtRevision = ~0ull;
+
         d.cachedAsset.reset();
 
         return d;
@@ -62,7 +62,7 @@ namespace jam::px::prefab
         if (!d.cachedAsset.has_value() || d.builtRevision != d.revision)
         {
             // 파일 IO 없이 doc에서 곧바로 asset 빌드
-            d.cachedAsset = PhysicsPrefabIO::LoadPrefabAssetFromJson(d.doc);
+            d.cachedAsset   = PhysicsPrefabIO::LoadPrefabAssetFromJson(d.doc);
             d.builtRevision = d.revision;
         }
         return *d.cachedAsset;
@@ -227,4 +227,4 @@ namespace jam::px::prefab
 
 
 
-}
+} // namespace jam::px

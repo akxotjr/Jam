@@ -1,5 +1,5 @@
 ﻿#include "pch.h"
-#include "jampx/character/CharacterMovementComponent.h"
+#include "jampx/character/LocomotionComponent.h"
 #include "jampx/character/DefaultQuakeAccelerator.h"
 
 #include <algorithm>
@@ -10,7 +10,7 @@
 namespace jam::px
 {
 
-	CharacterMovementComponent::CharacterMovementComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox)
+	LocomotionComponent::LocomotionComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox)
 		: m_cfg(cfg)
 	{
 		m_accelerator = std::make_unique<DefaultQuakeAccelerator>(cfg);
@@ -23,14 +23,14 @@ namespace jam::px
 		m_state.air		 = eAirState::Grounded;
 	}
 
-	void CharacterMovementComponent::SetMoveState(const CharacterMoveState& state)
+	void LocomotionComponent::SetMoveState(const CharacterMoveState& state)
 	{
 		m_state = state;
 
 		if (m_motor) m_motor->OverrideSense(state.grounded, state.ceiling);
 	}
 
-	void CharacterMovementComponent::Tick(float dt, const MoveIntent& intent)
+	void LocomotionComponent::Tick(float dt, const MoveIntent& intent)
 	{
 		if (!m_motor || dt <= 0.0f) return;
 
@@ -87,7 +87,7 @@ namespace jam::px
 		PostMoveUpdate(step.sense);
 	}
 
-	void CharacterMovementComponent::GetCharacterState(CharacterState& state) const
+	void LocomotionComponent::GetCharacterState(CharacterState& state) const
 	{
 		if (!m_motor) return;
 
@@ -104,14 +104,14 @@ namespace jam::px
 			SetStateFlag(state.stateFlags, STATE_IS_SPRINT);
 	}
 
-	void CharacterMovementComponent::Teleport(const Vec3& pos)
+	void LocomotionComponent::Teleport(const Vec3& pos)
 	{
 		if (!m_motor) return;
 		m_motor->Teleport(pos);
 		m_state.position = pos;
 	}
 
-	void CharacterMovementComponent::UpdateJumpTimers(float dt)
+	void LocomotionComponent::UpdateJumpTimers(float dt)
 	{
 		m_state.jump.coyoteRemain = std::max(0.f, m_state.jump.coyoteRemain - dt);
 		m_state.jump.bufferRemain = std::max(0.f, m_state.jump.bufferRemain - dt);
@@ -120,7 +120,7 @@ namespace jam::px
 			m_state.jump.coyoteRemain = m_cfg.jump.coyoteTime;
 	}
 
-	void CharacterMovementComponent::ApplyStanceRequest(const MoveIntent& intent)
+	void LocomotionComponent::ApplyStanceRequest(const MoveIntent& intent)
 	{
 		const eStance desired = intent.stanceRequest;
 		if (desired == m_state.stance)
@@ -134,7 +134,7 @@ namespace jam::px
 			m_state.stance = desired;
 	}
 
-	void CharacterMovementComponent::ApplyGaitRequest(const MoveIntent& intent)
+	void LocomotionComponent::ApplyGaitRequest(const MoveIntent& intent)
 	{
 		eGait desired = intent.gaitRequest;
 
@@ -155,7 +155,7 @@ namespace jam::px
 		m_state.gait = desired;
 	}
 
-	void CharacterMovementComponent::ApplyJump(const MoveIntent& intent)
+	void LocomotionComponent::ApplyJump(const MoveIntent& intent)
 	{
 		if (intent.jumpPressed)
 			m_state.jump.bufferRemain = m_cfg.jump.jumpBuffer;
@@ -176,7 +176,7 @@ namespace jam::px
 		}
 	}
 
-	void CharacterMovementComponent::ApplyGravity(float dt)
+	void LocomotionComponent::ApplyGravity(float dt)
 	{
 		// only when airbone
 		if (!m_state.grounded)
@@ -193,7 +193,7 @@ namespace jam::px
 		}
 	}
 
-	void CharacterMovementComponent::ApplyDash(float dt, const MoveIntent& intent)
+	void LocomotionComponent::ApplyDash(float dt, const MoveIntent& intent)
 	{
 		if (!m_accumulator) return;
 
@@ -260,7 +260,7 @@ namespace jam::px
 		}
 	}
 
-	void CharacterMovementComponent::PostMoveUpdate(const MotorSense& sense)
+	void LocomotionComponent::PostMoveUpdate(const MotorSense& sense)
 	{
 		const bool wasGrounded = m_state.grounded;
 		const bool nowGrounded = sense.grounded;
@@ -290,7 +290,7 @@ namespace jam::px
 		}
 	}
 
-	bool CharacterMovementComponent::CanSprint()
+	bool LocomotionComponent::CanSprint()
 	{
 		if (!m_state.grounded && !m_cfg.gait.sprintAllowInAir)
 			return false;

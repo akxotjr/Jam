@@ -122,6 +122,10 @@ namespace jam::px
 
 	using PxControllerManager			= physx::PxControllerManager;
 	using PxController 					= physx::PxController;
+	using PxControllerState				= physx::PxControllerState;
+	using PxControllerFilters			= physx::PxControllerFilters;
+	using PxControllerCollisionFlags	= physx::PxControllerCollisionFlags;
+	using PxControllerCollisionFlag		= physx::PxControllerCollisionFlag;
 	using PxCapsuleController 			= physx::PxCapsuleController;
 	using PxCapsuleControllerDesc 		= physx::PxCapsuleControllerDesc;
 

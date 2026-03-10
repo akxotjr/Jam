@@ -2,11 +2,11 @@
 #include "jampx/prefab/PrefabDocument.h"
 
 
-namespace jam::px::prefab
+namespace jam::px
 {
 
 
 
 
 
-}
+} // namespace jam::px

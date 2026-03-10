@@ -75,7 +75,7 @@
     <ClCompile Include="src\jampx\character\CharacterMotor.cpp">
       <Filter>character</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\character\CharacterMovementComponent.cpp">
+    <ClCompile Include="src\jampx\character\LocomotionComponent.cpp">
       <Filter>character</Filter>
     </ClCompile>
     <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp">
@@ -87,10 +87,10 @@
     <ClCompile Include="src\jampx\character\DefaultQuakeAccelerator.cpp">
       <Filter>character</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\kinematic\KinematicMoveComponent.cpp">
+    <ClCompile Include="src\jampx\kinematic\KinematicDriverComponent.cpp">
       <Filter>kinematic</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\projectile\ProjectileMoveComponent.cpp">
+    <ClCompile Include="src\jampx\projectile\ProjectileComponent.cpp">
       <Filter>projectile</Filter>
     </ClCompile>
     <ClCompile Include="src\jampx\kinematic\KinematicDrivers.cpp">
@@ -108,6 +108,22 @@
     <ClCompile Include="src\jampx\geometry\Bezier.cpp">
       <Filter>geometry\curve</Filter>
     </ClCompile>
+    <ClCompile Include="src\jampx\character\PlayerControllerComponent.cpp">
+      <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\character\AIControllerComponent.cpp">
+      <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\character\AIDecisionModels.cpp">
+      <Filter>character</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\CharacterBody.cpp">
+      <Filter>px</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\RigidBody.cpp">
+      <Filter>px</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jampx\actor\KinematicRigidBehavior.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\jampx\PhysicsWorld.h">
@@ -132,9 +148,6 @@
       <Filter>prefab</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\prefab\PrefabAssetCreator.h">
-      <Filter>prefab</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\prefab\PrefabAssets.h">
       <Filter>prefab</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\prefab\PrefabDocument.h">
@@ -167,7 +180,7 @@
     <ClInclude Include="include\jampx\character\CharacterMotor.h">
       <Filter>character</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\character\CharacterMovementComponent.h">
+    <ClInclude Include="include\jampx\character\LocomotionComponent.h">
       <Filter>character</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\character\CharacterMovementTypes.h">
@@ -197,13 +210,13 @@
     <ClInclude Include="include\jampx\character\CharacterFilter.h">
       <Filter>character</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\kinematic\KinematicMoveComponent.h">
+    <ClInclude Include="include\jampx\kinematic\KinematicDriverComponent.h">
       <Filter>kinematic</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\kinematic\IKinematicDriver.h">
       <Filter>kinematic</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\projectile\ProjectileMoveComponent.h">
+    <ClInclude Include="include\jampx\projectile\ProjectileComponent.h">
       <Filter>projectile</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\kinematic\KinematicCommon.h">
@@ -233,6 +246,31 @@
     <ClInclude Include="include\jampx\PhysicsAsset.h">
       <Filter>prefab</Filter>
     </ClInclude>
+    <ClInclude Include="include\jampx\character\PlayerControllerComponent.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\AIControllerComponent.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\IAIDecisionModel.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\ICharacterController.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\character\AIDecisionModels.h">
+      <Filter>character</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\CharacterBody.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\RigidBody.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\IRigidBehavior.h">
+      <Filter>px</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\actor\KinematicRigidBehavior.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="schema\physics_prefab.schema.json">

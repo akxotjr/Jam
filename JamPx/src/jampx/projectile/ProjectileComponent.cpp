@@ -1,16 +1,16 @@
 #include "pch.h"
-#include "jampx/projectile/ProjectileMoveComponent.h"
+#include "jampx/projectile/ProjectileComponent.h"
 
 
 namespace jam::px
 {
-	ProjectileMoveComponent::ProjectileMoveComponent(const ProjectileMoveConfig& cfg, const Vec3& initialVel)
+	ProjectileComponent::ProjectileComponent(const ProjectileConfig& cfg, const Vec3& initialVel)
 		: m_config(cfg)
 	{
 		m_state.velocity = initialVel;
 	}
 
-	ProjectileHitResult ProjectileMoveComponent::Tick(float dt, PxScene* scene, PxRigidDynamic* actor, uint16 teamId)
+	ProjectileHitResult ProjectileComponent::Tick(float dt, PxScene* scene, PxRigidDynamic* actor, uint16 teamId)
 	{
 		ProjectileHitResult result{};
 		if (!scene || !actor) return result;

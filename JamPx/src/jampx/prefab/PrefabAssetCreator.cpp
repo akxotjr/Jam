@@ -1,11 +1,11 @@
 ﻿#include "pch.h"
 #include "jampx/prefab/PrefabAssetCreator.h"
-#include "jampx/prefab/PrefabAssets.h"
+#include "jampx/PhysicsAsset.h"
 
 #include <fstream>
 
 
-namespace jam::px::prefab
+namespace jam::px
 {
 	namespace
 	{
@@ -25,7 +25,7 @@ namespace jam::px::prefab
 		}
 	}
 
-	PxMaterial* PrefabAssetCreator::CreateMaterial(const PrefabMaterialDef& def)
+	PxMaterial* PrefabAssetCreator::CreateMaterial(const MaterialDef& def)
 	{
 		auto* mat = PX_PHYSICS->createMaterial(def.staticFriction, def.dynamicFriction, def.restitution);
 		if (!mat) throw std::runtime_error("createMaterial failed");
@@ -61,7 +61,7 @@ namespace jam::px::prefab
 		return physics->createConvexMesh(input);
 	}
 
-	PxShape* PrefabAssetCreator::CreatePrimitiveShape(const PrefabShapeDef& def, const PxMaterial& material)
+	PxShape* PrefabAssetCreator::CreatePrimitiveShape(const ShapeDef& def, const PxMaterial& material)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics || !def.material)
@@ -71,19 +71,19 @@ namespace jam::px::prefab
 
 		switch (def.type)
 		{
-		case eShapeType::BOX:
-			shape = physics->createShape(PxBoxGeometry(def.boxHalfExtents), material);
+		case eShapeType::Box:
+			shape = physics->createShape(PxBoxGeometry(def.halfExtents), material);
 			break;
 
-		case eShapeType::SPHERE:
-			shape = physics->createShape(PxSphereGeometry(def.sphereRadius), material);
+		case eShapeType::Sphere:
+			shape = physics->createShape(PxSphereGeometry(def.radius), material);
 			break;
 
-		case eShapeType::CAPSULE:
-			shape = physics->createShape(PxCapsuleGeometry(def.capsuleRadius, def.capsuleHalfHeight), material);
+		case eShapeType::Capsule:
+			shape = physics->createShape(PxCapsuleGeometry(def.radius, def.halfHeight), material);
 			break;
 
-		case eShapeType::PLANE:
+		case eShapeType::Plane:
 			shape = physics->createShape(PxPlaneGeometry(), material);
 			break;
 
@@ -96,7 +96,7 @@ namespace jam::px::prefab
 		return shape;
 	}
 
-	PxShape* PrefabAssetCreator::CreateTriangleMeshShape(const PrefabShapeDef& def, const PxMaterial& material, PxTriangleMesh* mesh)
+	PxShape* PrefabAssetCreator::CreateTriangleMeshShape(const ShapeDef& def, const PxMaterial& material, PxTriangleMesh* mesh)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
@@ -112,7 +112,7 @@ namespace jam::px::prefab
 		return shape;
 	}
 
-	PxShape* PrefabAssetCreator::CreateConvexMeshShape(const PrefabShapeDef& def, const PxMaterial& material, PxConvexMesh* mesh)
+	PxShape* PrefabAssetCreator::CreateConvexMeshShape(const ShapeDef& def, const PxMaterial& material, PxConvexMesh* mesh)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
@@ -130,7 +130,7 @@ namespace jam::px::prefab
 	}
 
 
-	PxRigidActor* PrefabAssetCreator::CreateRigidActor(const PrefabTemplateDef& def, const std::vector<PxShape*>& shapes)
+	PxRigidActor* PrefabAssetCreator::CreateRigidActor(const ActorTemplateDef& def, const std::vector<PxShape*>& shapes)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
@@ -146,7 +146,7 @@ namespace jam::px::prefab
 
 		case eBodyKind::RIGID_DYNAMIC:
 		{
-			PxRigidDynamic* dyn = physics->createRigidDynamic(PxTransform(PxIdentity));
+			PxRigidDynamic* dyn = physics->createRigidDynamic(PxTransform(physx::PxIdentity));
 			if (!dyn) return nullptr;
 
 			dyn->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !def.dynamic.useGravity);

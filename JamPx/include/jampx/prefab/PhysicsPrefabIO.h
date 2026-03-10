@@ -4,7 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json-schema.hpp>
 
-namespace jam::px::prefab
+namespace jam::px
 {
 	struct PhysicsPrefabAsset;
 

@@ -3,12 +3,12 @@
 
 namespace jam::px
 {
-	class KinematicMoveComponent
+	class KinematicDriverComponent
 	{
 	public:
-		explicit KinematicMoveComponent(std::unique_ptr<IKinematicDriver> driver);
+		explicit KinematicDriverComponent(std::unique_ptr<IKinematicDriver> driver);
 
-		Transform				Tick(float dt);
+		PxTransform				Tick(float dt);
 		bool					IsDone() const;
 
 		IKinematicDriver*		GetDriver() { return m_driver.get(); }

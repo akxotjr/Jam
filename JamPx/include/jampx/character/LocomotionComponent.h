@@ -1,17 +1,17 @@
 ﻿#pragma once
 
-#include <jampx/api/PhysicsTypes.h>
 
+#include "jampx/character/CharacterMovementTypes.h"
 #include "jampx/character/IAccelerator.h"
 #include "jampx/character/CharacterMotor.h"
 #include "jampx/character/ExternalMoveAccumulator.h"
 
 namespace jam::px
 {
-    class CharacterMovementComponent
+    class LocomotionComponent
     {
     public:
-        explicit CharacterMovementComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox);
+        explicit LocomotionComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox);
 
         void                            SetConfig(const CharacterMoveConfig& cfg) { m_cfg = cfg; }
         const CharacterMoveConfig&      GetConfig() const { return m_cfg; }
@@ -24,7 +24,7 @@ namespace jam::px
         void                            GetCharacterState(CharacterState& state) const;
 
         void                            Teleport(const Vec3& pos);
-
+                 
     private:
         void                            UpdateJumpTimers(float dt);
         

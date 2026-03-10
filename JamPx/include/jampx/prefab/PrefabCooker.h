@@ -1,9 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <nlohmann/json.hpp>
 
-namespace jam::px::prefab
+namespace jam::px
 {
 	using nlohmann::json;
 
@@ -24,4 +24,4 @@ namespace jam::px::prefab
 		static void CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvcPath);
 	};
 
-}
+} // namespace jam::px
