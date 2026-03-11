@@ -9,7 +9,7 @@ namespace jam::px
 		{
 			DefaultQueryPolicy policy{};
 			policy.selfActor = selfActor;
-			return QueryFilterCallbackT<>{ policy, k_LOSQueryHitTypeMap };
+			return QueryFilterCallbackT<>{ policy, k_ProjectileQueryHitTypeMap };
 		}
 
 		float ComputeAutoSphereRadius(const PxRigidDynamic* actor)
@@ -123,14 +123,6 @@ namespace jam::px
 		return fd;
 	}
 
-	void ProjectileComponent::InitializeFromActorIfNeeded(const PxRigidDynamic* actor)
-	{
-		if (m_state.started || !actor)
-			return;
-
-		m_state.position = ToPx(actor->getGlobalPose().p);
-		m_state.started  = true;
-	}
 
 	void ProjectileComponent::IntegrateMotion(float dt, const PxVec3& sceneGravity, Vec3& outDisp)
 	{

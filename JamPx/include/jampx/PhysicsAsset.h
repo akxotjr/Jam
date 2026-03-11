@@ -6,8 +6,8 @@
 
 #include "jampx/PhysicsFilter.h"
 
-#include "jampx/kinematic/KinematicCommon.h"
-#include "jampx/projectile/ProjectileComponent.h"
+#include "jampx/actor/rigid/kinematic/KinematicCommon.h"
+#include "jampx/actor/rigid/projectile/ProjectileComponent.h"
 
 
 namespace jam::px

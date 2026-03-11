@@ -246,6 +246,14 @@ namespace jam::px
         .other      = PxQueryHitType::eNONE
     };
 
+    static constexpr QueryHitTypeMap k_ProjectileQueryHitTypeMap{
+        .world      = PxQueryHitType::eBLOCK,
+        .character  = PxQueryHitType::eBLOCK,
+        .hitbox     = PxQueryHitType::eBLOCK,
+        .trigger    = PxQueryHitType::eNONE,
+        .other      = PxQueryHitType::eNONE,
+    };
+
     struct QueryEvaluateContext
     {
         const RequestQueryFD&   rqfd;        // 쿼리 요청 측 FD (category-mask, meta, id, flags)
