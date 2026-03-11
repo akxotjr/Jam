@@ -318,21 +318,21 @@ namespace jam::px
             if (!PassQueryCategory(rawSfd.word0, fd.word0))
                 return PxQueryHitType::eNONE;
 
-            const RequestQueryFD    req = RequestQueryFD::FromPx(fd);
+            const RequestQueryFD    reqFD = RequestQueryFD::FromPx(fd);
             const QueryFD           shapeFD = QueryFD::FromPx(rawSfd);
 
-            if (!PassChannelAndSublayer(shapeFD.meta, req.meta))
+            if (!PassChannelAndSublayer(shapeFD.meta, reqFD.meta))
                 return PxQueryHitType::eNONE;
 
             // --- 정책 의미적 판단 ---
-            const QueryEvaluateContext ctx{ req, shapeFD, shape, actor };
+            const QueryEvaluateContext ctx{ reqFD, shapeFD, shape, actor };
 
             if (!policy.AcceptCandidate(ctx))
                 return PxQueryHitType::eNONE;
 
             // --- HitType 결정 ---
-            const eQueryHitMapMode mode = GetHitMapMode(req.flags);
-            if (mode == eQueryHitMapMode::AllTouch) return PxQueryHitType::eTOUCH;
+            const eQueryHitMapMode mode = GetHitMapMode(reqFD.flags);
+            if (mode == eQueryHitMapMode::AllTouch)  return PxQueryHitType::eTOUCH;
             if (mode == eQueryHitMapMode::AllBlock)  return PxQueryHitType::eBLOCK;
 
             return hitTypeMap.For(rawSfd.word0);
@@ -353,7 +353,7 @@ namespace jam::px
                 return PxQueryHitType::eNONE;
 
             const eQueryHitMapMode mode = GetHitMapMode(rqfd.flags);
-            if (mode == eQueryHitMapMode::AllTouch) return PxQueryHitType::eTOUCH;
+            if (mode == eQueryHitMapMode::AllTouch)  return PxQueryHitType::eTOUCH;
             if (mode == eQueryHitMapMode::AllBlock)  return PxQueryHitType::eBLOCK;
 
             return hitTypeMap.For(raw.word0);

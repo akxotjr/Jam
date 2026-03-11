@@ -1,65 +1,109 @@
 ﻿#include "pch.h"
 #include "jampx/actor/rigid/projectile/ProjectileComponent.h"
 
-
 namespace jam::px
 {
 	namespace
 	{
-		static QueryFilterCallbackT<> MakeDefaultQueryCallback()
+		QueryFilterCallbackT<> MakeDefaultQueryCallback(const PxRigidActor* selfActor)
 		{
-			return QueryFilterCallbackT<>{ DefaultQueryPolicy{}, k_LOSQueryHitTypeMap };
+			DefaultQueryPolicy policy{};
+			policy.selfActor = selfActor;
+			return QueryFilterCallbackT<>{ policy, k_LOSQueryHitTypeMap };
 		}
 
-		static bool SweepWithActorShape(
-			PxScene* scene,
-			PxRigidDynamic* actor,
-			const PxTransform& pose,
+		float ComputeAutoSphereRadius(const PxRigidDynamic* actor)
+		{
+			if (!actor) return 1.0f;
+
+			const PxBounds3 bounds = actor->getWorldBounds(1.0f);
+			const float r = bounds.getExtents().magnitude();
+			return (r > EPSILON) ? r : 1.0f;
+		}
+
+		float ComputeExpansion(float dist)
+		{
+			// 설정 필드가 아직 없으므로, 이동 거리 기반의 보수적 팽창값 사용
+			return physx::PxMax(0.01f, dist * 0.1f);
+		}
+
+		bool SweepWithActorShape(
+			const PxScene* scene,
+			const PxRigidDynamic* actor,
+			const PxTransform& actorPose,
 			const PxVec3& unitDir,
 			float dist,
+			float inflation,
 			const PxQueryFilterData& fd,
 			PxQueryFilterCallback* cb,
-			PxSweepBuffer& outBuf)
+			OUT PxSweepBuffer& buf)
 		{
 			if (!scene || !actor)
 				return false;
 
 			PxShape* shape = nullptr;
 			const bool hasShape = actor->getNbShapes() > 0 && actor->getShapes(&shape, 1) > 0 && shape != nullptr;
-			if (!hasShape)
-				return false;
+			if (!hasShape) return false;
 
-			return scene->sweep(
-				shape->getGeometry().getType(),
-				pose,
-				unitDir,
-				dist,
-				outBuf,
-				PxHitFlag::eDEFAULT,
-				fd,
-				cb);
+			const PxGeometryHolder geom = shape->getGeometry();
+			const PxTransform shapePose = actorPose.transform(shape->getLocalPose());
+
+			return scene->sweep(geom.any(), shapePose, unitDir, dist, buf, PxHitFlag::eDEFAULT, fd, cb, nullptr, inflation);
 		}
 
-		static bool RaycastFallback(
-			PxScene* scene,
+		bool SweepWithSphere(
+			const PxScene* scene,
+			const PxTransform& pose,
+			const PxVec3& unitDir,
+			float dist,
+			float radius,
+			const PxQueryFilterData& fd,
+			PxQueryFilterCallback* cb,
+			OUT PxSweepBuffer& buf)
+		{
+			if (!scene) return false;
+
+			const PxSphereGeometry sphereGeom(physx::PxMax(radius, 0.01f));
+			return scene->sweep(sphereGeom, pose, unitDir, dist, buf, PxHitFlag::eDEFAULT, fd, cb);
+		}
+
+		bool RaycastFallback(
+			const PxScene* scene,
 			const PxTransform& pose,
 			const PxVec3& unitDir,
 			float dist,
 			const PxQueryFilterData& fd,
 			PxQueryFilterCallback* cb,
-			PxRaycastBuffer& outBuf)
+			OUT PxRaycastBuffer& buf)
 		{
-			if (!scene)
+			if (!scene) return false;
+
+			return scene->raycast(pose.p, unitDir, dist, buf, PxHitFlag::eDEFAULT, fd, cb);
+		}
+
+		bool WriteSweepHit(const PxSweepBuffer& buf, OUT ProjectileHitResult& result)
+		{
+			if (!buf.hasBlock)
 				return false;
 
-			return scene->raycast(
-				pose.p,
-				unitDir,
-				dist,
-				outBuf,
-				PxHitFlag::eDEFAULT,
-				fd,
-				cb);
+			result.hit		= true;
+			result.position	= ToPx(buf.block.position);
+			result.normal	= ToPx(buf.block.normal);
+			result.hitId	= GetObjectId(buf.block.actor);
+			return true;
+		}
+
+		bool WriteRayHit(const PxRaycastBuffer& buf, OUT ProjectileHitResult& result)
+		{
+			if (!buf.hasBlock)
+				return false;
+
+			result.hit		= true;
+			result.position	= ToPx(buf.block.position);
+			result.normal	= ToPx(buf.block.normal);
+			result.hitId	= GetObjectId(buf.block.actor);
+
+			return true;
 		}
 	}
 
@@ -69,13 +113,23 @@ namespace jam::px
 		m_state.velocity = m_config.motion.initialVelocity;
 	}
 
-	void ProjectileComponent::InitializeFromActorIfNeeded(PxRigidDynamic* actor)
+	RequestQueryFD ProjectileComponent::BuildRuntimeRequestFd(uint16 teamId, const PxRigidActor* selfActor) const
+	{
+		RequestQueryFD fd = m_config.hit.requestFd;
+		fd.id = PackedId32::Make(teamId, 0, 0);
+
+		if (selfActor) fd.flags |= RequestQueryFlag::IGNORE_SELF_ACTOR;
+
+		return fd;
+	}
+
+	void ProjectileComponent::InitializeFromActorIfNeeded(const PxRigidDynamic* actor)
 	{
 		if (m_state.started || !actor)
 			return;
 
 		m_state.position = ToPx(actor->getGlobalPose().p);
-		m_state.started = true;
+		m_state.started  = true;
 	}
 
 	void ProjectileComponent::IntegrateMotion(float dt, const PxVec3& sceneGravity, Vec3& outDisp)
@@ -93,6 +147,12 @@ namespace jam::px
 		{
 			const Vec3 gravity = ToPx(sceneGravity) * m_config.motion.gravityScale;
 			m_state.velocity += gravity * dt;
+			outDisp = m_state.velocity * dt;
+			break;
+		}
+		case eProjectileMotionModel::Homing:
+		{
+			// 현재 config/state에 target 정보가 없어 안전하게 Linear로 동작
 			outDisp = m_state.velocity * dt;
 			break;
 		}
@@ -120,90 +180,113 @@ namespace jam::px
 		return false;
 	}
 
-	PxQueryFilterData ProjectileComponent::BuildQueryFilterData(uint16 teamId) const
-	{
-		RequestQueryFlag::Flags reqFlags = RequestQueryFlag::NONE;
-
-		if (m_config.hit.ignoreTriggers)
-			reqFlags |= RequestQueryFlag::IGNORE_TRIGGERS;
-		if (m_config.hit.ignoreSameTeam)
-			reqFlags |= RequestQueryFlag::IGNORE_SAME_TEAM;
-
-		RequestQueryFD reqFD = MakeRequestQueryFD(
-			m_config.hit.queryMask,
-			0,
-			QuerySublayer::Default,
-			0,
-			teamId,
-			0,
-			0,
-			reqFlags);
-
-		return MakePxQueryFilterData(reqFD);
-	}
 
 	bool ProjectileComponent::QueryHit(
-		PxScene* scene,
-		PxRigidDynamic* actor,
+		const PxScene* scene,
+		const PxRigidDynamic* actor,
 		const PxTransform& pose,
 		const Vec3& disp,
-		uint16 teamId,
-		ProjectileHitResult& outResult) const
+		OUT ProjectileHitResult& result) const
 	{
 		const float dist = disp.Magnitude();
 		if (!scene || !actor || dist < EPSILON)
 			return false;
 
-		const Vec3  normDir = disp * (1.f / dist);
+		const Vec3 normDir = disp * (1.f / dist);
 		const PxVec3 pxDir = ToPhysX(normDir);
 
-		const PxQueryFilterData fd = BuildQueryFilterData(teamId);
-		auto cb = MakeDefaultQueryCallback();
+		const PxQueryFilterData fd = MakePxQueryFilterData(m_config.hit.requestFd);
+		auto cb = MakeDefaultQueryCallback(actor);
 
-		bool hit = false;
+		const bool  tryRayFallback   = m_config.hit.fallbackRaycast;
+		const float baseSphereRadius = ComputeAutoSphereRadius(actor);
+		const float expansion		 = ComputeExpansion(dist);
 
-		if (m_config.hit.model == eProjectileHitModel::ShapeSweep && m_config.hit.useShapeSweep)
+		switch (m_config.hit.model)
 		{
-			PxSweepBuffer buf;
-			hit = SweepWithActorShape(scene, actor, pose, pxDir, dist, fd, &cb, buf);
-			if (hit && buf.hasBlock)
-			{
-				outResult.hit = true;
-				outResult.position = ToPx(buf.block.position);
-				outResult.normal = ToPx(buf.block.normal);
-				outResult.hitId = GetObjectId(buf.block.actor);
-				return true;
-			}
-		}
-
-		if (m_config.hit.fallbackRaycast)
+		case eProjectileHitModel::RaycastFallback:
 		{
 			PxRaycastBuffer buf;
-			hit = RaycastFallback(scene, pose, pxDir, dist, fd, &cb, buf);
-			if (hit && buf.hasBlock)
-			{
-				outResult.hit = true;
-				outResult.position = ToPx(buf.block.position);
-				outResult.normal = ToPx(buf.block.normal);
-				outResult.hitId = GetObjectId(buf.block.actor);
+			if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, buf) && WriteRayHit(buf, result))
 				return true;
+			break;
+		}
+		case eProjectileHitModel::ShapeSweep:
+		{
+			if (m_config.hit.useShapeSweep)
+			{
+				PxSweepBuffer buf;
+				if (SweepWithActorShape(scene, actor, pose, pxDir, dist, 0.f, fd, &cb, buf) && WriteSweepHit(buf, result))
+					return true;
 			}
+
+			if (tryRayFallback)
+			{
+				PxRaycastBuffer buf;
+				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, buf) && WriteRayHit(buf, result))
+					return true;
+			}
+			break;
+		}
+		case eProjectileHitModel::SphereSweep:
+		{
+			PxSweepBuffer buf;
+			if (SweepWithSphere(scene, pose, pxDir, dist, baseSphereRadius, fd, &cb, buf) && WriteSweepHit(buf, result))
+				return true;
+
+			if (tryRayFallback)
+			{
+				PxRaycastBuffer rb;
+				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
+					return true;
+			}
+			break;
+		}
+		case eProjectileHitModel::ExpandingShapeSweep:
+		{
+			if (m_config.hit.useShapeSweep)
+			{
+				PxSweepBuffer buf;
+				if (SweepWithActorShape(scene, actor, pose, pxDir, dist, expansion, fd, &cb, buf) && WriteSweepHit(buf, result))
+					return true;
+			}
+
+			if (tryRayFallback)
+			{
+				PxRaycastBuffer rb;
+				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
+					return true;
+			}
+			break;
+		}
+		case eProjectileHitModel::ExpandingSphereSweep:
+		{
+			PxSweepBuffer buf;
+			if (SweepWithSphere(scene, pose, pxDir, dist, baseSphereRadius + expansion, fd, &cb, buf) && WriteSweepHit(buf, result))
+				return true;
+
+			if (tryRayFallback)
+			{
+				PxRaycastBuffer rb;
+				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
+					return true;
+			}
+			break;
+		}
+		default:
+			break;
 		}
 
 		return false;
 	}
 
-	ProjectileHitResult ProjectileComponent::Tick(float dt, PxScene* scene, PxRigidDynamic* actor, uint16 teamId)
+	ProjectileHitResult ProjectileComponent::Tick(float dt, const PxScene* scene, PxRigidDynamic* actor)
 	{
 		ProjectileHitResult result{};
 		if (!scene || !actor || dt <= 0.f)
 			return result;
 
-		InitializeFromActorIfNeeded(actor);
-
 		const PxTransform pose = actor->getGlobalPose();
-
-		// actor pose가 외부에서 수정됐을 가능성에 맞춰 동기화
 		m_state.position = ToPx(pose.p);
 
 		Vec3 disp = Vec3::Zero();
@@ -212,20 +295,26 @@ namespace jam::px
 		const float dist = disp.Magnitude();
 		if (dist < EPSILON)
 		{
-			// 움직임이 거의 없어도 lifetime은 흐름
 			CheckLifetime(result);
 			return result;
 		}
 
-		if (QueryHit(scene, actor, pose, disp, teamId, result))
+		if (QueryHit(scene, actor, pose, disp, result))
+		{
+			if (result.hit)
+			{
+				m_state.traveledDist += (result.position - m_state.position).Magnitude();
+				m_state.position	  = result.position;
+			}
 			return result;
+		}
 
-		// 이동 적용
 		PxTransform newPose = pose;
 		newPose.p += ToPhysX(disp);
+
 		actor->setKinematicTarget(newPose);
 
-		m_state.position += disp;
+		m_state.position	 += disp;
 		m_state.traveledDist += dist;
 
 		CheckLifetime(result);

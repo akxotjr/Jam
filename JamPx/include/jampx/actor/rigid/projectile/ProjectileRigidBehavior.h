@@ -11,17 +11,15 @@ namespace jam::px
 		explicit ProjectileRigidBehavior(std::unique_ptr<ProjectileComponent> projectile);
 		~ProjectileRigidBehavior() override = default;
 
-		void		Tick(RigidBody& body, float dt) override;
-		eActorType	GetActorType() const override { return eActorType::Projectile; }
+		void						Tick(RigidBody& body, float dt) override;
+		eActorType					GetActorType() const override { return eActorType::Projectile; }
 
 		// --- result ---
-		const ProjectileHitResult& GetLastHitResult() const { return m_lastHitResult; }
+		const ProjectileHitResult&	GetLastHitResult() const { return m_lastHitResult; }
 		bool                        IsTerminated()     const { return m_lastHitResult.IsTerminal(); }
 
 	private:
-		std::unique_ptr<ProjectileComponent> m_projectile;
-
-		uint16                                  m_teamId = 0;
+		std::unique_ptr<ProjectileComponent>	m_projectile    = nullptr;
 		ProjectileHitResult                     m_lastHitResult = {};
 	};
 

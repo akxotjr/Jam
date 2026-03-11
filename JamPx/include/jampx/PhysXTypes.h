@@ -25,6 +25,7 @@ namespace jam::px
 	using PxMat33					= physx::PxMat33;
 	using PxMat44					= physx::PxMat44;
 
+	using PxBounds3					= physx::PxBounds3;
 
 	// ---- foundation / core ----
 
@@ -75,6 +76,8 @@ namespace jam::px
 	using PxPlaneGeometry 			= physx::PxPlaneGeometry;
 	using PxTriangleMeshGeometry 	= physx::PxTriangleMeshGeometry;
 	using PxConvexMeshGeometry 		= physx::PxConvexMeshGeometry;
+
+	using PxGeometryHolder			= physx::PxGeometryHolder;
 
 
 	// ---- query / filter ----

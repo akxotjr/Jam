@@ -3,27 +3,28 @@
 
 namespace jam::px
 {
-	enum class eProjectileMotionModel : uint8_t
+	enum class eProjectileMotionModel : uint8
 	{
 		Linear,
 		Ballistic,
-		// Homing, // 나중에 확장
+		Homing
 	};
 
-	enum class eProjectileHitModel : uint8_t
+	enum class eProjectileHitModel : uint8
 	{
 		RaycastFallback,   // shape 없으면 raycast
 		ShapeSweep,        // actor shape 기반 sweep, 실패 시 fallback 가능
-		// SphereSweep,     // 나중에 확장
+		SphereSweep,	   
+		ExpandingShapeSweep,
+		ExpandingSphereSweep,
 	};
+
 
 	struct ProjectileMotionConfig
 	{
-		eProjectileMotionModel	model = eProjectileMotionModel::Ballistic;
+		eProjectileMotionModel	model			= eProjectileMotionModel::Ballistic;
 		Vec3					initialVelocity = Vec3::Zero();
-
-		// scene gravity 사용 기준. Y-up 전제여도 벡터로 들고 있으면 확장하기 편함.
-		float					gravityScale = 1.f;
+		float					gravityScale	= 1.f;  // scene gravity 사용 기준.
 	};
 
 	struct ProjectileHitConfig
@@ -33,11 +34,13 @@ namespace jam::px
 		bool				useShapeSweep = true;
 		bool				fallbackRaycast = true;
 
-		bool				ignoreTriggers = true;
-		bool				ignoreSameTeam = true;
-
-		QueryCategory::Flags queryMask =
-			QueryCategory::WORLD | QueryCategory::CHARACTER | QueryCategory::HITBOX;
+		RequestQueryFD		requestFd = MakeRequestQueryFD(
+			QueryCategory::WORLD | QueryCategory::CHARACTER | QueryCategory::HITBOX,
+			0,
+			QuerySublayer::Default,
+			0,
+			0, 0, 0,
+			RequestQueryFlag::IGNORE_TRIGGERS | RequestQueryFlag::IGNORE_SAME_TEAM);
 	};
 
 	struct ProjectileLifetimeConfig
@@ -48,29 +51,29 @@ namespace jam::px
 
 	struct ProjectileConfig
 	{
-		ProjectileMotionConfig	motion = {};
-		ProjectileHitConfig		hit = {};
+		ProjectileMotionConfig		motion	 = {};
+		ProjectileHitConfig			hit		 = {};
 		ProjectileLifetimeConfig	lifetime = {};
 	};
 
 	struct ProjectileState
 	{
-		Vec3		position = Vec3::Zero();
-		Vec3		velocity = Vec3::Zero();
-		float		age = 0.f;
-		float		traveledDist = 0.f;
-		bool		started = false;
+		Vec3		position			= Vec3::Zero();
+		Vec3		velocity			= Vec3::Zero();
+		float		age					= 0.f;
+		float		traveledDist		= 0.f;
+		bool		started				= false;
 	};
 
 	struct ProjectileHitResult
 	{
-		bool		hit = false;
-		bool		maxRangeReached = false;
-		bool		maxLifetimeReached = false;
+		bool		hit					= false;
+		bool		maxRangeReached		= false;
+		bool		maxLifetimeReached	= false;
 
-		Vec3		position = Vec3::Zero();
-		Vec3		normal = Vec3::Zero();
-		ObjectId	hitId = INVALID_OBJ_ID;
+		Vec3		position			= Vec3::Zero();
+		Vec3		normal				= Vec3::Zero();
+		ObjectId	hitId				= INVALID_OBJ_ID;
 
 		bool IsTerminal() const
 		{
@@ -84,30 +87,32 @@ namespace jam::px
 	public:
 		explicit ProjectileComponent(const ProjectileConfig& cfg);
 
-		ProjectileHitResult Tick(float dt, PxScene* scene, PxRigidDynamic* actor, uint16 teamId);
+		ProjectileHitResult			Tick(float dt, const PxScene* scene, PxRigidDynamic* actor);
 
-		const ProjectileConfig& GetConfig() const { return m_config; }
+		const ProjectileConfig&		GetConfig() const { return m_config; }
+		const ProjectileState&		GetState() const { return m_state; }
+		void						SetState(const ProjectileState& state) { m_state = state; }
 
-		const ProjectileState& GetState() const { return m_state; }
-		void SetState(const ProjectileState& state) { m_state = state; }
+		const RequestQueryFD&		GetRequestFd() const { return m_config.hit.requestFd; }
+		RequestQueryFD&				EditRequestFd() { return m_config.hit.requestFd; }
+		void						SetRequestFd(const RequestQueryFD& fd) { m_config.hit.requestFd = fd; }
 
-	private:
-		void InitializeFromActorIfNeeded(PxRigidDynamic* actor);
-		void IntegrateMotion(float dt, const PxVec3& sceneGravity, Vec3& outDisp);
-		bool CheckLifetime(ProjectileHitResult& outResult) const;
-
-		PxQueryFilterData BuildQueryFilterData(uint16 teamId) const;
-		bool QueryHit(
-			PxScene* scene,
-			PxRigidDynamic* actor,
-			const PxTransform& pose,
-			const Vec3& disp,
-			uint16 teamId,
-			ProjectileHitResult& outResult) const;
+		RequestQueryFD				BuildRuntimeRequestFd(uint16 teamId, const PxRigidActor* selfActor) const;
 
 	private:
-		ProjectileConfig	m_config = {};
-		ProjectileState		m_state = {};
+		void						IntegrateMotion(float dt, const PxVec3& sceneGravity, OUT Vec3& outDisp);
+		bool						CheckLifetime(OUT ProjectileHitResult& outResult) const;
+
+		bool						QueryHit(
+										const PxScene* scene,
+										const PxRigidDynamic* actor,
+										const PxTransform& pose,
+										const Vec3& disp,
+										OUT ProjectileHitResult& result) const;
+
+	private:
+		ProjectileConfig			m_config	= {};
+		ProjectileState				m_state		= {};
 	};
 
 } // namespace jam::px
