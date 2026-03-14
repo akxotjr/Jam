@@ -7,9 +7,10 @@
 
 #include "jampx/third_party/tinygltf_impl.h"
 
-#include "jampx/api/PhysicsTypes.h"
-#include "jampx/api/IPhysicsJobBridge.h"
-#include "jampx/api/IPhysicsFacade.h"
+#include "jampx/PhysicsTypes.h"
+#include "jampx/IPhysicsFacade.h"
+#include "jampx/IPhysicsJobBridge.h"
+
 
 #include "jampx/PhysXTypes.h"
 #include "jampx/PhysicsUtils.h"

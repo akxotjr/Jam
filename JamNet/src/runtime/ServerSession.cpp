@@ -238,37 +238,43 @@ namespace jam::net
 
 		SpawnParams params{};
 
+		params.spawnId		= req.spawn_req_id;
 		params.owner		= req.owner_user_id;
 		params.controller	= req.controller_user_id;
 		params.desc.prefab	= key;
-		params.spawnId		= req.spawn_req_id;
-		params.desc.teamId	= req.team_id;
-		params.desc.partId	= req.part_id;
-		
-		if (req.initial_char_state)
-		{
-			px::CharacterState cs{};
-			if (!UnpackCharacterFull160(req.initial_char_state->data0(), req.initial_char_state->data1(), req.initial_char_state->data2(), cs))
-			{
-				res.success = false;
-				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
-				return;
-			}
+		params.desc.team	= static_cast<uint16>(req.team_id);
+		params.desc.part	= static_cast<uint8>(req.part_id);
+		params.desc.role	= static_cast<uint8>(req.role_id);
 
-			params.desc.cs = cs;
+		px::SpawnOverrideMask::Flag overrideMask{ req.override_mask };
+
+		if (px::IsRigidOverrideMask(overrideMask))
+		{
+			px::RigidSpawnOverrides overrides{};
+			overrides.mask = overrideMask;
+
+			if (overrideMask.has_any(px::SpawnOverrideMask::LINEAR_VEL) && req.linear_vel)
+				overrides.linearVelocity = px::Vec3{ req.linear_vel->x(), req.linear_vel->y(), req.linear_vel->z() };
+			if (overrideMask.has_any(px::SpawnOverrideMask::ANGULAR_VEL) && req.angular_vel)
+				overrides.angularVelocity = px::Vec3{ req.angular_vel->x(), req.angular_vel->y(), req.angular_vel->z() };
+			if (overrideMask.has_any(px::SpawnOverrideMask::LINEAR_DAMP))
+				overrides.linearDamping = req.linear_damping;
+			if (overrideMask.has_any(px::SpawnOverrideMask::ANGULAR_DAMP))
+				overrides.angularDamping = req.angular_damping;
+
+			params.desc.overrides = overrides;
 		}
-
-		if (req.initial_rigid_state)
+		else
 		{
-			px::RigidState rs{};
-			if (!UnpackRigidFull192(req.initial_rigid_state->data0(), req.initial_rigid_state->data1(), req.initial_rigid_state->data2(), rs))
-			{
-				res.success = false;
-				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
-				return;
-			}
+			px::CharacterSpawnOverrides overrides{};
+			overrides.mask = overrideMask;
 
-			params.desc.rs = rs;
+			if (overrideMask.has_any(px::SpawnOverrideMask::VIEW_YAW))
+				overrides.yaw = req.yaw;
+			if (overrideMask.has_any(px::SpawnOverrideMask::VIEW_PITCH))
+				overrides.pitch = req.pitch;
+
+			params.desc.overrides = overrides;
 		}
 
 		const auto self = static_pointer_cast<ServerUdpSession>(shared_from_this());

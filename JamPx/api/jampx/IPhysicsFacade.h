@@ -1,7 +1,13 @@
 ﻿#pragma once
+#include <jambase/JamTypes.h>
 
-#include "jampx/api/PhysicsTypes.h"
-#include "jampx/api/IPhysicsJobBridge.h"
+
+#include "jampx/PhysicsTypes.h"
+#include "jampx/IPhysicsJobBridge.h"
+
+#include <vector>
+#include <string>
+
 
 namespace jam::px
 {
@@ -25,6 +31,9 @@ namespace jam::px
 		virtual PhysicsHandle	Spawn(ObjectId id, const SpawnDesc& desc) = 0;
 		virtual void			Despawn(ObjectId id) = 0;
 
+		virtual eBodyType		GetBodyType(ObjectId id) const = 0;
+		virtual eBodyType		FindBodyType(PrefabKey key) const = 0;
+
 		virtual eMotionType		GetMotionType(ObjectId id) const = 0;
 		virtual eMotionType		FindMotionType(PrefabKey key) const = 0;
 
@@ -40,13 +49,10 @@ namespace jam::px
 		/// @note  내부적으로 sublayer=1 (LOS) 쿼리를 사용하며 ShapeQuery::NO_LOS_BLOCK 플래그를 존중함
 		virtual bool			RaycastLOS(const Vec3& from, const Vec3& to) const = 0;
 
-		virtual PhysicsHandle	SpawnProjectile(ObjectId id, const ProjectileSpawnDesc& desc) = 0;
-		virtual void			DespawnProjectile(ObjectId id) = 0;
 
 		virtual HitscanResult	Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId = 0) const = 0;
 
 
-		virtual std::vector<SimEvent> ConsumeSimEvents() = 0;
 		virtual std::vector<ObjectId> PopActiveList() = 0;
 
 	};

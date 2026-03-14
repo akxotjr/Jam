@@ -30,15 +30,15 @@ namespace jam::px
         PxCapsuleController*            GetController() const { return m_controller; }
         PxRigidActor*                   GetHitbox() const { return m_hitbox; }
         LocomotionComponent*            GetMover() const { return m_mover.get(); }
-        eBodyType                       GetBodyType() const { return eBodyType::Rigid; }
+        eBodyType                       GetBodyType() const { return eBodyType::Character; }
 
     private:
         PxCapsuleController*                    m_controller        = nullptr;   // non-owning
         PxRigidActor*                           m_hitbox            = nullptr;   // non-owning
 
         CharacterState                          m_state             = {};
-        std::unique_ptr<LocomotionComponent>    m_mover             = nullptr;
         std::unique_ptr<ICharacterController>   m_brain             = nullptr;
+        std::unique_ptr<LocomotionComponent>    m_mover             = nullptr;
 	};
 
 

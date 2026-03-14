@@ -5,8 +5,8 @@
 #include "jamnet/sync/replication/ClientReplicationSystem.h"
 #include "jamnet/sync/networld/ClientNetWorld.h"
 
-#include <PhysicsTypes.h>
-#include <IPhysicsFacade.h>
+#include <jampx/PhysicsTypes.h>
+#include <jampx/IPhysicsFacade.h>
 
 #include "jamnet/sync/replication/NetWorldContext.h"
 
@@ -46,32 +46,46 @@ namespace jam::net
 
         px::SpawnDesc desc{};
         desc.prefab      = pk->key;
-        desc.isKinematic = !isLocal;
+		desc.spawnSrc    = px::eSpawnSource::Network;
+		desc.team = 0;	// TODO: team/part/role 정보가 필요한 경우 NetActorComponents에 추가하여 설정
+		desc.part = 0;
+		desc.role = 0;
 
         if (auto* cs = m_world.try_get<px::CharacterState>(e))
         {
-            desc.cs = *cs;
+            desc.pose       = px::Transform{ .p = cs->pos, .q = px::Quat::Identity() };
+            desc.overrides  = px::CharacterSpawnOverrides{
+                .mask   = px::SpawnOverrideMask::VIEW_YAW | px::SpawnOverrideMask::VIEW_PITCH,
+                .yaw    = cs->facingYaw,
+                .pitch  = cs->facingPitch
+			};
         }
         else if (auto* rs = m_world.try_get<px::RigidState>(e))
         {
-            desc.rs = *rs;
+			desc.pose = px::Transform{ .p = rs->pose.p, .q = rs->pose.q };
+            desc.overrides = px::RigidSpawnOverrides{
+                .mask               = px::SpawnOverrideMask::LINEAR_VEL | px::SpawnOverrideMask::ANGULAR_VEL | px::SpawnOverrideMask::LINEAR_DAMP | px::SpawnOverrideMask::ANGULAR_DAMP,
+                .linearVelocity     = rs->linVel,
+                .angularVelocity    = rs->angVel,
+                .linearDamping      = 0.0f,	// 서버에서 리플리케이션 시점의 감쇠값을 알 수 없으므로 일단 0으로 스폰, 이후 서버 상태로 보정
+                .angularDamping     = 0.0f,
+			};
         }
 
         const px::PhysicsHandle h = m_physics->Spawn(id, desc);
         if (!h.IsValid()) return;
 
-        const px::eBodyKind kind = m_physics->GetBodyKind(id);
-        if (kind == px::eBodyKind::NONE) return;
-        m_world.emplace_or_replace<NetActorBodyKind>(e, NetActorBodyKind{ kind });
+		const px::eBodyType bodyType = desc.IsCharacter() ? px::eBodyType::Character : px::eBodyType::Rigid;
+        m_world.emplace_or_replace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
 
-        if (px::IsCharacterBody(kind))
+        if (bodyType == px::eBodyType::Character)
         {
             m_world.emplace_or_replace<CharacterPhysicalBody>(e, CharacterPhysicalBody{ h });
 
             if (isLocal)
             {
-                m_world.emplace_or_replace<PlayerInputState>(e);
-                m_world.emplace_or_replace<PlayerTag>(e);
+                m_world.emplace_or_replace<LocalInputState>(e);
+                m_world.emplace_or_replace<LocalCharacterTag>(e);
             }
         }
         else
@@ -125,15 +139,15 @@ namespace jam::net
 
     void ClientPhysicsSystem::PredictCurrentFrame()
     {
-        entt::entity player = GetPlayerEntity(m_world);
+        entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null) return;
 
-        const InputCmd currentInput = m_world.get<PlayerInputState>(player).currentInput;
+        const InputCmd currentInput = m_world.get<LocalInputState>(player).currentInput;
 
         const float mag = m_visualPosOffset.Magnitude();
 		if (mag > px::EPSILON)
         {
-            entt::entity e = GetPlayerEntity(m_world);
+            entt::entity e = GetLocalEntity(m_world);
             if (e != entt::null && m_world.valid(e))
             {
                 const float alpha = std::clamp(m_config.smoothCorrectionAlpha, 0.0f, 1.0f);
@@ -163,35 +177,27 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        const entt::entity localEntity = GetPlayerEntity(m_world);
+        const entt::entity local = GetLocalEntity(m_world);
 
-        auto view = m_world.view<NetIdentity, NetActorBodyKind>();
+        auto view = m_world.view<NetIdentity, NetActorBodyType>();
         for (auto e : view)
         {
             const px::ObjectId id = MakeObjectId(e);
-            const auto kind = view.get<NetActorBodyKind>(e).body;
+            const auto bodyType = view.get<NetActorBodyType>(e).body;
 
-            if (e == localEntity)
+            if (e == local)
             {
                 // [로컬 엔티티] PhysX(예측 결과) -> ECS 상태로 동기화
-                if (px::IsCharacterBody(kind))
-                {
-                    auto& state = m_world.get<px::CharacterState>(e);
-                    JAM_ASSERT(m_physics->GetCharacterState(id, state))
+                auto& state = m_world.get<px::CharacterState>(e);
+                JAM_ASSERT(m_physics->GetCharacterState(id, state))
 
-                        // 시각적 보간 오프셋 적용
-                	state.pos += m_visualPosOffset;
-                }
-                else
-                {
-                    auto& state = m_world.get<px::RigidState>(e);
-                    JAM_ASSERT(m_physics->GetRigidState(id, state))
-                }
+                    // 시각적 보간 오프셋 적용
+                state.pos += m_visualPosOffset;
             }
             else
             {
                 // [리모트 엔티티] ECS 상태(서버 리플리케이션/보간 결과) -> PhysX로 동기화
-                if (px::IsCharacterBody(kind))
+                if (bodyType == px::eBodyType::Character)
                 {
                     if (auto* state = m_world.try_get<px::CharacterState>(e))
                         m_physics->SetCharacterState(id, *state);
@@ -207,7 +213,7 @@ namespace jam::net
 
     void ClientPhysicsSystem::Reconcile(const ServerState& serverState)
     {
-        entt::entity player = GetPlayerEntity(m_world);
+        entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null || !m_physics) return;
 
         const px::ObjectId id = MakeObjectId(player);
@@ -272,7 +278,7 @@ namespace jam::net
         if (!m_physics)
             return;
 
-        const entt::entity player = GetPlayerEntity(m_world);
+        const entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null) return;
 
         const px::ObjectId id = MakeObjectId(player);
@@ -282,10 +288,10 @@ namespace jam::net
 
     void ClientPhysicsSystem::ReplayInputs(uint32 fromSeq)
     {
-        entt::entity player = GetPlayerEntity(m_world);
+        entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null) return;
 
-        auto& inputState = m_world.get<PlayerInputState>(player);
+        auto& inputState = m_world.get<LocalInputState>(player);
         uint32 lastSeq = fromSeq;
 
         for (const auto& cmd : inputState.unackedInputs)
@@ -301,7 +307,7 @@ namespace jam::net
 
     void ClientPhysicsSystem::ApplyInput(const InputCmd& cmd)
     {
-        entt::entity player = GetPlayerEntity(m_world);
+        entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null || !m_world.valid(player) || !m_physics)
             return;
 
@@ -335,7 +341,7 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        entt::entity player = GetPlayerEntity(m_world);
+        entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null) return;
 
         const px::ObjectId id = MakeObjectId(player);
@@ -375,7 +381,7 @@ namespace jam::net
 
     px::CharacterState* ClientPhysicsSystem::GetLocalCharacterState() const
     {
-        entt::entity player = GetPlayerEntity(m_world);
+        entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null)
             return nullptr;
         return m_world.try_get<px::CharacterState>(player);

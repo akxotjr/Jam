@@ -205,19 +205,19 @@ namespace jam::px
 
 
     //todo
-    struct RootMotionSource
-    {
-        std::string clipId;
-        float       playbackSpeed = 1.f;
-    };
+    //struct RootMotionSource
+    //{
+    //    std::string clipId;
+    //    float       playbackSpeed = 1.f;
+    //};
 
     //todo
-    struct ScriptTimelineSource
-    {
-        std::string timelineAssetId;
-        float       playbackSpeed   = 1.f;
-        bool        loop            = false;
-    };
+    //struct ScriptTimelineSource
+    //{
+    //    std::string timelineAssetId;
+    //    float       playbackSpeed   = 1.f;
+    //    bool        loop            = false;
+    //};
 
 
 
@@ -226,9 +226,9 @@ namespace jam::px
 	    CurveSource, 
 	    OrbitSource, 
 	    FollowSource,
-	    RootMotionSource,
-	    NetworkPoseSource, 
-	    ScriptTimelineSource
+	    NetworkPoseSource
+		//RootMotionSource,
+	    //ScriptTimelineSource
     >;
 
     struct KinematicDriverConfig

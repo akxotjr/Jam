@@ -141,6 +141,9 @@
     <ClCompile Include="src\jampx\actor\rigid\projectile\ProjectileRigidBehavior.cpp">
       <Filter>02. actor\rigid\projectile</Filter>
     </ClCompile>
+    <ClCompile Include="src\jampx\actor\ActorFactory.cpp">
+      <Filter>02. actor</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\jampx\PhysicsWorld.h">
@@ -182,12 +185,6 @@
     <ClInclude Include="pch.h">
       <Filter>99. pch</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\api\PhysicsTypes.h">
-      <Filter>00. api</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\api\IPhysicsFacade.h">
-      <Filter>00. api</Filter>
-    </ClInclude>
     <ClInclude Include="include\jampx\PhysicsUtils.h">
       <Filter>01. core</Filter>
     </ClInclude>
@@ -196,9 +193,6 @@
     </ClInclude>
     <ClInclude Include="include\jampx\ShardPxCpuDispacter.h">
       <Filter>01. core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\api\IPhysicsJobBridge.h">
-      <Filter>00. api</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\PhysicsSimFilter.h">
       <Filter>01. core</Filter>
@@ -293,12 +287,24 @@
     <ClInclude Include="include\jampx\actor\rigid\projectile\ProjectileRigidBehavior.h">
       <Filter>02. actor\rigid\projectile</Filter>
     </ClInclude>
+    <ClInclude Include="include\jampx\actor\ActorFactory.h">
+      <Filter>02. actor</Filter>
+    </ClInclude>
+    <ClInclude Include="api\jampx\IPhysicsFacade.h">
+      <Filter>00. api</Filter>
+    </ClInclude>
+    <ClInclude Include="api\jampx\IPhysicsJobBridge.h">
+      <Filter>00. api</Filter>
+    </ClInclude>
+    <ClInclude Include="api\jampx\PhysicsTypes.h">
+      <Filter>00. api</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="schema\physics_prefab.schema.json">
       <Filter>97. schema</Filter>
     </None>
-    <None Include="schema\physics_prefab_level.schema.json">
+    <None Include="schema\physics_level.schema.json">
       <Filter>97. schema</Filter>
     </None>
     <None Include="schema\physics_asset.schema.json">

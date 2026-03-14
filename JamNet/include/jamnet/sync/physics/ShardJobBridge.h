@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "IPhysicsJobBridge.h"
+#include <jampx/IPhysicsJobBridge.h>
 
 
 namespace jam::net

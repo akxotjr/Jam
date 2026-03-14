@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "jampx/api/PhysicsTypes.h"
+#include "jampx/PhysicsTypes.h"
 #include "jampx/actor/character/CharacterMovementTypes.h"
 
 namespace jam::px

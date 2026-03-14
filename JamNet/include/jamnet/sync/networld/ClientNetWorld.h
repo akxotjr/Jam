@@ -6,8 +6,7 @@
 #include "jamnet/sync/schema/gen/actor_spawn_generated.h"
 #include "jamnet/sync/schema/gen/actor_control_generated.h"
 
-#include "IPhysicsFacade.h"
-
+#include <jampx/IPhysicsFacade.h>
 
 namespace jam::net
 {

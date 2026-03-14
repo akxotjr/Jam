@@ -12,7 +12,10 @@ namespace jam::px
 		~ProjectileRigidBehavior() override = default;
 
 		void						Tick(RigidBody& body, float dt) override;
+		void						SyncState(RigidBody& body) override;
 		eActorType					GetActorType() const override { return eActorType::Projectile; }
+
+		void						SetTargetResolver(ProjectileTargetResolver resolver);
 
 		// --- result ---
 		const ProjectileHitResult&	GetLastHitResult() const { return m_lastHitResult; }
@@ -21,6 +24,7 @@ namespace jam::px
 	private:
 		std::unique_ptr<ProjectileComponent>	m_projectile    = nullptr;
 		ProjectileHitResult                     m_lastHitResult = {};
+		float									m_lastDt = 0.f;
 	};
 
 

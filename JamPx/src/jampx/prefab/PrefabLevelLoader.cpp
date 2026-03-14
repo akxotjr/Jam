@@ -25,7 +25,7 @@ namespace jam::px
 		for (auto* actor : it->second)
 		{
 			if (!actor) continue;
-			m_physicsWorld->RemoveActor(actor);
+			m_physicsWorld->RemoveRigidActor(actor);
 		}
 
 		it->second.clear();
@@ -42,7 +42,7 @@ namespace jam::px
 			for (auto* actor : actors)
 			{
 				if (!actor) continue;
-				m_physicsWorld->RemoveActor(actor);
+				m_physicsWorld->RemoveRigidActor(actor);
 			}
 		}
 
@@ -50,7 +50,7 @@ namespace jam::px
 		m_layerToPath.clear();
 	}
 
-	void PrefabLevelLoader::SetPhysicsWorld(jam::px::PhysicsWorld* world)
+	void PrefabLevelLoader::SetPhysicsWorld(PhysicsWorld* world)
 	{
 		m_physicsWorld = world;
 	}
@@ -66,10 +66,19 @@ namespace jam::px
 		// 파일=레이어 정책: UnloadLayer/UnloadAll 전까지 append
 		const PhysicsLevelAsset level = PhysicsPrefabIO::LoadLevelAssetFromFile(levelPath);
 
-		auto& spawned = m_layerActors[layer];
-		spawned.reserve(spawned.size() + level.instances.size());
+		// 호출자가 요청한 layer 이름과 동일한 레이어만 로드
+		auto itLayer = std::ranges::find_if(level.layers, [&](const PhysicsLevelLayerDef& l) { return l.name == layer; });
 
-		for (const auto& inst : level.instances)
+		if (itLayer == level.layers.end())
+			throw std::runtime_error("PrefabLevelLoader::Load - layer not found in level: " + layer);
+
+		if (!itLayer->enabled)
+			return;
+
+		auto& spawned = m_layerActors[layer];
+		spawned.reserve(spawned.size() + itLayer->instances.size());
+
+		for (const auto& inst : itLayer->instances)
 		{
 			auto* actor = PHYSICS_PREFAB_REGISTRY.Instantiate(inst);
 			if (!actor)

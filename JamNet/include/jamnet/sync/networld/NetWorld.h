@@ -1,7 +1,7 @@
 ﻿#pragma once
 
+#include <jampx/PhysicsTypes.h>
 
-#include "PhysicsTypes.h"
 #include "jamnet/sync/physics/ShardJobBridge.h"
 
 namespace jam::net

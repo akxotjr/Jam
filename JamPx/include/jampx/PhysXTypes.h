@@ -58,7 +58,8 @@ namespace jam::px
 	using PxActorFlag 				= physx::PxActorFlag;
 	using PxRigidBodyFlags 			= physx::PxRigidBodyFlags;
 	using PxRigidBodyFlag 			= physx::PxRigidBodyFlag;
-
+	using PxRigidDynamicLockFlags	= physx::PxRigidDynamicLockFlags;
+	using PxRigidDynamicLockFlag	= physx::PxRigidDynamicLockFlag;
 
 	// ---- geometry / mesh ----
 

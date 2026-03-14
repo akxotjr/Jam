@@ -18,7 +18,7 @@ namespace jam::px
         uint64                       revision = 0;              // doc가 "의미적으로" 변경될 때마다 증가
         uint64                       builtRevision = ~0ull;     // cachedAsset이 만들어진 revision
 
-	    std::optional<PhysicsPrefabAsset> cachedAsset;  // doc->asset 빌드 결과 캐시(미리보기/PIE 등에 사용)
+	    std::optional<PhysicsAsset>  cachedAsset;               // doc->asset 빌드 결과 캐시(미리보기/PIE 등에 사용)
 
         void Touch() noexcept
         {
@@ -56,8 +56,7 @@ namespace jam::px
         d.dirty = false;
     }
 
-    // doc->asset은 무겁기 때문에 필요할 때만 빌드 + revision으로 캐시
-    static const PhysicsPrefabAsset& GetOrBuildAsset(PrefabDocument& d)
+    static const PhysicsAsset& GetOrBuildAsset(PrefabDocument& d)
     {
         if (!d.cachedAsset.has_value() || d.builtRevision != d.revision)
         {
@@ -139,11 +138,11 @@ namespace jam::px
     // ----------------------------
     struct PrefabLevelDocument
     {
-	    std::filesystem::path     path;
-        json                 doc;
-        bool                 dirty = false;
+	    std::filesystem::path       path;
+        json                        doc;
+        bool                        dirty = false;
 
-        uint64               revision = 0;
+        uint64                      revision = 0;
 
         void Touch() noexcept
         {

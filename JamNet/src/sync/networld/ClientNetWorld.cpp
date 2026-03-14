@@ -104,35 +104,46 @@ namespace jam::net
 
     void ClientNetWorld::RequestSpawnActor(const SpawnParams& params)
     {
-        if (!m_transport || !params.desc.IsValid())
+        if (!m_transport || !params.desc.prefab.IsValid())
             return;
 
         fb::fbSpawnActorReqT req{};
 
-        req.spawn_req_id         = params.spawnId;
-        req.prefab_key           = params.desc.prefab.value;
-        req.owner_user_id        = params.owned ? m_userId : 0;
-		req.controller_user_id   = params.controlled ? m_userId : 0;
-
-        if (params.desc.cs.has_value())
+        req.spawn_req_id        = params.spawnId;
+        req.owner_user_id       = params.owned ? m_userId : 0;
+		req.controller_user_id  = params.controlled ? m_userId : 0;
+        req.prefab_key          = params.desc.prefab.value;
+		req.pos                 = make_unique<fb::fbVec3>(params.desc.pose.p.x, params.desc.pose.p.y, params.desc.pose.p.z);
+		req.rot                 = make_unique<fb::fbQuat>(params.desc.pose.q.x, params.desc.pose.q.y, params.desc.pose.q.z, params.desc.pose.q.w);
+		req.spawn_src           = static_cast<uint32>(params.desc.spawnSrc);
+		req.team_id             = params.desc.team;
+		req.part_id             = params.desc.part;
+		req.role_id             = params.desc.role;
+		
+		if (params.desc.IsRigid())
         {
-            PackedCharacterFull160 packed{};
-            if (!PackCharacterFull160(params.desc.cs.value(), packed))
-                return;
-
-            req.initial_char_state = make_unique<fb::fbCharacterFull160>(packed.data0, packed.data1, packed.data2);
+            const auto& overrides = std::get<px::RigidSpawnOverrides>(params.desc.overrides);
+			req.override_mask = overrides.mask.bits();
+        
+            if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_VEL))
+				req.linear_vel = make_unique<fb::fbVec3>(overrides.linearVelocity.x, overrides.linearVelocity.y, overrides.linearVelocity.z);
+			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_VEL))
+				req.angular_vel = make_unique<fb::fbVec3>(overrides.angularVelocity.x, overrides.angularVelocity.y, overrides.angularVelocity.z);
+			if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_DAMP))
+				req.linear_damping = overrides.linearDamping;
+			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_DAMP))
+				req.angular_damping = overrides.angularDamping;
         }
-        else if (params.desc.rs.has_value())
+        else
         {
-            PackedRigidFull192 packed{};
-            if (!PackRigidFull192(params.desc.rs.value(), packed))
-                return;
+			const auto& overrides = std::get<px::CharacterSpawnOverrides>(params.desc.overrides);
+			req.override_mask = overrides.mask.bits();
 
-            req.initial_rigid_state = make_unique<fb::fbTransformFull>(packed.data0, packed.data1, packed.data2);
+			if (overrides.mask.has_any(px::SpawnOverrideMask::VIEW_YAW))
+				req.yaw = overrides.yaw;
+			if (overrides.mask.has_any(px::SpawnOverrideMask::VIEW_PITCH))
+				req.pitch = overrides.pitch;
         }
-
-        if (params.desc.teamId.has_value()) req.team_id = params.desc.teamId.value();
-        if (params.desc.partId.has_value()) req.part_id = params.desc.partId.value();
 
 		RPCCallOptions opt{ .channel = eChannelType::RELIABLE_ORDERED, .timeout_ns = 10_s };
         m_transport->RPCCallAwaitMember<fb::fbSpawnActorReqT, fb::fbSpawnActorResT>(m_userId, eProtocolType::UDP, std::move(req), opt, this, &ClientNetWorld::OnSpawnActorResponse);
@@ -191,15 +202,15 @@ namespace jam::net
         m_world.emplace<OwnershipTag>(e, OwnershipTag{ owner });
         m_world.emplace<ControlTag>(e, ControlTag{ controller });
 
-        const auto kind = m_physics->GetBodyKind(prefabKey);
-        m_world.emplace<NetActorBodyKind>(e, NetActorBodyKind{ kind });
+        const auto bodyType = m_physics->FindBodyType(prefabKey);
+        m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
 
         m_netIdToEntity.emplace(netId, e);
 
         RenderActorSpawnedEvent event{};
         event.userId    = m_userId;
         event.isLocal   = false;
-        event.objectId       = MakeObjectId(e);
+        event.objectId  = MakeObjectId(e);
 
         GLOBAL_EVENTBUS_PUBLISH(event);
 

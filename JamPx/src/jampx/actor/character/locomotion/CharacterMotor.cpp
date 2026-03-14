@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
-#include "jampx/character/CharacterMotor.h"
+#include "jampx/actor/character/locomotion/CharacterMotor.h"
+#include "jampx/actor/character/locomotion/CharacterFilter.h"
 
 namespace jam::px
 {
@@ -153,7 +154,7 @@ namespace jam::px
 	{
 		if (!m_controller || !m_hitbox) return;
 
-		const PxExtendedVec3 p = m_controller->getPosition();
+		const PxExtendedVec3& p = m_controller->getPosition();
 		const PxTransform tf(toVec3(p));
 
 		m_hitbox->setKinematicTarget(tf);

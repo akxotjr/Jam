@@ -19,8 +19,9 @@ namespace jam::px
 		float		BasisFunc(int32 i, int32 p, float t) const;
 
 	private:
-		uint32					m_degree = 3;
-		mutable vector<float>	m_knots;
+		uint32						m_degree = 3;
+		mutable std::vector<float>	m_knots;
 	};
-}
+
+} // namespace jam::px
 

@@ -16,10 +16,11 @@ namespace jam::px
         IRigidBehavior*                     GetBehavior() const { return m_behavior.get(); }
 
         void                                Tick(float dt);
+        void                                SyncState(RigidBody& body);
 
         // --- state ---
-        const RigidState&                   GetState() const { return m_state; }
-        void                                SetState(const RigidState& s) { m_state = s; }
+        RigidState                          GetState() const;
+        void                                SetState(const RigidState& s, bool kinematicLike);
 
         // --- accessors ---
         PhysicsHandle                       GetPhysicsHandle();

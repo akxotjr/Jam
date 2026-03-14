@@ -67,6 +67,8 @@ namespace jam::px
 		float				proneHeight				= 0.2f;			// absolute
 		float				proneSpeedMultiplier	= 0.0f;
 		bool				holdToProne				= false;		// hold or toggle
+
+		bool operator==(const StanceConfig&) const = default;
 	};
 
 	struct GaitConfig
@@ -82,6 +84,8 @@ namespace jam::px
 		float				sprintAccelMultiplier	= 1.2f;
 		float				sprintMinSpeedToStart;
 		bool				sprintAllowInAir		= false;
+
+		bool operator==(const GaitConfig&) const = default;
 	};
 
 	struct JumpConfig
@@ -90,6 +94,8 @@ namespace jam::px
 		float				coyoteTime			= 0.1f;
 		float				jumpBuffer			= 0.1f;
 		bool				edgeTrigger			= true;
+
+		bool operator==(const JumpConfig&) const = default;
 	};
 
 
@@ -108,6 +114,8 @@ namespace jam::px
 		bool				allowInAir			= true;
 		bool				endOnCollision		= true; 
 		float				steerFactor			= 0.0f;   // 대쉬 중 조향 허용 비율(선택)
+
+		bool operator==(const DashConfig&) const = default;
 	};
 
 	struct DashState
@@ -149,6 +157,9 @@ namespace jam::px
 		GaitConfig			gait;
 		JumpConfig			jump;
 		DashConfig			dash;
+
+
+		bool operator==(const CharacterMoveConfig&) const = default;
 	};
 
 

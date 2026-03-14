@@ -11,7 +11,11 @@ namespace jam::px
 		virtual ~IRigidBehavior() = default;
 
 		virtual void		Tick(RigidBody& body, float dt) = 0;
+		virtual void		SyncState(RigidBody& body) = 0;
+
 		virtual eActorType	GetActorType() const = 0;
+
+		virtual bool		ApplyAuthoritativeState(const RigidState& state) { return false; }
 	};
 
 } // namespace jam::px

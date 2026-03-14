@@ -1,5 +1,5 @@
 ﻿#include "pch.h"
-#include "jampx/character/DefaultQuakeAccelerator.h"
+#include "jampx/actor/character/locomotion/DefaultQuakeAccelerator.h"
 
 
 

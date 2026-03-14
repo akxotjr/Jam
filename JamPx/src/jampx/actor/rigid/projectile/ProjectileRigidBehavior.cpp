@@ -9,6 +9,14 @@ namespace jam::px
 	{
 	}
 
+	void ProjectileRigidBehavior::SetTargetResolver(ProjectileTargetResolver resolver)
+	{
+		if (!m_projectile)
+			return;
+
+		m_projectile->SetTargetResolver(std::move(resolver));
+	}
+
 	void ProjectileRigidBehavior::Tick(RigidBody& body, float dt)
 	{
         if (!m_projectile) return;
@@ -17,16 +25,27 @@ namespace jam::px
         if (!dyn) return;
 
         PxScene* scene = dyn->getScene();
+
+		m_lastDt = dt;
         m_lastHitResult = m_projectile->Tick(dt, scene, dyn);
-
-        // Actor로부터 상태 동기화
-        RigidState state = body.GetState();
-        state.pose   = ToPx(dyn->getGlobalPose());
-        state.linVel = ToPx(dyn->getLinearVelocity());
-        state.angVel = ToPx(dyn->getAngularVelocity());
-
-        body.SetState(state);
 	}
 
+	void ProjectileRigidBehavior::SyncState(RigidBody& body)
+	{
+		auto* dyn = body.GetActor()->is<PxRigidDynamic>();
+		if (!dyn) return;
 
+		RigidState state = body.GetState();
+		const PxTransform prevPose	  = ToPhysX(state.pose);
+		const PxTransform currentPose = dyn->getGlobalPose();
+
+		const PxVec3 linVel = GetLinearVelocity(currentPose.p, prevPose.p, m_lastDt);
+		const PxVec3 angVel = GetAngularVelocity(currentPose.q, prevPose.q, m_lastDt);
+
+		state.pose	 = ToPx(currentPose);
+		state.linVel = ToPx(linVel);
+		state.angVel = ToPx(angVel);
+
+		body.SetState(state, true);
+	}
 } // namespace jam::px

@@ -50,13 +50,15 @@ namespace jam::px
 		return static_cast<ObjectId>(reinterpret_cast<uintptr_t>(actor->userData));
 	}
 
-
-	static PxVec3 GetLinearVelocity(const PxVec3& a, const PxVec3& b, float dt)
+	// a: current, b: previous
+	static PxVec3 GetLinearVelocity(const PxVec3& a, const PxVec3& b, const float dt)
 	{
-
+		if (dt <= 0.f) return PxVec3(physx::PxZero);
+		return (a - b) * (1.0f / dt);
 	}
 
-	static PxVec3 GetAngularVelocity(const PxQuat& a, const PxQuat& b, float dt)
+	// a: current, b: previous
+	static PxVec3 GetAngularVelocity(const PxQuat& a, const PxQuat& b, const float dt)
 	{
 		if (dt <= 0.f) return PxVec3(physx::PxZero);
 
@@ -73,5 +75,53 @@ namespace jam::px
 		return axis * (angle / dt);
 	}
 
+
+	static bool IsNearlyZero(const float v, const float eps = EPSILON)
+	{
+		return std::fabs(v) <= eps;
+	}
+
+	static bool IsNearlyZero(const PxVec3& v, const float eps = EPSILON)
+	{
+		return v.magnitudeSquared() <= eps * eps;
+	}
+
+	static PxVec3 SafeNormalize(const PxVec3& v, const PxVec3& fallback = PxVec3(1.f, 0.f, 0.f))
+	{
+		if (IsNearlyZero(v)) return fallback;
+		return v.getNormalized();
+	}
+
+	static PxVec3 RotateTowards(const PxVec3& fromDir, const PxVec3& toDir, float maxRad)
+	{
+		const PxVec3 fromN = SafeNormalize(fromDir);
+		const PxVec3 toN = SafeNormalize(toDir, fromN);
+
+		const float d = physx::PxClamp(fromN.dot(toN), -1.f, 1.f);
+		const float angle = acosf(d);
+
+		if (angle <= maxRad || angle <= 1e-6f)
+			return toN;
+
+		PxVec3 axis = fromN.cross(toN);
+		if (IsNearlyZero(axis))
+		{
+			axis = fromN.cross(PxVec3(0.f, 1.f, 0.f));
+			if (IsNearlyZero(axis))
+				axis = fromN.cross(PxVec3(1.f, 0.f, 0.f));
+		}
+		axis = SafeNormalize(axis);
+
+		const PxQuat q(maxRad, axis);
+		return SafeNormalize(q.rotate(fromN), fromN);
+	}
+
+	static PxVec3 ClampMagnitude(const PxVec3& v, float maxMag)
+	{
+		const float m = v.magnitude();
+		if (m <= maxMag || m <= EPSILON)
+			return v;
+		return v * (maxMag / m);
+	}
 	
 } // namespace jam::px

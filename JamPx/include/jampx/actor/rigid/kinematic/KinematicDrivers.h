@@ -45,6 +45,7 @@ namespace jam::px
 
     class CurveKinematicDriver : public IKinematicDriver
     {
+    public:
         explicit CurveKinematicDriver(KinematicCommon common, CurveSource src);
 
         PxTransform             Tick(float dt) override;

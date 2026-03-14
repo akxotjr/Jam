@@ -1,9 +1,6 @@
 ﻿#include "pch.h"
 #include "jampx/PhysicsWorld.h"
-
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
-#include "jampx/prefab/PrefabAssetCreator.h"
-
 #include "jampx/actor/character/locomotion/CharacterFilter.h"
 
 namespace jam::px
@@ -43,40 +40,6 @@ namespace jam::px
 		//CharacterControllerHitReport g_characterControllerHitReport;
 
 
-		inline PxRigidActor* CreateCharacterHitboxActor(
-			PxScene& scene,
-			prefab::TemplateHandle handle,
-			const PxTransform& worldPose,
-			void* userData)
-		{
-			const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
-			if (!def) return nullptr;
-
-			if (def->kind != eBodyKind::CHARACTER)
-				return nullptr;
-
-			if (!def->cct.hasHitbox)
-				return nullptr;
-
-			if (def->shapes.empty())
-				return nullptr;
-
-			std::vector<PxShape*> shapes;
-			PHYSICS_PREFAB_REGISTRY.GetShapes(def->shapes, shapes);
-
-			// Kinematic actor로 생성해서 follow할 대상
-			prefab::PrefabTemplateDef hitboxDef{};
-			hitboxDef.kind = eBodyKind::KINEMATIC;
-
-			PxRigidActor* actor = prefab::PrefabAssetCreator::CreateRigidActor(hitboxDef, shapes);
-			if (!actor) return nullptr;
-
-			actor->setGlobalPose(worldPose);
-			actor->userData = userData;
-
-			scene.addActor(*actor);
-			return actor;
-		}
 	}
 
 
@@ -130,15 +93,15 @@ namespace jam::px
 	}
 
 
-	PxRigidActor* PhysicsWorld::CreateActor(TemplateHandle templateHandle, const PxTransform& worldPose, void* userData)
+	PxRigidActor* PhysicsWorld::CreateRigidActor(TemplateHandle tpl, const PxTransform& pose, void* userData)
 	{
 		if (!m_pxScene)
 			return nullptr;
 
-		if (!PHYSICS_PREFAB_REGISTRY.HasTemplate(templateHandle))
+		if (!PHYSICS_PREFAB_REGISTRY.HasTemplate(tpl))
 			return nullptr;
 
-		PxRigidActor* inst = PHYSICS_PREFAB_REGISTRY.Instantiate(templateHandle, worldPose, userData);
+		PxRigidActor* inst = PHYSICS_PREFAB_REGISTRY.Instantiate(tpl, pose, userData);
 		if (!inst) return nullptr;
 
 		JAM_ASSERT(m_pxScene->addActor(*inst))
@@ -146,7 +109,7 @@ namespace jam::px
 		return inst;
 	}
 
-	void PhysicsWorld::RemoveActor(PxRigidActor* actor) const
+	void PhysicsWorld::RemoveRigidActor(PxRigidActor* actor) const
 	{
 		if (!actor || !m_pxScene) return;
 
@@ -154,40 +117,54 @@ namespace jam::px
 		actor->release();
 	}
 
-
-	PxCapsuleController* PhysicsWorld::CreateController(TemplateHandle handle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg)
+	PxCapsuleController* PhysicsWorld::CreateController(const CCTBodyDef& def, const PxVec3& pos, void* userData)
 	{
 		if (!m_controllerManager) return nullptr;
 
-		const ActorTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
-		if (!def) return nullptr;
-
-		if (def->kind != eBodyKind::CHARACTER)
-			return nullptr;
-
-		const prefab::PrefabCCTDef& cct = def->cct;
-
-		outMoveCfg = cct.movement;
-
 		PxCapsuleControllerDesc desc{};
-		desc.upDirection		= PxVec3(0.f, 1.f, 0.f);
-		desc.position			= PxExtendedVec3(pos.x, pos.y, pos.z);
-		desc.radius				= cct.radius;
-		desc.height				= cct.height;
-		desc.material			= PHYSICS_PREFAB_REGISTRY.GetMaterial(cct.material);
-		desc.contactOffset		= cct.contactOffset;
-		desc.stepOffset			= cct.stepOffset;
-		desc.slopeLimit			= cct.slopeLimit;
-		desc.reportCallback		= m_characterReportCB;
-		desc.behaviorCallback	= m_characterBehaviorCB;
-		desc.userData			= userData;
-		
+		desc.upDirection			= PxVec3(0.f, 1.0f, 0.f);
+		desc.position				= PxExtendedVec3(pos.x, pos.y, pos.z);
+		desc.radius					= def.radius;
+		desc.height					= def.height;
+		desc.material				= JAM_PX_MATERIAL(def.material);
+		desc.density				= def.density;
+		desc.userData				= userData;
 
-		if (!desc.isValid())
+		desc.slopeLimit				= def.slopeLimit;
+		desc.invisibleWallHeight	= def.invisibleWallHeight;
+		desc.maxJumpHeight			= def.maxJumpHeight;
+		desc.contactOffset			= def.contactOffset;
+		desc.stepOffset				= def.stepOffset;
+		desc.scaleCoeff				= def.scaleCoeff;
+		desc.volumeGrowth			= def.volumeGrowth;
+
+		if (!desc.isValid()) return nullptr;
+
+		auto* cct = m_controllerManager->createController(desc);
+		if (auto cctType = cct->getType(); cctType != physx::PxControllerShapeType::eCAPSULE)
 			return nullptr;
 
+		return static_cast<PxCapsuleController*>(cct);
+	}
 
-		return static_cast<PxCapsuleController*>(m_controllerManager->createController(desc));
+	PxRigidDynamic* PhysicsWorld::CreateHitbox(const std::vector<ShapeHandle>& shapeHandles, const PxVec3& pos, void* userData)
+	{
+		std::vector<PxShape*> shapes;
+
+		JAM_PX_SHAPES(shapeHandles, shapes);
+
+		PxRigidDynamic* hitbox = PX_PHYSICS->createRigidDynamic(PxTransform(pos));
+		if (!hitbox) return nullptr;
+
+		hitbox->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+
+		for (auto shape : shapes)
+		{
+			hitbox->attachShape(*shape);
+		}
+		m_pxScene->addActor(*hitbox);
+
+		return hitbox;
 	}
 
 	void PhysicsWorld::RemoveController(PxController* controller)
@@ -198,47 +175,6 @@ namespace jam::px
 		controller->release();
 	}
 
-	PhysicsWorld::CreatedCharacter PhysicsWorld::CreateCharacter(TemplateHandle handle, const PxVec3& pos, void* userData)
-	{
-		CreatedCharacter out{};
-
-		if (!m_pxScene || !m_controllerManager) return out;
-
-		const prefab::PrefabTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(handle);
-		if (!def) return out;
-
-		if (def->kind != eBodyKind::CHARACTER)
-			return out;
-
-		const prefab::PrefabCCTDef& cct = def->cct;
-		out.moveCfg = cct.movement;
-
-		PxCapsuleControllerDesc desc{};
-		desc.upDirection = PxVec3(0.f, 1.f, 0.f);
-		desc.position = PxExtendedVec3(pos.x, pos.y, pos.z);
-		desc.radius = cct.radius;
-		desc.height = cct.height;
-		desc.material = PHYSICS_PREFAB_REGISTRY.GetMaterial(cct.material);
-		desc.contactOffset = cct.contactOffset;
-		desc.stepOffset = cct.stepOffset;
-		desc.slopeLimit = cct.slopeLimit;
-		desc.reportCallback = m_characterReportCB;
-		desc.behaviorCallback = m_characterBehaviorCB;
-		desc.userData = userData;
-
-
-		if (!desc.isValid())
-			return out;
-
-		out.controller = static_cast<PxCapsuleController*>(m_controllerManager->createController(desc));
-		if (!out.controller)
-			return out;
-
-		const PxTransform tf(PxVec3(pos.x, pos.y, pos.z));
-		out.hitboxActor = CreateCharacterHitboxActor(*m_pxScene, handle, tf, userData);
-
-		return out;
-	}
 
 	std::vector<SimEvent> PhysicsWorld::ConsumeSimEvents()
 	{

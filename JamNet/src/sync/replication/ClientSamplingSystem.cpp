@@ -47,17 +47,17 @@ namespace jam::net
 				};
 		};
 
-		auto view = m_world.view<NetIdentity, NetActorBodyKind>();
+		auto view = m_world.view<NetIdentity, NetActorBodyType>();
 		samples.actors.reserve(view.size_hint());
 
 		for (auto e : view)
 		{
 			const auto& identity = view.get<NetIdentity>(e);
-			const auto& kind	 = view.get<NetActorBodyKind>(e);
+			const auto& bodyType	 = view.get<NetActorBodyType>(e).body;
 
 			RenderSamplesEvent::ActorSample sample{};
 
-			if (px::IsCharacterBody(kind.body))
+			if (bodyType == px::eBodyType::Character)
 			{
 				auto cs = m_world.get<px::CharacterState>(e);
 

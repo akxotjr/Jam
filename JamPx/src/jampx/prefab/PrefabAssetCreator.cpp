@@ -9,7 +9,7 @@ namespace jam::px
 {
 	namespace
 	{
-		static bool ReadAllBytes(const std::string& path, OUT std::vector<uint8>& out)
+		bool ReadAllBytes(const std::string& path, OUT std::vector<uint8>& out)
 		{
 			std::ifstream f(path, std::ios::binary);
 			if (!f)
@@ -23,6 +23,27 @@ namespace jam::px
 			f.read(reinterpret_cast<char*>(out.data()), size);
 			return true;
 		}
+
+		void ApplyMotionFlags(PxRigidDynamic& dyn, const MotionFlag::Flags flags, bool isKinematic)
+		{
+			dyn.setActorFlag(PxActorFlag::eDISABLE_GRAVITY, flags.has_any(MotionFlag::DISABLE_GRAVITY));
+
+			if (!isKinematic && flags.has_any(MotionFlag::ENABLE_CCD))
+				dyn.setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, true);
+
+			PxRigidDynamicLockFlags lockFlags{};
+			if (flags.has_any(MotionFlag::LOCK_LINEAR_X))  lockFlags |= PxRigidDynamicLockFlag::eLOCK_LINEAR_X;
+			if (flags.has_any(MotionFlag::LOCK_LINEAR_Y))  lockFlags |= PxRigidDynamicLockFlag::eLOCK_LINEAR_Y;
+			if (flags.has_any(MotionFlag::LOCK_LINEAR_Z))  lockFlags |= PxRigidDynamicLockFlag::eLOCK_LINEAR_Z;
+			if (flags.has_any(MotionFlag::LOCK_ANGULAR_X)) lockFlags |= PxRigidDynamicLockFlag::eLOCK_ANGULAR_X;
+			if (flags.has_any(MotionFlag::LOCK_ANGULAR_Y)) lockFlags |= PxRigidDynamicLockFlag::eLOCK_ANGULAR_Y;
+			if (flags.has_any(MotionFlag::LOCK_ANGULAR_Z)) lockFlags |= PxRigidDynamicLockFlag::eLOCK_ANGULAR_Z;
+
+			if (lockFlags)
+				dyn.setRigidDynamicLockFlags(lockFlags);
+		}
+
+
 	}
 
 	PxMaterial* PrefabAssetCreator::CreateMaterial(const MaterialDef& def)
@@ -132,64 +153,76 @@ namespace jam::px
 
 	PxRigidActor* PrefabAssetCreator::CreateRigidActor(const ActorTemplateDef& def, const std::vector<PxShape*>& shapes)
 	{
-		PxPhysics* physics = PHYSICS_CORE.Physics();
-		if (!physics)
+		PxPhysics* physics = PX_PHYSICS;
+		if (!physics) return nullptr;
+
+		if (!def.IsRigid() || def.bodyType != eBodyType::Rigid)
 			return nullptr;
 
-		PxRigidActor* actor = nullptr;
+		const auto& bodyDef = std::get<RigidBodyDef>(def.body);
 
-		switch (def.kind)
+		PxRigidActor* actor = nullptr;
+		switch (def.motionType)
 		{
-		case eBodyKind::RIGID_STATIC:
+		case eMotionType::Static:
 			actor = physics->createRigidStatic(PxTransform(physx::PxIdentity));
 			break;
 
-		case eBodyKind::RIGID_DYNAMIC:
-		{
-			PxRigidDynamic* dyn = physics->createRigidDynamic(PxTransform(physx::PxIdentity));
-			if (!dyn) return nullptr;
-
-			dyn->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !def.dynamic.useGravity);
-			dyn->setLinearDamping(def.dynamic.linearDamping);
-			dyn->setAngularDamping(def.dynamic.angularDamping);
-			dyn->setLinearVelocity(def.dynamic.linearVelocity);
-			dyn->setAngularVelocity(def.dynamic.angularVelocity);
-				
-				
-
-			actor = dyn;
-		}
-		break;
-
-		case eBodyKind::KINEMATIC:
-		{
-			PxRigidDynamic* dyn = physics->createRigidDynamic(PxTransform(PxIdentity));
-			if (!dyn) return nullptr;
-
-			dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
-			actor = dyn;
-		}
-		break;
-
-		case eBodyKind::CHARACTER:
-			return nullptr;
+		case eMotionType::Dynamic:
+		case eMotionType::Kinematic:
+			actor = physics->createRigidDynamic(PxTransform(physx::PxIdentity));
+			break;
 
 		default:
 			return nullptr;
 		}
 
-
 		if (!actor) return nullptr;
 
 		for (PxShape* s : shapes)
 		{
-			if (s) actor->attachShape(*s);
+			if (!s) continue;
+			if (!actor->attachShape(*s))
+			{
+				actor->release();
+				return nullptr;
+			}
+		}
+
+		if (auto* dyn = actor->is<PxRigidDynamic>())
+		{
+			const bool isKinematic = (def.motionType == eMotionType::Kinematic);
+			if (isKinematic)
+				dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+
+			const DynamicBodyDef* dynDef = nullptr;
+			if (bodyDef.dynamic)
+				dynDef = &JAM_PX_DYN_DEF(bodyDef.dynamic);
+
+			if (dynDef)
+			{
+				dyn->setLinearDamping(dynDef->linearDamping);
+				dyn->setAngularDamping(dynDef->angularDamping);
+
+				if (!isKinematic)
+				{
+					dyn->setLinearVelocity(dynDef->linearVelocity);
+					dyn->setAngularVelocity(dynDef->angularVelocity);
+				}
+
+				// dynamic only
+				if (!isKinematic && dynDef->density > 0.f)
+				{
+					physx::PxRigidBodyExt::updateMassAndInertia(*dyn, dynDef->density);
+				}
+			}
+
+			ApplyMotionFlags(*dyn, def.motionFlags, isKinematic);
 		}
 
 #ifdef _DEBUG
 		actor->setActorFlag(PxActorFlag::eVISUALIZATION, true);
 #endif
-
 
 		return actor;
 	}

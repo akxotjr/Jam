@@ -1,10 +1,10 @@
 ﻿#pragma once
 
 
-#include "jampx/character/CharacterMovementTypes.h"
-#include "jampx/character/IAccelerator.h"
-#include "jampx/character/CharacterMotor.h"
-#include "jampx/character/ExternalMoveAccumulator.h"
+#include "jampx/actor/character/CharacterMovementTypes.h"
+#include "jampx/actor/character/locomotion/IAccelerator.h"
+#include "jampx/actor/character/locomotion/CharacterMotor.h"
+#include "jampx/actor/character/locomotion/ExternalMoveAccumulator.h"
 
 namespace jam::px
 {

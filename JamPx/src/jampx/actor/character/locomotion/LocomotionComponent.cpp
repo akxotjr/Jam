@@ -1,6 +1,6 @@
 ﻿#include "pch.h"
-#include "jampx/character/LocomotionComponent.h"
-#include "jampx/character/DefaultQuakeAccelerator.h"
+#include "jampx/actor/character/locomotion/LocomotionComponent.h"
+#include "jampx/actor/character/locomotion/DefaultQuakeAccelerator.h"
 
 #include <algorithm>
 #include <cmath>

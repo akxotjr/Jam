@@ -2,7 +2,7 @@
 #include "NetWorld.h"
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 
-#include <IPhysicsFacade.h>
+#include <jampx/IPhysicsFacade.h>
 
 namespace jam::net
 {

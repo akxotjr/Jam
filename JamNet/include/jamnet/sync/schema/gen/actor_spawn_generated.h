@@ -39,13 +39,22 @@ struct fbDespawnActorResT;
 struct fbSpawnActorReqT : public ::flatbuffers::NativeTable {
   typedef fbSpawnActorReq TableType;
   uint32_t spawn_req_id = 0;
-  uint64_t prefab_key = 0;
   uint64_t owner_user_id = 0;
   uint64_t controller_user_id = 0;
-  std::unique_ptr<jam::net::fb::fbTransformFull> initial_rigid_state{};
-  std::unique_ptr<jam::net::fb::fbCharacterFull160> initial_char_state{};
+  uint64_t prefab_key = 0;
+  std::unique_ptr<jam::net::fb::fbVec3> pos{};
+  std::unique_ptr<jam::net::fb::fbQuat> rot{};
+  uint32_t spawn_src = 0;
   uint32_t team_id = 0;
   uint32_t part_id = 0;
+  uint32_t role_id = 0;
+  uint32_t override_mask = 0;
+  std::unique_ptr<jam::net::fb::fbVec3> linear_vel{};
+  std::unique_ptr<jam::net::fb::fbVec3> angular_vel{};
+  float linear_damping = 0.0f;
+  float angular_damping = 0.0f;
+  float yaw = 0.0f;
+  float pitch = 0.0f;
   fbSpawnActorReqT() = default;
   fbSpawnActorReqT(const fbSpawnActorReqT &o);
   fbSpawnActorReqT(fbSpawnActorReqT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -57,19 +66,25 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbSpawnActorReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_SPAWN_REQ_ID = 4,
-    VT_PREFAB_KEY = 6,
-    VT_OWNER_USER_ID = 8,
-    VT_CONTROLLER_USER_ID = 10,
-    VT_INITIAL_RIGID_STATE = 12,
-    VT_INITIAL_CHAR_STATE = 14,
-    VT_TEAM_ID = 16,
-    VT_PART_ID = 18
+    VT_OWNER_USER_ID = 6,
+    VT_CONTROLLER_USER_ID = 8,
+    VT_PREFAB_KEY = 10,
+    VT_POS = 12,
+    VT_ROT = 14,
+    VT_SPAWN_SRC = 16,
+    VT_TEAM_ID = 18,
+    VT_PART_ID = 20,
+    VT_ROLE_ID = 22,
+    VT_OVERRIDE_MASK = 24,
+    VT_LINEAR_VEL = 26,
+    VT_ANGULAR_VEL = 28,
+    VT_LINEAR_DAMPING = 30,
+    VT_ANGULAR_DAMPING = 32,
+    VT_YAW = 34,
+    VT_PITCH = 36
   };
   uint32_t spawn_req_id() const {
     return GetField<uint32_t>(VT_SPAWN_REQ_ID, 0);
-  }
-  uint64_t prefab_key() const {
-    return GetField<uint64_t>(VT_PREFAB_KEY, 0);
   }
   uint64_t owner_user_id() const {
     return GetField<uint64_t>(VT_OWNER_USER_ID, 0);
@@ -77,11 +92,17 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t controller_user_id() const {
     return GetField<uint64_t>(VT_CONTROLLER_USER_ID, 0);
   }
-  const jam::net::fb::fbTransformFull *initial_rigid_state() const {
-    return GetStruct<const jam::net::fb::fbTransformFull *>(VT_INITIAL_RIGID_STATE);
+  uint64_t prefab_key() const {
+    return GetField<uint64_t>(VT_PREFAB_KEY, 0);
   }
-  const jam::net::fb::fbCharacterFull160 *initial_char_state() const {
-    return GetStruct<const jam::net::fb::fbCharacterFull160 *>(VT_INITIAL_CHAR_STATE);
+  const jam::net::fb::fbVec3 *pos() const {
+    return GetStruct<const jam::net::fb::fbVec3 *>(VT_POS);
+  }
+  const jam::net::fb::fbQuat *rot() const {
+    return GetStruct<const jam::net::fb::fbQuat *>(VT_ROT);
+  }
+  uint32_t spawn_src() const {
+    return GetField<uint32_t>(VT_SPAWN_SRC, 0);
   }
   uint32_t team_id() const {
     return GetField<uint32_t>(VT_TEAM_ID, 0);
@@ -89,16 +110,49 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t part_id() const {
     return GetField<uint32_t>(VT_PART_ID, 0);
   }
+  uint32_t role_id() const {
+    return GetField<uint32_t>(VT_ROLE_ID, 0);
+  }
+  uint32_t override_mask() const {
+    return GetField<uint32_t>(VT_OVERRIDE_MASK, 0);
+  }
+  const jam::net::fb::fbVec3 *linear_vel() const {
+    return GetStruct<const jam::net::fb::fbVec3 *>(VT_LINEAR_VEL);
+  }
+  const jam::net::fb::fbVec3 *angular_vel() const {
+    return GetStruct<const jam::net::fb::fbVec3 *>(VT_ANGULAR_VEL);
+  }
+  float linear_damping() const {
+    return GetField<float>(VT_LINEAR_DAMPING, 0.0f);
+  }
+  float angular_damping() const {
+    return GetField<float>(VT_ANGULAR_DAMPING, 0.0f);
+  }
+  float yaw() const {
+    return GetField<float>(VT_YAW, 0.0f);
+  }
+  float pitch() const {
+    return GetField<float>(VT_PITCH, 0.0f);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_REQ_ID, 4) &&
-           VerifyField<uint64_t>(verifier, VT_PREFAB_KEY, 8) &&
            VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
-           VerifyField<jam::net::fb::fbTransformFull>(verifier, VT_INITIAL_RIGID_STATE, 8) &&
-           VerifyField<jam::net::fb::fbCharacterFull160>(verifier, VT_INITIAL_CHAR_STATE, 8) &&
+           VerifyField<uint64_t>(verifier, VT_PREFAB_KEY, 8) &&
+           VerifyField<jam::net::fb::fbVec3>(verifier, VT_POS, 4) &&
+           VerifyField<jam::net::fb::fbQuat>(verifier, VT_ROT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SPAWN_SRC, 4) &&
            VerifyField<uint32_t>(verifier, VT_TEAM_ID, 4) &&
            VerifyField<uint32_t>(verifier, VT_PART_ID, 4) &&
+           VerifyField<uint32_t>(verifier, VT_ROLE_ID, 4) &&
+           VerifyField<uint32_t>(verifier, VT_OVERRIDE_MASK, 4) &&
+           VerifyField<jam::net::fb::fbVec3>(verifier, VT_LINEAR_VEL, 4) &&
+           VerifyField<jam::net::fb::fbVec3>(verifier, VT_ANGULAR_VEL, 4) &&
+           VerifyField<float>(verifier, VT_LINEAR_DAMPING, 4) &&
+           VerifyField<float>(verifier, VT_ANGULAR_DAMPING, 4) &&
+           VerifyField<float>(verifier, VT_YAW, 4) &&
+           VerifyField<float>(verifier, VT_PITCH, 4) &&
            verifier.EndTable();
   }
   fbSpawnActorReqT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -113,26 +167,53 @@ struct fbSpawnActorReqBuilder {
   void add_spawn_req_id(uint32_t spawn_req_id) {
     fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_SPAWN_REQ_ID, spawn_req_id, 0);
   }
-  void add_prefab_key(uint64_t prefab_key) {
-    fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_PREFAB_KEY, prefab_key, 0);
-  }
   void add_owner_user_id(uint64_t owner_user_id) {
     fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_OWNER_USER_ID, owner_user_id, 0);
   }
   void add_controller_user_id(uint64_t controller_user_id) {
     fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_CONTROLLER_USER_ID, controller_user_id, 0);
   }
-  void add_initial_rigid_state(const jam::net::fb::fbTransformFull *initial_rigid_state) {
-    fbb_.AddStruct(fbSpawnActorReq::VT_INITIAL_RIGID_STATE, initial_rigid_state);
+  void add_prefab_key(uint64_t prefab_key) {
+    fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_PREFAB_KEY, prefab_key, 0);
   }
-  void add_initial_char_state(const jam::net::fb::fbCharacterFull160 *initial_char_state) {
-    fbb_.AddStruct(fbSpawnActorReq::VT_INITIAL_CHAR_STATE, initial_char_state);
+  void add_pos(const jam::net::fb::fbVec3 *pos) {
+    fbb_.AddStruct(fbSpawnActorReq::VT_POS, pos);
+  }
+  void add_rot(const jam::net::fb::fbQuat *rot) {
+    fbb_.AddStruct(fbSpawnActorReq::VT_ROT, rot);
+  }
+  void add_spawn_src(uint32_t spawn_src) {
+    fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_SPAWN_SRC, spawn_src, 0);
   }
   void add_team_id(uint32_t team_id) {
     fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_TEAM_ID, team_id, 0);
   }
   void add_part_id(uint32_t part_id) {
     fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_PART_ID, part_id, 0);
+  }
+  void add_role_id(uint32_t role_id) {
+    fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_ROLE_ID, role_id, 0);
+  }
+  void add_override_mask(uint32_t override_mask) {
+    fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_OVERRIDE_MASK, override_mask, 0);
+  }
+  void add_linear_vel(const jam::net::fb::fbVec3 *linear_vel) {
+    fbb_.AddStruct(fbSpawnActorReq::VT_LINEAR_VEL, linear_vel);
+  }
+  void add_angular_vel(const jam::net::fb::fbVec3 *angular_vel) {
+    fbb_.AddStruct(fbSpawnActorReq::VT_ANGULAR_VEL, angular_vel);
+  }
+  void add_linear_damping(float linear_damping) {
+    fbb_.AddElement<float>(fbSpawnActorReq::VT_LINEAR_DAMPING, linear_damping, 0.0f);
+  }
+  void add_angular_damping(float angular_damping) {
+    fbb_.AddElement<float>(fbSpawnActorReq::VT_ANGULAR_DAMPING, angular_damping, 0.0f);
+  }
+  void add_yaw(float yaw) {
+    fbb_.AddElement<float>(fbSpawnActorReq::VT_YAW, yaw, 0.0f);
+  }
+  void add_pitch(float pitch) {
+    fbb_.AddElement<float>(fbSpawnActorReq::VT_PITCH, pitch, 0.0f);
   }
   explicit fbSpawnActorReqBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -148,21 +229,39 @@ struct fbSpawnActorReqBuilder {
 inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint32_t spawn_req_id = 0,
-    uint64_t prefab_key = 0,
     uint64_t owner_user_id = 0,
     uint64_t controller_user_id = 0,
-    const jam::net::fb::fbTransformFull *initial_rigid_state = nullptr,
-    const jam::net::fb::fbCharacterFull160 *initial_char_state = nullptr,
+    uint64_t prefab_key = 0,
+    const jam::net::fb::fbVec3 *pos = nullptr,
+    const jam::net::fb::fbQuat *rot = nullptr,
+    uint32_t spawn_src = 0,
     uint32_t team_id = 0,
-    uint32_t part_id = 0) {
+    uint32_t part_id = 0,
+    uint32_t role_id = 0,
+    uint32_t override_mask = 0,
+    const jam::net::fb::fbVec3 *linear_vel = nullptr,
+    const jam::net::fb::fbVec3 *angular_vel = nullptr,
+    float linear_damping = 0.0f,
+    float angular_damping = 0.0f,
+    float yaw = 0.0f,
+    float pitch = 0.0f) {
   fbSpawnActorReqBuilder builder_(_fbb);
+  builder_.add_prefab_key(prefab_key);
   builder_.add_controller_user_id(controller_user_id);
   builder_.add_owner_user_id(owner_user_id);
-  builder_.add_prefab_key(prefab_key);
+  builder_.add_pitch(pitch);
+  builder_.add_yaw(yaw);
+  builder_.add_angular_damping(angular_damping);
+  builder_.add_linear_damping(linear_damping);
+  builder_.add_angular_vel(angular_vel);
+  builder_.add_linear_vel(linear_vel);
+  builder_.add_override_mask(override_mask);
+  builder_.add_role_id(role_id);
   builder_.add_part_id(part_id);
   builder_.add_team_id(team_id);
-  builder_.add_initial_char_state(initial_char_state);
-  builder_.add_initial_rigid_state(initial_rigid_state);
+  builder_.add_spawn_src(spawn_src);
+  builder_.add_rot(rot);
+  builder_.add_pos(pos);
   builder_.add_spawn_req_id(spawn_req_id);
   return builder_.Finish();
 }
@@ -349,24 +448,42 @@ inline ::flatbuffers::Offset<fbDespawnActorRes> CreatefbDespawnActorRes(
 
 inline fbSpawnActorReqT::fbSpawnActorReqT(const fbSpawnActorReqT &o)
       : spawn_req_id(o.spawn_req_id),
-        prefab_key(o.prefab_key),
         owner_user_id(o.owner_user_id),
         controller_user_id(o.controller_user_id),
-        initial_rigid_state((o.initial_rigid_state) ? new jam::net::fb::fbTransformFull(*o.initial_rigid_state) : nullptr),
-        initial_char_state((o.initial_char_state) ? new jam::net::fb::fbCharacterFull160(*o.initial_char_state) : nullptr),
+        prefab_key(o.prefab_key),
+        pos((o.pos) ? new jam::net::fb::fbVec3(*o.pos) : nullptr),
+        rot((o.rot) ? new jam::net::fb::fbQuat(*o.rot) : nullptr),
+        spawn_src(o.spawn_src),
         team_id(o.team_id),
-        part_id(o.part_id) {
+        part_id(o.part_id),
+        role_id(o.role_id),
+        override_mask(o.override_mask),
+        linear_vel((o.linear_vel) ? new jam::net::fb::fbVec3(*o.linear_vel) : nullptr),
+        angular_vel((o.angular_vel) ? new jam::net::fb::fbVec3(*o.angular_vel) : nullptr),
+        linear_damping(o.linear_damping),
+        angular_damping(o.angular_damping),
+        yaw(o.yaw),
+        pitch(o.pitch) {
 }
 
 inline fbSpawnActorReqT &fbSpawnActorReqT::operator=(fbSpawnActorReqT o) FLATBUFFERS_NOEXCEPT {
   std::swap(spawn_req_id, o.spawn_req_id);
-  std::swap(prefab_key, o.prefab_key);
   std::swap(owner_user_id, o.owner_user_id);
   std::swap(controller_user_id, o.controller_user_id);
-  std::swap(initial_rigid_state, o.initial_rigid_state);
-  std::swap(initial_char_state, o.initial_char_state);
+  std::swap(prefab_key, o.prefab_key);
+  std::swap(pos, o.pos);
+  std::swap(rot, o.rot);
+  std::swap(spawn_src, o.spawn_src);
   std::swap(team_id, o.team_id);
   std::swap(part_id, o.part_id);
+  std::swap(role_id, o.role_id);
+  std::swap(override_mask, o.override_mask);
+  std::swap(linear_vel, o.linear_vel);
+  std::swap(angular_vel, o.angular_vel);
+  std::swap(linear_damping, o.linear_damping);
+  std::swap(angular_damping, o.angular_damping);
+  std::swap(yaw, o.yaw);
+  std::swap(pitch, o.pitch);
   return *this;
 }
 
@@ -380,13 +497,22 @@ inline void fbSpawnActorReq::UnPackTo(fbSpawnActorReqT *_o, const ::flatbuffers:
   (void)_o;
   (void)_resolver;
   { auto _e = spawn_req_id(); _o->spawn_req_id = _e; }
-  { auto _e = prefab_key(); _o->prefab_key = _e; }
   { auto _e = owner_user_id(); _o->owner_user_id = _e; }
   { auto _e = controller_user_id(); _o->controller_user_id = _e; }
-  { auto _e = initial_rigid_state(); if (_e) _o->initial_rigid_state = std::unique_ptr<jam::net::fb::fbTransformFull>(new jam::net::fb::fbTransformFull(*_e)); }
-  { auto _e = initial_char_state(); if (_e) _o->initial_char_state = std::unique_ptr<jam::net::fb::fbCharacterFull160>(new jam::net::fb::fbCharacterFull160(*_e)); }
+  { auto _e = prefab_key(); _o->prefab_key = _e; }
+  { auto _e = pos(); if (_e) _o->pos = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
+  { auto _e = rot(); if (_e) _o->rot = std::unique_ptr<jam::net::fb::fbQuat>(new jam::net::fb::fbQuat(*_e)); }
+  { auto _e = spawn_src(); _o->spawn_src = _e; }
   { auto _e = team_id(); _o->team_id = _e; }
   { auto _e = part_id(); _o->part_id = _e; }
+  { auto _e = role_id(); _o->role_id = _e; }
+  { auto _e = override_mask(); _o->override_mask = _e; }
+  { auto _e = linear_vel(); if (_e) _o->linear_vel = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
+  { auto _e = angular_vel(); if (_e) _o->angular_vel = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
+  { auto _e = linear_damping(); _o->linear_damping = _e; }
+  { auto _e = angular_damping(); _o->angular_damping = _e; }
+  { auto _e = yaw(); _o->yaw = _e; }
+  { auto _e = pitch(); _o->pitch = _e; }
 }
 
 inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -398,23 +524,41 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(::flatbuffer
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSpawnActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _spawn_req_id = _o->spawn_req_id;
-  auto _prefab_key = _o->prefab_key;
   auto _owner_user_id = _o->owner_user_id;
   auto _controller_user_id = _o->controller_user_id;
-  auto _initial_rigid_state = _o->initial_rigid_state ? _o->initial_rigid_state.get() : nullptr;
-  auto _initial_char_state = _o->initial_char_state ? _o->initial_char_state.get() : nullptr;
+  auto _prefab_key = _o->prefab_key;
+  auto _pos = _o->pos ? _o->pos.get() : nullptr;
+  auto _rot = _o->rot ? _o->rot.get() : nullptr;
+  auto _spawn_src = _o->spawn_src;
   auto _team_id = _o->team_id;
   auto _part_id = _o->part_id;
+  auto _role_id = _o->role_id;
+  auto _override_mask = _o->override_mask;
+  auto _linear_vel = _o->linear_vel ? _o->linear_vel.get() : nullptr;
+  auto _angular_vel = _o->angular_vel ? _o->angular_vel.get() : nullptr;
+  auto _linear_damping = _o->linear_damping;
+  auto _angular_damping = _o->angular_damping;
+  auto _yaw = _o->yaw;
+  auto _pitch = _o->pitch;
   return jam::net::fb::CreatefbSpawnActorReq(
       _fbb,
       _spawn_req_id,
-      _prefab_key,
       _owner_user_id,
       _controller_user_id,
-      _initial_rigid_state,
-      _initial_char_state,
+      _prefab_key,
+      _pos,
+      _rot,
+      _spawn_src,
       _team_id,
-      _part_id);
+      _part_id,
+      _role_id,
+      _override_mask,
+      _linear_vel,
+      _angular_vel,
+      _linear_damping,
+      _angular_damping,
+      _yaw,
+      _pitch);
 }
 
 inline fbSpawnActorResT *fbSpawnActorRes::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

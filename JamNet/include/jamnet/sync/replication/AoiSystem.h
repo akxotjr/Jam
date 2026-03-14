@@ -1,6 +1,6 @@
 #pragma once
-#include "PhysicsTypes.h"
-#include "IPhysicsFacade.h"
+#include <jampx/PhysicsTypes.h>
+#include <jampx/IPhysicsFacade.h>
 
 namespace jam::net
 {

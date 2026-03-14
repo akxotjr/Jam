@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <PhysicsTypes.h>
+#include <jampx/PhysicsTypes.h>
 
 namespace jam::net
 {

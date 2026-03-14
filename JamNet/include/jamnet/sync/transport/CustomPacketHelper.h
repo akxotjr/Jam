@@ -60,11 +60,11 @@ namespace jam::net
     {
         if (isFrameworkCall)
         {
-            JAMNET_ASSERT(IsFrameworkReservedId(id) && "Framework must use reserved Custom Packet IDs (0-15)");
+            JAM_ASSERT(IsFrameworkReservedId(id) && "Framework must use reserved Custom Packet IDs (0-15)");
         }
         else
         {
-            JAMNET_ASSERT(IsApplicationId(id) && "Application must use Custom Packet IDs (16-31)");
+            JAM_ASSERT(IsApplicationId(id) && "Application must use Custom Packet IDs (16-31)");
         }
     }
 #else

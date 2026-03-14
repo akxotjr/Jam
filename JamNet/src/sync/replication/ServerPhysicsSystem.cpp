@@ -30,10 +30,11 @@ namespace jam::net
 		const px::PhysicsHandle h  = m_physics->Spawn(id, desc);
 		if (!h.IsValid()) return;
 
-		const px::eBodyKind kind = m_physics->GetBodyKind(id);
-		m_world.emplace<NetActorBodyKind>(e, NetActorBodyKind{ kind });
+		const px::eBodyType bodyType = desc.IsCharacter() ? px::eBodyType::Character : px::eBodyType::Rigid;
 
-		if (px::IsCharacterBody(kind))
+		m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
+
+		if (bodyType == px::eBodyType::Character)
 		{
 			m_world.emplace<CharacterPhysicalBody>(e, CharacterPhysicalBody{ h });
 			auto& cs = m_world.emplace<px::CharacterState>(e);
@@ -117,10 +118,9 @@ namespace jam::net
 			const entt::entity e = static_cast<entt::entity>(id);
 			if (!m_world.valid(e)) continue;
 
-			const auto* kindComp = m_world.try_get<NetActorBodyKind>(e);
-			if (!kindComp) continue;
+			const auto bodyType = m_world.get<NetActorBodyType>(e).body;
 
-			if (px::IsCharacterBody(kindComp->body))
+			if (bodyType == px::eBodyType::Character)
 			{
 				px::CharacterState cs{};
 				if (m_physics->GetCharacterState(id, cs))
@@ -148,14 +148,14 @@ namespace jam::net
 		if (!m_physics)
 			return;
 
-		auto view = m_world.view<NetIdentity, NetActorBodyKind>();
+		auto view = m_world.view<NetIdentity, NetActorBodyType>();
 
 		for (auto e : view)
 		{
 			const px::ObjectId id = MakeObjectId(e);
-			const auto kind = view.get<NetActorBodyKind>(e).body;
+			const auto bodyType = view.get<NetActorBodyType>(e).body;
 
-			if (px::IsCharacterBody(kind))
+			if (bodyType == px::eBodyType::Character)
 			{
 				px::CharacterState cs{};
 				if (m_physics->GetCharacterState(id, cs))

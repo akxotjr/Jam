@@ -21,19 +21,29 @@ namespace jam::px
 
 	void PhysicsPrefabRegistry::Clear()
 	{
+		// actor 먼저 정리 (shape ref 보유 가능)
+		for (auto& r : m_rigidCache | std::views::values)
+			if (r) r->release();
+		m_rigidCache.clear();
+
 		for (auto& s : m_shapeCache | std::views::values)
 			if (s) s->release();
 		m_shapeCache.clear();
+
+		for (auto& t : m_triMeshCache | std::views::values)
+			if (t) t->release();
+		m_triMeshCache.clear();
+
+		for (auto& c : m_cvxMeshCache | std::views::values)
+			if (c) c->release();
+		m_cvxMeshCache.clear();
 
 		for (auto& m : m_materialCache | std::views::values)
 			if (m) m->release();
 		m_materialCache.clear();
 
-		for (auto& r : m_rigidCache | std::views::values)
-			if (r) r->release();
-		m_rigidCache.clear();
-
 		m_nameToHandle.clear();
+		m_keyToHandle.clear();
 		m_asset = {};
 	}
 
@@ -42,6 +52,9 @@ namespace jam::px
 		Clear();
 
 		m_asset = PhysicsPrefabIO::LoadPrefabAssetFromFile(m_prefabPath);
+
+		m_nameToHandle.clear();
+		m_keyToHandle.clear();
 
 		// material stage
 		for (const auto& [h, matDef] : m_asset.materials)
@@ -78,7 +91,6 @@ namespace jam::px
 		for (const auto& [h, shapeDef] : m_asset.shapes)
 		{
 			PxMaterial* mat = GetMaterial(shapeDef.material);
-
 			PxShape* shape = nullptr;
 
 			if (IsPrimitiveShape(shapeDef.type))
@@ -108,15 +120,18 @@ namespace jam::px
 		for (const auto& [h, tmpDef] : m_asset.templates)
 		{
 			m_nameToHandle[tmpDef.name] = h;
+			m_keyToHandle[fnv1a<uint64>(tmpDef.name)] = h;
 
-			const uint64 key64 = fnv1a<uint64>(tmpDef.name);
-			m_keyToHandle[key64] = h;
+			// Character/Non-rigid는 별도 경로
+			if (!tmpDef.IsRigid())
+				continue;
 
-			if (tmpDef.actorType == eActorType::Character)
-				continue; // 별도 시스템에서 처리
+			const auto& rigidDef = std::get<RigidBodyDef>(tmpDef.body);
+			if (rigidDef.shapes.empty())
+				throw std::runtime_error("rigid template has no shapes: " + tmpDef.name);
 
 			std::vector<PxShape*> shapes;
-			GetShapes(tmpDef.shapes, shapes);
+			GetShapes(rigidDef.shapes, shapes);
 
 			PxRigidActor* actor = PrefabAssetCreator::CreateRigidActor(tmpDef, shapes);
 			if (!actor)
@@ -150,6 +165,18 @@ namespace jam::px
 	{
 		auto it = m_asset.templates.find(h);
 		return it != m_asset.templates.end() ? &it->second : nullptr;
+	}
+
+	eBodyType PhysicsPrefabRegistry::GetBodyType(const PrefabKey key)
+	{
+		if (!key.IsValid()) return eBodyType::None;
+		
+		auto h = FindHandleByKey(key);
+		auto* def = FindTemplateDef(h);
+
+		if (!def) return eBodyType::None;
+
+		return def->bodyType;
 	}
 
 	eMotionType PhysicsPrefabRegistry::GetMotionType(const PrefabKey key)
@@ -204,6 +231,47 @@ namespace jam::px
 			shapes.push_back(GetShape(h));
 	}
 
+	const DynamicBodyDef& PhysicsPrefabRegistry::GetDynamicBodyDef(DynamicBodyHandle h) const
+	{
+		auto it = m_asset.dynBodies.find(h);
+		if (it == m_asset.dynBodies.end())
+			throw std::runtime_error("dynamic body def not resolved");
+		return it->second;
+	}
+
+	const CCTBodyDef& PhysicsPrefabRegistry::GetCCTBodyDef(CCTBodyHandle h) const
+	{
+		auto it = m_asset.cctBodies.find(h);
+		if (it == m_asset.cctBodies.end())
+			throw std::runtime_error("cct body def not resolved");
+		return it->second;
+	}
+
+	const CharacterMoveConfig& PhysicsPrefabRegistry::GetCharacterMoveConfig(CharacterMoveConfigHandle h) const
+	{
+		auto it = m_asset.charMoveConfigs.find(h);
+		if (it == m_asset.charMoveConfigs.end())
+			throw std::runtime_error("character move config not resolved");
+		return it->second;
+	}
+
+	const KinematicDriverConfig& PhysicsPrefabRegistry::GetKinematicDriverConfig(KinematicDriverConfigHandle h) const
+	{
+		auto it = m_asset.kinematicDriverConfigs.find(h);
+		if (it == m_asset.kinematicDriverConfigs.end())
+			throw std::runtime_error("kinematic driver config not resolved");
+		return it->second;
+	}
+
+	const ProjectileConfig& PhysicsPrefabRegistry::GetProjectileConfig(ProjectileConfigHandle h) const
+	{
+		auto it = m_asset.projectileConfigs.find(h);
+		if (it == m_asset.projectileConfigs.end())
+			throw std::runtime_error("projectile config not resolved");
+		return it->second;
+	}
+
+
 	PxRigidActor* PhysicsPrefabRegistry::Instantiate(const PhysicsLevelInstanceDef& inst)
 	{
 		const TemplateHandle h = FindHandleByName(inst.templateName);
@@ -214,14 +282,14 @@ namespace jam::px
 		if (!def)
 			throw std::runtime_error("template def not found. template= " + inst.templateName);
 
-		if (def->spawnPolicy == ePSpawnPolicy::RUNTIME_ONLY)
+		if (def->spawnPolicy == eSpawnPolicy::RuntimeOnly)
 			throw std::runtime_error("template is runtime-only. template= " + inst.templateName);
 
 		const auto it = m_rigidCache.find(h);
 		if (it == m_rigidCache.end() || !it->second)
 			return nullptr;
 
-		PxRigidActor* out = nullptr;
+		PxRigidActor* out	 = nullptr;
 		PxRigidActor* cached = it->second;
 
 		const auto& overrides = inst.overrides;
@@ -239,36 +307,40 @@ namespace jam::px
 
 		if (auto* dyn = out->is<PxRigidDynamic>())
 		{
-			if (overrides.linearVelocity.has_value())  dyn->setLinearVelocity(overrides.linearVelocity.value());
-			if (overrides.angularVelocity.has_value()) dyn->setAngularVelocity(overrides.angularVelocity.value());
-			if (overrides.linearDamping.has_value())   dyn->setLinearDamping(overrides.linearDamping.value());
-			if (overrides.angularDamping.has_value())  dyn->setAngularDamping(overrides.angularDamping.value());
+			const auto& ov = inst.overrides;
+			if (ov.mask.has_any(SpawnOverrideMask::LINEAR_VEL))
+				dyn->setLinearVelocity(ToPhysX(ov.linearVelocity));
+			if (ov.mask.has_any(SpawnOverrideMask::ANGULAR_VEL))
+				dyn->setAngularVelocity(ToPhysX(ov.angularVelocity));
+			if (ov.mask.has_any(SpawnOverrideMask::LINEAR_DAMP))
+				dyn->setLinearDamping(ov.linearDamping);
+			if (ov.mask.has_any(SpawnOverrideMask::ANGULAR_DAMP))
+				dyn->setAngularDamping(ov.angularDamping);
 		}
 
 		return out;
 	}
 
 
-	PxRigidActor* PhysicsPrefabRegistry::Instantiate(TemplateHandle h, const PxTransform& worldPose, void* userData)
+	PxRigidActor* PhysicsPrefabRegistry::Instantiate(TemplateHandle tpl, const PxTransform& pose, void* userData)
 	{
-		const auto it = m_rigidCache.find(h);
+		const auto it = m_rigidCache.find(tpl);
 		if (it == m_rigidCache.end() || !it->second)
 			return nullptr;
 
-		PxRigidActor* out = nullptr;
+		PxRigidActor* out    = nullptr;
 		PxRigidActor* cached = it->second;
 
 		if (auto* sta = cached->is<PxRigidStatic>())
 		{
-			out = PxCloneStatic(*PX_PHYSICS, worldPose, *sta);
+			out = PxCloneStatic(*PX_PHYSICS, pose, *sta);
 		}
 		else if (auto* dyn = cached->is<PxRigidDynamic>())
 		{
-			out = PxCloneDynamic(*PX_PHYSICS, worldPose, *dyn);
+			out = PxCloneDynamic(*PX_PHYSICS, pose, *dyn);
 		}
 
-		if (out)
-			out->userData = userData;
+		if (out) out->userData = userData;
 
 		return out;
 	}

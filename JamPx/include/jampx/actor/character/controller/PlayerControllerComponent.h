@@ -4,16 +4,15 @@
 
 namespace jam::px
 {
-
-
 	class PlayerControllerComponent : public ICharacterController
 	{
 	public:
-		void				SetInput(const CharacterInput& input) { m_input = input; }
-		MoveIntent			BuildIntent(float dt) override;
+		void					SetInput(const CharacterInput& input) { m_input = input; }
+		MoveIntent				BuildIntent(float dt) override;
+		eCharacterControlType	GetType() const override { return eCharacterControlType::Player; }
 
 	private:
-		CharacterInput		m_input = {};
+		CharacterInput			m_input = {};
 	};
 
 

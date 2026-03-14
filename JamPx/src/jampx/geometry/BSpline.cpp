@@ -21,7 +21,7 @@ namespace jam::px
 		const int32 n = static_cast<int32>(m_controlPoints.size());
 		const int32 p = static_cast<int32>(m_degree);
 
-		if (n <= p)   return { PxZero };
+		if (n <= p)   return { physx::PxZero };
 		if (t <= 0.f) return m_controlPoints.front();
 		if (t >= 1.f) return m_controlPoints.back();
 

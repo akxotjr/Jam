@@ -1,10 +1,12 @@
 ﻿#pragma once
 
 #include <jambase/JamTypes.h>
+#include <jambase/EnumUtils.h>
 
 #include <cstdint>
 #include <cmath>
 #include <optional>
+#include <variant>
 
 namespace jam::px
 {
@@ -334,6 +336,7 @@ namespace jam::px
 
 	enum class eBodyType : uint8
 	{
+		None,
 		Rigid,
 		Character,
 	};
@@ -369,13 +372,13 @@ namespace jam::px
 			LOCK_ANGULAR_Z					= 1 << 7,
 		};
 
-		using Flags = FlagsT<Enum>;
+		using Flags = FlagsT<Enum, uint32>;
 	};
 
-	inline void HashAppend(jam::Fnv1a32& h, const MotionFlag::Flags& bodyFlag) noexcept
-	{
-		HashAppend(h, bodyFlag.bits());
-	}
+	//inline void HashAppend(jam::Fnv1a32& h, const MotionFlag::Flags& bodyFlag) noexcept
+	//{
+	//	HashAppend(h, bodyFlag.bits());
+	//}
 
 	struct PhysicsHandle
 	{
@@ -396,15 +399,15 @@ namespace jam::px
 
 	enum class eSpawnSource : uint8
 	{
-		Level = 0,
+		Level	= 0,
 		Runtime = 1,
 		Network = 2,
-		Tool = 3,
+		Tool	= 3,
 	};
 
 	struct SpawnOverrideMask
 	{
-		enum Enum
+		enum Enum : uint32
 		{
 			NONE			= 0,
 			LINEAR_VEL		= 1 << 0,
@@ -416,9 +419,10 @@ namespace jam::px
 			VIEW_PITCH		= 1 << 9,
 		};
 
-		using Flag = FlagsT<Enum>;
+		using Flag = FlagsT<Enum, uint32>;
 	};
-
+	static bool IsRigidOverrideMask(SpawnOverrideMask::Flag mask) noexcept { return mask.has_any(SpawnOverrideMask::LINEAR_VEL | SpawnOverrideMask::ANGULAR_VEL | SpawnOverrideMask::LINEAR_DAMP | SpawnOverrideMask::ANGULAR_DAMP); }
+	static bool IsCharacterOverrideMask(SpawnOverrideMask::Flag mask) noexcept { return mask.has_any(SpawnOverrideMask::VIEW_YAW | SpawnOverrideMask::VIEW_PITCH); }
 
 	struct RigidSpawnOverrides
 	{
@@ -437,7 +441,6 @@ namespace jam::px
 		float				yaw   = 0.0f;
 		float				pitch = 0.0f;
 	};
-
 
 	struct SpawnDesc
 	{
@@ -498,34 +501,12 @@ namespace jam::px
 
 
 
-
-
-	enum class eProjectileKind : uint8
-	{
-		DYN_SIM,		// 0~30   m/s : PxRigidDynamic, PhysX simulate
-		ANALYTIC,		// 30-300 m/s : Kinematic + Manual integration + Sweep CCD
-		HITSCAN,		// 300+   m/s : Instant raycast
-	};
-
-
-	struct ProjectileSpawnDesc
-	{
-		eProjectileKind kind = eProjectileKind::DYN_SIM;
-
-		PrefabKey prefab{};
-		Transform pose{};
-		Vec3 velocity = Vec3::Zero();
-		float gravityScale = 1.f;
-		float maxRange = 1000.f;
-		uint16 teamId = 0;
-	};
-
 	struct HitscanResult
 	{
-		bool hit = false;
-		Vec3 position = Vec3::Zero();
-		Vec3 normal = Vec3::Zero();
-		ObjectId hitId = INVALID_OBJ_ID;
+		bool		hit = false;
+		Vec3		position = Vec3::Zero();
+		Vec3		normal = Vec3::Zero();
+		ObjectId	hitId = INVALID_OBJ_ID;
 	};
 
 

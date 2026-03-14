@@ -2,7 +2,7 @@
 
 #include "jamnet/runtime/matchmaking/IMatchmaker.h"
 
-#include <IPhysicsFacade.h>
+#include <jampx/IPhysicsFacade.h>
 
 namespace jam::net
 {

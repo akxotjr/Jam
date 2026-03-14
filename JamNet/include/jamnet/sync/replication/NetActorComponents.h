@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <PhysicsTypes.h>
+#include <jampx/PhysicsTypes.h>
 
 #include "ReplicationTypes.h"
 
@@ -28,9 +28,9 @@ namespace jam::net
 	};
 
 
-	struct NetActorBodyKind
+	struct NetActorBodyType
 	{
-		px::eBodyKind		body = px::eBodyKind::NONE;
+		px::eBodyType		body = px::eBodyType::Rigid;
 	};
 
 
@@ -87,11 +87,11 @@ namespace jam::net
 		uint64					userId = 0;		// = 0: 조종자 없음. > 0: userId 소유자가 조종권 소유 
 	};
 
-	/// @brief Tag of player(local character. usage only client-side). Local player is unique in NetWorld.
-	struct PlayerTag {};
+	/// @brief Tag of local character (usage only client-side). Local character is unique in NetWorld.
+	struct LocalCharacterTag {};
 
-	/// @brief Input state and history of Local player. 
-	struct PlayerInputState
+	/// @brief Input state and history of Local character. 
+	struct LocalInputState
 	{
 		InputCmd				currentInput{};
 		deque<InputCmd>			unackedInputs;
@@ -101,9 +101,9 @@ namespace jam::net
 
 	// --- helpers ---
 
-	static entt::entity GetPlayerEntity(entt::registry& world)
+	static entt::entity GetLocalEntity(entt::registry& world)
 	{
-		auto view = world.view<PlayerTag>();
+		auto view = world.view<LocalCharacterTag>();
 		return view.empty() ? entt::null : view.front();
 	}
 

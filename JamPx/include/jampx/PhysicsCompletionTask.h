@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "jampx/api/IPhysicsJobBridge.h"
+#include "jampx/IPhysicsJobBridge.h"
 
 namespace jam::px
 {

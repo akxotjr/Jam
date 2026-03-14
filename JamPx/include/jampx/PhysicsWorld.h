@@ -2,7 +2,6 @@
 
 
 #include "jampx/ShardPxCpuDispacter.h"
-#include "jampx/actor/character/CharacterMovementTypes.h"
 
 
 
@@ -30,31 +29,22 @@ namespace jam::px
 		void							BeginSimulate(float elapsed, PxBaseTask* completionTask) const;
 		void							EndSimulate() const;
 
-		PxRigidActor*					CreateActor(TemplateHandle templateHandle, const PxTransform& worldPose, void* userData);
-		void							RemoveActor(PxRigidActor* actor) const;
+		PxRigidActor*					CreateRigidActor(TemplateHandle tpl, const PxTransform& pose, void* userData);
+		void							RemoveRigidActor(PxRigidActor* actor) const;
 
-		PxCapsuleController*			CreateController(TemplateHandle templateHandle, const PxVec3& pos, void* userData, CharacterMoveConfig& outMoveCfg);
+		PxCapsuleController*			CreateController(const CCTBodyDef& def, const PxVec3& pos, void* userData = nullptr);
+		PxRigidDynamic*					CreateHitbox(const std::vector<ShapeHandle>& shapeHandles, const PxVec3& pos, void* userData = nullptr);
 		void							RemoveController(PxController* controller);
-
-	public:
-		struct CreatedCharacter
-		{
-			PxCapsuleController*		controller = nullptr;
-			PxRigidActor*				hitboxActor = nullptr;
-			CharacterMoveConfig			moveCfg{};
-		};
-
-		CreatedCharacter				CreateCharacter(TemplateHandle templateHandle, const PxVec3& pos, void* userData);
 
 		std::vector<SimEvent>			ConsumeSimEvents();
 		std::vector<ObjectId>			ConsumeAdvancdActive();
 
 	private:
-		PxScene*									m_pxScene = nullptr;
-		PxControllerManager*						m_controllerManager = nullptr;
-		std::unique_ptr<SimulationEventCallback>	m_simCallback = nullptr;
+		PxScene*									m_pxScene				= nullptr;
+		PxControllerManager*						m_controllerManager		= nullptr;
+		std::unique_ptr<SimulationEventCallback>	m_simCallback			= nullptr;
 
-		PxUserControllerHitReport*		m_characterReportCB = nullptr;
-		PxControllerBehaviorCallback*	m_characterBehaviorCB = nullptr;
+		PxUserControllerHitReport*					m_characterReportCB		= nullptr;
+		PxControllerBehaviorCallback*				m_characterBehaviorCB	= nullptr;
 	};
 }

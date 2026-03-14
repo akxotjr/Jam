@@ -18,7 +18,7 @@ namespace jam::px
 			std::vector<uint32> indices;
 		};
 
-		static bool WriteAllBytes(const std::string& path, const void* data, size_t size)
+		bool WriteAllBytes(const std::string& path, const void* data, size_t size)
 		{
 			std::ofstream f(path, std::ios::binary);
 			if (!f) return false;
@@ -26,13 +26,7 @@ namespace jam::px
 			return true;
 		}
 
-		static bool FileExists(const std::string& path)
-		{
-			std::ifstream f(path, std::ios::binary);
-			return static_cast<bool>(f);
-		}
-
-		static void EnsureParentDirExists(const std::string& path)
+		void EnsureParentDirExists(const std::string& path)
 		{
 			namespace fs = std::filesystem;
 
@@ -47,7 +41,7 @@ namespace jam::px
 				throw std::runtime_error("failed to create directories: " + parent.string());
 		}
 
-		static bool LoadGltfModel(const std::string& path, OUT tinygltf::Model& outModel, OUT std::string& outErr)
+		bool LoadGltfModel(const std::string& path, OUT tinygltf::Model& outModel, OUT std::string& outErr)
 		{
 			tinygltf::TinyGLTF loader;
 			std::string err, warn;
@@ -68,25 +62,25 @@ namespace jam::px
 			return true;
 		}
 
-		static const tinygltf::Accessor* GetAccessor(const tinygltf::Model& model, int32 idx)
+		const tinygltf::Accessor* GetAccessor(const tinygltf::Model& model, int32 idx)
 		{
 			if (idx < 0 || idx >= static_cast<int>(model.accessors.size())) return nullptr;
 			return &model.accessors[idx];
 		}
 
-		static const tinygltf::BufferView* GetBufferView(const tinygltf::Model& model, int32 idx)
+		const tinygltf::BufferView* GetBufferView(const tinygltf::Model& model, int32 idx)
 		{
 			if (idx < 0 || idx >= static_cast<int>(model.bufferViews.size())) return nullptr;
 			return &model.bufferViews[idx];
 		}
 
-		static const tinygltf::Buffer* GetBuffer(const tinygltf::Model& model, int32 idx)
+		const tinygltf::Buffer* GetBuffer(const tinygltf::Model& model, int32 idx)
 		{
 			if (idx < 0 || idx >= static_cast<int>(model.buffers.size())) return nullptr;
 			return &model.buffers[idx];
 		}
 
-		static PxMat44 MakeNodeLocalMatrix(const tinygltf::Node& n)
+		PxMat44 MakeNodeLocalMatrix(const tinygltf::Node& n)
 		{
 			// matrix 우선
 			if (n.matrix.size() == 16)
@@ -121,7 +115,7 @@ namespace jam::px
 			return M;
 		}
 
-		static void TraverseNodeRecursive(const tinygltf::Model& model, int32 nodeIndex, const PxMat44& parent, const std::function<void(int, const PxMat44&)>& onVisit)
+		void TraverseNodeRecursive(const tinygltf::Model& model, int32 nodeIndex, const PxMat44& parent, const std::function<void(int, const PxMat44&)>& onVisit)
 		{
 			const auto& node = model.nodes[nodeIndex];
 			const PxMat44 local = MakeNodeLocalMatrix(node);
@@ -134,8 +128,7 @@ namespace jam::px
 		}
 
 
-
-		static bool ExtractPositions(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT std::vector<PxVec3>& out, OUT std::string& outErr)
+		bool ExtractPositions(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT std::vector<PxVec3>& out, OUT std::string& outErr)
 		{
 			if (acc.type != TINYGLTF_TYPE_VEC3 || acc.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
 			{
@@ -170,7 +163,7 @@ namespace jam::px
 			return true;
 		}
 
-		static bool ExtractIndices(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT std::vector<uint32_t>& out, OUT std::string& outErr)
+		bool ExtractIndices(const tinygltf::Model& model, const tinygltf::Accessor& acc, OUT std::vector<uint32_t>& out, OUT std::string& outErr)
 		{
 			if (acc.type != TINYGLTF_TYPE_SCALAR) { outErr = "indices accessor must be SCALAR"; return false; }
 
@@ -214,7 +207,7 @@ namespace jam::px
 			return true;
 		}
 
-		static bool ExtractSingleMesh(const std::string& gltfPath, int32 meshIndex, int32 primitiveIndex, OUT ExtractedMesh& out, OUT std::string& outErr)
+		bool ExtractSingleMesh(const std::string& gltfPath, int32 meshIndex, int32 primitiveIndex, OUT ExtractedMesh& out, OUT std::string& outErr)
 		{
 			out = {};
 
@@ -276,7 +269,7 @@ namespace jam::px
 			return true;
 		}
 
-		static bool ExtractMergedSceneMesh(const std::string& gltfPath, OUT ExtractedMesh& out, OUT std::string& outErr)
+		bool ExtractMergedSceneMesh(const std::string& gltfPath, OUT ExtractedMesh& out, OUT std::string& outErr)
 		{
 			out = {};
 
@@ -352,7 +345,7 @@ namespace jam::px
 			return true;
 		}
 
-		static physx::PxCookingParams MakeDefaultCookingParams()
+		physx::PxCookingParams MakeDefaultCookingParams()
 		{
 			PxTolerancesScale scale{};
 			physx::PxCookingParams params(scale);
@@ -361,7 +354,7 @@ namespace jam::px
 			return params;
 		}
 
-		static void DebugMeshStats(const ExtractedMesh& mesh)
+		void DebugMeshStats(const ExtractedMesh& mesh)
 		{
 			PxVec3 mn(FLT_MAX), mx(-FLT_MAX);
 			for (const auto& p : mesh.positions)
@@ -389,7 +382,7 @@ namespace jam::px
 			std::printf("[Cook] maxEdge=%.3f\n", maxEdge);
 		}
 
-		static void DebugWorstTriangle(const ExtractedMesh& mesh)
+		void DebugWorstTriangle(const ExtractedMesh& mesh)
 		{
 			float best = -1.0f;
 			size_t bestT = 0;
@@ -431,7 +424,7 @@ namespace jam::px
 			std::printf("  ic=%u (%.3f %.3f %.3f)\n", ic, c.x, c.y, c.z);
 		}
 
-		static void CookTriangleMeshToPxtri(const physx::PxCookingParams& params, const ExtractedMesh& mesh, const std::string& outPath)
+		void CookTriangleMeshToPxtri(const physx::PxCookingParams& params, const ExtractedMesh& mesh, const std::string& outPath)
 		{
 			DebugMeshStats(mesh);
 			DebugWorstTriangle(mesh);
@@ -458,7 +451,7 @@ namespace jam::px
 				throw std::runtime_error("failed to write: " + outPath);
 		}
 
-		static void CookConvexMeshToPxcvx(const PxCookingParams& params, const ExtractedMesh& mesh, const std::string& outPath)
+		void CookConvexMeshToPxcvx(const PxCookingParams& params, const ExtractedMesh& mesh, const std::string& outPath)
 		{
 			PxConvexMeshDesc desc;
 			desc.points.count = static_cast<PxU32>(mesh.positions.size());
@@ -478,54 +471,6 @@ namespace jam::px
 			if (!WriteAllBytes(outPath, stream.getData(), stream.getSize()))
 				throw std::runtime_error("failed to write: " + outPath);
 		}
-
-		static bool IsTriangleMeshType(const std::string& type)
-		{
-			return type == k_shapeTriangleMesh;
-		}
-
-		static bool IsConvexMeshType(const std::string& type)
-		{
-			return type == k_shapeConvexMesh;
-		}
-
-		static void CookShapeIfMesh(json& shape, const PxCookingParams& params)
-		{
-			const std::string type = shape.value(k_shapeType, "");
-			if (!IsTriangleMeshType(type) && !IsConvexMeshType(type))
-				return;
-
-			if (!shape.contains(k_mesh) || !shape.at(k_mesh).is_object())
-				throw std::runtime_error("mesh shape requires mesh object");
-
-			json& mj = shape.at(k_mesh);
-
-			const std::string src		= mj.value(k_src, "");
-			const int32  meshIndex		= mj.value(k_meshIndex, 0);
-			const int32  primIndex		= mj.value(k_primitiveIndex, 0);
-			const std::string cooked	= mj.value(k_cooked, "");
-
-			if (cooked.empty())
-				throw std::runtime_error("mesh.cooked is required");
-
-			if (src.empty())
-				throw std::runtime_error("mesh.src is required for cooking");
-
-			if (FileExists(cooked))
-				return;
-
-			ExtractedMesh em;
-			std::string err;
-			if (!ExtractSingleMesh(src, meshIndex, primIndex, em, err))
-				throw std::runtime_error(err);
-
-			if (IsTriangleMeshType(type))
-				CookTriangleMeshToPxtri(params, em, cooked);
-			else
-				CookConvexMeshToPxcvx(params, em, cooked);
-		}
-
-
 
 	}
 

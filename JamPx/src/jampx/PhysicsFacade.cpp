@@ -5,93 +5,21 @@
 #include <ranges>
 
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
-#include "jampx/projectile/ProjectileComponent.h"
-
+#include "jampx/actor/ActorFactory.h"
+#include "jampx/actor/character/controller/PlayerControllerComponent.h"
+#include "jampx/actor/rigid/projectile/ProjectileRigidBehavior.h"
 
 namespace jam::px
 {
 	namespace
 	{
 
-
-		inline TemplateHandle ToTemplateHandle(PrefabKey k)
+		TemplateHandle ToTemplateHandle(PrefabKey k)
 		{
 			return PHYSICS_PREFAB_REGISTRY.FindHandleByKey(k);
 		}
 
-		inline MoveIntent ToMoveIntent(const CharacterInput& input)
-		{
-			MoveIntent intent{};
-			intent.moveYaw = input.facingYaw;
-
-			float x = 0.f, y = 0.f;
-
-			if (HasInputFlag(input.inputFlags, INPUT_FORWARD))	y += 1.f;
-			if (HasInputFlag(input.inputFlags, INPUT_BACKWARD))	y -= 1.f;
-			if (HasInputFlag(input.inputFlags, INPUT_LEFT))		x -= 1.f;
-			if (HasInputFlag(input.inputFlags, INPUT_RIGHT))		x += 1.f;
-
-			Vec2 dir = Vec2(x, y);
-			dir.Normalize();
-
-			intent.moveX		 = dir.x;
-			intent.moveY		 = dir.y;
-			intent.moveMag		 = 1.0f;
-
-			intent.gaitRequest	 = HasInputFlag(input.inputFlags, INPUT_SPRINT) ? eGait::Sprint : 
-								   HasInputFlag(input.inputFlags, INPUT_RUN)    ? eGait::Run    : eGait::Walk;
-
-			intent.stanceRequest = HasInputFlag(input.inputFlags, INPUT_PRONE)  ? eStance::Prone :
-								   HasInputFlag(input.inputFlags, INPUT_CROUCH) ? eStance::Crouching : eStance::Standing;
-
-			intent.jumpPressed	 = HasInputFlag(input.inputFlags, INPUT_JUMP);
-			intent.dashPressed	 = HasInputFlag(input.inputFlags, INPUT_DASH);
-
-			return intent;
-		}
-
-
-		inline void ApplySpawnPackedIdToActorShapes(const PxRigidActor& actor, std::optional<uint16_t> teamId, std::optional<uint8_t> partId, std::optional<uint8_t> roleId)
-		{
-			if (!teamId.has_value() && !partId.has_value() && !roleId.has_value())
-				return;
-
-			const PxU32 n = actor.getNbShapes();
-			if (n == 0) return;
-
-			std::vector<PxShape*> shapes;
-			shapes.resize(n);
-			actor.getShapes(shapes.data(), n);
-
-			for (PxShape* s : shapes)
-			{
-				if (!s) continue;
-
-				PxFilterData qfd = s->getQueryFilterData();
-
-				PackedId32 old{};
-				old.v = qfd.word2;
-
-				const auto [v] = PackedId32::Make(
-					teamId.value_or(old.Team()),
-					partId.value_or(old.Part()),
-					roleId.value_or(old.Role())
-				);
-
-				qfd.word2 = v;
-
-				s->setQueryFilterData(qfd);
-			}
-		}
-
-
-
 	}
-
-
-
-
-
 
 
 	void PhysicsFacade::Init()
@@ -113,21 +41,8 @@ namespace jam::px
 	{
 		if (!m_inited.load(std::memory_order_relaxed)) return;
 
-		for (auto& e : m_rigidEntries | std::views::values)
-		{
-			if (e.actor) { m_world->RemoveActor(e.actor); e.actor = nullptr; }
-		}
-		m_rigidEntries.clear();
+		if (m_world) m_world->Destroy();
 
-		for (auto& e : m_characterEntries | std::views::values)
-		{
-			if (e.controller) { m_world->RemoveController(e.controller); e.controller = nullptr; }
-		}
-		m_characterEntries.clear();
-
-		if (m_world)
-			m_world->Destroy();
-	
 		m_inited.store(false, std::memory_order_relaxed);
 	}
 
@@ -188,158 +103,141 @@ namespace jam::px
 		if (!m_world || !m_stepPending) return;
 		m_world->EndSimulate();
 		m_stepPending = false;
+
+		SyncKinematics();
+		SyncProjectiles();
 	}
 
 	PhysicsHandle PhysicsFacade::Spawn(ObjectId id, const SpawnDesc& desc)
 	{
 		if (!m_inited.load(std::memory_order_relaxed) || !m_world) return {};
 
-		if (auto it = m_rigidEntries.find(id); it != m_rigidEntries.end())
-			return it->second.physicsHandle;
+		const TemplateHandle	tpl		= ToTemplateHandle(desc.prefab);
+		const ActorTemplateDef* tplDef	= PHYSICS_PREFAB_REGISTRY.FindTemplateDef(tpl);
+		if (!tplDef) return {};
 
-		if (auto it = m_characterEntries.find(id); it != m_characterEntries.end())
-			return it->second.physicsHandle;
+		const auto actorType  = tplDef->actorType;
+		const auto bodyType   = tplDef->bodyType;
+		const auto motionType = tplDef->motionType;
 
-		const TemplateHandle templateHandle = ToTemplateHandle(desc.prefab);
-
-		const ActorTemplateDef* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(templateHandle);
-		if (!def) return {};
-
-		void* userData = nullptr;
-
-		if (def->actorType == eActorType::Character)
+		if (bodyType == eBodyType::Rigid)
 		{
-			if (!desc.cs.has_value()) return {};
+			auto body = ActorFactory::CreateRigidBody(*m_world, tpl, *tplDef, desc, id);
+			if (!body.has_value()) return {};
 
-			const auto& cs = desc.cs.value();
-
-			CharacterUserData ud{ .id = id };
-			userData = reinterpret_cast<void*>(&ud);
-
-			CharacterEntry entry{};
-			entry.templateHandle = templateHandle;
-			entry.isKinematic = desc.isKinematic;
-
-			const auto created = m_world->CreateCharacter(templateHandle, ToPhysX(cs.pos), userData);
-			if (!created.controller) return {};
-
-			entry.controller = created.controller;
-			entry.hitbox = created.hitboxActor;
-
-			if (entry.hitbox)
-				ApplySpawnPackedIdToActorShapes(*entry.hitbox, desc.teamId, desc.partId, desc.user8);
-
-			entry.physicsHandle = PhysicsHandle{ reinterpret_cast<uint64_t>(entry.controller) };
-			entry.mover = std::make_unique<LocomotionComponent>(def->cct.movement, entry.controller, entry.hitbox);
-			entry.state = cs;
-
-			SetCharacterState(id, cs);
-
-			m_characterEntries.emplace(id, std::move(entry));
-			return m_characterEntries[id].physicsHandle;
-		}
-
-		if (!desc.rs.has_value()) return {};
-		const auto& rs = desc.rs.value();
-
-		userData = reinterpret_cast<void*>(id);
-
-		const bool applyKinematic = desc.isKinematic || (def->motionType == eMotionType::Kinematic);
-
-		RigidEntry entry{};
-		entry.templateHandle = templateHandle;
-		entry.isKinematic = applyKinematic;
-		entry.actor = m_world->CreateActor(templateHandle, ToPhysX(rs.pose), userData);
-		if (!entry.actor) return {};
-
-		if (applyKinematic)
-		{
-			if (auto* dyn = entry.actor->is<PxRigidDynamic>())
+			switch (motionType)
 			{
-				auto flags = dyn->getRigidBodyFlags();
-				flags |= PxRigidBodyFlag::eKINEMATIC;
-				dyn->setRigidBodyFlags(flags);
+			case eMotionType::Static:
+			case eMotionType::Dynamic:
+				{
+					auto [it, inserted] = m_rigidMap.emplace(id, std::move(body.value()));
+					return it->second.GetPhysicsHandle();
+				}
+
+			case eMotionType::Kinematic:
+				{
+					if (actorType == eActorType::Projectile)
+					{
+						auto [it, inserted] = m_projectileMap.emplace(id, std::move(body.value()));
+						return it->second.GetPhysicsHandle();
+					}
+
+					auto [it, inserted] = m_kinematicMap.emplace(id, std::move(body.value()));
+					return it->second.GetPhysicsHandle();
+				}
+
+			default: break;
+			}
+		}
+		else if (bodyType == eBodyType::Character)
+		{
+			auto body = ActorFactory::CreateCharacterBody(*m_world, tpl, *tplDef, desc, id);
+			if (!body.has_value()) return {};
+
+			if (motionType == eMotionType::CCT)
+			{
+				auto [it, inserted] = m_cctMap.emplace(id, std::move(body.value()));
+				return it->second.GetPhysicsHandle();
+			}
+			if (motionType == eMotionType::RemoteCCT)
+			{
+				auto [it, inserted] = m_remoteCctMap.emplace(id, std::move(body.value()));
+				return it->second.GetPhysicsHandle();
 			}
 		}
 
-		ApplySpawnPackedIdToActorShapes(*entry.actor, desc.teamId, desc.partId, desc.user8);
-
-		entry.physicsHandle = PhysicsHandle{ reinterpret_cast<uint64_t>(entry.actor) };
-		entry.state = rs;
-
-		SetRigidState(id, rs);
-
-		m_rigidEntries.emplace(id, std::move(entry));
-		return m_rigidEntries[id].physicsHandle;
+		JAM_ASSERT(false, "Unknown body type in template: {}", tplDef->name);
+		return {};
 	}
 
 	void PhysicsFacade::Despawn(ObjectId id)
 	{
-		if (!m_inited.load(std::memory_order_relaxed) || !m_world) return;
+		if (!m_world) return;
 
-		if (auto it = m_rigidEntries.find(id); it != m_rigidEntries.end())
+		if (auto it = m_rigidMap.find(id); it != m_rigidMap.end())
 		{
-			RigidEntry& entry = it->second;
-			if (entry.actor)
-			{
-				m_world->RemoveActor(entry.actor);
-				entry.actor = nullptr;
-			}
-
-			m_rigidEntries.erase(it);
+			ActorFactory::DestroyRigidBody(*m_world, it->second);
+			m_rigidMap.erase(it);
+			return;
 		}
-
-		if (auto it = m_characterEntries.find(id); it != m_characterEntries.end())
+		if (auto it = m_kinematicMap.find(id); it != m_kinematicMap.end())
 		{
-			CharacterEntry& entry = it->second;
-
-			if (entry.hitbox)
-			{
-				m_world->RemoveActor(entry.hitbox);
-				entry.hitbox = nullptr;
-			}
-
-			if (entry.controller)
-			{
-				m_world->RemoveController(entry.controller);
-				entry.controller = nullptr;
-			}
-
-			m_characterEntries.erase(it);
+			ActorFactory::DestroyRigidBody(*m_world, it->second);
+			m_kinematicMap.erase(it);
+			return;
 		}
+		if (auto it = m_projectileMap.find(id); it != m_projectileMap.end())
+		{
+			ActorFactory::DestroyRigidBody(*m_world, it->second);
+			m_projectileMap.erase(it);
+			return;
+		}
+		if (auto it = m_cctMap.find(id); it != m_cctMap.end())
+		{
+			ActorFactory::DestroyCharacterBody(*m_world, it->second);
+			m_cctMap.erase(it);
+			return;
+		}
+		if (auto it = m_remoteCctMap.find(id); it != m_remoteCctMap.end())
+		{
+			ActorFactory::DestroyCharacterBody(*m_world, it->second);
+			m_remoteCctMap.erase(it);
+		}
+	}
+
+	eBodyType PhysicsFacade::GetBodyType(ObjectId id) const
+	{
+		if (m_rigidMap.contains(id))		return eBodyType::Rigid;
+		if (m_kinematicMap.contains(id))	return eBodyType::Rigid;
+		if (m_projectileMap.contains(id))	return eBodyType::Rigid;
+		if (m_cctMap.contains(id))			return eBodyType::Character;
+		if (m_remoteCctMap.contains(id))	return eBodyType::Character;
+		return eBodyType::None;
+	}
+
+	eBodyType PhysicsFacade::FindBodyType(PrefabKey key) const
+	{
+		return PHYSICS_PREFAB_REGISTRY.GetBodyType(key);
 	}
 
 
 	eMotionType PhysicsFacade::GetMotionType(ObjectId id) const
 	{
-		if (auto it = m_rigidEntries.find(id); it != m_rigidEntries.end())
+		if (m_rigidMap.contains(id))
 		{
-			const RigidEntry& entry = it->second;
-			if (entry.actor)
-			{
-				if (entry.actor->is<PxRigidStatic>())
-					return eMotionType::Static;
-
-				if (auto* dyn = entry.actor->is<PxRigidDynamic>())
-				{
-					if (dyn->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
-						return eMotionType::Kinematic;
-					return eMotionType::Dynamic;
-				}
-			}
-			return eMotionType::None;
+			const auto* actor = m_rigidMap.at(id).GetActor();
+			if (!actor) return eMotionType::None;
+			if (actor->is<PxRigidStatic>()) return eMotionType::Static;
+			return actor->is<PxRigidDynamic>() ? eMotionType::Dynamic : eMotionType::None;
 		}
 
-		if (auto it = m_characterEntries.find(id); it != m_characterEntries.end())
-		{
-			if (it->second.controller)
-				return eMotionType::Kinematic;
-		}
+		if (m_kinematicMap.contains(id))	return eMotionType::Kinematic;
+		if (m_projectileMap.contains(id))	return eMotionType::Kinematic;
+		if (m_cctMap.contains(id))			return eMotionType::CCT;
+		if (m_remoteCctMap.contains(id))	return eMotionType::RemoteCCT;
 
 		return eMotionType::None;
 	}
-
-
 
 	eMotionType PhysicsFacade::FindMotionType(PrefabKey key) const
 	{
@@ -349,141 +247,90 @@ namespace jam::px
 
 	bool PhysicsFacade::GetCharacterState(ObjectId id, CharacterState& state) const
 	{
-		auto it = m_characterEntries.find(id);
-		if (it == m_characterEntries.end())
-			return false;
-
-		const CharacterEntry& e = it->second;
-		if (!e.controller || !e.mover)
-			return false;
-
-		e.mover->GetCharacterState(state);
-		return true;
+		if (auto it = m_cctMap.find(id); it != m_cctMap.end())
+		{
+			state = it->second.GetState();
+			return true;
+		}
+		if (auto it = m_remoteCctMap.find(id); it != m_remoteCctMap.end())
+		{
+			state = it->second.GetState();
+			return true;
+		}
+		return false;
 	}
 
 	bool PhysicsFacade::SetCharacterState(ObjectId id, const CharacterState& state)
 	{
-		auto it = m_characterEntries.find(id);
-		if (it == m_characterEntries.end())
-			return false;
-
-		CharacterEntry& e = it->second;
-		if (!e.controller) return false;
-
-		// 1. CCT 위치 복원 + sense 캐시 무효화 (stale grounded 방지)
-		e.mover->Teleport(state.pos);
-
-		// 2. CharacterMovementComponent 내부 상태 복원
-		if (e.mover)
+		if (auto it = m_cctMap.find(id); it != m_cctMap.end())
 		{
-			CharacterMoveState mvState = e.mover->GetMoveState();
-
-			// pos
-			mvState.position = state.pos;
-
-			// velocity 재구성: moveDir(XZ 방향) * horizontalSpeed + Y
-			const float hSpd = state.horizontalSpeed;
-			mvState.velocity.x = state.moveDir.x * hSpd;
-			mvState.velocity.z = state.moveDir.y * hSpd;
-			mvState.velocity.y = state.verticalSpeed;
-
-			// air/grounded 복원
-			const bool isJumping = HasStateFlag(state.stateFlags, STATE_IS_JUMPING);
-			if (isJumping || state.verticalSpeed > 0.01f)
-			{
-				mvState.grounded = false;
-				mvState.air = state.verticalSpeed > 0.f ? eAirState::Rising : eAirState::Falling;
-			}
-			else if (state.verticalSpeed < -0.01f)
-			{
-				mvState.grounded = false;
-				mvState.air = eAirState::Falling;
-			}
-			else
-			{
-				mvState.grounded = true;
-				mvState.air = eAirState::Grounded;
-			}
-
-			mvState.jump.coyoteRemain = 0.f;
-			mvState.jump.bufferRemain = 0.f;
-
-			e.mover->SetMoveState(mvState);
+			it->second.SetState(state);
+			MarkDirty(id);
+			return true;
 		}
-		MarkDirty(id);
-
-		return true;
+		if (auto it = m_remoteCctMap.find(id); it != m_remoteCctMap.end())
+		{
+			it->second.SetState(state);
+			MarkDirty(id);
+			return true;
+		}
+		return false;
 	}
 
 	bool PhysicsFacade::GetRigidState(ObjectId id, RigidState& state) const
 	{
-		auto it = m_rigidEntries.find(id);
-		if (it == m_rigidEntries.end())
-			return false;
-
-		const RigidEntry& e = it->second;
-		if (!e.actor) return false;
-
-		state.pose = ToPx(e.actor->getGlobalPose());
-
-		if (auto* dyn = e.actor->is<PxRigidDynamic>())
+		if (auto it = m_rigidMap.find(id); it != m_rigidMap.end())
 		{
-			state.linVel = ToPx(dyn->getLinearVelocity());
-			state.angVel = ToPx(dyn->getAngularVelocity());
+			state = it->second.GetState();
+			return true;
 		}
-		else
+		if (auto it = m_kinematicMap.find(id); it != m_kinematicMap.end())
 		{
-			state.linVel = {};
-			state.angVel = {};
+			state = it->second.GetState();
+			return true;
+		}
+		if (auto it = m_projectileMap.find(id); it != m_projectileMap.end())
+		{
+			state = it->second.GetState();
+			return true;
 		}
 
-		return true;
+		return false;
 	}
 
 	bool PhysicsFacade::SetRigidState(ObjectId id, const RigidState& state)
 	{
-		auto it = m_rigidEntries.find(id);
-		if (it == m_rigidEntries.end())
-			return false;
-
-		RigidEntry& e = it->second;
-		if (!e.actor) return false;
-		e.state = state;
-
-		if (e.isKinematic)
+		if (auto it = m_rigidMap.find(id); it != m_rigidMap.end())
 		{
-			if (auto* dyn = e.actor->is<PxRigidDynamic>())
-				dyn->setKinematicTarget(ToPhysX(state.pose));
-			else
-				e.actor->setGlobalPose(ToPhysX(state.pose)); // static fallback
+			it->second.SetState(state, false);
+			return true;
 		}
-		else
+		if (auto it = m_kinematicMap.find(id); it != m_kinematicMap.end())
 		{
-			e.actor->setGlobalPose(ToPhysX(state.pose));
-
-			if (auto* dyn = e.actor->is<PxRigidDynamic>())
-			{
-				dyn->setLinearVelocity(ToPhysX(state.linVel));
-				dyn->setAngularVelocity(ToPhysX(state.angVel));
-			}
+			it->second.SetState(state, true);
+			return true;
 		}
-
-		MarkDirty(id);
-
-		return true;
+		if (auto it = m_projectileMap.find(id); it != m_projectileMap.end())
+		{
+			it->second.SetState(state, true);
+			return true;
+		}
+		return false;
 	}
 
 	void PhysicsFacade::ApplyCharacterInput(ObjectId id, const CharacterInput& input)
 	{
-		auto it = m_characterEntries.find(id);
-		if (it == m_characterEntries.end()) return;
+		auto it = m_cctMap.find(id);
+		if (it == m_cctMap.end()) return;
 
-		CharacterEntry& entry = it->second;
-		if (!entry.controller) return;
+		CharacterBody& body = it->second;
 
-		entry.lastIntent		= ToMoveIntent(input);
-		entry.state.facingYaw	= input.facingYaw;
-		entry.state.facingPitch = input.facingPitch;
+		if (auto* player = dynamic_cast<PlayerControllerComponent*>(body.GetBrain()))
+			player->SetInput(input);
+
+		// todo: 여기서 하는게 맞나?
+		body.SetFacing(input.facingYaw, input.facingPitch);
+		MarkDirty(id);
 	}
 
 
@@ -514,68 +361,6 @@ namespace jam::px
 		PxRaycastBuffer buf;
 		return !scene->raycast(origin, dir, dist, buf, PxHitFlag::eDEFAULT, fd, &cb);
 	}
-
-
-	PhysicsHandle PhysicsFacade::SpawnProjectile(ObjectId id, const ProjectileSpawnDesc& desc)
-	{
-		if (!m_inited.load(std::memory_order_relaxed) || !m_world) return {};
-		if (m_projectileEntries.contains(id)) return m_projectileEntries[id].physicsHandle;
-		if (desc.kind == eProjectileKind::HITSCAN) return {};
-
-		const TemplateHandle templateHandle = ToTemplateHandle(desc.prefab);
-		if (!PHYSICS_PREFAB_REGISTRY.HasTemplate(templateHandle)) return {};
-
-		void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(id));
-		PxRigidActor* actor = m_world->CreateActor(templateHandle, ToPhysX(desc.pose), userData);
-		if (!actor) return {};
-
-		ProjectileEntry entry{};
-		entry.kind = desc.kind;
-		entry.templateHandle = templateHandle;
-		entry.actor = actor;
-		entry.teamId = desc.teamId;
-
-		if (desc.kind == eProjectileKind::DYN_SIM)
-		{
-			if (auto* dyn = actor->is<PxRigidDynamic>())
-			{
-				dyn->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, true);
-				dyn->setLinearVelocity(ToPhysX(desc.velocity));
-			}
-			// mover 없음: PhysX onContact → SimEvent 로 처리
-		}
-		else // ANALYTIC
-		{
-			if (auto* dyn = actor->is<PxRigidDynamic>())
-				dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
-
-			ProjectileConfig cfg{};
-			cfg.gravityScale = desc.gravityScale;
-			cfg.maxRange	 = desc.maxRange;
-
-			entry.mover = std::make_unique<ProjectileComponent>(cfg, desc.velocity);
-		}
-
-		entry.physicsHandle = PhysicsHandle{ reinterpret_cast<uint64_t>(actor) };
-
-		m_projectileEntries.emplace(id, std::move(entry));
-		MarkDirty(id);
-		return m_projectileEntries[id].physicsHandle;
-	}
-
-	void PhysicsFacade::DespawnProjectile(ObjectId id)
-	{
-		auto it = m_projectileEntries.find(id);
-		if (it == m_projectileEntries.end()) return;
-
-		if (it->second.actor)
-		{
-			m_world->RemoveActor(it->second.actor);
-			it->second.actor = nullptr;
-		}
-		m_projectileEntries.erase(it);
-	}
-
 
 
 	HitscanResult PhysicsFacade::Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const
@@ -669,50 +454,56 @@ namespace jam::px
 
 	void PhysicsFacade::StepProjectiles(float dt)
 	{
-		if (m_projectileEntries.empty()) return;
-
-		PxScene* scene = m_world ? m_world->GetScene() : nullptr;
-		if (!scene) return;
+		if (m_projectileMap.empty()) return;
 
 		std::vector<ObjectId> toRemove;
+		toRemove.reserve(m_projectileMap.size());
 
-		for (auto& [id, entry] : m_projectileEntries)
+		for (auto& [id, body] : m_projectileMap)
 		{
-			if (entry.kind != eProjectileKind::ANALYTIC) continue;
-			if (!entry.actor || !entry.mover) continue;
+			body.Tick(dt);
 
-			auto* dyn = entry.actor->is<PxRigidDynamic>();
-			if (!dyn) continue;
-
-			const auto result = entry.mover->Tick(dt, scene, dyn, entry.teamId);
-
-			if (result.hit)
-			{
-				SimEvent e{};
-				e.type						= eSimEventType::ContactFound;
-				e.contact0					= id;
-				e.contact1					= result.hitId;
-				e.contactPointCount			= 1;
-				e.contactPoints[0].position = ToPhysX(result.position);
-				e.contactPoints[0].normal   = ToPhysX(result.normal);
-
-				m_pendingSimEvents.push_back(e);
-				toRemove.push_back(id);
-				continue;
-			}
-
-			if (result.maxRangeReached)
-			{
-				toRemove.push_back(id);
-				continue;
-			}
+			auto* proj = dynamic_cast<ProjectileRigidBehavior*>(body.GetBehavior());
+			if (!proj) continue;
 
 			MarkDirty(id);
+
+			const ProjectileHitResult& r = proj->GetLastHitResult();
+			if (r.hit)
+			{
+				SimEvent e{};
+				e.type = eSimEventType::ContactFound;
+				e.contact0					= id;
+				e.contact1					= r.hitId;
+				e.contactPointCount			= 1;
+				e.contactPoints[0].position = r.position;
+				e.contactPoints[0].normal	= r.normal;
+				m_pendingSimEvents.push_back(e);
+			}
+
+			if (proj->IsTerminated())
+				toRemove.push_back(id);
 		}
 
-		for (ObjectId rmId : toRemove)
-			DespawnProjectile(rmId);
+		for (ObjectId id : toRemove)
+			Despawn(id);
 	}
 
+	void PhysicsFacade::SyncKinematics()
+	{
+		for (auto& [id, body] : m_kinematicMap)
+		{
+			body.SyncState(body);
+			MarkDirty(id);
+		}
+	}
 
+	void PhysicsFacade::SyncProjectiles()
+	{
+		for (auto& [id, body] : m_projectileMap)
+		{
+			body.SyncState(body);
+			MarkDirty(id);
+		}
+	}
 }

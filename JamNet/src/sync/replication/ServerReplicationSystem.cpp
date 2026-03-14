@@ -80,14 +80,14 @@ namespace jam::net
 				vector<flatbuffers::Offset<fb::fbActorEntity>> offs;
 				offs.reserve(kBatch);
 
-				auto view = m_world.view<NetIdentity, NetActorBodyKind>();
+				auto view = m_world.view<NetIdentity, NetActorBodyType>();
 
 				m_fbb->Clear();
 				
 				for (auto e : view)
 				{
 					const uint32 netId = m_world.get<NetIdentity>(e).netId;
-					const auto	 body  = m_world.get<NetActorBodyKind>(e).body;
+					const auto	 body  = m_world.get<NetActorBodyType>(e).body;
 					const MetaSentKey key{ .userId = user, .netId = netId };
 
 					if (forceFullMetaUser)
@@ -115,8 +115,9 @@ namespace jam::net
 						continue;
 					}
 
-					if (px::IsStaticBody(body))
-						continue;
+					//todo: active list 기반으로 되는지 체크
+					//if (px::IsStaticBody(body))
+					//	continue;
 
 					if (periodicFull)
 					{
@@ -220,12 +221,12 @@ namespace jam::net
 
 	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildFullActorEntity(entt::entity e, uint64 userId, bool includeMeta)
 	{
-		const uint32 netId = m_world.get<NetIdentity>(e).netId;
-		const auto	 body  = m_world.get<NetActorBodyKind>(e).body;
+		const uint32 netId    = m_world.get<NetIdentity>(e).netId;
+		const auto	 bodyType = m_world.get<NetActorBodyType>(e).body;
 
 		auto& userEntityBase = m_entityBaselinePerUser[userId];
 
-		if (px::IsCharacterBody(body))
+		if (bodyType == px::eBodyType::Character)
 		{
 			auto& cs = m_world.get<px::CharacterState>(e);
 
@@ -309,12 +310,12 @@ namespace jam::net
 
 	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildDeltaActorEntity(entt::entity e, uint64 userId)
 	{
-		const uint32 netId = m_world.get<NetIdentity>(e).netId;
-		const auto	 body  = m_world.get<NetActorBodyKind>(e).body;
+		const uint32 netId	  = m_world.get<NetIdentity>(e).netId;
+		const auto	 bodyType = m_world.get<NetActorBodyType>(e).body;
 
 		auto& userEntityBase = m_entityBaselinePerUser[userId];
 
-		if (px::IsCharacterBody(body))
+		if (bodyType == px::eBodyType::Character)
 		{
 			auto& cs = m_world.get<px::CharacterState>(e);
 

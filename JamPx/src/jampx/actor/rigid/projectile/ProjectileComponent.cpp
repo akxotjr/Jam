@@ -27,6 +27,19 @@ namespace jam::px
 			return physx::PxMax(0.01f, dist * 0.1f);
 		}
 
+		float NextSpeed(const ProjectileHomingConfig& cfg, float currentSpeed, float dt)
+		{
+			if (cfg.keepSpeedConstant)
+			{
+				if (currentSpeed > EPSILON)
+					return physx::PxMin(currentSpeed, cfg.maxSpeed);
+				return physx::PxMin(cfg.maxSpeed, cfg.acceleration * dt);
+			}
+
+			const float accelerated = currentSpeed + cfg.acceleration * dt;
+			return physx::PxMin(accelerated, cfg.maxSpeed);
+		}
+
 		bool SweepWithActorShape(
 			const PxScene* scene,
 			const PxRigidDynamic* actor,
@@ -49,6 +62,7 @@ namespace jam::px
 			const PxTransform shapePose = actorPose.transform(shape->getLocalPose());
 
 			return scene->sweep(geom.any(), shapePose, unitDir, dist, buf, PxHitFlag::eDEFAULT, fd, cb, nullptr, inflation);
+
 		}
 
 		bool SweepWithSphere(
@@ -87,8 +101,8 @@ namespace jam::px
 				return false;
 
 			result.hit		= true;
-			result.position	= ToPx(buf.block.position);
-			result.normal	= ToPx(buf.block.normal);
+			result.position	= buf.block.position;
+			result.normal	= buf.block.normal;
 			result.hitId	= GetObjectId(buf.block.actor);
 			return true;
 		}
@@ -99,8 +113,8 @@ namespace jam::px
 				return false;
 
 			result.hit		= true;
-			result.position	= ToPx(buf.block.position);
-			result.normal	= ToPx(buf.block.normal);
+			result.position	= buf.block.position;
+			result.normal	= buf.block.normal;
 			result.hitId	= GetObjectId(buf.block.actor);
 
 			return true;
@@ -108,44 +122,43 @@ namespace jam::px
 	}
 
 	ProjectileComponent::ProjectileComponent(const ProjectileConfig& cfg)
-		: m_config(cfg)
+		: m_config(std::move(cfg))
 	{
 		m_state.velocity = m_config.motion.initialVelocity;
 	}
 
-	RequestQueryFD ProjectileComponent::BuildRuntimeRequestFd(uint16 teamId, const PxRigidActor* selfActor) const
+
+	void ProjectileComponent::IntegrateMotion(float dt, const PxVec3& sceneGravity, OUT PxVec3& disp)
 	{
-		RequestQueryFD fd = m_config.hit.requestFd;
-		fd.id = PackedId32::Make(teamId, 0, 0);
-
-		if (selfActor) fd.flags |= RequestQueryFlag::IGNORE_SELF_ACTOR;
-
-		return fd;
-	}
-
-
-	void ProjectileComponent::IntegrateMotion(float dt, const PxVec3& sceneGravity, Vec3& outDisp)
-	{
-		outDisp = Vec3::Zero();
+		disp = PxVec3(physx::PxZero);
 
 		switch (m_config.motion.model)
 		{
 		case eProjectileMotionModel::Linear:
 		{
-			outDisp = m_state.velocity * dt;
+			disp = m_state.velocity * dt;
 			break;
 		}
 		case eProjectileMotionModel::Ballistic:
 		{
-			const Vec3 gravity = ToPx(sceneGravity) * m_config.motion.gravityScale;
+			const PxVec3 gravity = sceneGravity * m_config.motion.gravityScale;
 			m_state.velocity += gravity * dt;
-			outDisp = m_state.velocity * dt;
+			disp = m_state.velocity * dt;
 			break;
 		}
-		case eProjectileMotionModel::Homing:
+		case eProjectileMotionModel::HomingSteer:
 		{
-			// 현재 config/state에 target 정보가 없어 안전하게 Linear로 동작
-			outDisp = m_state.velocity * dt;
+			IntegrateHomingSteer(dt, disp);
+			break;
+		}
+		case eProjectileMotionModel::HomingLead:
+		{
+			IntegrateHomingLead(dt, disp);
+			break;
+		}
+		case eProjectileMotionModel::HomingPN:
+		{
+			IntegrateHomingPN(dt, disp);
 			break;
 		}
 		default:
@@ -155,17 +168,157 @@ namespace jam::px
 		m_state.age += dt;
 	}
 
-	bool ProjectileComponent::CheckLifetime(ProjectileHitResult& outResult) const
+	// -------------------------------------------------------------------------
+	// HomingSteer
+	//
+	// 현재 target 위치를 향해 desiredDir를 만들고,
+	// 현재 진행 방향을 maxTurnRateRad 한도 내에서 회전시킨다.
+	// -------------------------------------------------------------------------
+	void ProjectileComponent::IntegrateHomingSteer(float dt, OUT PxVec3& disp)
+	{
+		disp = m_state.velocity * dt;
+
+		ProjectileHomingTarget target{};
+		if (!ResolveHomingTarget(target))
+		{
+			if (!m_config.homing.keepLastDirection)
+			{
+				m_state.velocity = PxVec3(physx::PxZero);
+				disp = PxVec3(physx::PxZero);
+			}
+			return;
+		}
+		PxVec3 toTarget = target.position - m_state.position;
+
+		const PxVec3 desiredDir = SafeNormalize(toTarget);
+		const PxVec3 currentDir = SafeNormalize(m_state.velocity, desiredDir);
+		const PxVec3 newDir		= RotateTowards(currentDir, desiredDir, m_config.homing.maxTurnRate * dt);
+
+		const PxReal nexSpeed	= NextSpeed(m_config.homing, m_state.velocity.magnitude(), dt);
+		m_state.velocity = newDir * nexSpeed;
+
+		disp = m_state.velocity * dt;
+	}
+
+	// -------------------------------------------------------------------------
+	// HomingLead
+	//
+	// futurePos = targetPos + targetVel * predictTime
+	// 를 향해 steering 한다.
+	// -------------------------------------------------------------------------
+	void ProjectileComponent::IntegrateHomingLead(float dt, OUT PxVec3& disp)
+	{
+		disp = m_state.velocity * dt;
+
+		ProjectileHomingTarget target{};
+		if (!ResolveHomingTarget(target))
+		{
+			if (!m_config.homing.keepLastDirection)
+			{
+				m_state.velocity = PxVec3(physx::PxZero);
+				disp = PxVec3(physx::PxZero);
+			}
+			return;
+		}
+
+		const float	 speed      = physx::PxMax(m_state.velocity.magnitude(), 0.01f);
+		const PxVec3 toNow      = target.position - m_state.position;
+		const float  distance   = toNow.magnitude();
+
+		const float timeToGo    = distance / speed;
+		const float predictTime = physx::PxMin(m_config.homing.maxPredictTime, timeToGo * m_config.homing.leadTimeScale);
+
+		const PxVec3 futurePos  = target.position + target.velocity * predictTime;
+		const PxVec3 toFuture   = futurePos - m_state.position;
+
+		const PxVec3 desiredDir = SafeNormalize(toFuture);
+		const PxVec3 currentDir = SafeNormalize(m_state.velocity, desiredDir);
+		const PxVec3 newDir		= RotateTowards(currentDir, desiredDir, m_config.homing.maxTurnRate * dt);
+
+		const float  nextSpeed  = NextSpeed(m_config.homing, m_state.velocity.magnitude(), dt);
+		m_state.velocity = newDir * nextSpeed;
+
+		disp = m_state.velocity * dt;
+	}
+
+
+	// -------------------------------------------------------------------------
+	// HomingPN
+	//
+	// True Proportional Navigation.
+	//
+	// r      = targetPos - missilePos
+	// vRel   = targetVel - missileVel
+	// omega  = (r x vRel) / |r|^2
+	// accel  = N * (vel x omega)
+	//
+	// accel은 velocity와 수직인 횡가속으로 작용하는 것이 핵심.
+	// -------------------------------------------------------------------------
+	void ProjectileComponent::IntegrateHomingPN(float dt, OUT PxVec3& disp)
+	{
+		disp = m_state.velocity * dt;
+
+		ProjectileHomingTarget target{};
+		if (!ResolveHomingTarget(target))
+		{
+			if (!m_config.homing.keepLastDirection)
+			{
+				m_state.velocity = PxVec3(physx::PxZero);
+				disp = PxVec3(physx::PxZero);
+			}
+			return;
+		}
+
+		const PxVec3 r = target.position - m_state.position;
+		const float r2 = r.magnitudeSquared();
+		if (r2 <= EPSILON * EPSILON)
+			return;
+
+		const PxVec3 vRel  = target.velocity - m_state.velocity;
+		const PxVec3 omega = r.cross(vRel) * (1.f / r2);
+
+		PxVec3 aLat = m_state.velocity.cross(omega) * m_config.homing.navigationGain;
+		aLat = ClampMagnitude(aLat, m_config.homing.maxLateralAccel);
+
+		const PxVec3 desiredVel = m_state.velocity + aLat * dt;
+		const PxVec3 desiredDir = SafeNormalize(desiredVel, SafeNormalize(r));
+		const PxVec3 currentDir = SafeNormalize(m_state.velocity, desiredDir);
+
+		const PxVec3 newDir     = RotateTowards(currentDir, desiredDir, m_config.homing.maxTurnRate * dt);
+		const float  nextSpeed  = NextSpeed(m_config.homing, m_state.velocity.magnitude(), dt);
+
+		m_state.velocity = newDir * nextSpeed;
+		disp = m_state.velocity * dt;
+	}
+
+	bool ProjectileComponent::ResolveHomingTarget(ProjectileHomingTarget& target) const
+	{
+		if (!m_config.homing.enableHoming)
+			return false;
+
+		if (!m_reolver)
+			return false;
+
+		if (m_config.homing.targetId == INVALID_OBJ_ID)
+			return false;
+
+		if (!m_reolver(m_config.homing.targetId, target))
+			return false;
+
+		return target.valid;
+	}
+
+	bool ProjectileComponent::CheckLifetime(OUT ProjectileHitResult& result) const
 	{
 		if (m_state.traveledDist >= m_config.lifetime.maxRange)
 		{
-			outResult.maxRangeReached = true;
+			result.maxRangeReached = true;
 			return true;
 		}
 
 		if (m_state.age >= m_config.lifetime.maxLifetime)
 		{
-			outResult.maxLifetimeReached = true;
+			result.maxLifetimeReached = true;
 			return true;
 		}
 
@@ -177,15 +330,14 @@ namespace jam::px
 		const PxScene* scene,
 		const PxRigidDynamic* actor,
 		const PxTransform& pose,
-		const Vec3& disp,
+		const PxVec3& disp,
 		OUT ProjectileHitResult& result) const
 	{
-		const float dist = disp.Magnitude();
+		const float dist = disp.magnitude();
 		if (!scene || !actor || dist < EPSILON)
 			return false;
 
-		const Vec3 normDir = disp * (1.f / dist);
-		const PxVec3 pxDir = ToPhysX(normDir);
+		const PxVec3 normDir = disp.getNormalized();
 
 		const PxQueryFilterData fd = MakePxQueryFilterData(m_config.hit.requestFd);
 		auto cb = MakeDefaultQueryCallback(actor);
@@ -199,7 +351,7 @@ namespace jam::px
 		case eProjectileHitModel::RaycastFallback:
 		{
 			PxRaycastBuffer buf;
-			if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, buf) && WriteRayHit(buf, result))
+			if (RaycastFallback(scene, pose, normDir, dist, fd, &cb, buf) && WriteRayHit(buf, result))
 				return true;
 			break;
 		}
@@ -208,14 +360,15 @@ namespace jam::px
 			if (m_config.hit.useShapeSweep)
 			{
 				PxSweepBuffer buf;
-				if (SweepWithActorShape(scene, actor, pose, pxDir, dist, 0.f, fd, &cb, buf) && WriteSweepHit(buf, result))
+				if (SweepWithActorShape(scene, actor, pose, normDir, dist, 0.f, fd, &cb, buf) && WriteSweepHit(buf, result))
 					return true;
+
 			}
 
 			if (tryRayFallback)
 			{
 				PxRaycastBuffer buf;
-				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, buf) && WriteRayHit(buf, result))
+				if (RaycastFallback(scene, pose, normDir, dist, fd, &cb, buf) && WriteRayHit(buf, result))
 					return true;
 			}
 			break;
@@ -223,13 +376,13 @@ namespace jam::px
 		case eProjectileHitModel::SphereSweep:
 		{
 			PxSweepBuffer buf;
-			if (SweepWithSphere(scene, pose, pxDir, dist, baseSphereRadius, fd, &cb, buf) && WriteSweepHit(buf, result))
+			if (SweepWithSphere(scene, pose, normDir, dist, baseSphereRadius, fd, &cb, buf) && WriteSweepHit(buf, result))
 				return true;
 
 			if (tryRayFallback)
 			{
 				PxRaycastBuffer rb;
-				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
+				if (RaycastFallback(scene, pose, normDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
 					return true;
 			}
 			break;
@@ -239,14 +392,14 @@ namespace jam::px
 			if (m_config.hit.useShapeSweep)
 			{
 				PxSweepBuffer buf;
-				if (SweepWithActorShape(scene, actor, pose, pxDir, dist, expansion, fd, &cb, buf) && WriteSweepHit(buf, result))
+				if (SweepWithActorShape(scene, actor, pose, normDir, dist, expansion, fd, &cb, buf) && WriteSweepHit(buf, result))
 					return true;
 			}
 
 			if (tryRayFallback)
 			{
 				PxRaycastBuffer rb;
-				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
+				if (RaycastFallback(scene, pose, normDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
 					return true;
 			}
 			break;
@@ -254,13 +407,13 @@ namespace jam::px
 		case eProjectileHitModel::ExpandingSphereSweep:
 		{
 			PxSweepBuffer buf;
-			if (SweepWithSphere(scene, pose, pxDir, dist, baseSphereRadius + expansion, fd, &cb, buf) && WriteSweepHit(buf, result))
+			if (SweepWithSphere(scene, pose, normDir, dist, baseSphereRadius + expansion, fd, &cb, buf) && WriteSweepHit(buf, result))
 				return true;
 
 			if (tryRayFallback)
 			{
 				PxRaycastBuffer rb;
-				if (RaycastFallback(scene, pose, pxDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
+				if (RaycastFallback(scene, pose, normDir, dist, fd, &cb, rb) && WriteRayHit(rb, result))
 					return true;
 			}
 			break;
@@ -279,12 +432,12 @@ namespace jam::px
 			return result;
 
 		const PxTransform pose = actor->getGlobalPose();
-		m_state.position = ToPx(pose.p);
+		m_state.position = pose.p;
 
-		Vec3 disp = Vec3::Zero();
+		PxVec3 disp;
 		IntegrateMotion(dt, scene->getGravity(), disp);
 
-		const float dist = disp.Magnitude();
+		const float dist = disp.magnitude();
 		if (dist < EPSILON)
 		{
 			CheckLifetime(result);
@@ -295,14 +448,14 @@ namespace jam::px
 		{
 			if (result.hit)
 			{
-				m_state.traveledDist += (result.position - m_state.position).Magnitude();
+				m_state.traveledDist += (result.position - m_state.position).magnitude();
 				m_state.position	  = result.position;
 			}
 			return result;
 		}
 
 		PxTransform newPose = pose;
-		newPose.p += ToPhysX(disp);
+		newPose.p += disp;
 
 		actor->setKinematicTarget(newPose);
 

@@ -7,18 +7,25 @@ namespace jam.net.fb;
 
 table fbSpawnActorReq
 {
-	spawn_req_id		 : uint;
-	prefab_key			 : ulong;
-	owner_user_id		 : ulong;
-	controller_user_id	 : ulong;
+	spawn_req_id			: uint;
+	owner_user_id			: ulong;
+	controller_user_id		: ulong;
 
-
-	// -- overrides
-
-	initial_rigid_state	 : fbTransformFull;
-	initial_char_state	 : fbCharacterFull160;
-	team_id				 : uint;
-	part_id				 : uint;
+	prefab_key				: ulong;
+	pos						: fbVec3;
+	rot						: fbQuat;
+	spawn_src				: uint;		// 0 : level, 1: runtime, 2: network, 3: tool
+	team_id					: uint;
+	part_id					: uint;
+	role_id					: uint;
+	
+	override_mask 			: uint;		// bitmask for override fields below
+	linear_vel				: fbVec3;
+	angular_vel				: fbVec3;
+	linear_damping			: float;
+	angular_damping			: float;
+	yaw						: float;
+	pitch					: float;
 }
 
 table fbSpawnActorRes

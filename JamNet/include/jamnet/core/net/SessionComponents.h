@@ -92,14 +92,14 @@ namespace jam::net
 		array<uint16, 4> latestRecvSeq{};	// 최신 받은 seq (채널별)
 		array<uint16, 4> expectedSeq{};		// 예상 수신 seq (채널별)
 
-		JAMNET_FORCE_INLINE uint16 GetNextSendSeq(eChannelType ch)
+		uint16 GetNextSendSeq(eChannelType ch)
 		{
 			return sendSeq[E2U(ch)]++;
 		}
 
-		JAMNET_FORCE_INLINE uint16 AllocSequence(eChannelType ch, uint16 count)
+		uint16 AllocSequence(eChannelType ch, uint16 count)
 		{
-			JAMNET_ASSERT(count < 0x8000);
+			JAM_ASSERT(count < 0x8000);
 
 			const uint32 idx = E2U(ch);
 			const uint16 base = sendSeq[idx];
@@ -107,22 +107,22 @@ namespace jam::net
 			return base;
 		}
 
-		JAMNET_FORCE_INLINE bool IsNewer(eChannelType ch, uint16 seq) const
+		bool IsNewer(eChannelType ch, uint16 seq) const
 		{
 			return SeqGreater(seq, latestRecvSeq[E2U(ch)]);
 		}
 
-		JAMNET_FORCE_INLINE bool IsExpected(eChannelType ch, uint16 seq) const
+		bool IsExpected(eChannelType ch, uint16 seq) const
 		{
 			return seq == expectedSeq[E2U(ch)];
 		}
 
-		JAMNET_FORCE_INLINE void UpdateLatest(eChannelType ch, uint16 seq)
+		void UpdateLatest(eChannelType ch, uint16 seq)
 		{
 			latestRecvSeq[E2U(ch)] = seq;
 		}
 
-		JAMNET_FORCE_INLINE void UpdateExpected(eChannelType ch, uint16 seq)
+		void UpdateExpected(eChannelType ch, uint16 seq)
 		{
 			expectedSeq[E2U(ch)] = seq;
 		}
@@ -185,12 +185,12 @@ namespace jam::net
 		ChannelData						reliableOrdered;	// index 0
 		ChannelData						reliableUnordered;	// index 1
 
-		JAMNET_FORCE_INLINE ChannelData& GetChannelData(eChannelType ch)
+		ChannelData& GetChannelData(eChannelType ch)
 		{
 			return (ch == eChannelType::RELIABLE_ORDERED) ? reliableOrdered : reliableUnordered;
 		}
 
-		JAMNET_FORCE_INLINE const ChannelData& GetChannel(eChannelType ch) const
+		const ChannelData& GetChannel(eChannelType ch) const
 		{
 			return (ch == eChannelType::RELIABLE_ORDERED) ? reliableOrdered : reliableUnordered;
 		}

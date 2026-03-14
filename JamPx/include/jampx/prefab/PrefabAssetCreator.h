@@ -16,7 +16,7 @@ namespace jam::px
 
 		static PxShape*			CreatePrimitiveShape(const ShapeDef& def, const PxMaterial& material);
 		static PxShape*			CreateTriangleMeshShape(const ShapeDef& def, const PxMaterial& material, PxTriangleMesh* mesh);
-		static PxShape*			CreateConvexMeshShape(const ShapeDef& def, const PxMaterial& materialconst, PxConvexMesh* mesh);
+		static PxShape*			CreateConvexMeshShape(const ShapeDef& def, const PxMaterial& material, PxConvexMesh* mesh);
 
 		static PxRigidActor*	CreateRigidActor(const ActorTemplateDef& def, const std::vector<PxShape*>& shapes);
 	};

@@ -40,10 +40,10 @@ namespace jam::net
 		if (!m_bInitialized) return;
 		if (!m_world.ctx().contains<TickCounter>()) return;
 
-		entt::entity player = GetPlayerEntity(m_world);
+		entt::entity player = GetLocalEntity(m_world);
 		if (player == entt::null) return;
 
-		auto& inputState = m_world.get_or_emplace<PlayerInputState>(player);
+		auto& inputState = m_world.get_or_emplace<LocalInputState>(player);
 		uint32 currentTick = m_world.ctx().get<TickCounter>().tick;
 
 		px::CharacterInput sample{};
@@ -68,10 +68,10 @@ namespace jam::net
 
 	void ClientInputSystem::OnServerAck(uint32 ackSeq)
 	{
-		entt::entity player = GetPlayerEntity(m_world);
+		entt::entity player = GetLocalEntity(m_world);
 		if (player == entt::null) return;
 
-		if (auto* inputState = m_world.try_get<PlayerInputState>(player))
+		if (auto* inputState = m_world.try_get<LocalInputState>(player))
 		{
 			while (!inputState->unackedInputs.empty() && inputState->unackedInputs.front().seq <= ackSeq)
 				inputState->unackedInputs.pop_front();

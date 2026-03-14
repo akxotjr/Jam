@@ -8,8 +8,8 @@
 
 #include "jampx/PhysicsWorld.h"
 
-#include "jampx/RigidBody.h"
-#include "jampx/CharacterBody.h"
+#include "jampx/actor/rigid/RigidBody.h"
+#include "jampx/actor/character/CharacterBody.h"
 
 #include "jampx/prefab/PrefabLevelLoader.h"
 
@@ -45,6 +45,9 @@ namespace jam::px
 		PhysicsHandle						Spawn(ObjectId id, const SpawnDesc& desc) override;
 		void								Despawn(ObjectId id) override;
 
+		eBodyType							GetBodyType(ObjectId id) const;
+		eBodyType							FindBodyType(PrefabKey key) const;
+
 		eMotionType							GetMotionType(ObjectId id) const override;
 		eMotionType							FindMotionType(PrefabKey key) const override;
 
@@ -59,13 +62,11 @@ namespace jam::px
 
 		bool								RaycastLOS(const Vec3& from, const Vec3& to) const override;
 
-		PhysicsHandle						SpawnProjectile(ObjectId id, const ProjectileSpawnDesc& desc) override;
-		void								DespawnProjectile(ObjectId id) override;
 
 		HitscanResult						Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const override;
 
 
-		std::vector<SimEvent>				ConsumeSimEvents() override;
+		std::vector<SimEvent>				ConsumeSimEvents();
 		std::vector<ObjectId>				PopActiveList() override;
 
 	private:
@@ -73,30 +74,10 @@ namespace jam::px
 
 		void								StepCharacters(float dt);
 		void								StepKinematics(float dt);
-
 		void								StepProjectiles(float dt);
 
-
-	private:
-
-
-		/// @brief ANALYTIC / DYN_SIM 투사체 항목.
-		/// HITSCAN은 영속 항목 없이 즉발 처리.
-		struct ProjectileEntry
-		{
-			eProjectileKind					kind{};
-			PhysicsHandle					physicsHandle{};
-			PxRigidActor*					actor = nullptr;
-			TemplateHandle					templateHandle{};
-
-			Vec3							velocity{};
-			float							gravityScale = 1.f;
-			float							maxRange = 1000.f;
-			float							traveledDist = 0.f;
-			uint16_t						teamId = 0;
-
-			std::unique_ptr<ProjectileComponent> mover;
-		};
+		void								SyncKinematics();
+		void								SyncProjectiles();
 
 	private:
 		std::atomic<bool>									m_inited			= false;
@@ -110,27 +91,17 @@ namespace jam::px
 		PhysicsCompletionTask								m_completionTask;
 		bool												m_stepPending		= false;
 
-		std::unordered_map<ObjectId, ProjectileEntry>		m_projectileEntries;
-
-		// None / Static / Dynamic -> PhysX Simulate
-		std::unordered_map<ObjectId, RigidBody>				m_rigidMap;
-
-		// Kinematic -> StepKinematics()
-		std::unordered_map<ObjectId, RigidBody>				m_kinematicMap;
-
-		// Local/AI character -> MoveCharacters()
-		std::unordered_map<ObjectId, CharacterBody>			m_cctMap;
-
-		// Remote character -> SetCharacterState()'s Teleport. no tick
-		std::unordered_map<ObjectId, CharacterBody>			m_remoteCctMap;
-
-
+		std::unordered_map<ObjectId, RigidBody>				m_rigidMap;			// None / Static / Dynamic -> PhysX Simulate
+		std::unordered_map<ObjectId, RigidBody>				m_kinematicMap;		// Kinematic -> StepKinematics()
+		std::unordered_map<ObjectId, RigidBody>				m_projectileMap;	// Projectiles -> StepProjectiles()
+		std::unordered_map<ObjectId, CharacterBody>			m_cctMap;			// Local/AI character -> MoveCharacters()
+		std::unordered_map<ObjectId, CharacterBody>			m_remoteCctMap;		// Remote character -> SetCharacterState()'s Teleport. no tick
 
 		// ANALYTIC 투사체 히트 등 수동 push 이벤트
 		std::vector<SimEvent>								m_pendingSimEvents;
 
 		// kinematic body / setGlobalPose / character move에 의한 수동 dirty tracking
-// onAdvance로 검출되지 않는 위치 변경을 보완함
+		// onAdvance로 검출되지 않는 위치 변경을 보완함
 		std::unordered_set<ObjectId>						m_dirtySet;
 	};
 }

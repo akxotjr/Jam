@@ -5,7 +5,9 @@
 namespace jam::px
 {
 	CharacterBody::CharacterBody(PxCapsuleController* controller, PxRigidActor* hitbox, const CharacterMoveConfig& cfg)
-		: m_controller(controller), m_hitbox(hitbox), m_mover(std::make_unique<LocomotionComponent>(cfg, controller, hitbox))
+		: m_controller(controller), 
+		  m_hitbox(hitbox), 
+		  m_mover(std::make_unique<LocomotionComponent>(cfg, controller, hitbox))
 	{
 		m_state.pos = m_mover->GetMoveState().position;
 	}

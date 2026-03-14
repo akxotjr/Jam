@@ -23,7 +23,7 @@ namespace jam
 
         constexpr FlagsT() noexcept = default;
         constexpr FlagsT(Enum e) noexcept : m_bits(static_cast<Storage>(u(e))) {}
-        constexpr explicit FlagsT(Storage bits) noexcept : m_bits(bits) {}
+        constexpr FlagsT(Storage bits) noexcept : m_bits(bits) {}
 
         static constexpr FlagsT None() noexcept { return FlagsT(Storage{ 0 }); }
 
@@ -51,7 +51,7 @@ namespace jam
         friend constexpr FlagsT& operator&=(FlagsT& a, FlagsT b) noexcept { a.m_bits &= b.m_bits; return a; }
         friend constexpr FlagsT& operator^=(FlagsT& a, FlagsT b) noexcept { a.m_bits ^= b.m_bits; return a; }
 
-        // ops (Enum <-> Enum/Flags) : 편의 (PhysX 느낌)
+        // ops (Enum <-> Enum/Flags) 
         friend constexpr FlagsT operator|(Enum a, Enum b) noexcept { return FlagsT(a) | FlagsT(b); }
         friend constexpr FlagsT operator&(Enum a, Enum b) noexcept { return FlagsT(a) & FlagsT(b); }
         friend constexpr FlagsT operator^(Enum a, Enum b) noexcept { return FlagsT(a) ^ FlagsT(b); }
@@ -67,5 +67,13 @@ namespace jam
     private:
         Storage m_bits{ 0 };
     };
+
+    //// unscoped enum의 정수 승격으로 built-in | 가 선택되는 것을 방지하기 위한 보조 오버로드
+    //template<class Enum, std::enable_if_t<std::is_enum_v<Enum>, int> = 0>
+    //constexpr FlagsT<Enum, underlying_t<Enum>> operator|(Enum a, Enum b) noexcept
+    //{
+    //    using F = FlagsT<Enum, underlying_t<Enum>>;
+    //    return F(a) | F(b);
+    //}
 
 } // namespace jam

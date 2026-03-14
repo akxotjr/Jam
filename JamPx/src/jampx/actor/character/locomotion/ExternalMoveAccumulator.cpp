@@ -1,5 +1,5 @@
 ﻿#include "pch.h"
-#include "jampx/character/ExternalMoveAccumulator.h"
+#include "jampx/actor/character/locomotion/ExternalMoveAccumulator.h"
 
 
 namespace jam::px
@@ -23,4 +23,4 @@ namespace jam::px
             m_overrideWeight = std::max(m_overrideWeight, r.overrideWeight);
         }
 	}
-}
+} // namespace jam::px
