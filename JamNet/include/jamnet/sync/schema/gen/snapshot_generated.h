@@ -29,6 +29,8 @@ struct fbCharacterDelta96;
 
 struct fbCharacterDelta128;
 
+struct fbKinematicState;
+
 struct fbSnapshotHeader;
 struct fbSnapshotHeaderBuilder;
 struct fbSnapshotHeaderT;
@@ -206,6 +208,66 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) fbCharacterDelta128 FLATBUFFERS_FINAL_CLA
 };
 FLATBUFFERS_STRUCT_END(fbCharacterDelta128, 16);
 
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) fbKinematicState FLATBUFFERS_FINAL_CLASS {
+ private:
+  uint64_t start_epoch_;
+  uint32_t phase_;
+  float t_;
+  uint32_t target_id_;
+  uint32_t event_mask_;
+  uint8_t kine_type_;
+  int8_t padding0__;  int16_t padding1__;  int32_t padding2__;
+
+ public:
+  fbKinematicState()
+      : start_epoch_(0),
+        phase_(0),
+        t_(0),
+        target_id_(0),
+        event_mask_(0),
+        kine_type_(0),
+        padding0__(0),
+        padding1__(0),
+        padding2__(0) {
+    (void)padding0__;
+    (void)padding1__;
+    (void)padding2__;
+  }
+  fbKinematicState(uint64_t _start_epoch, uint32_t _phase, float _t, uint32_t _target_id, uint32_t _event_mask, uint8_t _kine_type)
+      : start_epoch_(::flatbuffers::EndianScalar(_start_epoch)),
+        phase_(::flatbuffers::EndianScalar(_phase)),
+        t_(::flatbuffers::EndianScalar(_t)),
+        target_id_(::flatbuffers::EndianScalar(_target_id)),
+        event_mask_(::flatbuffers::EndianScalar(_event_mask)),
+        kine_type_(::flatbuffers::EndianScalar(_kine_type)),
+        padding0__(0),
+        padding1__(0),
+        padding2__(0) {
+    (void)padding0__;
+    (void)padding1__;
+    (void)padding2__;
+  }
+  uint64_t start_epoch() const {
+    return ::flatbuffers::EndianScalar(start_epoch_);
+  }
+  uint32_t phase() const {
+    return ::flatbuffers::EndianScalar(phase_);
+  }
+  float t() const {
+    return ::flatbuffers::EndianScalar(t_);
+  }
+  uint32_t target_id() const {
+    return ::flatbuffers::EndianScalar(target_id_);
+  }
+  uint32_t event_mask() const {
+    return ::flatbuffers::EndianScalar(event_mask_);
+  }
+  uint8_t kine_type() const {
+    return ::flatbuffers::EndianScalar(kine_type_);
+  }
+};
+FLATBUFFERS_STRUCT_END(fbKinematicState, 32);
+
 struct fbSnapshotHeaderT : public ::flatbuffers::NativeTable {
   typedef fbSnapshotHeader TableType;
   uint32_t server_tick = 0;
@@ -286,6 +348,7 @@ struct fbActorMetaT : public ::flatbuffers::NativeTable {
   uint64_t controller_user_id = 0;
   uint64_t prefab_key = 0;
   uint32_t spawn_req_id = 0;
+  uint32_t packed_id = 0;
 };
 
 struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -295,7 +358,8 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_OWNER_USER_ID = 4,
     VT_CONTROLLER_USER_ID = 6,
     VT_PREFAB_KEY = 8,
-    VT_SPAWN_REQ_ID = 10
+    VT_SPAWN_REQ_ID = 10,
+    VT_PACKED_ID = 12
   };
   uint64_t owner_user_id() const {
     return GetField<uint64_t>(VT_OWNER_USER_ID, 0);
@@ -309,12 +373,16 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t spawn_req_id() const {
     return GetField<uint32_t>(VT_SPAWN_REQ_ID, 0);
   }
+  uint32_t packed_id() const {
+    return GetField<uint32_t>(VT_PACKED_ID, 0);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_PREFAB_KEY, 8) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_REQ_ID, 4) &&
+           VerifyField<uint32_t>(verifier, VT_PACKED_ID, 4) &&
            verifier.EndTable();
   }
   fbActorMetaT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -338,6 +406,9 @@ struct fbActorMetaBuilder {
   void add_spawn_req_id(uint32_t spawn_req_id) {
     fbb_.AddElement<uint32_t>(fbActorMeta::VT_SPAWN_REQ_ID, spawn_req_id, 0);
   }
+  void add_packed_id(uint32_t packed_id) {
+    fbb_.AddElement<uint32_t>(fbActorMeta::VT_PACKED_ID, packed_id, 0);
+  }
   explicit fbActorMetaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -354,11 +425,13 @@ inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(
     uint64_t owner_user_id = 0,
     uint64_t controller_user_id = 0,
     uint64_t prefab_key = 0,
-    uint32_t spawn_req_id = 0) {
+    uint32_t spawn_req_id = 0,
+    uint32_t packed_id = 0) {
   fbActorMetaBuilder builder_(_fbb);
   builder_.add_prefab_key(prefab_key);
   builder_.add_controller_user_id(controller_user_id);
   builder_.add_owner_user_id(owner_user_id);
+  builder_.add_packed_id(packed_id);
   builder_.add_spawn_req_id(spawn_req_id);
   return builder_.Finish();
 }
@@ -374,6 +447,7 @@ struct fbActorEntityT : public ::flatbuffers::NativeTable {
   std::unique_ptr<jam::net::fb::fbTransformDelta> transform_delta{};
   std::unique_ptr<jam::net::fb::fbCharacterFull160> character_full{};
   std::unique_ptr<jam::net::fb::fbCharacterDelta128> character_delta{};
+  std::unique_ptr<jam::net::fb::fbKinematicState> kinematic_state{};
   fbActorEntityT() = default;
   fbActorEntityT(const fbActorEntityT &o);
   fbActorEntityT(fbActorEntityT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -390,7 +464,8 @@ struct fbActorEntity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_TRANSFORM_FULL = 10,
     VT_TRANSFORM_DELTA = 12,
     VT_CHARACTER_FULL = 14,
-    VT_CHARACTER_DELTA = 16
+    VT_CHARACTER_DELTA = 16,
+    VT_KINEMATIC_STATE = 18
   };
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
@@ -413,6 +488,9 @@ struct fbActorEntity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const jam::net::fb::fbCharacterDelta128 *character_delta() const {
     return GetStruct<const jam::net::fb::fbCharacterDelta128 *>(VT_CHARACTER_DELTA);
   }
+  const jam::net::fb::fbKinematicState *kinematic_state() const {
+    return GetStruct<const jam::net::fb::fbKinematicState *>(VT_KINEMATIC_STATE);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
@@ -423,6 +501,7 @@ struct fbActorEntity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<jam::net::fb::fbTransformDelta>(verifier, VT_TRANSFORM_DELTA, 8) &&
            VerifyField<jam::net::fb::fbCharacterFull160>(verifier, VT_CHARACTER_FULL, 8) &&
            VerifyField<jam::net::fb::fbCharacterDelta128>(verifier, VT_CHARACTER_DELTA, 8) &&
+           VerifyField<jam::net::fb::fbKinematicState>(verifier, VT_KINEMATIC_STATE, 8) &&
            verifier.EndTable();
   }
   fbActorEntityT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -455,6 +534,9 @@ struct fbActorEntityBuilder {
   void add_character_delta(const jam::net::fb::fbCharacterDelta128 *character_delta) {
     fbb_.AddStruct(fbActorEntity::VT_CHARACTER_DELTA, character_delta);
   }
+  void add_kinematic_state(const jam::net::fb::fbKinematicState *kinematic_state) {
+    fbb_.AddStruct(fbActorEntity::VT_KINEMATIC_STATE, kinematic_state);
+  }
   explicit fbActorEntityBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -474,8 +556,10 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(
     const jam::net::fb::fbTransformFull *transform_full = nullptr,
     const jam::net::fb::fbTransformDelta *transform_delta = nullptr,
     const jam::net::fb::fbCharacterFull160 *character_full = nullptr,
-    const jam::net::fb::fbCharacterDelta128 *character_delta = nullptr) {
+    const jam::net::fb::fbCharacterDelta128 *character_delta = nullptr,
+    const jam::net::fb::fbKinematicState *kinematic_state = nullptr) {
   fbActorEntityBuilder builder_(_fbb);
+  builder_.add_kinematic_state(kinematic_state);
   builder_.add_character_delta(character_delta);
   builder_.add_character_full(character_full);
   builder_.add_transform_delta(transform_delta);
@@ -614,6 +698,7 @@ inline void fbActorMeta::UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolve
   { auto _e = controller_user_id(); _o->controller_user_id = _e; }
   { auto _e = prefab_key(); _o->prefab_key = _e; }
   { auto _e = spawn_req_id(); _o->spawn_req_id = _e; }
+  { auto _e = packed_id(); _o->packed_id = _e; }
 }
 
 inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -628,12 +713,14 @@ inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatB
   auto _controller_user_id = _o->controller_user_id;
   auto _prefab_key = _o->prefab_key;
   auto _spawn_req_id = _o->spawn_req_id;
+  auto _packed_id = _o->packed_id;
   return jam::net::fb::CreatefbActorMeta(
       _fbb,
       _owner_user_id,
       _controller_user_id,
       _prefab_key,
-      _spawn_req_id);
+      _spawn_req_id,
+      _packed_id);
 }
 
 inline fbActorEntityT::fbActorEntityT(const fbActorEntityT &o)
@@ -643,7 +730,8 @@ inline fbActorEntityT::fbActorEntityT(const fbActorEntityT &o)
         transform_full((o.transform_full) ? new jam::net::fb::fbTransformFull(*o.transform_full) : nullptr),
         transform_delta((o.transform_delta) ? new jam::net::fb::fbTransformDelta(*o.transform_delta) : nullptr),
         character_full((o.character_full) ? new jam::net::fb::fbCharacterFull160(*o.character_full) : nullptr),
-        character_delta((o.character_delta) ? new jam::net::fb::fbCharacterDelta128(*o.character_delta) : nullptr) {
+        character_delta((o.character_delta) ? new jam::net::fb::fbCharacterDelta128(*o.character_delta) : nullptr),
+        kinematic_state((o.kinematic_state) ? new jam::net::fb::fbKinematicState(*o.kinematic_state) : nullptr) {
 }
 
 inline fbActorEntityT &fbActorEntityT::operator=(fbActorEntityT o) FLATBUFFERS_NOEXCEPT {
@@ -654,6 +742,7 @@ inline fbActorEntityT &fbActorEntityT::operator=(fbActorEntityT o) FLATBUFFERS_N
   std::swap(transform_delta, o.transform_delta);
   std::swap(character_full, o.character_full);
   std::swap(character_delta, o.character_delta);
+  std::swap(kinematic_state, o.kinematic_state);
   return *this;
 }
 
@@ -673,6 +762,7 @@ inline void fbActorEntity::UnPackTo(fbActorEntityT *_o, const ::flatbuffers::res
   { auto _e = transform_delta(); if (_e) _o->transform_delta = std::unique_ptr<jam::net::fb::fbTransformDelta>(new jam::net::fb::fbTransformDelta(*_e)); }
   { auto _e = character_full(); if (_e) _o->character_full = std::unique_ptr<jam::net::fb::fbCharacterFull160>(new jam::net::fb::fbCharacterFull160(*_e)); }
   { auto _e = character_delta(); if (_e) _o->character_delta = std::unique_ptr<jam::net::fb::fbCharacterDelta128>(new jam::net::fb::fbCharacterDelta128(*_e)); }
+  { auto _e = kinematic_state(); if (_e) _o->kinematic_state = std::unique_ptr<jam::net::fb::fbKinematicState>(new jam::net::fb::fbKinematicState(*_e)); }
 }
 
 inline ::flatbuffers::Offset<fbActorEntity> fbActorEntity::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorEntityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -690,6 +780,7 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(::flatbuffers::F
   auto _transform_delta = _o->transform_delta ? _o->transform_delta.get() : nullptr;
   auto _character_full = _o->character_full ? _o->character_full.get() : nullptr;
   auto _character_delta = _o->character_delta ? _o->character_delta.get() : nullptr;
+  auto _kinematic_state = _o->kinematic_state ? _o->kinematic_state.get() : nullptr;
   return jam::net::fb::CreatefbActorEntity(
       _fbb,
       _net_id,
@@ -698,7 +789,8 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(::flatbuffers::F
       _transform_full,
       _transform_delta,
       _character_full,
-      _character_delta);
+      _character_delta,
+      _kinematic_state);
 }
 
 inline fbSnapshotT::fbSnapshotT(const fbSnapshotT &o)

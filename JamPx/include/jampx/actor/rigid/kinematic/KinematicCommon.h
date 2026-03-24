@@ -1,4 +1,6 @@
 ﻿#pragma once
+
+#include "jampx/Easing.h"
 #include "jampx/geometry/Curve.h"
 
 
@@ -114,7 +116,8 @@ namespace jam::px
         // ---- center ----
         eOrbitCenterMode        centerMode          = eOrbitCenterMode::FixedPoint;
         PxVec3                  fixedCenter         = PxVec3(physx::PxZero);
-        PxVec3                  targetOffset        = PxVec3(physx::PxZero);   // using centerMode = FollowTarget
+        ObjectId                targetId            = INVALID_OBJ_ID;
+    	PxVec3                  targetOffset        = PxVec3(physx::PxZero);   // using centerMode = FollowTarget
 
         // ---- plane ----
         eOrbitPlaneMode         planeMode           = eOrbitPlaneMode::XZ;

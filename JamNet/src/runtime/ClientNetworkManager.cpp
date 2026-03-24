@@ -208,7 +208,7 @@ namespace jam::net
 		return true;
 	}
 
-	void ClientNetworkManager:: InitializeWorldSkeleton() const
+	void ClientNetworkManager::InitializeWorldSkeleton() const
 	{
 		if (!m_world)
 			return;

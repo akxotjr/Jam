@@ -11,6 +11,7 @@ namespace jam::px
 	struct SpawnDesc;
 	struct ProjectileSpawnDesc;
 
+
 	class ActorFactory
 	{
 	public:
@@ -39,7 +40,7 @@ namespace jam::px
 			uint8				roleId);
 
 		/// @brief RigidBody를 월드에서 제거 (actor 소유권은 PhysicsWorld)
-		static void DestroyRigidBody(const PhysicsWorld& world, const RigidBody& body);
+		static void DestroyRigidBody(PhysicsWorld& world, const RigidBody& body);
 
 		/// @brief CharacterBody(CCT + hitbox)를 월드에서 제거
 		static void DestroyCharacterBody(PhysicsWorld& world, const CharacterBody& body);

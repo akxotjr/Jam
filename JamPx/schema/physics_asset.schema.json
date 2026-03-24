@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["version"],
   "properties": {
-    "version": { "type": "integer", "const": 2 },
+    "version": { "type": "integer", "const": 1 },
     "materials": { "$ref": "#/$defs/material_map" },
     "meshes": { "$ref": "#/$defs/mesh_map" },
     "shapes": { "$ref": "#/$defs/shape_map" },

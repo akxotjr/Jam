@@ -122,7 +122,7 @@ namespace jam::px
 	}
 
 	ProjectileComponent::ProjectileComponent(const ProjectileConfig& cfg)
-		: m_config(std::move(cfg))
+		: m_config(cfg)
 	{
 		m_state.velocity = m_config.motion.initialVelocity;
 	}
@@ -296,13 +296,13 @@ namespace jam::px
 		if (!m_config.homing.enableHoming)
 			return false;
 
-		if (!m_reolver)
+		if (!m_resolver)
 			return false;
 
 		if (m_config.homing.targetId == INVALID_OBJ_ID)
 			return false;
 
-		if (!m_reolver(m_config.homing.targetId, target))
+		if (!m_resolver(m_config.homing.targetId, target))
 			return false;
 
 		return target.valid;

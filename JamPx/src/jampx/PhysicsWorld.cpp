@@ -5,62 +5,27 @@
 
 namespace jam::px
 {
-	namespace
-	{
-		//class CharacterControllerHitReport final : public PxUserControllerHitReport
-		//{
-		//public:
-		//	void onShapeHit(const PxControllerShapeHit& hit) override
-		//	{
-		//		PxRigidActor* actor = hit.actor;
-		//		if (!actor) return;
-
-		//		PxRigidDynamic* dyn = actor->is<PxRigidDynamic>();
-		//		if (!dyn) return;
-
-		//		if (dyn->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
-		//			return;
-
-		//		// 아주 약하게 밀리는 정도
-		//		const PxVec3 dir = hit.dir;
-		//		if (dir.magnitudeSquared() <= 1e-6f)
-		//			return;
-
-		//		const PxVec3 n = dir.getNormalized();
-
-		//		// impulse 크기(원하는 느낌에 따라 조절)
-		//		constexpr float kPushImpulse = 0.25f;
-		//		dyn->addForce(n * kPushImpulse, PxForceMode::eIMPULSE, true);
-		//	}
-
-		//	void onControllerHit(const PxControllersHit&) override {}
-		//	void onObstacleHit(const PxControllerObstacleHit&) override {}
-		//};
-
-		//CharacterControllerHitReport g_characterControllerHitReport;
-
-
-	}
-
-
 	void PhysicsWorld::Init(ShardPxCpuDispacter* dispacter)
 	{
-		if (m_pxScene) return;
+		if (m_scenes[0]) return;
 
-		if (dispacter)
+		for (int i = 0; i < 2; ++i)
 		{
-			auto desc = PhysicsCore::Instance().MakeDefaultSceneDesc();
-			desc.cpuDispatcher = dispacter;
-			m_pxScene = PhysicsCore::Instance().CreateScene(desc);
-		}
-		else
-		{
-			m_pxScene = PhysicsCore::Instance().CreateScene();
-		}
+			if (dispacter)
+			{
+				auto desc = PhysicsCore::Instance().MakeDefaultSceneDesc();
+				desc.cpuDispatcher = dispacter;
+				m_scenes[i] = PhysicsCore::Instance().CreateScene(desc);
+			}
+			else
+			{
+				m_scenes[i] = PhysicsCore::Instance().CreateScene();
+			}
 
-		m_simCallback = std::make_unique<SimulationEventCallback>();
-		m_pxScene->setSimulationEventCallback(m_simCallback.get());
-		m_controllerManager = PxCreateControllerManager(*m_pxScene, false);
+			m_simCallbacks[i] = std::make_unique<SimulationEventCallback>();
+			m_scenes[i]->setSimulationEventCallback(m_simCallbacks[i].get());
+			m_controllerMgrs[i] = PxCreateControllerManager(*m_scenes[i], false);
+		}
 
 		m_characterBehaviorCB = new CharacterBehaviorCallbackT<>(DefaultCharacterBehaviorPolicy{});
 		m_characterReportCB   = new CharacterHitReportT<>(DefaultCharacterHitReportPolicy{});
@@ -68,35 +33,46 @@ namespace jam::px
 
 	void PhysicsWorld::Destroy()
 	{
-		if (m_controllerManager) { m_controllerManager->release(); m_controllerManager = nullptr; }
-		if (m_pxScene)           { m_pxScene->release();           m_pxScene = nullptr; }
+		for (int i = 0; i < 2; ++i)
+		{
+			if (m_controllerMgrs[i]) { m_controllerMgrs[i]->release(); m_controllerMgrs[i] = nullptr; }
+			if (m_scenes[i])         { m_scenes[i]->release();         m_scenes[i] = nullptr; }
+		}
 	}
 
-	void PhysicsWorld::Simulate(float elapsed) const
+	PxScene* PhysicsWorld::GetScene(ePxSceneSlot slot) const
 	{
-		if (!m_pxScene) return;
-
-		m_pxScene->simulate(elapsed);
-		m_pxScene->fetchResults(true);
+		const int32 idx = E2U(slot);
+		return (idx >= 0 && idx < 2) ? m_scenes[idx] : nullptr;
 	}
 
-	void PhysicsWorld::BeginSimulate(float elapsed, PxBaseTask* completionTask) const
+	void PhysicsWorld::Simulate(ePxSceneSlot slot, float elapsed) const
 	{
-		if (!m_pxScene) return;
-		m_pxScene->simulate(elapsed, completionTask);
+		PxScene* scene = GetScene(slot);
+		if (!scene) return;
+
+		scene->simulate(elapsed);
+		scene->fetchResults(true);
 	}
 
-	void PhysicsWorld::EndSimulate() const
+	void PhysicsWorld::BeginSimulate(ePxSceneSlot slot, float elapsed, PxBaseTask* completionTask) const
 	{
-		if (!m_pxScene) return;
-		m_pxScene->fetchResults(true); // Completion Task 이후이므로 즉시 반환됨
+		PxScene* scene = GetScene(slot);
+		if (!scene) return;
+		scene->simulate(elapsed, completionTask);
 	}
 
-
-	PxRigidActor* PhysicsWorld::CreateRigidActor(TemplateHandle tpl, const PxTransform& pose, void* userData)
+	void PhysicsWorld::EndSimulate(ePxSceneSlot slot) const
 	{
-		if (!m_pxScene)
-			return nullptr;
+		PxScene* scene = GetScene(slot);
+		if (!scene) return;
+		scene->fetchResults(true);
+	}
+
+	PxRigidActor* PhysicsWorld::CreateRigidActor(ePxSceneSlot slot, TemplateHandle tpl, const PxTransform& pose, void* userData)
+	{
+		PxScene* scene = GetScene(slot);
+		if (!scene) return nullptr;
 
 		if (!PHYSICS_PREFAB_REGISTRY.HasTemplate(tpl))
 			return nullptr;
@@ -104,22 +80,27 @@ namespace jam::px
 		PxRigidActor* inst = PHYSICS_PREFAB_REGISTRY.Instantiate(tpl, pose, userData);
 		if (!inst) return nullptr;
 
-		JAM_ASSERT(m_pxScene->addActor(*inst))
+		JAM_ASSERT(scene->addActor(*inst))
 
 		return inst;
 	}
 
-	void PhysicsWorld::RemoveRigidActor(PxRigidActor* actor) const
+	void PhysicsWorld::RemoveRigidActor(ePxSceneSlot slot, PxRigidActor* actor) const
 	{
-		if (!actor || !m_pxScene) return;
+		if (!actor) return;
 
-		m_pxScene->removeActor(*actor);
+		PxScene* scene = GetScene(slot);
+		if (!scene) return;
+
+		scene->removeActor(*actor);
 		actor->release();
 	}
 
-	PxCapsuleController* PhysicsWorld::CreateController(const CCTBodyDef& def, const PxVec3& pos, void* userData)
+	PxCapsuleController* PhysicsWorld::CreateController(ePxSceneSlot slot, const CCTBodyDef& def, const PxVec3& pos, void* userData)
 	{
-		if (!m_controllerManager) return nullptr;
+		const int32 idx = E2U(slot);
+		PxControllerManager* mgr = (idx >= 0 && idx < 2) ? m_controllerMgrs[idx] : nullptr;
+		if (!mgr) return nullptr;
 
 		PxCapsuleControllerDesc desc{};
 		desc.upDirection			= PxVec3(0.f, 1.0f, 0.f);
@@ -140,7 +121,7 @@ namespace jam::px
 
 		if (!desc.isValid()) return nullptr;
 
-		auto* cct = m_controllerManager->createController(desc);
+		auto* cct = mgr->createController(desc);
 		if (auto cctType = cct->getType(); cctType != physx::PxControllerShapeType::eCAPSULE)
 			return nullptr;
 
@@ -149,20 +130,44 @@ namespace jam::px
 
 	PxRigidDynamic* PhysicsWorld::CreateHitbox(const std::vector<ShapeHandle>& shapeHandles, const PxVec3& pos, void* userData)
 	{
-		std::vector<PxShape*> shapes;
+		// Hitbox는 Main Scene에만 생성 (쿼리 전용이므로 replay 불필요)
+		PxScene* scene = GetScene(ePxSceneSlot::Main);
+		if (!scene) return nullptr;
 
+		std::vector<PxShape*> shapes;
 		JAM_PX_SHAPES(shapeHandles, shapes);
 
 		PxRigidDynamic* hitbox = PX_PHYSICS->createRigidDynamic(PxTransform(pos));
 		if (!hitbox) return nullptr;
 
 		hitbox->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+		hitbox->userData = userData;
 
-		for (auto shape : shapes)
+		for (auto h : shapeHandles)
 		{
+			PxShape* cached = JAM_PX_SHAPE(h);
+			if (!cached) continue;
+
+			PxShape* shape = physx::PxCloneShape(*PX_PHYSICS, *cached, true);
+			if (!shape)
+			{
+				hitbox->release();
+				return nullptr;
+			}
+
+			shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
+			shape->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, true);
+			shape->setFlag(PxShapeFlag::eTRIGGER_SHAPE, false);
+
+			PxFilterData qfd = shape->getQueryFilterData();
+			qfd.word0 = QueryCategory::HITBOX;
+			shape->setQueryFilterData(qfd);
+
 			hitbox->attachShape(*shape);
+			shape->release();
 		}
-		m_pxScene->addActor(*hitbox);
+
+		scene->addActor(*hitbox);
 
 		return hitbox;
 	}
@@ -175,16 +180,17 @@ namespace jam::px
 		controller->release();
 	}
 
-
 	std::vector<SimEvent> PhysicsWorld::ConsumeSimEvents()
 	{
-		if (!m_simCallback) return{};
-		return m_simCallback->ConsumeEvents();
+		// Main scene 이벤트만 반환 (gameplay relevant)
+		if (!m_simCallbacks[0]) return{};
+		return m_simCallbacks[0]->ConsumeEvents();
 	}
 
 	std::vector<ObjectId> PhysicsWorld::ConsumeAdvancdActive()
 	{
-		if (!m_simCallback) return {};
-		return m_simCallback->ConsumeActiveList();
+		// Main scene active list만 반환
+		if (!m_simCallbacks[0]) return {};
+		return m_simCallbacks[0]->ConsumeActiveList();
 	}
 }

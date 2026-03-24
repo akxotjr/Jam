@@ -8,7 +8,7 @@
   "properties": {
     "version": {
       "type": "integer",
-      "const": 2
+      "const": 1
     },
     "scene_name": {
       "type": "string",
@@ -54,8 +54,12 @@
     "instance": {
       "type": "object",
       "additionalProperties": false,
-      "required": [ "template", "pose" ],
+      "required": [ "level_actor_id", "template", "pose" ],
       "properties": {
+        "level_actor_id": {
+          "type": "integer",
+          "default": 0
+        },
         "template": {
           "type": "string",
           "minLength": 1

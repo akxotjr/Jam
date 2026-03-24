@@ -56,6 +56,7 @@ namespace jam::px
 
 		ApplyJump(intent);
 		ApplyGravity(dt);
+
 		ApplyDash(dt, intent);
 
 		if (m_accumulator && m_accumulator->IsOverrideLocomotion())
@@ -87,7 +88,7 @@ namespace jam::px
 		PostMoveUpdate(step.sense);
 	}
 
-	void LocomotionComponent::GetCharacterState(CharacterState& state) const
+	void LocomotionComponent::GetCharacterState(OUT CharacterState& state) const
 	{
 		if (!m_motor) return;
 
@@ -189,7 +190,10 @@ namespace jam::px
 			// velocity.y = 0 이면 CCT에 하강 의도가 없어 삼각형 메시 엣지의
 			// micro step-up이 매 프레임 누적됨.
 			// 소량 음수를 유지해 CCT가 항상 바닥으로 눌리도록 함.
-			m_state.velocity.y = -(m_cfg.gravity * dt);
+			//m_state.velocity.y = -(m_cfg.gravity * dt);
+
+			constexpr float kGroundStickSpeed = -2.0f;
+			m_state.velocity.y = kGroundStickSpeed;
 		}
 	}
 

@@ -25,15 +25,13 @@ namespace jam::net
 		m_physics->SetJobBridge(m_bridge.get());
 		m_physics->Init();
 
-		if (!m_levelPath.empty())
-			m_physics->LoadLevel(m_levelPath);
-
-
 		m_world.ctx().emplace<ServerNetWorld*>(this);
 		m_world.ctx().emplace<TickCounter>().Init();
 		m_world.ctx().emplace<ServerInputSystem>(m_world).Init();
 		m_world.ctx().emplace<ServerPhysicsSystem>(m_world, m_physics.get()).Init();
 		m_world.ctx().emplace<ServerReplicationSystem>(m_world).Init();
+
+		BootstrapLevelActors();
 	}
 
 	void ServerNetWorld::SetTransportAdapter(ITransportEndpoint* transport)
@@ -45,7 +43,9 @@ namespace jam::net
 	{
 		m_physics = std::move(physics);
 	}
-	
+
+
+
 	void ServerNetWorld::Enter(uint64 userId)
 	{
 		if (userId == 0)
@@ -126,7 +126,7 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::DespawnActor(const uint32 netId, const uint64 userId)
+	void ServerNetWorld::DespawnActor(const NetId netId, const uint64 userId)
 	{
 		Post(Job([this, netId, userId]()
 			{
@@ -134,7 +134,7 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::PossessActor(uint32 netId, uint64 userId)
+	void ServerNetWorld::PossessActor(NetId netId, uint64 userId)
 	{
 		Post(Job([this, netId, userId]
 			{
@@ -142,7 +142,7 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::UnpossessActor(uint32 netId, uint64 userId)
+	void ServerNetWorld::UnpossessActor(NetId netId, uint64 userId)
 	{
 		Post(Job([this, netId, userId]
 			{
@@ -150,16 +150,16 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::SpawnActorAsync(const SpawnParams& params, std::function<void(uint32)> onDone)
+	void ServerNetWorld::SpawnActorAsync(const SpawnParams& params, std::function<void(NetId)> onDone)
 	{
 		Post(Job([this, params, onDone = std::move(onDone)]()
 			{
-				const uint32 netId = SpawnActorImpl(params);
-				if (onDone) onDone(netId);
+				const NetId nid = SpawnActorImpl(params);
+				if (onDone) onDone(nid);
 			}));
 	}
 
-	void ServerNetWorld::DespawnActorAsync(uint32 netId, uint64 userId, std::function<void(bool)> onDone)
+	void ServerNetWorld::DespawnActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone)
 	{
 		Post(Job([this, netId, userId, onDone = std::move(onDone)]()
 			{
@@ -168,7 +168,7 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::PossessActorAsync(uint32 netId, uint64 userId, std::function<void(bool)> onDone)
+	void ServerNetWorld::PossessActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone)
 	{
 		Post(Job([this, netId, userId, onDone = std::move(onDone)]()
 			{
@@ -177,7 +177,7 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::UnpossessActorAsync(uint32 netId, uint64 userId, std::function<void(bool)> onDone)
+	void ServerNetWorld::UnpossessActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone)
 	{
 		Post(Job([this, netId, userId, onDone = std::move(onDone)]()
 			{
@@ -207,38 +207,94 @@ namespace jam::net
 		m_world.ctx().get<ServerReplicationSystem>().Tick();
 	}
 
-	uint32 ServerNetWorld::SpawnActorImpl(const SpawnParams& params)
+	void ServerNetWorld::BootstrapLevelActors()
+	{
+		if (!m_physics || m_levelPath.empty()) 
+			return;
+
+		m_levelLayerInfo = m_physics->SetLevelPath(m_levelPath);
+		if (m_levelLayerInfo.totalCount == 0) 
+			return;
+
+		for (const auto& [layer, count] : m_levelLayerInfo.countPerLayer)
+		{
+			if (count == 0) continue;
+
+			std::vector<px::LevelInstanceInfo> instances(count);
+			std::vector<entt::entity> created;
+			created.reserve(count);
+
+			for (uint32 i = 0; i < count; ++i)
+			{
+				const entt::entity e = m_world.create();
+				created.push_back(e);
+
+				instances[i].objectId = MakeObjectId(e);
+			}
+
+			if (!m_physics->LoadLevel(layer, instances))
+			{
+				for (auto e : created)
+					if (m_world.valid(e)) m_world.destroy(e);
+				continue;
+			}
+
+			for (const auto& inst : instances)
+			{
+				const entt::entity e = static_cast<entt::entity>(inst.objectId);
+				if (!m_world.valid(e)) continue;
+
+				const NetId nid = NetId::MakeLevel(inst.levelActorId);
+				if (!nid.IsValid()) continue;
+
+				m_world.emplace_or_replace<NetId>(e, nid);
+				m_world.emplace_or_replace<PhysicsSpawnedTag>(e);
+				m_world.emplace_or_replace<NetActorBodyType>(e, NetActorBodyType{ .body = px::eBodyType::Rigid });
+				m_world.emplace_or_replace<NetPrefabKey>(e, NetPrefabKey{ inst.prefab });
+				m_world.emplace_or_replace<px::RigidState>(e, inst.state);
+				m_world.emplace_or_replace<NewlyCreatedTag>(e);
+			}
+		}
+	}
+
+	NetId ServerNetWorld::SpawnActorImpl(const SpawnParams& params)
 	{
 		if (!params.desc.prefab.IsValid())
-			return 0;
+			return NetId::Invalid();
 
-		entt::entity e = m_world.create();
+		const entt::entity e = m_world.create();
 
-		uint32 netId = m_netIdGenerator.fetch_add(1, std::memory_order_relaxed);
-		m_world.emplace<NetIdentity>(e, netId);
+		const NetId nid = NetId::MakeRuntime(m_netIdGenerator.fetch_add(1, std::memory_order_relaxed));
+
+		m_world.emplace<NetId>(e, nid);
 		m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ params.desc.prefab });
 		m_world.emplace<NewlyCreatedTag>(e);
 		m_world.emplace<NetSpawnRequestId>(e, NetSpawnRequestId{ params.spawnId });
 		m_world.emplace<OwnershipTag>(e, OwnershipTag{params.owner});
 		m_world.emplace<ControlTag>(e, ControlTag{ params.controller });
+		m_world.emplace<NetTeamPartRole>(e, NetTeamPartRole{
+			.team = params.desc.team,
+			.part = params.desc.part,
+			.role = params.desc.role
+		});
 
 		m_world.ctx().get<ServerPhysicsSystem>().SpawnActor(e, params.desc);
 
-		JAMNET_LOG_DEBUG("[ServerNetWorld::SpawnActorImpl] netId = {}, owner = {}, reqId = {}", netId, params.owner, params.spawnId);
+		JAMNET_LOG_DEBUG("[ServerNetWorld::SpawnActorImpl] netId = {}, owner = {}, reqId = {}", nid.Raw(), params.owner, params.spawnId);
 
-		return netId;
+		return nid;
 	}
 
 
-	bool ServerNetWorld::DespawnActorImpl(uint32 netId, uint64 userId)
+	bool ServerNetWorld::DespawnActorImpl(NetId netId, uint64 userId)
 	{
 		// 1. NetId로 엔티티 찾기
-		auto view = m_world.view<NetIdentity>();
+		auto view = m_world.view<NetId>();
 		entt::entity targetEntity = entt::null;
 
 		for (auto actor : view)
 		{
-			if (view.get<NetIdentity>(actor).netId == netId)
+			if (view.get<NetId>(actor) == netId)
 			{
 				targetEntity = actor;
 				break;
@@ -268,14 +324,14 @@ namespace jam::net
 		return true;
 	}
 
-	bool ServerNetWorld::PossessActorImpl(uint32 netId, uint64 userId)
+	bool ServerNetWorld::PossessActorImpl(NetId netId, uint64 userId)
 	{
-		auto view = m_world.view<NetIdentity, OwnershipTag>();
+		auto view = m_world.view<NetId, OwnershipTag>();
 		entt::entity target = entt::null;
 
 		for (auto actor : view)
 		{
-			if (view.get<NetIdentity>(actor).netId == netId)
+			if (view.get<NetId>(actor) == netId)
 			{
 				target = actor;
 				break;
@@ -295,14 +351,14 @@ namespace jam::net
 		return true;
 	}
 
-	bool ServerNetWorld::UnpossessActorImpl(uint32 netId, uint64 userId)
+	bool ServerNetWorld::UnpossessActorImpl(NetId netId, uint64 userId)
 	{
-		auto view = m_world.view<NetIdentity, ControlTag>();
+		auto view = m_world.view<NetId, ControlTag>();
 		entt::entity targetEntity = entt::null;
 
 		for (auto actor : view)
 		{
-			if (view.get<NetIdentity>(actor).netId == netId)
+			if (view.get<NetId>(actor) == netId)
 			{
 				targetEntity = actor;
 				break;

@@ -18,6 +18,7 @@ namespace jam::px
 
         PxTransform         Tick(float dt) override;
         bool                IsDone() const override { return m_done; }
+        KinematicState      BuildState() const override;
 
     private:
         int32               NextIndex() const;
@@ -51,6 +52,8 @@ namespace jam::px
         PxTransform             Tick(float dt) override;
         bool                    IsDone() const override { return m_done; }
 
+        KinematicState          BuildState() const override;
+
     private:
         void                    BuildArchLengthLUT();
         float                   ArcLengthToT(float arcLen) const;
@@ -83,6 +86,7 @@ namespace jam::px
 
         PxTransform         Tick(float dt) override;
         bool                IsDone() const override { return m_done; }
+        KinematicState      BuildState() const override;
 
         void                SetDynamicCenter(const PxVec3& center) { m_dynamicCenter = center; }
 
@@ -130,6 +134,7 @@ namespace jam::px
 
         PxTransform         Tick(float dt) override;
         bool                IsDone() const override { return false; }
+        KinematicState      BuildState() const override;
 
     private:
         PxQuat              ComputeTargetRotation(const PxTransform& targetPose, const PxVec3& desiredPos) const;
@@ -154,6 +159,7 @@ namespace jam::px
         NetworkPoseKinematicDriver(KinematicCommon common, NetworkPoseSource src);
 
         PxTransform         Tick(float dt) override { return m_pose; }
+        bool                IsDone() const override { return false; }
 
         void                SetAuthoritativePose(const PxTransform& pose) { m_pose = pose; }
         void                SetAuthoritativeLinearVelocity(const PxVec3& v) { m_linearVel = v; }
@@ -166,14 +172,6 @@ namespace jam::px
         PxVec3              m_linearVel  = PxVec3(physx::PxZero);
         PxVec3              m_angularVel = PxVec3(physx::PxZero);
     };
-
-
-
-
-
-    
-
-
 
 
 

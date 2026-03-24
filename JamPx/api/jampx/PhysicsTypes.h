@@ -17,6 +17,15 @@ namespace jam::px
 
 	inline constexpr float EPSILON = 1e-6f;
 
+	inline constexpr float EPS_2 = 1e-2f;
+	inline constexpr float EPS_3 = 1e-3f;
+	inline constexpr float EPS_4 = 1e-4f;
+	inline constexpr float EPS_5 = 1e-5f;
+	inline constexpr float EPS_6 = 1e-6f;
+	inline constexpr float EPS_7 = 1e-7f;
+	inline constexpr float EPS_8 = 1e-8f;
+
+
 
 	inline float Clamp(float v, float lo, float hi) noexcept
 	{
@@ -282,11 +291,47 @@ namespace jam::px
 		bool operator==(const Transform&) const = default;
 	};
 
+
+	using ObjectId = uint32;
+	static constexpr ObjectId INVALID_OBJ_ID = 0xFFFF'FFFF;
+
+
+
+	enum class eKineDrivenType : uint8
+	{
+		None = 0,
+		Deterministic,
+		TargetDerived,
+		StateDriven,
+		RuntimeDynamic
+	};
+
+	static bool IsLocalDrivenKine(eKineDrivenType type)
+	{
+		return (type == eKineDrivenType::Deterministic)
+			|| (type == eKineDrivenType::TargetDerived)
+			|| (type == eKineDrivenType::StateDriven);
+	}
+
+	struct KinematicState
+	{
+		uint32					startEpoch	= 0;
+		uint32					phase		= 0;
+		float					t			= 0.f;
+		ObjectId				targetId	= 0;
+		uint32					eventMask   = 0;
+
+		bool operator==(const KinematicState&) const = default;
+	};
+
 	struct RigidState
 	{
-		Transform	pose{};
-		Vec3		linVel = Vec3::Zero();
-		Vec3		angVel = Vec3::Zero();
+		Transform				pose	  = {};
+		Vec3					linVel    = Vec3::Zero();
+		Vec3					angVel    = Vec3::Zero();
+
+		eKineDrivenType			kineType  = eKineDrivenType::None;
+		KinematicState			kineState = {};
 
 		bool operator==(const RigidState&) const = default;
 
@@ -295,6 +340,7 @@ namespace jam::px
 			return pose.p.IsFinite() && pose.q.IsFinite() && linVel.IsFinite() && angVel.IsFinite();
 		}
 	};
+
 
 	struct CharacterState
 	{
@@ -314,11 +360,23 @@ namespace jam::px
 		}
 	};
 
+	using PhysicsState = std::variant<RigidState, CharacterState>;
+
+	static bool IsRigidState(const PhysicsState& state) { return std::holds_alternative<RigidState>(state); }
+	static bool IsCharState(const PhysicsState& state) { return std::holds_alternative<CharacterState>(state); }
+
+	struct ActorContext
+	{
+		ObjectId	 oid	= INVALID_OBJ_ID;
+		PhysicsState state  = {};
+	};
+
+
 	enum eStateFlag : uint32_t
 	{
-		STATE_NONE = 0,
+		STATE_NONE		 = 0,
 		STATE_IS_JUMPING = 1u << 0,
-		STATE_IS_SPRINT = 1u << 1,
+		STATE_IS_SPRINT  = 1u << 1,
 	};
 
 	inline bool HasStateFlag(uint32_t flags, eStateFlag f) noexcept { return (flags & static_cast<uint32_t>(f)) != 0; }
@@ -375,18 +433,7 @@ namespace jam::px
 		using Flags = FlagsT<Enum, uint32>;
 	};
 
-	//inline void HashAppend(jam::Fnv1a32& h, const MotionFlag::Flags& bodyFlag) noexcept
-	//{
-	//	HashAppend(h, bodyFlag.bits());
-	//}
 
-	struct PhysicsHandle
-	{
-		uint64_t value{};
-
-		bool IsValid() const { return value != 0; }
-		constexpr bool operator==(const PhysicsHandle& r) const noexcept = default;
-	};
 
 	struct PrefabKey
 	{
@@ -454,23 +501,30 @@ namespace jam::px
 
 		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
 
-		bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
+		constexpr bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
 		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterSpawnOverrides>(overrides); }
 	};
 
 
-	struct PhysicsState
-	{
-		std::variant<RigidState, CharacterState> state;
 
-		bool IsRigid() const noexcept { return std::holds_alternative<RigidState>(state); }
-		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterState>(state); }
+
+
+
+	struct LevelLayerInfo
+	{
+		std::unordered_map<std::string, uint32> countPerLayer;
+		uint32 totalCount = 0;
+	};
+
+	struct LevelInstanceInfo
+	{
+		ObjectId	objectId		= INVALID_OBJ_ID;
+		uint32		levelActorId	= 0;
+		PrefabKey	prefab			= {};
+		RigidState	state			= {};
 	};
 
 
-
-	using ObjectId = uint32;
-	static constexpr ObjectId INVALID_OBJ_ID = 0;
 
 	/// @brief 입력 비트 플래그 (32bit로 최대 32개 입력 지원)
 	enum eInputFlag : uint32_t

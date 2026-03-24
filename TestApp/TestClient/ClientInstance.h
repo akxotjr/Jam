@@ -5,8 +5,8 @@
 #include "jamnet/runtime/ClientNetworkManager.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
 
-#include "jampx/api/PhysicsTypes.h"
-#include "jampx/prefab/PrefabAssets.h"
+#include "jampx/PhysicsTypes.h"
+#include "jampx/PhysicsAsset.h"
 
 
 
@@ -22,9 +22,8 @@ struct ActorSnapshot
 
 struct ActorRenderingData
 {
-	uint32					actorId = 0;
 	glm::vec4				color{};
-	px::prefab::eShapeType  shape{};
+	px::eShapeType			shape{};
 	px::Vec3				boxHalfExtents{ 0.5f, 0.5f, 0.5f };
 	float                   sphereRadius = 0.5f;
 	float                   capsuleRadius = 0.5f;
@@ -35,7 +34,7 @@ struct ActorRenderingData
 	bool                    ensured = false;
 	uint32                  pendingSpawnReqId = 0;
 
-	px::ObjectKey			key{};
+	px::ObjectId			oid{};
 	bool                    isLocal = false;
 	deque<ActorSnapshot>    snapshots;  // 최근 N개 스냅샷 저장
 
@@ -84,12 +83,15 @@ public:
 	
 private:
 
+	void								OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt);
 	void                                OnActorSpawned(const net::RenderActorSpawnedEvent& evt);
 	void                                OnActorDespawned(const net::RenderActorDespawnedEvent& evt);
 	void                                OnRenderSamples(const net::RenderSamplesEvent& evt);
 	
 	void                                ProcessMouseLook(GLFWwindow* window);
-	ActorRenderingData*					EnsureRenderingActorData(px::ObjectKey key);
+
+	void								CreateRenderingLevelData(const net::RenderLevelSpawnedEvent& evt);
+	ActorRenderingData*					EnsureRenderingActorData(const net::RenderActorSpawnedEvent& evt);
 
 	void                                BuildRenderFrames();
 	void                                UpdateCamera();
@@ -97,7 +99,7 @@ private:
 	void								RenderLevelMap();
 	glm::vec3                           QuatToEuler(const px::Quat& q) const;
 
-	ActorRenderingData*					GetRenderingActorData(px::ObjectKey key);
+	ActorRenderingData*					GetRenderingActorData(px::ObjectId id);
 	void                                InterpolateActorTransform(const ActorRenderingData& data, uint32 renderTick, OUT px::Vec3& pos, OUT px::Quat& rot) const;
 
 	void                                CleanupOldSnapshots(uint32 currentTick);
@@ -114,6 +116,7 @@ private:
 
 	uint32										m_nextSpawnReqId = 1;
 
+	GlobalEventBus::Subscription				m_subLevelSpawned;
 	GlobalEventBus::Subscription				m_subActorSpawned;
 	GlobalEventBus::Subscription				m_subActorDespawned;
 	GlobalEventBus::Subscription				m_subRenderSamples;
@@ -130,7 +133,7 @@ private:
 	static constexpr uint32						INTERPOLATION_DELAY = 4;
 
 
-	unordered_map<px::ObjectKey, ActorRenderingData, px::ObjectKeyHash>   m_actorRenderData;			// ObjectKey : Rendering data
+	unordered_map<px::ObjectId, ActorRenderingData>   m_actorRenderData;		
 	uint32										m_currentRenderTick = 0;
 	uint32										m_latestServerTick = 0;
 

@@ -139,7 +139,7 @@ namespace jam::px
 		const ProjectileState&		GetState() const { return m_state; }
 		void						SetState(const ProjectileState& state) { m_state = state; }
 
-		void						SetTargetResolver(ProjectileTargetResolver resolver) { m_reolver = std::move(resolver); }
+		void						SetTargetResolver(ProjectileTargetResolver resolver) { m_resolver = std::move(resolver); }
 
 		const RequestQueryFD&		GetRequestFd() const { return m_config.hit.requestFd; }
 		RequestQueryFD&				EditRequestFd() { return m_config.hit.requestFd; }
@@ -167,7 +167,9 @@ namespace jam::px
 		ProjectileConfig			m_config	= {};
 		ProjectileState				m_state		= {};
 
-		ProjectileTargetResolver	m_reolver	= nullptr;
+		ProjectileTargetResolver	m_resolver	= nullptr;
 	};
+
+
 
 } // namespace jam::px

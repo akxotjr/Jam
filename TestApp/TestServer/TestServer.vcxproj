@@ -116,7 +116,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamPx\include\jampx\api\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamPx\api\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>

@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "NetActorComponents.h"
 #include "ReplicationTypes.h"
-
+#include "jamnet/sync/replication/IReplayRunner.h"
 
 namespace jam::px
 {
@@ -10,15 +10,7 @@ namespace jam::px
 
 namespace jam::net
 {
-	/**
-	 * @class ClientPhysicsSystem
-	 * @brief Physics(Prediction, Reconciliation)
-	 * @details 
-	 *  - Local Actor Prediction (현재 입력 -> Simulate)
-	 *  - Local Actor Reconiliation (서버 상태 -> Rewind -> Replay)
-	 *  - PhysX Actor 생성 관리
-	 *  - Transform 동기화
-	 */
+
 	class ClientPhysicsSystem
     {
     public:
@@ -34,48 +26,31 @@ namespace jam::net
         void                                SetReconcileConfig(const ReconcileConfig& config) { m_config = config; }
         const ReconcileConfig&              GetReconcileConfig() const { return m_config; }
 
-		const px::Vec3&                     GetVisualOffset() const { return m_visualPosOffset; }
-
     private:
 
-        void                                CheckAndReconcile();
-        void                                PredictCurrentFrame();
-        void                                SyncTransforms();
+        void                                LivePredict();
 
-        void                                Reconcile(const ServerState& serverState);
-        void                                RewindToServerState(const ServerState& serverState);
-        void                                ReplayInputs(uint32 fromSeq);
+        void                                Reconcile();
+        void                                PushAuthorityStates();
+        void                                PullProxyStates();
 
+        void                                Rewind(const ReplayContext& ctx);
+        void                                Replay(const ReplayContext& ctx);
         void                                ApplyInput(const InputCmd& cmd);
 
         void                                Simulate();
-
-        void                                SavePredictedState(uint32 inputSeq);
-        optional<PredictedState>            GetPredictedState(uint32 inputSeq) const;
-        void                                PrunePredictedHistory(uint32 upToSeq);
-
-        px::CharacterState*                 GetLocalCharacterState() const;
-
-
-        float                               CalculateRotationError(const px::Quat& a, const px::Quat& b) const;
+        void                                Resimulate();
 
     private:
         entt::registry&                     m_world;
-        px::IPhysicsFacade*                 m_physics;
+        px::IPhysicsFacade*                 m_physics       = nullptr;
+        std::unique_ptr<IReplayRunner>      m_replayRunner  = nullptr;
 
         uint64                              m_userId = 0;
-        deque<PredictedState>               m_predictedHistory;
-
         ReconcileConfig                     m_config{};
 
+        bool                                m_tickFiberRunning = false;
         uint64                              m_awaitSeq = 0;
-
-        uint32                              m_lastReconciledSeq = 0;
-        uint32                              m_lastReconciledServerTick = 0;
-
-		px::Vec3                            m_visualPosOffset = px::Vec3::Zero();
-
-        static constexpr size_t             kMaxPredictedHistroySize = 128;
     };
 }
 

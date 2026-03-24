@@ -21,6 +21,9 @@
     <Filter Include="Main">
       <UniqueIdentifier>{add048f3-3c22-44d1-9c1c-f21cd6b54092}</UniqueIdentifier>
     </Filter>
+    <Filter Include="contents">
+      <UniqueIdentifier>{2eb2261a-5db0-49df-a595-003b385e81fc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -34,7 +37,14 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Contents\test_prefab.json" />
-    <None Include="Contents\test_level.json" />
+    <None Include="..\Contents\test_asset.json">
+      <Filter>contents</Filter>
+    </None>
+    <None Include="..\Contents\test_level.json">
+      <Filter>contents</Filter>
+    </None>
+    <None Include="..\Contents\test_level1.json">
+      <Filter>contents</Filter>
+    </None>
   </ItemGroup>
 </Project>

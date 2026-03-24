@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "NetActorComponents.h"
 #include "jamnet/sync/schema/gen/snapshot_generated.h"
 #include "jamnet/sync/replication/ReplicationUtils.h"
 
@@ -62,7 +63,7 @@ namespace jam::net
         void                                            EnsureMetaResendBudget(entt::entity e, const MetaSentKey& key);
     	bool                                            ShouldIncludeMeta(entt::entity e, const MetaSentKey& key);
         void                                            OnMetaSent(entt::entity e, const MetaSentKey& key);
-		bool                                            CanClearNewlyCreatedTag(uint32 netId);
+		bool                                            CanClearNewlyCreatedTag(NetId netId);
 
 
     private:
@@ -70,12 +71,13 @@ namespace jam::net
         unique_ptr<flatbuffers::FlatBufferBuilder>          m_fbb;
 
         // Snapshot state
-        unordered_map<uint64, unordered_map<uint32, uint32>>                 m_entityBaselinePerUser;           // user -> (netId -> baselineRev)
-        unordered_map<uint64, unordered_map<uint32, RigidBaselineState>>     m_rigidBaselineStatesPerUser;      // user -> (netId -> baseline)
-        unordered_map<uint64, unordered_map<uint32, CharacterBaselineState>> m_characterBaselineStatesPerUser;  // user -> (netId -> baseline)
+        unordered_map<uint64, unordered_map<NetId, uint32>>                     m_entityBaselinePerUser;           // user -> (netId -> baselineRev)
+        unordered_map<uint64, unordered_map<NetId, RigidBaselineState>>         m_rigidBaselineStatesPerUser;      // user -> (netId -> baseline)
+        unordered_map<uint64, unordered_map<NetId, CharacterBaselineState>>     m_characterBaselineStatesPerUser;  // user -> (netId -> baseline)
+        unordered_map<uint64, unordered_map<NetId, px::KinematicState>>         m_kineBaselineStatesPerUser;
 
-        unordered_map<uint64, unordered_map<uint32, PackedRigidDelta128>>     m_cachedRigidDeltaPerUser;
-        unordered_map<uint64, unordered_map<uint32, PackedCharacterDelta128>> m_cachedCharacterDeltaPerUser;
+        unordered_map<uint64, unordered_map<NetId, PackedRigidDelta128>>     m_cachedRigidDeltaPerUser;             // user -> (netId -> packed cache)
+        unordered_map<uint64, unordered_map<NetId, PackedCharacterDelta128>> m_cachedCharacterDeltaPerUser;         // user -> (netId -> packed cache)
 
         unordered_set<MetaSentKey, MetaSentKeyHash>         m_metaSent;
         unordered_map<MetaSentKey, uint8, MetaSentKeyHash>  m_metaResendBudget;
@@ -83,8 +85,8 @@ namespace jam::net
         unordered_map<uint64, int32>                        m_forceFullMetaPerUsers;
 
         uint32                                              m_fullCacheTick = 0;
-        unordered_map<uint32, PackedRigidFull192>           m_cachedRigidFull;
-        unordered_map<uint32, PackedCharacterFull160>       m_cachedCharacterFull;
+        unordered_map<NetId, PackedRigidFull192>           m_cachedRigidFull;
+        unordered_map<NetId, PackedCharacterFull160>       m_cachedCharacterFull;
 
         // --- Snapshot cadence ---
         uint32                                              m_tickCounter = 0;

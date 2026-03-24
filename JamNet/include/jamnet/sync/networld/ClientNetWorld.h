@@ -8,6 +8,8 @@
 
 #include <jampx/IPhysicsFacade.h>
 
+#include "jamnet/sync/replication/NetActorComponents.h"
+
 namespace jam::net
 {
 	class ClientNetWorld : public NetWorld
@@ -20,29 +22,30 @@ namespace jam::net
 
 		void								SetTransportSystem(shared_ptr<ITransportEndpoint> transport);
 		void								SetPhysicsFacade(unique_ptr<px::IPhysicsFacade> physics);
+		void								SetLevelPath(const string& levelPath) { m_levelPath = levelPath; }
+
 
 		void								SetUserId(uint64 userId) { m_userId = userId; }
 		uint64								GetUserId() const { return m_userId; }
 
-		entt::entity						GetEntity(uint32 netId);
+		entt::entity						GetEntity(NetId netId);
 
 		void								Send(const shared_ptr<SendBuffer>& buf);
 		void								OnRecvPacket(const PacketView& view);
 
 		void								SpawnActor(const SpawnParams& params);
-		void								DespawnActor(uint32 netId);
+		void								DespawnActor(NetId netId);
 
 		void								PushInput(uint32 inputFlags, float facingYaw, float facingPitch);
 
 
-		void								RequestDespawnActor(uint32 netId);
-		void								RequestPossessActor(uint32 netId);
-		void								RequestUnpossessActor(uint32 netId);
+		void								RequestDespawnActor(NetId netId);
+		void								RequestPossessActor(NetId netId);
+		void								RequestUnpossessActor(NetId netId);
 
-		entt::entity						EnsureReplicatedActor(uint32 netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller);
-		entt::entity						TryConfirmPendingSpawn(uint32 spawnReqId, uint32 netId);
+		entt::entity						EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller);
+		entt::entity						TryConfirmPendingSpawn(NetId netId, uint32 spawnReqId);
 	
-		void								SetLevelPath(const string& levelPath) { m_levelPath = levelPath; }
 
 	private:
 		void								TickOnShard() override;
@@ -50,7 +53,7 @@ namespace jam::net
 		void								ProcessSnapshot(const PacketView& view);
 
 		void								SpawnActorImpl(const SpawnParams& params);
-		void								DespawnActorImpl(uint32 netId);
+		void								DespawnActorImpl(NetId netId);
 
 		void								RequestSpawnActor(const SpawnParams& params);
 
@@ -59,6 +62,7 @@ namespace jam::net
 		void								OnPossessActorResponse(optional<fb::fbPossessActorResT> res);
 		void								OnUnpossesActorResponse(optional<fb::fbUnpossessActorResT> res);
 
+		void								BootstrapLevelActors();
 
 	private:
 		shared_ptr<ITransportEndpoint>			m_transport;
@@ -66,11 +70,12 @@ namespace jam::net
 		unique_ptr<px::IPhysicsFacade>			m_physics;
 
 		string									m_levelPath;
+		px::LevelLayerInfo						m_levelLayerInfo = {};
 
 		uint64									m_userId = 0;
-		uint32									m_localNetId = 0;
+		NetId									m_localNetId = NetId::Invalid();
 
-		unordered_map<uint32, entt::entity>		m_netIdToEntity;		// netId -> entity (for ensure by server)
+		unordered_map<NetId, entt::entity>		m_netIdToEntity;		// netId -> entity (for ensure by server)
 		unordered_map<uint32, entt::entity>		m_spawnReqIdToEntity;	// spawnReqId -> pending entities
 	};
 }

@@ -1,5 +1,8 @@
 ﻿#include "pch.h"
 #include "jampx/actor/character/locomotion/CharacterMotor.h"
+
+//#include <iostream>
+
 #include "jampx/actor/character/locomotion/CharacterFilter.h"
 
 namespace jam::px
@@ -34,11 +37,18 @@ namespace jam::px
 			QueryCategory::WORLD, 
 			0, 0, 0, 
 			0, 0, 0, 
-			RequestQueryFlag::MAP_DEFAULT);
+			RequestQueryFlag::MAP_DEFAULT
+			| RequestQueryFlag::IGNORE_SELF_ACTOR
+			| RequestQueryFlag::IGNORE_TRIGGERS);
 
+		DefaultQueryPolicy qryPolicy;
 
-		m_qryCallback = std::make_unique<QueryFilterCallbackT<>>(DefaultQueryPolicy{}, QueryHitTypeMap{});
+		if (m_controller)
+			qryPolicy.selfActor = m_controller->getActor();
+
+		m_qryCallback = std::make_unique<QueryFilterCallbackT<>>(qryPolicy, QueryHitTypeMap{});
 		m_cctCallback = std::make_unique<CharacterFilterCallbackT<>>(DefaultCharacterFilterPolicy{});
+
 	}
 
 	CharacterMotor::~CharacterMotor()
@@ -79,6 +89,28 @@ namespace jam::px
 
 		const PxControllerCollisionFlags flags = m_controller->move(disp, EPSILON, dt, filters);
 		const PxExtendedVec3& after = m_controller->getPosition();
+
+		//// ---- DEBUG LOG BEGIN ----
+		//{
+		//	const bool hitSide = flags.isSet(PxControllerCollisionFlag::eCOLLISION_SIDES);
+		//	const bool hitUp = flags.isSet(PxControllerCollisionFlag::eCOLLISION_UP);
+		//	const bool hitDown = flags.isSet(PxControllerCollisionFlag::eCOLLISION_DOWN);
+
+		//	const auto d = diff(after, before);
+
+		//	std::cout
+		//		<< "[CCT_MOVE] "
+		//		<< "dt=" << dt
+		//		<< " disp=(" << disp.x << "," << disp.y << "," << disp.z << ")"
+		//		<< " before=(" << before.x << "," << before.y << "," << before.z << ")"
+		//		<< " after=(" << after.x << "," << after.y << "," << after.z << ")"
+		//		<< " delta=(" << d.x << "," << d.y << "," << d.z << ")"
+		//		<< " flags[s=" << (hitSide ? 1 : 0)
+		//		<< ",u=" << (hitUp ? 1 : 0)
+		//		<< ",d=" << (hitDown ? 1 : 0) << "]"
+		//		<< "\n";
+		//}
+		//// ---- DEBUG LOG END ----
 
 		auto delta = diff(after, before);
 

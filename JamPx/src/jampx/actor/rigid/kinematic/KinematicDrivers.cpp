@@ -2,6 +2,7 @@
 #include "jampx/actor/rigid/kinematic/KinematicDrivers.h"
 
 #include <algorithm>
+#include <iostream>
 
 #include "jampx/geometry/Bezier.h"
 #include "jampx/geometry/BSpline.h"
@@ -66,6 +67,14 @@ namespace jam::px
 		}
 
 		return m_pose;
+	}
+
+	KinematicState WaypointKinematicDriver::BuildState() const
+	{
+		KinematicState state{};
+		state.phase	  = static_cast<uint32>(std::max(0, m_segIndex));
+		state.t		  = std::clamp(m_segProgress, 0.0f, 1.0f);
+		return state;
 	}
 
 	int32 WaypointKinematicDriver::NextIndex() const
@@ -231,6 +240,20 @@ namespace jam::px
 		return m_pose;
 	}
 
+	KinematicState CurveKinematicDriver::BuildState() const
+	{
+		KinematicState state{};
+		const float dur = (m_src.duration > 1e-6f) ? m_src.duration : 1.0f;
+		const float progress = m_src.loop
+			? (m_elapsedTime / dur - std::floor(m_elapsedTime / dur))
+			: std::clamp(m_elapsedTime / dur, 0.0f, 1.0f);
+
+		state.phase = static_cast<uint32>(m_src.loop ? (m_elapsedTime / dur) : 0);
+		state.t		= progress;
+		
+		return state;
+	}
+
 	void CurveKinematicDriver::BuildArchLengthLUT()
 	{
 		m_lut.clear();
@@ -376,6 +399,23 @@ namespace jam::px
 		return m_pose;
 	}
 
+	KinematicState OrbitKinematicDriver::BuildState() const
+	{
+		KinematicState state{};
+
+		if (m_src.centerMode == eOrbitCenterMode::FollowTarget)
+		{
+			state.targetId = m_src.targetId;
+			state.phase    = (m_dir < 0.0f) ? 1u : 0u;
+			return state;
+		}
+
+		const float range = std::max(1e-6f, m_src.maxAngleRad - m_src.minAngleRad);
+		state.t	 = std::clamp((m_angle - m_src.minAngleRad) / range, 0.0f, 1.0f);
+		state.phase = (m_dir < 0.0f) ? 1u : 0u;
+		
+		return state;
+	}
 
 
 	PxVec3 OrbitKinematicDriver::ComputeCenter() const
@@ -570,6 +610,15 @@ namespace jam::px
 		return m_pose;
 	}
 
+	KinematicState FollowKinematicDriver::BuildState() const
+	{
+		KinematicState state{};
+		state.targetId  = m_src.targetId;
+		state.phase		= m_hasValidTarget ? 1u : 0u;
+		
+		return state;
+	}
+
 	PxQuat FollowKinematicDriver::ComputeTargetRotation(const PxTransform& targetPose, const PxVec3& desiredPos) const
 	{
 		switch (m_src.rotationMode)
@@ -600,6 +649,11 @@ namespace jam::px
 		}
 
 		return m_pose.q;
+	}
+
+	NetworkPoseKinematicDriver::NetworkPoseKinematicDriver(KinematicCommon common, NetworkPoseSource src)
+		: m_common(common), m_src(src)
+	{
 	}
 
 

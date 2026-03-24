@@ -82,7 +82,7 @@ namespace jam::px
 		return physics->createConvexMesh(input);
 	}
 
-	PxShape* PrefabAssetCreator::CreatePrimitiveShape(const ShapeDef& def, const PxMaterial& material)
+	PxShape* PrefabAssetCreator::CreatePrimitiveShape(const ShapeDef& def, const PxMaterial& material, bool exclusive)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics || !def.material)
@@ -93,19 +93,19 @@ namespace jam::px
 		switch (def.type)
 		{
 		case eShapeType::Box:
-			shape = physics->createShape(PxBoxGeometry(def.halfExtents), material);
+			shape = physics->createShape(PxBoxGeometry(def.halfExtents), material, exclusive);
 			break;
 
 		case eShapeType::Sphere:
-			shape = physics->createShape(PxSphereGeometry(def.radius), material);
+			shape = physics->createShape(PxSphereGeometry(def.radius), material, exclusive);
 			break;
 
 		case eShapeType::Capsule:
-			shape = physics->createShape(PxCapsuleGeometry(def.radius, def.halfHeight), material);
+			shape = physics->createShape(PxCapsuleGeometry(def.radius, def.halfHeight), material, exclusive);
 			break;
 
 		case eShapeType::Plane:
-			shape = physics->createShape(PxPlaneGeometry(), material);
+			shape = physics->createShape(PxPlaneGeometry(), material, exclusive);
 			break;
 
 		default: return nullptr;
@@ -117,14 +117,14 @@ namespace jam::px
 		return shape;
 	}
 
-	PxShape* PrefabAssetCreator::CreateTriangleMeshShape(const ShapeDef& def, const PxMaterial& material, PxTriangleMesh* mesh)
+	PxShape* PrefabAssetCreator::CreateTriangleMeshShape(const ShapeDef& def, const PxMaterial& material, PxTriangleMesh* mesh, bool exclusive)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
 			return nullptr;
 
 		PxTriangleMeshGeometry geom(mesh);
-		PxShape* shape = physics->createShape(geom, material);
+		PxShape* shape = physics->createShape(geom, material, exclusive);
 		if (!shape) return nullptr;
 
 		shape->setLocalPose(def.localPose);
@@ -133,14 +133,14 @@ namespace jam::px
 		return shape;
 	}
 
-	PxShape* PrefabAssetCreator::CreateConvexMeshShape(const ShapeDef& def, const PxMaterial& material, PxConvexMesh* mesh)
+	PxShape* PrefabAssetCreator::CreateConvexMeshShape(const ShapeDef& def, const PxMaterial& material, PxConvexMesh* mesh, bool exclusive)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
 			return nullptr;
 
 		PxConvexMeshGeometry geom(mesh);
-		PxShape* shape = physics->createShape(geom, material);
+		PxShape* shape = physics->createShape(geom, material, exclusive);
 		if (!shape)
 			return nullptr;
 

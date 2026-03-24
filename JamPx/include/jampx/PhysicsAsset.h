@@ -165,6 +165,18 @@ namespace jam::px
 
 		// mesh geometry params
 		MeshHandle		mesh				= {};
+
+		bool IsPrimitiveGeometry() const {
+			return (type == eShapeType::Box)
+				|| (type == eShapeType::Capsule)
+				|| (type == eShapeType::Sphere)
+				|| (type == eShapeType::Plane);
+		}
+
+		bool IsMeshGeometry() const
+		{
+			return (type == eShapeType::TriangleMesh) || (type == eShapeType::ConvexMesh);
+		}
 	};
 
 
@@ -248,7 +260,7 @@ namespace jam::px
 
 	struct PhysicsAsset
 	{
-		int32 version = 2;
+		int32 version = 1;
 
 		std::unordered_map<MaterialHandle, MaterialDef>								materials;
 		std::unordered_map<MeshHandle, MeshDef>										meshes;
@@ -267,6 +279,7 @@ namespace jam::px
 
 	struct PhysicsLevelInstanceDef
 	{
+		uint32									levelActorId = 0;		// stable cross server/client id
 		std::string								templateName;
 		PxTransform								pose{ physx::PxIdentity };
 		RigidSpawnOverrides						overrides{};
@@ -281,7 +294,7 @@ namespace jam::px
 
 	struct PhysicsLevelAsset
 	{
-		int32									version = 2;
+		int32									version = 1;
 		std::string								sceneName;
 		std::vector<PhysicsLevelLayerDef>		layers;
 	};

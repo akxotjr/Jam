@@ -1,16 +1,15 @@
 ﻿#include "pch.h"
 
 #include "jamnet/sync/networld/ClientNetWorld.h"
-
 #include "jamnet/sync/transport/CustomPacketHelper.h"
-
 #include "jamnet/sync/replication/NetActorComponents.h"
 #include "jamnet/sync/replication/NetWorldContext.h"
-
 #include "jamnet/sync/replication/ClientInputSystem.h"
-#include "jamnet/sync/replication/ClientPhysicsSystem.h"
+#include "jamnet/sync/replication/ClientReplaySystem.h"
 #include "jamnet/sync/replication/ClientReplicationSystem.h"
+#include "jamnet/sync/replication/ClientPhysicsSystem.h"
 #include "jamnet/sync/replication/ClientSamplingSystem.h"
+
 #include "jamnet/sync/replication/ReplicationUtils.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
 
@@ -28,17 +27,17 @@ namespace jam::net
         m_physics->SetJobBridge(m_bridge.get());
         m_physics->Init();
 
-        if (!m_levelPath.empty())
-            m_physics->LoadLevel(m_levelPath);
-
         InitClientNetWorldCtx(m_world);
 
         m_world.ctx().emplace<ClientNetWorld*>(this);
         m_world.ctx().emplace<TickCounter>().Init();
         m_world.ctx().emplace<ClientInputSystem>(m_world).Init();
 		m_world.ctx().emplace<ClientReplicationSystem>(m_world).Init();
+        m_world.ctx().emplace<ClientReplaySystem>(m_world).Init();
         m_world.ctx().emplace<ClientPhysicsSystem>(m_world, m_physics.get()).Init();
         m_world.ctx().emplace<ClientSamplingSystem>(m_world).Init();
+
+        BootstrapLevelActors();
 	}
 
     void ClientNetWorld::SetTransportSystem(shared_ptr<ITransportEndpoint> transport)
@@ -51,7 +50,8 @@ namespace jam::net
         m_physics = std::move(physics);
     }
 
-    entt::entity ClientNetWorld::GetEntity(uint32 netId)
+ 
+    entt::entity ClientNetWorld::GetEntity(NetId netId)
     {
         if (auto it = m_netIdToEntity.find(netId); it != m_netIdToEntity.end())
         {
@@ -88,7 +88,7 @@ namespace jam::net
             }));
     }
 
-    void ClientNetWorld::DespawnActor(uint32 netId)
+    void ClientNetWorld::DespawnActor(NetId netId)
     {
         RequestDespawnActor(netId);
     }
@@ -149,42 +149,40 @@ namespace jam::net
         m_transport->RPCCallAwaitMember<fb::fbSpawnActorReqT, fb::fbSpawnActorResT>(m_userId, eProtocolType::UDP, std::move(req), opt, this, &ClientNetWorld::OnSpawnActorResponse);
     }
 
-    void ClientNetWorld::RequestDespawnActor(uint32 netId)
+    void ClientNetWorld::RequestDespawnActor(NetId netId)
     {
         if (!m_transport)
             return;
 
         fb::fbDespawnActorReqT req{};
-        req.net_id = netId;
+        req.net_id = netId.Raw();
 
         RPCCallOptions opt{ .channel = eChannelType::RELIABLE_ORDERED, .timeout_ns = 1_s };
         m_transport->RPCCallAwaitMember<fb::fbDespawnActorReqT, fb::fbDespawnActorResT>(m_userId, eProtocolType::UDP, std::move(req), opt, this, &ClientNetWorld::OnDespawnActorResponse);
     }
 
-    void ClientNetWorld::RequestPossessActor(uint32 netId)
+    void ClientNetWorld::RequestPossessActor(NetId netId)
     {
 		if (!m_transport) return;
 
         fb::fbPossessActorReqT req{};
-		req.net_id = netId;
-        RPCCallOptions opt{ eChannelType::RELIABLE_ORDERED, 2_s };
+		req.net_id = netId.Raw();
+        RPCCallOptions opt{ .channel = eChannelType::RELIABLE_ORDERED, .timeout_ns = 1_s };
 		m_transport->RPCCallAwaitMember<fb::fbPossessActorReqT, fb::fbPossessActorResT>(m_userId, eProtocolType::UDP, std::move(req), opt, this, &ClientNetWorld::OnPossessActorResponse);
     }
 
-    void ClientNetWorld::RequestUnpossessActor(uint32 netId)
+    void ClientNetWorld::RequestUnpossessActor(NetId netId)
     {
         if (!m_transport) return;
 
 		fb::fbUnpossessActorReqT req{};
-		req.net_id = netId;
+		req.net_id = netId.Raw();
         RPCCallOptions opt{ eChannelType::RELIABLE_ORDERED, 1_s };
 		m_transport->RPCCallAwaitMember<fb::fbUnpossessActorReqT, fb::fbUnpossessActorResT>(m_userId, eProtocolType::UDP, std::move(req), opt, this, &ClientNetWorld::OnUnpossesActorResponse);
     }
 
 
-
-
-    entt::entity ClientNetWorld::EnsureReplicatedActor(uint32 netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller)
+    entt::entity ClientNetWorld::EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller)
     {
         if (auto it = m_netIdToEntity.find(netId); it != m_netIdToEntity.end())
         {
@@ -197,13 +195,33 @@ namespace jam::net
 
         entt::entity e = m_world.create();
 
-        m_world.emplace<NetIdentity>(e, NetIdentity{ netId });
+        m_world.emplace<NetId>(e, netId);
         m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ prefabKey });
+        m_world.emplace<NetTeamPartRole>(e);
         m_world.emplace<OwnershipTag>(e, OwnershipTag{ owner });
         m_world.emplace<ControlTag>(e, ControlTag{ controller });
 
+
         const auto bodyType = m_physics->FindBodyType(prefabKey);
         m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
+        if (bodyType == px::eBodyType::Rigid)
+        {
+            m_world.emplace<RigidAuthorityState>(e);
+            m_world.emplace<RigidProxyState>(e);
+            m_world.emplace<RigidReplayHistory>(e);
+        }
+        else
+        {
+            m_world.emplace<CharAuthorityState>(e);
+            m_world.emplace<CharProxyState>(e);
+            m_world.emplace<CharReplayHistory>(e);
+        }
+
+        if (m_physics->IsReplayCandidate(prefabKey))
+        {
+            m_world.emplace<ReplayCandidateTag>(e);
+            m_world.emplace<ReplayRetention>(e, ReplayRetention{});
+        }
 
         m_netIdToEntity.emplace(netId, e);
 
@@ -211,36 +229,38 @@ namespace jam::net
         event.userId    = m_userId;
         event.isLocal   = false;
         event.objectId  = MakeObjectId(e);
+        event.prefab    = prefabKey;
 
         GLOBAL_EVENTBUS_PUBLISH(event);
 
         return e;
     }
 
-    entt::entity ClientNetWorld::TryConfirmPendingSpawn(uint32 spawnReqId, uint32 netId)
+    entt::entity ClientNetWorld::TryConfirmPendingSpawn(NetId netId, uint32 spawnReqId)
     {
-        if (spawnReqId == 0 || netId == 0)
+        if (spawnReqId == 0 || !netId.IsValid())
             return entt::null;
 
         auto it = m_spawnReqIdToEntity.find(spawnReqId);
         if (it == m_spawnReqIdToEntity.end())
             return entt::null;
 
-        entt::entity e = it->second;
+        const entt::entity e = it->second;
         m_spawnReqIdToEntity.erase(it);
 
         if (e == entt::null || !m_world.valid(e))
             return entt::null;
 
-        m_world.emplace_or_replace<NetIdentity>(e, NetIdentity{ netId });
+        m_world.emplace_or_replace<NetId>(e, netId);
 
         if (m_world.all_of<NetPendingSpawnTag>(e)) m_world.remove<NetPendingSpawnTag>(e);
         if (m_world.all_of<NetSpawnRequestId>(e))  m_world.remove<NetSpawnRequestId>(e);
 
         m_netIdToEntity[netId] = e;
 
-        const uint64 owner      = m_world.get<OwnershipTag>(e).userId;
-        const uint64 controller = m_world.get<ControlTag>(e).userId;
+        const uint64        owner      = m_world.get<OwnershipTag>(e).userId;
+        const uint64        controller = m_world.get<ControlTag>(e).userId;
+        const px::PrefabKey prefab     = m_world.get<NetPrefabKey>(e).key;
 
         bool isLocal = (owner == controller) && (controller == m_userId);
         if (isLocal) m_localNetId = netId;
@@ -248,8 +268,10 @@ namespace jam::net
         RenderActorSpawnedEvent event{};
         event.userId        = m_userId;
         event.spawnReqId    = spawnReqId;
-        event.objectId           = MakeObjectId(e);
+        event.objectId      = MakeObjectId(e);
         event.isLocal       = isLocal;
+        event.prefab        = prefab;
+
         GLOBAL_EVENTBUS_PUBLISH(event);
 
         return e;
@@ -262,21 +284,17 @@ namespace jam::net
         if (!m_world.ctx().contains<TickCounter>()
             || !m_world.ctx().contains<ClientInputSystem>()
             || !m_world.ctx().contains<ClientReplicationSystem>()
+            || !m_world.ctx().contains<ClientReplaySystem>()
             || !m_world.ctx().contains<ClientPhysicsSystem>()
             || !m_world.ctx().contains<ClientSamplingSystem>())
             return;
 
-        const uint64 before = NOW_NS();
-
         m_world.ctx().get<TickCounter>().Tick();
         m_world.ctx().get<ClientInputSystem>().Tick();
         m_world.ctx().get<ClientReplicationSystem>().Tick();
+        m_world.ctx().get<ClientReplaySystem>().Tick();
         m_world.ctx().get<ClientPhysicsSystem>().Tick();
         m_world.ctx().get<ClientSamplingSystem>().Tick();
-	
-        const uint64 after = NOW_NS();
-
-        JAMNET_LOG_DEBUG("1 tick elapsed time(ns) : {}", after - before);
 	}
 
     void ClientNetWorld::ProcessSnapshot(const PacketView& view)
@@ -310,6 +328,7 @@ namespace jam::net
             return;
         }
 
+        const NetId  nid        = NetId::MakeRaw(res->net_id);
         const uint64 spawnReqId = res->spawn_req_id;
 
         if (!res->success)
@@ -324,7 +343,7 @@ namespace jam::net
             return;
         }
 
-        TryConfirmPendingSpawn(spawnReqId, res->net_id);
+        TryConfirmPendingSpawn(nid, spawnReqId);
     }
 
     void ClientNetWorld::OnDespawnActorResponse(optional<fb::fbDespawnActorResT> res)
@@ -352,10 +371,10 @@ namespace jam::net
             return;
         }
 
-		auto view = m_world.view<NetIdentity>();
+		auto view = m_world.view<NetId>();
         for (auto e : view)
         {
-            if (view.get<NetIdentity>(e).netId == res->net_id)
+            if (view.get<NetId>(e).Raw() == res->net_id)
             {
                 m_world.emplace_or_replace<ControlTag>(e, ControlTag{ m_userId });
                 JAMNET_LOG_DEBUG("Now controlling actor NetID=%llu\n", res->net_id);
@@ -375,22 +394,129 @@ namespace jam::net
         JAMNET_LOG_DEBUG("Stopped controlling actor\n");
     }
 
+    void ClientNetWorld::BootstrapLevelActors()
+    {
+        if (!m_physics || m_levelPath.empty())
+            return;
+
+        m_levelLayerInfo = m_physics->SetLevelPath(m_levelPath);
+        if (m_levelLayerInfo.totalCount == 0) 
+            return;
+
+        RenderLevelSpawnedEvent event{};
+        event.userId = m_userId;
+
+        bool hasAny = false;
+
+        for (const auto& [layer, count] : m_levelLayerInfo.countPerLayer)
+        {
+            if (count == 0) continue;
+
+            std::vector<px::LevelInstanceInfo> instances;
+            instances.resize(count);
+
+            std::vector<entt::entity> created;
+            created.reserve(count);
+
+            for (uint32 i = 0; i < count; ++i)
+            {
+                const entt::entity e = m_world.create();
+                created.push_back(e);
+
+                instances[i].objectId = MakeObjectId(e);
+            }
+
+            if (!m_physics->LoadLevel(layer, instances))
+            {
+                for (const auto e : created)
+                {
+                    if (m_world.valid(e))
+                        m_world.destroy(e);
+                }
+                continue;
+            }
+
+            for (const auto& inst : instances)
+            {
+                if (inst.objectId == px::INVALID_OBJ_ID) continue;
+
+                const entt::entity e = static_cast<entt::entity>(inst.objectId);
+                if (!m_world.valid(e)) continue;
+
+                const NetId nid = NetId::MakeLevel(inst.levelActorId);
+                if (!nid.IsValid()) continue;
+
+                m_world.emplace<NetId>(e, nid);
+                m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ inst.prefab });
+                m_world.emplace<OwnershipTag>(e);
+                m_world.emplace<ControlTag>(e);
+                m_world.emplace<RemoteActorTag>(e);
+            	m_world.emplace<NetTeamPartRole>(e);
+                m_world.emplace<PhysicsSpawnedTag>(e);
+                m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ .body = px::eBodyType::Rigid });
+                m_world.emplace<RigidAuthorityState>(e, inst.state);
+                m_world.emplace<RigidProxyState>(e, inst.state);
+                m_world.emplace<RigidReplayHistory>(e);
+
+                if (m_physics->IsReplayCandidate(inst.prefab))
+                {
+                    m_world.emplace<ReplayCandidateTag>(e);
+                    m_world.emplace<ReplayRetention>(e, ReplayRetention{});
+                }
+            
+                event.instances[inst.objectId] = inst.prefab;
+                hasAny = true;
+
+                m_netIdToEntity[nid] = e;
+            }
+        }
+
+        if (hasAny)
+			GLOBAL_EVENTBUS_PUBLISH(event);
+    }
+
     void ClientNetWorld::SpawnActorImpl(const SpawnParams& params)
     {
         entt::entity e = m_world.create();
 
         m_world.emplace<NetPendingSpawnTag>(e);
         m_world.emplace<NetSpawnRequestId>(e, NetSpawnRequestId{ params.spawnId });
-        m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ params.desc.prefab });
+        m_world.emplace<NetId>(e, NetId::Invalid());             // pre-creating NetId to invalid val. actual value is initialized when receive server snapshot. 
+		m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ params.desc.prefab });
         m_world.emplace<OwnershipTag>(e, OwnershipTag{ params.owned ? m_userId : 0 });
         m_world.emplace<ControlTag>(e, ControlTag{ params.controlled ? m_userId : 0 });
+        m_world.emplace<NetTeamPartRole>(e, NetTeamPartRole{ params.desc.team, params.desc.part, params.desc.role });
+        
+        const bool isRigid  = params.desc.IsRigid();
+        const auto bodyType = isRigid ? px::eBodyType::Rigid : px::eBodyType::Character;
+		m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
+
+        // pre-creating Authority/Proxy state. actual value is initialized when receive server snapshot. 
+        if (isRigid)
+        {
+            m_world.emplace<RigidAuthorityState>(e);
+            m_world.emplace<RigidProxyState>(e);
+            m_world.emplace<RigidReplayHistory>(e);
+        }
+        else
+        {
+            m_world.emplace<CharAuthorityState>(e);
+            m_world.emplace<CharProxyState>(e);
+            m_world.emplace<CharReplayHistory>(e);
+        }
+
+        if (m_physics->IsReplayCandidate(params.desc.prefab))
+        {
+            m_world.emplace<ReplayCandidateTag>(e);
+            m_world.emplace<ReplayRetention>(e, ReplayRetention{});
+        }
 
         m_spawnReqIdToEntity.emplace(params.spawnId, e);
 
         RequestSpawnActor(params);
     }
 
-    void ClientNetWorld::DespawnActorImpl(const uint32 netId)
+    void ClientNetWorld::DespawnActorImpl(const NetId netId)
     {
         const auto e = GetEntity(netId);
 
@@ -403,9 +529,9 @@ namespace jam::net
                 m_spawnReqIdToEntity.erase(it);
         }
 
-        if (const auto* id = m_world.try_get<NetIdentity>(e))
+        if (const auto* id = m_world.try_get<NetId>(e))
         {
-            if (auto it = m_netIdToEntity.find(id->netId); it != m_netIdToEntity.end() && it->second == e)
+            if (auto it = m_netIdToEntity.find(*id); it != m_netIdToEntity.end() && it->second == e)
                 m_netIdToEntity.erase(it);
         }
 

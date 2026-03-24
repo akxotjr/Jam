@@ -123,8 +123,8 @@ namespace jam::px
 			m_keyToHandle[fnv1a<uint64>(tmpDef.name)] = h;
 
 			// Character/Non-rigid는 별도 경로
-			if (!tmpDef.IsRigid())
-				continue;
+			if (!tmpDef.IsRigid()) continue;
+			if (tmpDef.spawnPolicy != eSpawnPolicy::LevelOnly) continue;
 
 			const auto& rigidDef = std::get<RigidBodyDef>(tmpDef.body);
 			if (rigidDef.shapes.empty())
@@ -165,6 +165,12 @@ namespace jam::px
 	{
 		auto it = m_asset.templates.find(h);
 		return it != m_asset.templates.end() ? &it->second : nullptr;
+	}
+
+	const ActorTemplateDef* PhysicsPrefabRegistry::FindTemplateDef(PrefabKey key) const
+	{
+		auto h = FindHandleByKey(key);
+		return FindTemplateDef(h);
 	}
 
 	eBodyType PhysicsPrefabRegistry::GetBodyType(const PrefabKey key)
@@ -231,6 +237,14 @@ namespace jam::px
 			shapes.push_back(GetShape(h));
 	}
 
+	const ShapeDef& PhysicsPrefabRegistry::GetShapeDef(ShapeHandle h) const
+	{
+		auto it = m_asset.shapes.find(h);
+		if (it == m_asset.shapes.end())
+			throw std::runtime_error("shape def not resolved");
+		return it->second;
+	}
+
 	const DynamicBodyDef& PhysicsPrefabRegistry::GetDynamicBodyDef(DynamicBodyHandle h) const
 	{
 		auto it = m_asset.dynBodies.find(h);
@@ -271,7 +285,7 @@ namespace jam::px
 		return it->second;
 	}
 
-
+	[[deprecated]]
 	PxRigidActor* PhysicsPrefabRegistry::Instantiate(const PhysicsLevelInstanceDef& inst)
 	{
 		const TemplateHandle h = FindHandleByName(inst.templateName);
@@ -291,8 +305,6 @@ namespace jam::px
 
 		PxRigidActor* out	 = nullptr;
 		PxRigidActor* cached = it->second;
-
-		const auto& overrides = inst.overrides;
 
 		if (auto* sta = cached->is<PxRigidStatic>())
 		{
@@ -321,27 +333,43 @@ namespace jam::px
 		return out;
 	}
 
-
+	// runtime spawn path
 	PxRigidActor* PhysicsPrefabRegistry::Instantiate(TemplateHandle tpl, const PxTransform& pose, void* userData)
 	{
-		const auto it = m_rigidCache.find(tpl);
-		if (it == m_rigidCache.end() || !it->second)
-			return nullptr;
+		const auto* def = FindTemplateDef(tpl);
+		if (!def || !def->IsRigid()) return nullptr;
 
-		PxRigidActor* out    = nullptr;
-		PxRigidActor* cached = it->second;
+		const auto& rigidDef = std::get<RigidBodyDef>(def->body);
 
-		if (auto* sta = cached->is<PxRigidStatic>())
+		std::vector<PxShape*> exclusiveShapes;
+		exclusiveShapes.reserve(rigidDef.shapes.size());
+
+		for (auto h : rigidDef.shapes)
 		{
-			out = PxCloneStatic(*PX_PHYSICS, pose, *sta);
-		}
-		else if (auto* dyn = cached->is<PxRigidDynamic>())
-		{
-			out = PxCloneDynamic(*PX_PHYSICS, pose, *dyn);
+			const auto it = m_shapeCache.find(h);
+			if (it == m_shapeCache.end()) return nullptr;
+
+			const PxShape* cached = it->second;
+			PxShape* cloned = physx::PxCloneShape(*PX_PHYSICS, *cached, true);
+
+			if (!cloned)
+			{
+				for (PxShape* s : exclusiveShapes) if (s) s->release();
+				return nullptr;
+			}
+			
+			exclusiveShapes.push_back(cloned);
 		}
 
-		if (out) out->userData = userData;
+		PxRigidActor* out = PrefabAssetCreator::CreateRigidActor(*def, exclusiveShapes);
 
+		for (PxShape* s : exclusiveShapes)
+			if (s) s->release();
+
+		if (!out) return nullptr;
+
+		out->setGlobalPose(pose);
+		out->userData = userData;
 		return out;
 	}
 

@@ -242,6 +242,7 @@ namespace jam::net
 		params.owner		= req.owner_user_id;
 		params.controller	= req.controller_user_id;
 		params.desc.prefab	= key;
+		params.desc.pose = { .p = { req.pos->x(), req.pos->y(), req.pos->z() }, .q = { req.rot->x(), req.rot->y(), req.rot->z(), req.rot->w() } };
 		params.desc.team	= static_cast<uint16>(req.team_id);
 		params.desc.part	= static_cast<uint8>(req.part_id);
 		params.desc.role	= static_cast<uint8>(req.role_id);
@@ -281,11 +282,11 @@ namespace jam::net
 		const uint32 reqId		= requestId;
 		const uint32 spawnReqId = req.spawn_req_id;
 
-		nw->SpawnActorAsync(params, [self, reqId, spawnReqId](uint32 netId) mutable
+		nw->SpawnActorAsync(params, [self, reqId, spawnReqId](NetId netId) mutable
 			{
 				fb::fbSpawnActorResT asyncRes{};
-				asyncRes.success	  = (netId != 0);
-				asyncRes.net_id		  = netId;
+				asyncRes.success	  = netId.IsValid();
+				asyncRes.net_id		  = netId.Raw();
 				asyncRes.spawn_req_id = spawnReqId;
 
 				self->Post(Job([self, asyncRes = asyncRes, reqId]() mutable
@@ -315,9 +316,10 @@ namespace jam::net
 			return;
 		}
 
-		uint64 userId = GetCallerPrincipalId(e);
+		const uint64 userId = GetCallerPrincipalId(e);
+		const NetId  netId = NetId::MakeRaw(req.net_id);
 
-		nw->DespawnActorAsync(req.net_id, userId, [e, requestId](bool ok)
+		nw->DespawnActorAsync(netId, userId, [e, requestId](bool ok)
 			{
 				fb::fbDespawnActorResT asyncRes{};
 				asyncRes.success = ok;
@@ -346,8 +348,9 @@ namespace jam::net
 		}
 
 		const uint64 userId = GetCallerPrincipalId(e);
+		const NetId  netId = NetId::MakeRaw(req.net_id);
 
-		nw->PossessActorAsync(req.net_id, userId, [e, requestId, netId = req.net_id](bool ok)
+		nw->PossessActorAsync(netId, userId, [e, requestId, netId = req.net_id](bool ok)
 			{
 				fb::fbPossessActorResT asyncRes{};
 				asyncRes.success = ok;
@@ -377,8 +380,9 @@ namespace jam::net
 		}
 
 		const uint64 userId = GetCallerPrincipalId(e);
+		const NetId  netId  = NetId::MakeRaw(req.net_id);
 
-		nw->UnpossessActorAsync(req.net_id, userId, [e, requestId](bool ok)
+		nw->UnpossessActorAsync(netId, userId, [e, requestId](bool ok)
 			{
 				fb::fbUnpossessActorResT asyncRes{};
 				asyncRes.success = ok;

@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "materials": {
+    "mat_char": {
+      "name": "mat_char",
+      "static_friction": 0.5,
+      "dynamic_friction": 0.5,
+      "restitution": 0.1
+    },
+    "mat_floor": {
+      "name": "mat_floor",
+      "static_friction": 0.6,
+      "dynamic_friction": 0.6,
+      "restitution": 0.0
+    },
+    "mat_map": {
+      "name": "mat_map",
+      "static_friction": 0.6,
+      "dynamic_friction": 0.5,
+      "restitution": 0.1
+    }
+  },
+
+  "meshes": {
+    "mesh_map": {
+      "type": "triangle",
+      "cooked_path": "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//ThirdPersonMap_L.pxtri"
+    }
+  },
+
+  "shapes": {
+    "shape_char_hitbox": {
+      "type": "box",
+      "local_pose": {
+        "p": [ 0.0, 0.9, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_char",
+      "shape_flag": "query_only",
+      "sim_filter": {
+        "word0": 0,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 4,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "half_extents": [ 0.2, 0.2, 0.2 ]
+    },
+    "shape_floor": {
+      "type": "box",
+      "local_pose": {
+        "p": [ 0.0, 0.0, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_floor",
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "half_extents": [ 100.0, 0.2, 100.0 ]
+    },
+    "shape_map": {
+      "type": "triangle_mesh",
+      "local_pose": {
+        "p": [ 0.0, 0.0, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_map",
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "mesh": "mesh_map"
+    },
+    "shape_elevator": {
+      "type": "box",
+      "local_pose": {
+        "p": [ 0.0, 0.0, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_floor",
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "half_extents": [ 1.5, 0.2, 1.5 ]
+    }
+  },
+
+  "cct_bodies": {
+    "cct_char": {
+      "radius": 0.35,
+      "height": 1.0,
+      "material": "mat_char",
+      "density": 10.0,
+      "policy": "default"
+    }
+  },
+
+  "char_move_configs": {
+    "move_char": {
+      "gravity": 25.0,
+      "ground_accel": 35.0,
+      "ground_max_speed": 5.0,
+      "air_accel": 10.0,
+      "air_max_speed": 10.0
+    }
+  },
+
+  "kinematic_driver_configs": {
+    "elevator_waypoint": {
+      "common": {
+        "compute_derived_vel": true,
+        "carry_riders": true,
+        "sweep": true,
+        "max_speed": 10.0
+      },
+      "source": {
+        "source_type": "waypoint",
+        "speed": 1.2,
+        "loop_mode": "ping_pong",
+        "use_ease_profile": true,
+        "ease_type": "smooth_step",
+        "waypoints": [
+          {
+            "pose": {
+              "p": [ 10.0, 0.5, 10.0 ],
+              "q": [ 0.0, 0.0, 0.0, 1.0 ]
+            },
+            "pause_duration": 0.5
+          },
+          {
+            "pose": {
+              "p": [ 10.0, 10.0, 10.0 ],
+              "q": [ 0.0, 0.0, 0.0, 1.0 ]
+            },
+            "pause_duration": 0.5
+          }
+        ]
+      }
+    }
+  },
+
+  "templates": {
+    "Character": {
+      "name": "Character",
+      "actor_type": "character",
+      "body_type": "character_body",
+      "motion_type": "cct",
+      "motion_flags": [],
+      "spawn_policy": "both",
+      "allow_replication": true,
+      "body": {
+        "cct": "cct_char",
+        "hitboxes": [ "shape_char_hitbox" ],
+        "controller_type": "player",
+        "move_config": "move_char"
+      }
+    },
+    "Floor": {
+      "name": "Floor",
+      "actor_type": "generic",
+      "body_type": "rigid_body",
+      "motion_type": "static",
+      "motion_flags": [],
+      "spawn_policy": "level_only",
+      "allow_replication": false,
+      "body": {
+        "shapes": [ "shape_floor" ]
+      }
+    },
+    "Map": {
+      "name": "Map",
+      "actor_type": "generic",
+      "body_type": "rigid_body",
+      "motion_type": "static",
+      "motion_flags": [],
+      "spawn_policy": "level_only",
+      "allow_replication": false,
+      "body": {
+        "shapes": [ "shape_map" ]
+      }
+    },
+    "Elevator": {
+      "name": "Elevator",
+      "actor_type": "generic",
+      "body_type": "rigid_body",
+      "motion_type": "kinematic",
+      "motion_flags": [],
+      "spawn_policy": "level_only",
+      "allow_replication": false,
+      "body": {
+        "shapes": [ "shape_elevator" ],
+        "behavior": {
+          "kind": "kinematic_driver",
+          "config": "elevator_waypoint"
+        }
+      }
+    }
+  }
+}

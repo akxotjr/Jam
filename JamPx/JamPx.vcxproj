@@ -111,6 +111,7 @@
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Replication Refactoring Guide.md" />
     <None Include="schema\physics_asset.schema.json" />
     <None Include="schema\physics_prefab.schema.json" />
     <None Include="schema\physics_level.schema.json" />
@@ -171,25 +172,25 @@
     <IncludePath>$(ProjectDir)api\;$(ProjectDir);$(ProjectDir)include\</IncludePath>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jampx\</IntDir>
-    <TargetName>jampx</TargetName>
+    <TargetName>libjampx</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(ProjectDir)api\;$(ProjectDir);$(ProjectDir)include\</IncludePath>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jampx\</IntDir>
-    <TargetName>jampx</TargetName>
+    <TargetName>libjampx</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <IncludePath>$(ProjectDir)api\;$(ProjectDir);$(ProjectDir)include\</IncludePath>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jampx\</IntDir>
-    <TargetName>jampx</TargetName>
+    <TargetName>libjampx</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <IncludePath>$(ProjectDir)api\;$(ProjectDir);$(ProjectDir)include\</IncludePath>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jampx\</IntDir>
-    <TargetName>jampx</TargetName>
+    <TargetName>libjampx</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -223,7 +224,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>JAMPX_WITH_EDITOR=1;JAMPX_PREFAB_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_prefab.schema.json";JAMPX_LEVEL_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_prefab_level.schema.json";_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>JAMPX_WITH_EDITOR=1;JAMPX_PREFAB_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_asset.schema.json";JAMPX_LEVEL_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_level.schema.json";_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)JamBase\include\;$(VcpkgRoot)\installed\x64-windows\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>

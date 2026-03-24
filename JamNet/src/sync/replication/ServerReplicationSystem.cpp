@@ -28,6 +28,7 @@ namespace jam::net
 		m_entityBaselinePerUser.clear();
 		m_rigidBaselineStatesPerUser.clear();
 		m_characterBaselineStatesPerUser.clear();
+		m_kineBaselineStatesPerUser.clear();
 
 		m_cachedRigidDeltaPerUser.clear();
 		m_cachedCharacterDeltaPerUser.clear();
@@ -80,15 +81,15 @@ namespace jam::net
 				vector<flatbuffers::Offset<fb::fbActorEntity>> offs;
 				offs.reserve(kBatch);
 
-				auto view = m_world.view<NetIdentity, NetActorBodyType>();
+				auto view = m_world.view<NetId, NetActorBodyType>();
 
 				m_fbb->Clear();
 				
 				for (auto e : view)
 				{
-					const uint32 netId = m_world.get<NetIdentity>(e).netId;
-					const auto	 body  = m_world.get<NetActorBodyType>(e).body;
-					const MetaSentKey key{ .userId = user, .netId = netId };
+					const NetId nid  = m_world.get<NetId>(e);
+					const auto	body = m_world.get<NetActorBodyType>(e).body;
+					const MetaSentKey key{ .userId = user, .netId = nid.Raw() };
 
 					if (forceFullMetaUser)
 					{
@@ -97,8 +98,6 @@ namespace jam::net
 						auto off = BuildFullActorEntity(e, user, true);
 						if (!off.IsNull())
 							offs.push_back(off);
-
-						JAMNET_LOG_DEBUG("[Snapshot] userId= {}, netId= {}, forceFullMeta", user, netId);
 
 						forceFullMetaSent = true;
 
@@ -111,7 +110,6 @@ namespace jam::net
 						if (!off.IsNull())
 							offs.push_back(off);
 
-						JAMNET_LOG_DEBUG("[Snapshot] userId= {}, netId= {}, includeMeta", user, netId);
 						continue;
 					}
 
@@ -131,8 +129,6 @@ namespace jam::net
 						if (!off.IsNull())
 							offs.push_back(off);
 					}
-
-					//JAMNET_LOG_DEBUG("[Snapshot] userId= {}, netId= {}, no include meta", user, netId);
 				}
 
 				if (offs.empty())
@@ -146,9 +142,9 @@ namespace jam::net
 						m_forceFullMetaPerUsers.erase(it);
 				}
 
-				auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack);
-				auto vec = m_fbb->CreateVector(offs);
-				auto snap = fb::CreatefbSnapshot(*m_fbb, header, vec);
+				const auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack);
+				const auto vec	  = m_fbb->CreateVector(offs);
+				const auto snap	  = fb::CreatefbSnapshot(*m_fbb, header, vec);
 				m_fbb->Finish(snap, fb::fbSnapshotIdentifier());
 
 				return PacketBuilder::CreateCustomPacket(CustomPacketId::SNAPSHOT, PacketFlags::NONE, eChannelType::UNRELIABLE_SEQUENCED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
@@ -185,6 +181,7 @@ namespace jam::net
 		m_entityBaselinePerUser.erase(userId);
 		m_rigidBaselineStatesPerUser.erase(userId);
 		m_characterBaselineStatesPerUser.erase(userId);
+		m_kineBaselineStatesPerUser.erase(userId);
 
 		m_forceFullMetaPerUsers.erase(userId);
 
@@ -201,10 +198,12 @@ namespace jam::net
 		uint64 controller	= 0;
 		uint64 prefab		= 0;
 		uint32 spawnReqId	= 0;
+		uint32 packedId		= 0;
 
 		if (auto* o	= m_world.try_get<OwnershipTag>(e))			 owner		= o->userId;
 		if (auto* c	= m_world.try_get<ControlTag>(e))			 controller = c->userId;
 		if (auto* p	= m_world.try_get<NetPrefabKey>(e))			 prefab		= p->key.value;
+		if (auto* tpr = m_world.try_get<NetTeamPartRole>(e))	 packedId	= tpr->Packed();
 
 		// spawn_req_id는 "요청자(client local)" 범위 식별자다.
 		// 따라서 요청자(현재는 owner로 가정)에게만 내려준다.
@@ -214,14 +213,14 @@ namespace jam::net
 				spawnReqId = s->requestId;
 		}
 
-		meta = fb::CreatefbActorMeta(*m_fbb, owner, controller, prefab, spawnReqId);
+		meta = fb::CreatefbActorMeta(*m_fbb, owner, controller, prefab, spawnReqId, packedId);
 		
 		return meta;
 	}
 
 	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildFullActorEntity(entt::entity e, uint64 userId, bool includeMeta)
 	{
-		const uint32 netId    = m_world.get<NetIdentity>(e).netId;
+		const NetId  netId    = m_world.get<NetId>(e);
 		const auto	 bodyType = m_world.get<NetActorBodyType>(e).body;
 
 		auto& userEntityBase = m_entityBaselinePerUser[userId];
@@ -262,16 +261,39 @@ namespace jam::net
 			flatbuffers::Offset<fb::fbActorMeta> meta = 0;
 			if (includeMeta) meta = BuildActorMeta(e, userId);
 
-			auto off = fb::CreatefbActorEntity(*m_fbb, netId, base, meta, nullptr, nullptr, &charFull, nullptr);
+			auto off = fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, meta, nullptr, nullptr, &charFull, nullptr);
 			if (!off.IsNull() && includeMeta)
 			{
-				const MetaSentKey key{ .userId = userId, .netId = netId };
+				const MetaSentKey key{ .userId = userId, .netId = netId.Raw() };
 				OnMetaSent(e, key);
 			}
 			return off;
 		}
 
 		auto& rs = m_world.get<px::RigidState>(e);
+
+		if (rs.kineType != px::eKineDrivenType::None && rs.kineType != px::eKineDrivenType::RuntimeDynamic)
+		{
+			auto& kineBs = m_kineBaselineStatesPerUser[userId][netId];
+			kineBs = rs.kineState;
+
+			const fb::fbKinematicState kine(
+				rs.kineState.startEpoch,
+				rs.kineState.phase,
+				rs.kineState.t,
+				rs.kineState.targetId,
+				rs.kineState.eventMask,
+				static_cast<uint8>(rs.kineType)
+			);
+
+			uint32 base = 0;
+			if (auto it = userEntityBase.find(netId); it != userEntityBase.end())
+				base = it->second;
+
+			auto off = fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, 0, nullptr, nullptr, nullptr, nullptr, &kine);
+			return off;
+		}
+
 		PackedRigidFull192 packed{};
 
 		if (auto it = m_cachedRigidFull.find(netId); it != m_cachedRigidFull.end())
@@ -299,10 +321,10 @@ namespace jam::net
 		flatbuffers::Offset<fb::fbActorMeta> meta = 0;
 		if (includeMeta) meta = BuildActorMeta(e, userId);
 
-		auto off = fb::CreatefbActorEntity(*m_fbb, netId, base, meta, &rigidFull);
+		auto off = fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, meta, &rigidFull);
 		if (!off.IsNull() && includeMeta)
 		{
-			const MetaSentKey key{ .userId = userId, .netId = netId };
+			const MetaSentKey key{ .userId = userId, .netId = netId.Raw() };
 			OnMetaSent(e, key);
 		}
 		return off;
@@ -310,7 +332,7 @@ namespace jam::net
 
 	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildDeltaActorEntity(entt::entity e, uint64 userId)
 	{
-		const uint32 netId	  = m_world.get<NetIdentity>(e).netId;
+		const NetId  netId	  = m_world.get<NetId>(e);
 		const auto	 bodyType = m_world.get<NetActorBodyType>(e).body;
 
 		auto& userEntityBase = m_entityBaselinePerUser[userId];
@@ -350,7 +372,7 @@ namespace jam::net
 				newBs.pitch = cs.facingPitch;
 			}
 
-			return fb::CreatefbActorEntity(*m_fbb, netId, base++, 0, nullptr, nullptr, nullptr, &charDelta);
+			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, 0, nullptr, nullptr, nullptr, &charDelta);
 		}
 
 		// rigid delta
@@ -360,6 +382,37 @@ namespace jam::net
 			return BuildFullActorEntity(e, userId, false);
 
 		auto& rs = m_world.get<px::RigidState>(e);
+
+		if (rs.kineType != px::eKineDrivenType::RuntimeDynamic)
+		{
+			if (rs.kineState.startEpoch == 0)
+			{
+				rs.kineState.startEpoch = static_cast<uint64>(m_world.ctx().get<TickCounter>().tick);
+			}
+
+			auto& userKineBaseline = m_kineBaselineStatesPerUser[userId];
+			auto itBs = userKineBaseline.find(netId);
+			if (itBs == userKineBaseline.end())
+				return BuildFullActorEntity(e, userId, false);
+
+			if (itBs->second == rs.kineState)
+				return 0; // unchanged
+
+			itBs->second = rs.kineState;
+
+			uint32& base = userEntityBase[netId];
+
+			const fb::fbKinematicState kine(
+				rs.kineState.startEpoch,
+				rs.kineState.phase,
+				rs.kineState.t,
+				rs.kineState.targetId,
+				rs.kineState.eventMask,
+				static_cast<uint8>(rs.kineType)
+			);
+
+			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, 0, nullptr, nullptr, nullptr, nullptr, &kine);
+		}
 
 		PackedRigidDelta128 packed{};
 		if (!PackRigidDelta128(bs->second.pos, bs->second.rot, rs, packed))
@@ -385,7 +438,7 @@ namespace jam::net
 			newBs.rot = rs.pose.q;
 		}
 
-		return fb::CreatefbActorEntity(*m_fbb, netId, base++, 0, nullptr, &rigidDelta);
+		return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, 0, nullptr, &rigidDelta);
 	}
 
 	void ServerReplicationSystem::EnsureMetaResendBudget(entt::entity e, const MetaSentKey& key)
@@ -449,7 +502,7 @@ namespace jam::net
 		// 2) NewlyCreatedTag는 "모든 유저에게 meta를 충분히 보냈는가" 관점으로 제거한다.
 		//    - spawn_req_id는 요청자 전용이므로, 여기 판단에서 제외되어도 됨.
 		//    - CanClearNewlyCreatedTag는 (metaSent/metaResendBudget) 기준으로 유저 전체를 검사한다.
-		const uint32 netId = m_world.get<NetIdentity>(e).netId;
+		const NetId netId = m_world.get<NetId>(e);
 		if (CanClearNewlyCreatedTag(netId))
 		{
 			m_world.remove<NewlyCreatedTag>(e);
@@ -460,7 +513,7 @@ namespace jam::net
 		}
 	}
 
-	bool ServerReplicationSystem::CanClearNewlyCreatedTag(uint32 netId)
+	bool ServerReplicationSystem::CanClearNewlyCreatedTag(NetId netId)
 	{
 		auto* nw = m_world.ctx().get<ServerNetWorld*>();
 		if (!nw) return true;
@@ -473,7 +526,7 @@ namespace jam::net
 
 		for (uint64 userId : users)
 		{
-			const MetaSentKey key{ .userId = userId, .netId = netId };
+			const MetaSentKey key{ .userId = userId, .netId = netId.Raw() };
 
 			// 아직 resend budget 남아있으면 meta 전송이 더 필요하다고 판단
 			if (auto it = m_metaResendBudget.find(key); it != m_metaResendBudget.end())

@@ -4,6 +4,8 @@
 
 #include <jampx/IPhysicsFacade.h>
 
+#include "jamnet/sync/replication/NetActorComponents.h"
+
 namespace jam::net
 {
 	struct TransportInfo;
@@ -19,6 +21,8 @@ namespace jam::net
 
 		void								SetTransportAdapter(ITransportEndpoint* transport);
 		void								SetPhysicsFacade(unique_ptr<px::IPhysicsFacade> physics);
+		void								SetLevelPath(const string& levelPath) { m_levelPath = levelPath; }
+
 
 		void								Enter(uint64 userId);
 		void								Leave(uint64 userId);
@@ -31,29 +35,29 @@ namespace jam::net
 
 		
 		void								SpawnActor(const SpawnParams& params);
-		void								DespawnActor(uint32 netId, uint64 userId);
-		void								PossessActor(uint32 netId, uint64 userId);
-		void								UnpossessActor(uint32 netId, uint64 userId);
+		void								DespawnActor(NetId netId, uint64 userId);
+		void								PossessActor(NetId netId, uint64 userId);
+		void								UnpossessActor(NetId netId, uint64 userId);
 
 
-		void								SpawnActorAsync(const SpawnParams& params, std::function<void(uint32)> onDone);
-		void								DespawnActorAsync(uint32 netId, uint64 userId, std::function<void(bool)> onDone);
-		void								PossessActorAsync(uint32 netId, uint64 userId, std::function<void(bool)> onDone);
-		void								UnpossessActorAsync(uint32 netId, uint64 userId, std::function<void(bool)> onDone);
+		void								SpawnActorAsync(const SpawnParams& params, std::function<void(NetId)> onDone);
+		void								DespawnActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone);
+		void								PossessActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone);
+		void								UnpossessActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone);
 
 		void								RequestInitialSnapshotNewClient();
 
 		void								GetMembers(OUT vector<uint64>& users) { users = m_members; };
 
-		void								SetLevelPath(const string& levelPath) { m_levelPath = levelPath; }
 
 	private:
 		void								TickOnShard() override;
+		void								BootstrapLevelActors();
 
-		uint32								SpawnActorImpl(const SpawnParams& params);
-		bool								DespawnActorImpl(uint32 netId, uint64 userId = 0);
-		bool								PossessActorImpl(uint32 netId, uint64 userId = 0);
-		bool								UnpossessActorImpl(uint32 netId, uint64 userId = 0);
+		NetId								SpawnActorImpl(const SpawnParams& params);
+		bool								DespawnActorImpl(NetId netId, uint64 userId = 0);
+		bool								PossessActorImpl(NetId netId, uint64 userId = 0);
+		bool								UnpossessActorImpl(NetId netId, uint64 userId = 0);
 
 		void								ProcessGameInput(const PacketView& pkt);
 
@@ -63,6 +67,7 @@ namespace jam::net
 		unique_ptr<px::IPhysicsFacade>		m_physics = nullptr;
 
 		string								m_levelPath;
+		px::LevelLayerInfo					m_levelLayerInfo = {};
 
 		atomic<bool>						m_pendingInitialFullSnapshot{ false };
 

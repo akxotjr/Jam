@@ -248,8 +248,11 @@
     <ClInclude Include="include\jamnet\sync\replication\AoiSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ClientReplaySystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientReplicationSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientSamplingSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\CorrectionReplayRunner.h" />
+    <ClInclude Include="include\jamnet\sync\replication\IReplayRunner.h" />
     <ClInclude Include="include\jamnet\sync\replication\NetActorComponents.h" />
     <ClInclude Include="include\jamnet\sync\replication\NetWorldContext.h" />
     <ClInclude Include="include\jamnet\sync\replication\ReplicationEvents.h" />
@@ -335,8 +338,10 @@
     <ClCompile Include="src\sync\replication\AoiSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientInputSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ClientReplaySystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientReplicationSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientSamplingSystem.cpp" />
+    <ClCompile Include="src\sync\replication\CorrectionReplayRunner.cpp" />
     <ClCompile Include="src\sync\replication\ServerInputSystem.cpp" />
     <ClCompile Include="src\sync\replication\ServerPhysicsSystem.cpp" />
     <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp" />

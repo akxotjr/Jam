@@ -19,20 +19,13 @@ namespace jam::net
 		px::CharacterInput			input{};
 	};
 
-	/// @brief 서버에서 받은 권위 상태 (Reconciliation 용)
-	struct ServerState
-	{
-		uint64						serverTick	= 0;
-		uint32						inputAck	= 0;
-		px::CharacterState			state{};
-	};
 
 	/// @brief 클라이언트 예측 상태 (Reconciliation 비교용)
-	struct PredictedState
-	{
-		uint32						inputSeq = 0;
-		px::CharacterState			state{};
-	};
+	//struct PredictedState
+	//{
+	//	uint32						inputSeq = 0;
+	//	px::CharacterState			state{};
+	//};
 
 	/// @brief Reconiliation 설정
 	struct ReconcileConfig

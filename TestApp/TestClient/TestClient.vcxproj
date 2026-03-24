@@ -118,7 +118,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamPx\include\jampx\api\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamPx\api\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -168,8 +168,9 @@
     <ClInclude Include="Renderer.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Contents\test_level.json" />
-    <None Include="Contents\test_prefab.json" />
+    <None Include="..\Contents\test_asset.json" />
+    <None Include="..\Contents\test_level.json" />
+    <None Include="..\Contents\test_level1.json" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -38,44 +38,31 @@ namespace jam::net
 	void ClientInputSystem::Tick()
 	{
 		if (!m_bInitialized) return;
-		if (!m_world.ctx().contains<TickCounter>()) return;
 
-		entt::entity player = GetLocalEntity(m_world);
-		if (player == entt::null) return;
+		if (!m_world.ctx().contains<InputHistoryBuffer>())
+			m_world.ctx().emplace<InputHistoryBuffer>();
 
-		auto& inputState = m_world.get_or_emplace<LocalInputState>(player);
-		uint32 currentTick = m_world.ctx().get<TickCounter>().tick;
+		auto& inputHistory = m_world.ctx().get<InputHistoryBuffer>();
+		const uint32 currentTick = m_world.ctx().get<TickCounter>().tick;
 
 		px::CharacterInput sample{};
 		if (m_inputSample.TryRead(sample))
+			inputHistory.current.input = sample;
+
+		inputHistory.current.seq = currentTick;
+		inputHistory.Push(inputHistory.current);
+
+		if (auto* netWorld = m_world.ctx().get<ClientNetWorld*>())
 		{
-			inputState.currentInput.input = sample;
-		}
-
-		inputState.currentInput.seq = currentTick;
-		inputState.unackedInputs.push_back(inputState.currentInput);
-
-		while (inputState.unackedInputs.size() > kMaxHistorySize)
-			inputState.unackedInputs.pop_front();
-
-		if (m_world.ctx().contains<ClientNetWorld*>())
-		{
-			auto* netWorld = m_world.ctx().get<ClientNetWorld*>();
-			SendInput(netWorld, inputState.currentInput);
+			SendInput(netWorld, inputHistory.current);
 		}
 	}
 
 
 	void ClientInputSystem::OnServerAck(uint32 ackSeq)
 	{
-		entt::entity player = GetLocalEntity(m_world);
-		if (player == entt::null) return;
-
-		if (auto* inputState = m_world.try_get<LocalInputState>(player))
-		{
-			while (!inputState->unackedInputs.empty() && inputState->unackedInputs.front().seq <= ackSeq)
-				inputState->unackedInputs.pop_front();
-		}
+		if (auto* inputHistory = m_world.ctx().find<InputHistoryBuffer>())
+			inputHistory->PruneAck(ackSeq);
 	}
 
 	void ClientInputSystem::SendInput(ClientNetWorld* netWorld, const InputCmd& cmd)

@@ -16,11 +16,11 @@ namespace jam::px
 
         void                                Load();
 
-
         bool                                HasTemplate(TemplateHandle h) const;
         TemplateHandle                      FindHandleByName(const std::string& name) const;
         TemplateHandle                      FindHandleByKey(PrefabKey key) const; // PrefabKey.value == fnv1a64(template.name)
         const ActorTemplateDef*             FindTemplateDef(TemplateHandle h) const;
+        const ActorTemplateDef*             FindTemplateDef(PrefabKey key) const;
 		eBodyType                           GetBodyType(PrefabKey key);
         eMotionType                         GetMotionType(PrefabKey key);
 
@@ -30,13 +30,17 @@ namespace jam::px
 		PxShape*                            GetShape(ShapeHandle h) const;
 		void                                GetShapes(const std::vector<ShapeHandle>& handles, std::vector<PxShape*>& shapes) const;
 
+        const ShapeDef&                     GetShapeDef(ShapeHandle h) const;
 		const DynamicBodyDef&               GetDynamicBodyDef(DynamicBodyHandle h) const;
         const CCTBodyDef&                   GetCCTBodyDef(CCTBodyHandle h) const;
 		const CharacterMoveConfig&          GetCharacterMoveConfig(CharacterMoveConfigHandle h) const;
 		const KinematicDriverConfig&        GetKinematicDriverConfig(KinematicDriverConfigHandle h) const;
 		const ProjectileConfig&             GetProjectileConfig(ProjectileConfigHandle h) const;
 
-        PxRigidActor*                       Instantiate(const PhysicsLevelInstanceDef& inst);
+        
+    	[[deprecated]]PxRigidActor*         Instantiate(const PhysicsLevelInstanceDef& inst);
+
+
         PxRigidActor*                       Instantiate(TemplateHandle tpl, const PxTransform& pose, void* userData = nullptr);
         PxRigidActor*                       Instantiate(const std::string& name, const PxTransform& worldPose, void* userData = nullptr);
 

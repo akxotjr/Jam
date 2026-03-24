@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "scene_name": "test_scene",
+  "layers": [
+    {
+      "name": "default",
+      "enabled": true,
+      "instances": [
+        {
+          "template": "Map",
+          "pose": {
+            "p": [ 0.0, 0.0, 0.0 ],
+            "q": [ 0.0, 0.0, 0.0, 1.0 ]
+          }
+        },
+        {
+          "template": "Elevator",
+          "pose": {
+            "p": [ 0.0, 0.0, 0.0 ],
+            "q": [ 0.0, 0.0, 0.0, 1.0 ]
+          }
+        }
+      ]
+    }
+  ]
+}

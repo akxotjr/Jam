@@ -16,9 +16,45 @@ namespace jam::net
 
 	void ServerPhysicsSystem::Tick()
 	{
-		ApplyInputs();
-		Simulate();
-		SyncTransforms();
+		if (!m_physics) return;
+
+		auto& shard = SHARD_LOCAL_CHECKED();
+		auto* sched = shard.scheduler;
+
+		// 스케줄러가 없으면 기존 동기 경로 유지
+		if (!sched)
+		{
+			ApplyInputs();
+			Simulate();
+			SyncTransforms();
+			return;
+		}
+
+		// 이전 물리 fiber가 아직 대기/실행 중이면 중복 실행 방지
+		if (m_tickFiberRunning)
+			return;
+
+		m_tickFiberRunning = true;
+
+		sched->SpawnFiber(
+			[this]()
+			{
+				try
+				{
+					ApplyInputs();
+					Simulate();      
+					SyncTransforms();
+				}
+				catch (...)
+				{
+					m_tickFiberRunning = false;
+					throw;
+				}
+
+				m_tickFiberRunning = false;
+			},
+			FiberDesc{ .name = "ServerPhysics.TickFiber" }
+		);
 	}
 
 	void ServerPhysicsSystem::SpawnActor(entt::entity e, const px::SpawnDesc& desc) const
@@ -26,19 +62,18 @@ namespace jam::net
 		if (!m_physics || !m_world.valid(e))
 			return;
 
-		const px::ObjectId		id = MakeObjectId(e);
-		const px::PhysicsHandle h  = m_physics->Spawn(id, desc);
-		if (!h.IsValid()) return;
+		const px::ObjectId oid = MakeObjectId(e);
+		if (!m_physics->Spawn(oid, desc)) 
+			return;
 
 		const px::eBodyType bodyType = desc.IsCharacter() ? px::eBodyType::Character : px::eBodyType::Rigid;
-
 		m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
+		m_world.emplace<PhysicsSpawnedTag>(e);
 
 		if (bodyType == px::eBodyType::Character)
 		{
-			m_world.emplace<CharacterPhysicalBody>(e, CharacterPhysicalBody{ h });
 			auto& cs = m_world.emplace<px::CharacterState>(e);
-			JAM_ASSERT(m_physics->GetCharacterState(id, cs))
+			JAM_ASSERT(m_physics->GetCharacterState(oid, cs))
 
 			const uint64 controller = m_world.get<ControlTag>(e).userId;
 			const uint64 owner		= m_world.get<OwnershipTag>(e).userId;
@@ -50,9 +85,8 @@ namespace jam::net
 		}
 		else
 		{
-			m_world.emplace<RigidPhysicalBody>(e, RigidPhysicalBody{ h });
 			auto& rs = m_world.emplace<px::RigidState>(e);
-			JAM_ASSERT(m_physics->GetRigidState(id, rs))
+			JAM_ASSERT(m_physics->GetRigidState(oid, rs))
 		}
 	}
 
@@ -62,16 +96,8 @@ namespace jam::net
 			return;
 
 		const px::ObjectId id = MakeObjectId(e);
-		m_physics->Despawn(id);
-
-		if (auto* hb = m_world.try_get<CharacterHitboxPhysicalBody>(e))
-			hb->handle = {};
-
-		if (auto* cc = m_world.try_get<CharacterPhysicalBody>(e))
-			cc->handle = {};
-
-		if (auto* ra = m_world.try_get<RigidPhysicalBody>(e))
-			ra->handle = {};
+		if (m_physics->Despawn(id))
+			m_world.erase<PhysicsSpawnedTag>(e);
 	}
 
 	void ServerPhysicsSystem::ApplyInputs() const
@@ -97,11 +123,11 @@ namespace jam::net
 		const uint64 awaitKey = inFiber ? ++m_awaitSeq : 0;
 
 		// BeginStep이 true를 반환하면 PhysX Task가 Shard에 제출되었으므로 파이버를 Suspend 합니다.
-		if (m_physics->BeginStep(SIMULATION_TICK_SEC, awaitKey) && inFiber)
+		if (m_physics->BeginSimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
 			sched->Suspend(awaitKey, NOW_NS() + 2_s);
 
 		// 파이버가 Resume 된 후 (또는 동기 실행 시) 결과를 가져옵니다.
-		m_physics->EndStep();
+		m_physics->EndSimulate();
 	}
 
 	void ServerPhysicsSystem::SyncActiveTransforms() const
@@ -114,7 +140,6 @@ namespace jam::net
 
 		for (const px::ObjectId id : activeList)
 		{
-			// ObjectId == entt::entity (uint32 캐스팅 규칙)
 			const entt::entity e = static_cast<entt::entity>(id);
 			if (!m_world.valid(e)) continue;
 
@@ -127,8 +152,6 @@ namespace jam::net
 				{
 					if (auto* state = m_world.try_get<px::CharacterState>(e))
 						*state = cs;
-
-					JAMNET_LOG_TRACE("SyncActiveTransform(Character) id={} pos({:.2f},{:.2f},{:.2f})", id, cs.pos.x, cs.pos.y, cs.pos.z);
 				}
 			}
 			else
@@ -148,28 +171,26 @@ namespace jam::net
 		if (!m_physics)
 			return;
 
-		auto view = m_world.view<NetIdentity, NetActorBodyType>();
+		auto view = m_world.view<NetId, NetActorBodyType>();
 
 		for (auto e : view)
 		{
-			const px::ObjectId id = MakeObjectId(e);
+			const px::ObjectId oid = MakeObjectId(e);
 			const auto bodyType = view.get<NetActorBodyType>(e).body;
 
 			if (bodyType == px::eBodyType::Character)
 			{
 				px::CharacterState cs{};
-				if (m_physics->GetCharacterState(id, cs))
+				if (m_physics->GetCharacterState(oid, cs))
 				{
 					auto& state = m_world.get<px::CharacterState>(e);
 					state = cs;
-
-					JAMNET_LOG_TRACE("SyncTransform : pos({}, {}, {})", state.pos.x, state.pos.y, state.pos.z);
 				}
 			}
 			else
 			{
 				px::RigidState rs{};
-				if (m_physics->GetRigidState(id, rs))
+				if (m_physics->GetRigidState(oid, rs))
 				{
 					auto& state = m_world.get<px::RigidState>(e);
 					state = rs;

@@ -11,6 +11,8 @@ namespace jam::px
 
 		virtual PxTransform		Tick(float dt) = 0;
 		virtual bool			IsDone() const { return false; }
+
+		virtual KinematicState  BuildState() const { return {}; }
 	};
 
 } // namespace jam::px

@@ -1,4 +1,4 @@
-namespace jam.net.fb;
+癤퓆amespace jam.net.fb;
 
 
 
@@ -41,6 +41,16 @@ struct fbCharacterDelta128
 	data1 : ulong;
 }
 
+struct fbKinematicState
+{
+	start_epoch : ulong;
+	phase		: uint;
+	t			: float;
+	target_id	: uint;
+	event_mask	: uint;
+	kine_type	: ubyte;
+}
+
 
 // --- Snapshot --- 
 
@@ -55,10 +65,11 @@ table fbSnapshotHeader
 
 table fbActorMeta
 {
-	owner_user_id		: ulong = 0;		// 소유권(권한 관리용). = 0 : 서버소유, > 0 : 유저 소유
-	controller_user_id	: ulong = 0;		// 조종권(입력 관리용). = 0 : 조종자 없음, > 0 : 유저 조종
+	owner_user_id		: ulong = 0;		
+	controller_user_id	: ulong = 0;		
 	prefab_key			: ulong = 0;
 	spawn_req_id		: uint  = 0;
+	packed_id			: uint  = 0;	// team(16) / part(8) / role (8)
 }
 
 
@@ -74,6 +85,8 @@ table fbActorEntity
 
 	character_full		: fbCharacterFull160;
 	character_delta		: fbCharacterDelta128;
+
+	kinematic_state		: fbKinematicState;
 }
 
 table fbSnapshot

@@ -5,52 +5,119 @@
 
 namespace jam::px
 {
-	KinematicRigidBehavior::KinematicRigidBehavior(std::unique_ptr<IKinematicDriver> driver)
-		: m_driver(std::move(driver))
+	KinematicRigidBehavior::KinematicRigidBehavior(
+		std::unique_ptr<IKinematicDriver> mainDriver,
+		std::unique_ptr<IKinematicDriver> replayDriver)
+		: m_mainDriver(std::move(mainDriver)), m_replayDriver(std::move(replayDriver))
 	{
 	}
 
-	void KinematicRigidBehavior::Tick(RigidBody& body, float dt)
+	void KinematicRigidBehavior::TickOnMain(RigidBody& body, float dt)
 	{
-        if (!m_driver || m_driver->IsDone())
+        if (!m_mainDriver || m_mainDriver->IsDone())
             return;
 
-		auto* dyn = body.GetActor()->is<PxRigidDynamic>();
+		auto* dyn = body.GetMainActor()->is<PxRigidDynamic>();
 		if (!dyn) return;
 
-		m_lastDt = dt;
-		const PxTransform pose = m_driver->Tick(dt);
+		m_lastDtMain = dt;
+		const PxTransform pose = m_mainDriver->Tick(dt);
 		dyn->setKinematicTarget(pose);
 	}
 
-	void KinematicRigidBehavior::SyncState(RigidBody& body)
+	void KinematicRigidBehavior::TickOnReplay(RigidBody& body, float dt)
 	{
-		auto* dyn = body.GetActor()->is<PxRigidDynamic>();
+		if (!m_replayDriver)
+			return;
+
+		auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
 		if (!dyn) return;
 
-		RigidState state = body.GetState();
-		const PxTransform prevPose    = ToPhysX(state.pose);
-		const PxTransform currentPose = dyn->getGlobalPose();
-
-		const PxVec3 linVel	= GetLinearVelocity(currentPose.p, prevPose.p, m_lastDt);
-		const PxVec3 angVel	= GetAngularVelocity(currentPose.q, prevPose.q, m_lastDt);
-		
-		state.pose	 = ToPx(currentPose);
-		state.linVel = ToPx(linVel);
-		state.angVel = ToPx(angVel);
-
-		body.SetState(state, true);
+		m_lastDtReplay = dt;
+		const PxTransform pose = m_replayDriver->Tick(dt);
+		dyn->setKinematicTarget(pose);
 	}
 
-	bool KinematicRigidBehavior::ApplyAuthoritativeState(const RigidState& s)
+	bool KinematicRigidBehavior::SyncMainState(RigidBody& body)
 	{
-		auto* net = dynamic_cast<NetworkPoseKinematicDriver*>(m_driver.get());
+		auto* dyn = body.GetMainActor()->is<PxRigidDynamic>();
+		if (!dyn) return false;
+
+		const RigidState prev = body.GetMainState();
+
+		const PxTransform prevPose = ToPhysX(prev.pose);
+		const PxTransform nowPose = dyn->getGlobalPose();
+
+		RigidState now = {
+			.pose	  = ToPx(nowPose),
+			.linVel	  = ToPx(GetLinearVelocity(nowPose.p, prevPose.p, m_lastDtMain)),
+			.angVel	  = ToPx(GetAngularVelocity(nowPose.q, prevPose.q, m_lastDtMain)),
+			.kineType = prev.kineType
+		};
+
+		bool changed = !IsNearlyEqual(prevPose, nowPose);
+
+		if (prev.kineType != eKineDrivenType::RuntimeDynamic)
+		{
+			const auto newKineState = m_mainDriver->BuildState();
+			const bool kineStateChanged = prev.kineState != newKineState;
+			now.kineState = newKineState;
+			changed = changed || kineStateChanged;
+		}
+
+		body.SetMainState(now);
+		return changed;
+	}
+
+	void KinematicRigidBehavior::SyncReplayState(RigidBody& body)
+	{
+		auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
+		if (!dyn) return;
+
+		const RigidState prev = body.GetReplayState();
+		
+		const PxTransform prevPose = ToPhysX(prev.pose);
+		const PxTransform nowPose  = dyn->getGlobalPose();
+		
+		RigidState now = {
+			.pose     = ToPx(nowPose),
+			.linVel   = ToPx(GetLinearVelocity(nowPose.p, prevPose.p, m_lastDtReplay)),
+			.angVel   = ToPx(GetAngularVelocity(nowPose.q, prevPose.q, m_lastDtReplay)),
+			.kineType = prev.kineType
+		};
+
+		if (IsLocalDrivenKine(now.kineType))
+		{
+			now.kineState = m_replayDriver->BuildState();
+		}
+
+		body.SetReplayState(now);
+	}
+
+	bool KinematicRigidBehavior::ApplyMainState(const RigidState& state)
+	{
+		auto* net = dynamic_cast<NetworkPoseKinematicDriver*>(m_mainDriver.get());
 		if (!net) return false;
 
-		net->SetAuthoritativePose(ToPhysX(s.pose));
-		net->SetAuthoritativeLinearVelocity(ToPhysX(s.linVel));
-		net->SetAuthoritativeAngularVelocity(ToPhysX(s.angVel));
+		net->SetAuthoritativePose(ToPhysX(state.pose));
+		net->SetAuthoritativeLinearVelocity(ToPhysX(state.linVel));
+		net->SetAuthoritativeAngularVelocity(ToPhysX(state.angVel));
+
 		return true;
 	}
+
+	bool KinematicRigidBehavior::ApplyReplayState(const RigidState& state)
+	{
+		auto* netDriver = dynamic_cast<NetworkPoseKinematicDriver*>(m_replayDriver.get());
+		if (!netDriver) return false;
+
+		netDriver->SetAuthoritativePose(ToPhysX(state.pose));
+		netDriver->SetAuthoritativeLinearVelocity(ToPhysX(state.linVel));
+		netDriver->SetAuthoritativeAngularVelocity(ToPhysX(state.angVel));
+
+		return true;
+	}
+
+
 } // namespace jam::px
 

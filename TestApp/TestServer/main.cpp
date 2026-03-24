@@ -27,7 +27,7 @@ int main()
 	{
 		ServerConfig serverCfg{};
 		serverCfg.physicsFactory = []() { return std::make_unique<jam::px::PhysicsFacade>(); };
-		serverCfg.levelPath = "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//TestClient//Contents//test_level.json";
+		serverCfg.levelPath = "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
 		auto serverManager = std::make_unique<ServerNetworkManager>(serverCfg);
 
 		if (!serverManager->Start())
@@ -43,7 +43,7 @@ int main()
 		PHYSICS_CORE_INIT();
 		JAMNET_LOG_INFO("PhysicsCore initialized successfully");
 		
-		PHYSICS_PREFAB_REGISTRY.Init("C://Users//akxotjr//GameWorkSpace//Jam//TestApp//TestClient//Contents//test_prefab.json");
+		PHYSICS_PREFAB_REGISTRY.Init("C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_asset.json");
 		JAMNET_LOG_INFO("PhysicsPrefabRegistry initialized successfully");
 
 

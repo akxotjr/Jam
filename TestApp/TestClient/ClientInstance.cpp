@@ -7,11 +7,69 @@
 #include "Renderer.h"
 #include "jamnet/sync/networld/ClientNetWorld.h"
 #include "jampx/PhysicsFacade.h"
+#include "jampx/prefab/PhysicsPrefabRegistry.h"
 
+
+namespace
+{
+	glm::vec4 ResolveColor(
+		px::eActorType actorType,
+		px::eBodyType bodyType,
+		px::eMotionType motionType,
+		px::eCharacterControlType controllerType = px::eCharacterControlType::None)
+	{
+		struct ColorRule
+		{
+			px::eActorType				actorType;
+			px::eBodyType				bodyType;
+			px::eMotionType				motionType;
+			px::eCharacterControlType	controllerType;
+			bool						checkController;
+			glm::vec4					color;
+		};
+
+		static constexpr ColorRule kTable[] =
+		{
+			// Rigid
+			{ px::eActorType::Generic,		px::eBodyType::Rigid,		px::eMotionType::Static,	px::eCharacterControlType::None,	false, { 0.55f, 0.55f, 0.55f, 1.0f } },
+			{ px::eActorType::Generic,		px::eBodyType::Rigid,		px::eMotionType::Dynamic,	px::eCharacterControlType::None,	false, { 0.95f, 0.65f, 0.20f, 1.0f } },
+			{ px::eActorType::Generic,		px::eBodyType::Rigid,		px::eMotionType::Kinematic,	px::eCharacterControlType::None,	false, { 0.95f, 0.90f, 0.20f, 1.0f } },
+
+			// Projectile
+			{ px::eActorType::Projectile,	px::eBodyType::Rigid,		px::eMotionType::Dynamic,	px::eCharacterControlType::None,	false, { 1.00f, 0.25f, 0.25f, 1.0f } },
+
+			// Character (controller type 포함)
+			{ px::eActorType::Character,	px::eBodyType::Character,	px::eMotionType::CCT,		px::eCharacterControlType::Player, true,  { 0.25f, 0.90f, 0.35f, 1.0f } },
+			{ px::eActorType::Character,	px::eBodyType::Character,	px::eMotionType::CCT,		px::eCharacterControlType::AI,		true,  { 0.85f, 0.30f, 0.90f, 1.0f } },
+			{ px::eActorType::Character,	px::eBodyType::Character,	px::eMotionType::RemoteCCT,	px::eCharacterControlType::Player, true,  { 0.20f, 0.75f, 1.00f, 1.0f } },
+			{ px::eActorType::Character,	px::eBodyType::Character,	px::eMotionType::RemoteCCT,	px::eCharacterControlType::AI,		true,  { 0.55f, 0.40f, 0.95f, 1.0f } },
+		};
+
+		for (const auto& rule : kTable)
+		{
+			if (rule.actorType != actorType || rule.bodyType != bodyType || rule.motionType != motionType)
+				continue;
+
+			if (rule.checkController && rule.controllerType != controllerType)
+				continue;
+
+			return rule.color;
+		}
+
+		// fallback
+		return glm::vec4(0.80f, 0.80f, 0.80f, 1.0f);
+	}
+}
 
 ClientInstance::ClientInstance(uint32 instanceId, uint64 userId)
 	: m_instanceId(instanceId), m_userId(userId)
 {
+	m_subLevelSpawned = GLOBAL_EVENTBUS_SUBSCRIBE(
+		jam::net::RenderLevelSpawnedEvent,
+		[this](const jam::net::RenderLevelSpawnedEvent& evt) { OnLevelSpawned(evt); },
+		jam::SubscribeOptions{ jam::eDispatchPolicy::MAIN_EXECUTOR }
+	);
+
 	m_subActorSpawned = GLOBAL_EVENTBUS_SUBSCRIBE(
 		jam::net::RenderActorSpawnedEvent,
 		[this](const jam::net::RenderActorSpawnedEvent& evt) { OnActorSpawned(evt); },
@@ -59,7 +117,7 @@ bool ClientInstance::Connect(const string& serverIp, uint16 tcpPort, uint16 udpP
 	config.serverTcpAddress = net::NetAddress(serverIp, tcpPort);
 	config.serverUdpAddress = net::NetAddress(serverIp, udpPort);
 	config.physicsFactory	= [] { return std::make_unique<jam::px::PhysicsFacade>(); };
-	config.levelPath		= "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//TestClient//Contents//test_level.json";
+	config.levelPath		= "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
 
 	m_networkManager = std::make_unique<net::ClientNetworkManager>(config, m_userId);
 	
@@ -147,15 +205,16 @@ void ClientInstance::SpawnActor()
 	params.owned		= true;
 	params.controlled	= true;
 
-	params.desc.prefab = px::MakePrefabKey("Character");
-	params.desc.cs = { .pos = { 5.0f * static_cast<float>(m_windowIndex), 10.f, 0.f} };
+	params.desc.prefab  = px::MakePrefabKey("Character");
+	params.desc.pose    = { .p = { 15.0f * static_cast<float>(m_windowIndex), 50.f, 0.f} };
+	params.desc.overrides = px::CharacterSpawnOverrides{};
 
 	{
 		ActorRenderingData data{};
 		data.ensured			= false;
 		data.pendingSpawnReqId	= params.spawnId;
 
-		data.shape				= px::prefab::eShapeType::CAPSULE;
+		data.shape				= px::eShapeType::Capsule;
 		data.capsuleRadius		= 0.35f;
 		data.capsuleHalfHeight	= 0.5f;
 		data.color				= glm::vec4(0.9f, 0.25f, 0.25f, 1.0f);
@@ -270,23 +329,82 @@ void ClientInstance::ProcessMouseLook(GLFWwindow* window)
     //m_viewRightXZ   = glm::vec2(cy, -sy);    // right: (x,z) = (cy, -sy)
 }
 
-
-ActorRenderingData* ClientInstance::EnsureRenderingActorData(px::ObjectKey key)
+void ClientInstance::CreateRenderingLevelData(const net::RenderLevelSpawnedEvent& evt)
 {
-	auto [it, inserted] = m_actorRenderData.try_emplace(key, ActorRenderingData{});
+	for (const auto& [objectId, prefab] : evt.instances)
+	{
+		auto [it, inserted] = m_actorRenderData.try_emplace(objectId, ActorRenderingData{});
+		ActorRenderingData& data = it->second;
+		data.oid = objectId;
+
+		if (inserted)
+		{
+			const auto* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(prefab);
+			if (!def || !def->IsRigid()) continue;
+
+			const auto& rigidBody = std::get<px::RigidBodyDef>(def->body);
+			const auto& shapeDef  = PHYSICS_PREFAB_REGISTRY.GetShapeDef(rigidBody.shapes[0]);
+
+			if (shapeDef.IsMeshGeometry()) continue;
+
+			data.ensured			= true;
+			data.pendingSpawnReqId	= 0;
+			data.isLocal			= false;
+			data.shape				= shapeDef.type;
+			data.boxHalfExtents		= px::ToPx(shapeDef.halfExtents);
+			data.capsuleRadius		= shapeDef.radius;
+			data.capsuleHalfHeight	= shapeDef.halfHeight;
+			data.sphereRadius		= shapeDef.radius;
+			data.color				= ResolveColor(def->actorType, def->bodyType, def->motionType);
+		}
+	}
+
+}
+
+ActorRenderingData* ClientInstance::EnsureRenderingActorData(const net::RenderActorSpawnedEvent& evt)
+{
+	auto [it, inserted] = m_actorRenderData.try_emplace(evt.objectId, ActorRenderingData{});
 	ActorRenderingData& data = it->second;
-	data.key = key;
+	data.oid = evt.objectId;
 
 	if (inserted)
 	{
-		data.color = glm::vec4(0.9f, 0.25f, 0.25f, 1.0f);
-		data.shape = px::prefab::eShapeType::CAPSULE;
-		data.capsuleRadius = 0.35f;
-		data.capsuleHalfHeight = 0.45f;
+		const auto* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(evt.prefab);
+		if (!def) return nullptr;
+
+		if (def->IsRigid())
+		{
+			const auto& rigidBody = std::get<px::RigidBodyDef>(def->body);
+			const auto& shapeDef  = PHYSICS_PREFAB_REGISTRY.GetShapeDef(rigidBody.shapes[0]);
+
+
+			data.shape				= shapeDef.type;
+			data.boxHalfExtents		= px::ToPx(shapeDef.halfExtents);
+			data.capsuleRadius		= shapeDef.radius;
+			data.capsuleHalfHeight	= shapeDef.halfHeight;
+			data.sphereRadius		= shapeDef.radius;
+
+			data.color = ResolveColor(def->actorType, def->bodyType, def->motionType);
+		}
+		else
+		{
+			const auto& charBody = std::get<px::CharacterBodyDef>(def->body);
+			const auto& cct		 = PHYSICS_PREFAB_REGISTRY.GetCCTBodyDef(charBody.cct);
+
+			data.shape				= px::eShapeType::Capsule;
+			data.capsuleHalfHeight	= cct.height * 0.5f;
+			data.capsuleRadius		= cct.radius;
+
+			data.color = ResolveColor(def->actorType, def->bodyType, def->motionType, charBody.controllerType);
+
+			JAMNET_LOG_DEBUG("Render SpawnEvent: UserId= {}, ObjectId= {} ", m_userId, data.oid);
+		}
 	}
 
 	return &data;
 }
+
+
 
 void ClientInstance::BuildRenderFrames()
 {
@@ -319,6 +437,14 @@ void ClientInstance::BuildRenderFrames()
 }
 
 
+void ClientInstance::OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt)
+{
+	if (evt.userId != m_userId)
+		return;
+
+	CreateRenderingLevelData(evt);
+}
+
 void ClientInstance::OnActorSpawned(const net::RenderActorSpawnedEvent& evt)
 {	
 	if (evt.userId != m_userId)
@@ -330,18 +456,19 @@ void ClientInstance::OnActorSpawned(const net::RenderActorSpawnedEvent& evt)
 		m_pendingSpawnToRenderData.erase(it);
 
 		data.ensured = true;
-		data.key	 = evt.objectId;
+		data.oid	 = evt.objectId;
 		data.isLocal = evt.isLocal;
 
 		m_actorRenderData.emplace(evt.objectId, std::move(data));
 		return;
 	}
 
-	ActorRenderingData* data = EnsureRenderingActorData(evt.objectId);
+
+	ActorRenderingData* data = EnsureRenderingActorData(evt);
 	data->ensured			= true;
 	data->pendingSpawnReqId = 0;
 	data->isLocal			= evt.isLocal;
-	data->color				= glm::vec4(0.25f, 0.55f, 0.95f, 1.0f);
+
 }
 
 void ClientInstance::OnActorDespawned(const net::RenderActorDespawnedEvent& evt)
@@ -438,24 +565,24 @@ void ClientInstance::RenderActors()
 
 		switch (data.shape)
 		{
-		case px::prefab::eShapeType::BOX:
+		case px::eShapeType::Box:
 		{
 			glm::vec3 scale = glm::vec3(data.boxHalfExtents.x * 2.f, data.boxHalfExtents.y * 2.f, data.boxHalfExtents.z * 2.f);
 			Renderer::Instance().DrawBox(position, rotation, scale, data.color);
 			break;
 		}
 
-		case px::prefab::eShapeType::SPHERE:
+		case px::eShapeType::Sphere:
 		{
 			Renderer::Instance().DrawSphere(position, data.sphereRadius, data.color);
 			break;
 		}
-		case px::prefab::eShapeType::CAPSULE:
+		case px::eShapeType::Capsule:
 		{
 			Renderer::Instance().DrawCapsule(position, data.capsuleRadius, data.capsuleHalfHeight, data.color);
 			break;
 		}
-		case px::prefab::eShapeType::PLANE:
+		case px::eShapeType::Plane:
 		{
 			Renderer::Instance().DrawPlane(position, glm::vec2(WORLD_RANGE_MAX, WORLD_RANGE_MAX), data.color);
 			break;
@@ -508,9 +635,9 @@ glm::vec3 ClientInstance::QuatToEuler(const px::Quat& q) const
 	return euler;
 }
 
-ActorRenderingData* ClientInstance::GetRenderingActorData(px::ObjectKey key)
+ActorRenderingData* ClientInstance::GetRenderingActorData(px::ObjectId id)
 {
-	auto it = m_actorRenderData.find(key);
+	auto it = m_actorRenderData.find(id);
 	if (it != m_actorRenderData.end())
 	{
 		return &it->second;

@@ -8,23 +8,32 @@ namespace jam::px
 	class ProjectileRigidBehavior : public IRigidBehavior
 	{
 	public:
-		explicit ProjectileRigidBehavior(std::unique_ptr<ProjectileComponent> projectile);
+		explicit ProjectileRigidBehavior(
+			std::unique_ptr<ProjectileComponent> mainProjectile,
+			std::unique_ptr<ProjectileComponent> replayProjectile);
 		~ProjectileRigidBehavior() override = default;
 
-		void						Tick(RigidBody& body, float dt) override;
-		void						SyncState(RigidBody& body) override;
-		eActorType					GetActorType() const override { return eActorType::Projectile; }
+		void							TickOnMain(RigidBody& body, float dt) override;
+		void							TickOnReplay(RigidBody& body, float dt) override;
 
-		void						SetTargetResolver(ProjectileTargetResolver resolver);
+		bool							SyncMainState(RigidBody& body) override;
+		void							SyncReplayState(RigidBody& body) override;
+		
+		eActorType						GetActorType() const override { return eActorType::Projectile; }
 
-		// --- result ---
-		const ProjectileHitResult&	GetLastHitResult() const { return m_lastHitResult; }
-		bool                        IsTerminated()     const { return m_lastHitResult.IsTerminal(); }
+		void							SetTargetResolver(ProjectileTargetResolver resolver);
+
+		const ProjectileHitResult&		GetLastHitResult() const { return m_lastHitResult; }
+		bool							IsTerminated()     const { return m_lastHitResult.IsTerminal(); }
 
 	private:
-		std::unique_ptr<ProjectileComponent>	m_projectile    = nullptr;
-		ProjectileHitResult                     m_lastHitResult = {};
-		float									m_lastDt = 0.f;
+		std::unique_ptr<ProjectileComponent>	m_mainProjectile	= nullptr;
+		std::unique_ptr<ProjectileComponent>	m_replayProjectile	= nullptr;
+
+		ProjectileHitResult                     m_lastHitResult		= {};	// from main-projectile
+
+		float									m_lastDtMain		= 0.f;
+		float									m_lastDtReplay		= 0.f;
 	};
 
 

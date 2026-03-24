@@ -340,6 +340,7 @@ namespace jam::px
 			inline constexpr const char* enabled					= "enabled";
 			inline constexpr const char* instances					= "instances";
 
+			inline constexpr const char* level_actor_id				= "level_actor_id";
 			inline constexpr const char* template_name				= "template";
 			inline constexpr const char* pose						= "pose";
 			inline constexpr const char* overrides					= "overrides";
@@ -911,7 +912,7 @@ namespace jam::px
 	{
 		PhysicsAsset asset{};
 		asset.version = root.at(detail::k::version).get<int32>();
-		if (asset.version != 2)
+		if (asset.version != 1)
 			throw std::runtime_error("Unsupported physics asset version");
 
 		// materials
@@ -1144,7 +1145,7 @@ namespace jam::px
 		PhysicsLevelAsset out{};
 		out.version = root.at(detail::k::version).get<int32>();
 
-		if (out.version != 2)
+		if (out.version != 1)
 			throw std::runtime_error("Unsupported level version (expected 2)");
 
 		out.sceneName = root.value(detail::k::scene_name, std::string{});
@@ -1170,6 +1171,7 @@ namespace jam::px
 			for (const json& ij : insts)
 			{
 				PhysicsLevelInstanceDef inst{};
+				inst.levelActorId = ij.value(detail::k::level_actor_id, 0u);
 				inst.templateName = ij.at(detail::k::template_name).get<std::string>();
 				inst.pose		  = detail::ParseTransform(ij.at(detail::k::pose));
 

@@ -58,6 +58,12 @@
     <Filter Include="sync\physics">
       <UniqueIdentifier>{127e16be-cdd8-46f5-83db-2a0395181ea6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="sync\replication\client system">
+      <UniqueIdentifier>{dd060cde-7ff5-48bd-81f5-3bfe92b2b39f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\replication\server system">
+      <UniqueIdentifier>{d0260de9-9b39-4168-85f0-0e1e0c133fa7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -270,21 +276,6 @@
     <ClInclude Include="include\jamnet\sync\schema\gen\input_generated.h">
       <Filter>sync\schema\gen</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerReplicationSystem.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientReplicationSystem.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientSamplingSystem.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\sync\replication\NetActorComponents.h">
       <Filter>sync\replication</Filter>
     </ClInclude>
@@ -292,12 +283,6 @@
       <Filter>sync\replication</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\replication\ReplicationUtils.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerInputSystem.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h">
       <Filter>sync\replication</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h">
@@ -342,8 +327,38 @@
     <ClInclude Include="include\jamnet\sync\physics\ShardJobBridge.h">
       <Filter>sync\physics</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\AoiSystem.h">
+    <ClInclude Include="include\jamnet\sync\replication\IReplayRunner.h">
       <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h">
+      <Filter>sync\replication\client system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h">
+      <Filter>sync\replication\client system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientReplaySystem.h">
+      <Filter>sync\replication\client system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientReplicationSystem.h">
+      <Filter>sync\replication\client system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ClientSamplingSystem.h">
+      <Filter>sync\replication\client system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ServerReplicationSystem.h">
+      <Filter>sync\replication\server system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ServerInputSystem.h">
+      <Filter>sync\replication\server system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h">
+      <Filter>sync\replication\server system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\AoiSystem.h">
+      <Filter>sync\replication\server system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\CorrectionReplayRunner.h">
+      <Filter>sync\replication\client system</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -515,35 +530,41 @@
     <ClCompile Include="src\sync\networld\NetWorld.cpp">
       <Filter>sync\networld</Filter>
     </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientInputSystem.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientReplicationSystem.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientSamplingSystem.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerInputSystem.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerPhysicsSystem.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
     <ClCompile Include="src\runtime\matchmaking\DefaultMatchmaker.cpp">
       <Filter>runtime\matchmaking</Filter>
     </ClCompile>
     <ClCompile Include="src\sync\physics\ShardJobBridge.cpp">
       <Filter>sync\physics</Filter>
     </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientInputSystem.cpp">
+      <Filter>sync\replication\client system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp">
+      <Filter>sync\replication\client system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientReplaySystem.cpp">
+      <Filter>sync\replication\client system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientReplicationSystem.cpp">
+      <Filter>sync\replication\client system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ClientSamplingSystem.cpp">
+      <Filter>sync\replication\client system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ServerInputSystem.cpp">
+      <Filter>sync\replication\server system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ServerPhysicsSystem.cpp">
+      <Filter>sync\replication\server system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp">
+      <Filter>sync\replication\server system</Filter>
+    </ClCompile>
     <ClCompile Include="src\sync\replication\AoiSystem.cpp">
-      <Filter>sync\replication</Filter>
+      <Filter>sync\replication\server system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\CorrectionReplayRunner.cpp">
+      <Filter>sync\replication\client system</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

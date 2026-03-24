@@ -1,13 +1,5 @@
 ﻿#include "pch.h"
 
-#include <conio.h>
-
-
-// ---- High-resolution frame pacing & stats ----
-#include <atomic>
-#include <cmath>
-
-
 #include <windows.h>
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
@@ -90,9 +82,9 @@ static void Run(const TestConfig& config)
     auto& renderer = Renderer::Instance();
     renderer.Init(static_cast<int32>(windowCount));
 
-    const std::string mapGltfPath = (std::filesystem::current_path() / "Contents" / "ThirdPersonMap11.glb").string();
-    if (!Renderer::Instance().LoadGLTFScene(mapGltfPath))
-        throw std::runtime_error("failed to load level map");
+    //const std::string mapGltfPath = "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//ThirdPersonMap_L.glb";
+    //if (!Renderer::Instance().LoadGLTFScene(mapGltfPath))
+    //    throw std::runtime_error("failed to load level map");
 
 
     std::vector<std::unique_ptr<ClientInstance>> clients;
@@ -125,7 +117,7 @@ static void Run(const TestConfig& config)
         }
     }
 
-    constexpr double targetFPS = 120.0;
+    constexpr double targetFPS  = 120.0;
     const     auto   targetSpan = std::chrono::nanoseconds((int64_t)std::llround(1e9 / targetFPS));
     constexpr auto   sleepGuard = std::chrono::microseconds(2000);
 
@@ -158,181 +150,6 @@ static void Run(const TestConfig& config)
 
 
 
-static void WriteTestPrefabAndLevel()
-{
-    namespace fs = std::filesystem;
-    using namespace jam::px::prefab;
-
-    fs::path contents = fs::current_path() / "Contents";
-    std::error_code ec;
-    fs::create_directories(contents, ec);
-
-    // ----------------------------
-    // Prefab
-    // ----------------------------
-    fs::path prefabPath = contents / "test_prefab.json";
-
-    PrefabDocument prefabDoc{};
-    prefabDoc.path = prefabPath;
-
-    {
-        PrefabEditor ed(prefabDoc);
-
-        ed.Set(json::json_pointer(pVersion), 1);
-        ed.Set(json::json_pointer(pTemplates), json::array());
-
-        constexpr size_t characterTemplateIndex = 0;
-        constexpr size_t mapTemplateIndex = 1;
-
-        // ---- Character template ----
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_name), "Character");
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, kKind), vKindCharacter);
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_spawnPolicy), k_spawnBoth);
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_allowReplication), true);
-        ed.Set(MakeTemplateFieldPtr(characterTemplateIndex, k_shapes), json::array());
-
-        // cct
-        ed.Set(MakeCctFieldPtr(characterTemplateIndex, k_cct_radius), 0.35);
-        ed.Set(MakeCctFieldPtr(characterTemplateIndex, k_cct_height), 1.8);
-        ed.Set(MakeCctFieldPtr(characterTemplateIndex, kAllowCrouch), true);
-
-        ed.EnsureObject(MakeCctFieldPtr(characterTemplateIndex, k_material));
-        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, k_material).to_string() + "/" + k_staticFriction), 0.5);
-        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, k_material).to_string() + "/" + k_dynamicFriction), 0.5);
-        ed.Set(json::json_pointer(MakeCctFieldPtr(characterTemplateIndex, k_material).to_string() + "/" + k_restitution), 0.1);
-
-        ed.EnsureObject(MakeCctMovementPtr(characterTemplateIndex));
-        ed.Set(MakeCctMovementFieldPtr(characterTemplateIndex, kWalkSpeed), 5.0);
-        ed.Set(MakeCctMovementFieldPtr(characterTemplateIndex, kSprintSpeed), 7.5);
-        ed.Set(MakeCctMovementFieldPtr(characterTemplateIndex, kCrouchSpeed), 3.0);
-        ed.Set(MakeCctMovementFieldPtr(characterTemplateIndex, kAccelGround), 35.0);
-        ed.Set(MakeCctMovementFieldPtr(characterTemplateIndex, kGravity), 25.0);
-        ed.Set(MakeCctMovementFieldPtr(characterTemplateIndex, kJumpSpeed), 7.0);
-
-        // character shape[0]
-        constexpr size_t characterShapeIndex = 0;
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_shapeType), k_shapeCapsule);
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_shapeFlag), k_simulation);
-
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_localPose));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_localPose).to_string() + "/" + k_p),
-            json::array({ 0.0, 0.9, 0.0 }));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_localPose).to_string() + "/" + k_q),
-            json::array({ 0.0, 0.0, 0.0, 1.0 }));
-
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_material));
-        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, k_staticFriction), 0.5);
-        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, k_dynamicFriction), 0.5);
-        ed.Set(MakeShapeMaterialFieldPtr(characterTemplateIndex, characterShapeIndex, k_restitution), 0.0);
-
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word0), 1);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word1), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word2), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_simFilter).to_string() + "/" + k_word3), 0);
-
-        ed.EnsureObject(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word0), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word1), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word2), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_qryFilter).to_string() + "/" + k_word3), 0u);
-
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_radius), 0.35);
-        ed.Set(MakeShapeFieldPtr(characterTemplateIndex, characterShapeIndex, k_halfHeight), 0.9);
-
-        // ---- Map template ----
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_name), "Map");
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, kKind), vKindStatic);
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_spawnPolicy), k_spawnLevelOnly);
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_allowReplication), false);
-        ed.Set(MakeTemplateFieldPtr(mapTemplateIndex, k_shapes), json::array());
-
-        constexpr size_t mapShapeIndex = 0;
-        ed.Set(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_shapeType), k_shapeTriangleMesh);
-        ed.Set(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_shapeFlag), k_simulation);
-
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_localPose));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_localPose).to_string() + "/" + k_p),
-            json::array({ 0.0, 0.0, 0.0 }));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_localPose).to_string() + "/" + k_q),
-            json::array({ 0.0, 0.0, 0.0, 1.0 }));
-
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_material));
-        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, k_staticFriction), 0.6);
-        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, k_dynamicFriction), 0.6);
-        ed.Set(MakeShapeMaterialFieldPtr(mapTemplateIndex, mapShapeIndex, k_restitution), 0.0);
-
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word0), 1);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word1), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word2), 0);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_simFilter).to_string() + "/" + k_word3), 0);
-
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter));
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word0), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word1), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word2), 0u);
-        ed.Set(json::json_pointer(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_qryFilter).to_string() + "/" + k_word3), 0u);
-
-        ed.EnsureObject(MakeShapeFieldPtr(mapTemplateIndex, mapShapeIndex, k_mesh));
-        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, k_cooked), "Contents/ThridPersonMap.pxtri");
-        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, k_meshIndex), 0);
-        ed.Set(MakeShapeMeshFieldPtr(mapTemplateIndex, mapShapeIndex, k_primitiveIndex), 0);
-    }
-
-    try
-    {
-        SavePrefab(prefabDoc);
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "SavePrefab failed: " << e.what() << std::endl;
-    }
-
-    // ----------------------------
-    // Level
-    // ----------------------------
-    fs::path levelPath = contents / "test_level.json";
-
-    PrefabLevelDocument levelDoc{};
-    levelDoc.path = levelPath;
-
-    {
-        PrefabLevelEditor ed(levelDoc);
-
-        ed.Set(json::json_pointer("/version"), 1);
-        ed.Set(json::json_pointer("/instances"), json::array());
-
-        constexpr size_t mapInstanceIndex = 0;
-        constexpr size_t charInstanceIndex = 1;
-
-        // map instance
-        ed.Set(json::json_pointer("/instances/" + std::to_string(mapInstanceIndex) + "/template"), "Map");
-        ed.EnsureObject(json::json_pointer("/instances/" + std::to_string(mapInstanceIndex) + "/pose"));
-        ed.Set(json::json_pointer("/instances/" + std::to_string(mapInstanceIndex) + "/pose/p"), json::array({ 0.0, 0.0, 0.0 }));
-        ed.Set(json::json_pointer("/instances/" + std::to_string(mapInstanceIndex) + "/pose/q"), json::array({ 0.0, 0.0, 0.0, 1.0 }));
-
-        // character instance
-        ed.Set(json::json_pointer("/instances/" + std::to_string(charInstanceIndex) + "/template"), "Character");
-        ed.EnsureObject(json::json_pointer("/instances/" + std::to_string(charInstanceIndex) + "/pose"));
-        ed.Set(json::json_pointer("/instances/" + std::to_string(charInstanceIndex) + "/pose/p"), json::array({ 2.0, 0.0, 2.0 }));
-        ed.Set(json::json_pointer("/instances/" + std::to_string(charInstanceIndex) + "/pose/q"), json::array({ 0.0, 0.0, 0.0, 1.0 }));
-
-        ed.EnsureObject(json::json_pointer("/instances/" + std::to_string(charInstanceIndex) + "/overrides"));
-        ed.Set(json::json_pointer("/instances/" + std::to_string(charInstanceIndex) + "/overrides/linear_velocity"), json::array({ 0.0, 0.0, 0.0 }));
-        ed.Set(json::json_pointer("/instances/" + std::to_string(charInstanceIndex) + "/overrides/angular_velocity"), json::array({ 0.0, 0.0, 0.0 }));
-    }
-
-    try
-    {
-        SavePrefabLevel(levelDoc);
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "SavePrefabLevel failed: " << e.what() << '\n';
-    }
-}
-
 int main()
 {
     // -- test running -- 
@@ -346,7 +163,9 @@ int main()
     JamNetRuntime runtime(runtimeConfig);
 
     PHYSICS_CORE_INIT();
-    PHYSICS_PREFAB_REGISTRY.Init("C://Users//akxotjr//GameWorkSpace//Jam//TestApp//TestClient//Contents//test_prefab.json");
+    PHYSICS_PREFAB_REGISTRY.Init("C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_asset.json");
+
+
 
     TestConfig testConfig{};
 
@@ -355,20 +174,6 @@ int main()
 
     Run(testConfig);
 
-    
-    // -- test write prefab and level --
-
-    //WriteTestPrefabAndLevel();
-
-
-    // -- test cooking --
-
-    //PHYSICS_CORE_INIT();
-
-    //px::prefab::PrefabCooker cooker;
-    //cooker.CookTriangleMesh(
-    //    "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//TestClient//Contents//ThirdPersonMap11.glb",
-    //    "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//TestClient//Contents/ThirdPersonMap11.pxtri");
 
     return 0;
 }

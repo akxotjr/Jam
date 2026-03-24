@@ -27,5 +27,7 @@ namespace jam::net
         px::IPhysicsFacade*     m_physics = nullptr;
 
         uint64                  m_awaitSeq = 0;
+
+        bool                    m_tickFiberRunning = false;
 	};
 }

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Easing.h"
+#include "jampx/PhysicsTypes.h"
 
 namespace jam::px
 {
@@ -85,6 +86,28 @@ namespace jam::px
 	{
 		return v.magnitudeSquared() <= eps * eps;
 	}
+
+	static bool IsNearlyEqual(const float a, const float b, const float eps = EPSILON)
+	{
+		return std::fabs(a - b) <= eps;
+	}
+
+	static bool IsNearlyEqual(const PxVec3& a, const PxVec3& b, float eps = EPS_3)
+	{
+		return (a - b).magnitudeSquared() <= eps * eps;
+	}
+
+	static bool IsNearlyEqual(const PxQuat& a, const PxQuat& b, float eps = EPS_4)
+	{
+		return std::fabs(a.dot(b)) >= (1.0f - eps);
+	}
+
+	static bool IsNearlyEqual(const PxTransform& a, const PxTransform& b, const float posEps = EPS_3, const float rotEps = EPS_4)
+	{
+		if (!IsNearlyEqual(a.p, b.p, posEps)) return false;
+		return IsNearlyEqual(a.q, b.q, rotEps);
+	}
+
 
 	static PxVec3 SafeNormalize(const PxVec3& v, const PxVec3& fallback = PxVec3(1.f, 0.f, 0.f))
 	{

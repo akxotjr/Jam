@@ -310,5 +310,6 @@
     <None Include="schema\physics_asset.schema.json">
       <Filter>97. schema</Filter>
     </None>
+    <None Include="Replication Refactoring Guide.md" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,8 @@
 ﻿#pragma once
 
+#include <jambase/Fnv1a.h>
+
+#include "jampx/PhysicsUtils.h"
 
 namespace jam::px
 {

@@ -14,7 +14,7 @@ namespace jam::net
 			return  (static_cast<uint64>(static_cast<uint32>(x)) << 32) | static_cast<uint32>(z);
 		}
 
-		pair<int32, int32> WorldToCell(float wx, float wz, float cellSize) noexcept
+		std::pair<int32, int32> WorldToCell(float wx, float wz, float cellSize) noexcept
 		{
 			return
 			{
@@ -93,7 +93,7 @@ namespace jam::net
 		m_physics = physics;
 	}
 
-	bool AoiSystem::IsVisible(uint64 userId, uint32 netId) const
+	bool AoiSystem::IsVisible(uint64 userId, NetId netId) const
 	{
 		if (m_alwaysVisible.contains(netId)) return true;
 		if (auto it = m_states.find(userId); it != m_states.end())
@@ -108,7 +108,7 @@ namespace jam::net
 		return nullptr;
 	}
 
-	void AoiSystem::SetAlwaysVisible(uint32 netId, bool always)
+	void AoiSystem::SetAlwaysVisible(NetId netId, bool always)
 	{
 		if (always) m_alwaysVisible.insert(netId);
 		else        m_alwaysVisible.erase(netId);
@@ -133,15 +133,15 @@ namespace jam::net
 			GetCandidatesFromGrid(userPos, candidates);
 
 			// 2. 새 visible 집합 구성
-			unordered_set<uint32> newVisible;
+			unordered_set<NetId> newVisible;
 			newVisible.reserve(state.visible.size() + 16);
 
 			// alwaysVisible 먼저 삽입 (격자 쿼리 불필요)
 			{
-				auto view = m_world.view<NetIdentity>();
+				auto view = m_world.view<NetId>();
 				for (auto e : view)
 				{
-					const uint32 netId = m_world.get<NetIdentity>(e).netId;
+					const NetId netId = m_world.get<NetId>(e);
 					if (m_alwaysVisible.contains(netId))
 						newVisible.insert(netId);
 				}
@@ -150,10 +150,10 @@ namespace jam::net
 			// 3. 후보별 조건식 + hysteresis + LOS 검사
 			for (auto e : candidates)
 			{
-				if (!m_world.valid(e) || !m_world.all_of<NetIdentity>(e))
+				if (!m_world.valid(e) || !m_world.all_of<NetId>(e))
 					continue;
 
-				const uint32 netId = m_world.get<NetIdentity>(e).netId;
+				const NetId netId = m_world.get<NetId>(e);
 				if (m_alwaysVisible.contains(netId))
 					continue;
 
@@ -183,11 +183,11 @@ namespace jam::net
 			state.entered.clear();
 			state.left.clear();
 
-			for (uint32 id : newVisible)
+			for (NetId id : newVisible)
 				if (!state.visible.contains(id))
 					state.entered.push_back(id);
 
-			for (uint32 id : state.visible)
+			for (NetId id : state.visible)
 				if (!newVisible.contains(id))
 					state.left.push_back(id);
 
@@ -205,7 +205,7 @@ namespace jam::net
 
 		const float cellSize = std::max(1.f, m_cfg.gridCellSize);
 
-		auto view = m_world.view<NetIdentity>();
+		auto view = m_world.view<NetId>();
 		for (auto e : view)
 		{
 			const px::Vec3 pos = GetEntityPosition(e);

@@ -21,7 +21,7 @@ namespace jam::px
 
         void                            Tick(float dt, const MoveIntent& intent);
 
-        void                            GetCharacterState(CharacterState& state) const;
+        void                            GetCharacterState(OUT CharacterState& state) const;
 
         void                            Teleport(const Vec3& pos);
                  

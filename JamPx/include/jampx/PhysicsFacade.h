@@ -4,15 +4,12 @@
 #include <unordered_set>
 
 #include "jampx/PhysicsCompletionTask.h"
+#include "jampx/PhysicsTypes.h"
 #include "jampx/ShardPxCpuDispacter.h"
-
 #include "jampx/PhysicsWorld.h"
-
 #include "jampx/actor/rigid/RigidBody.h"
 #include "jampx/actor/character/CharacterBody.h"
-
 #include "jampx/prefab/PrefabLevelLoader.h"
-
 
 
 namespace jam::px
@@ -35,21 +32,39 @@ namespace jam::px
 
 		void								SetJobBridge(IPhysicsJobBridge* bridge) override;
 
-		bool								LoadLevel(const std::string& path) override;
+		LevelLayerInfo						SetLevelPath(const std::string& path) override;
+		bool								LoadLevel(const std::string& layer, INOUT std::vector<LevelInstanceInfo>& instances) override;
+		std::vector<ObjectId>				UnloadLevel(const std::string& layer) override;
+		std::vector<ObjectId>				UnloadAllLevel() override;
 
-		void								Step(float dt) override;
+		void								Simulate(float dt) override;
+		bool								BeginSimulate(float dt, uint64 awaitKey) override;
+		void								EndSimulate() override;
 
-		bool								BeginStep(float dt, uint64 awaitKey) override;
-		void								EndStep() override;
+		void								Resimulate(float dt) override;
+		bool								BeginResimulate(float dt, uint64 awaitKey) override;
+		void								EndResimulate() override;
 
-		PhysicsHandle						Spawn(ObjectId id, const SpawnDesc& desc) override;
-		void								Despawn(ObjectId id) override;
+		bool								Spawn(ObjectId id, const SpawnDesc& desc) override;
+		bool								Despawn(ObjectId id) override;
 
-		eBodyType							GetBodyType(ObjectId id) const;
-		eBodyType							FindBodyType(PrefabKey key) const;
+		eBodyType							GetBodyType(ObjectId id) const override;
+		eBodyType							FindBodyType(PrefabKey key) const override;
 
 		eMotionType							GetMotionType(ObjectId id) const override;
 		eMotionType							FindMotionType(PrefabKey key) const override;
+
+		bool								IsReplayCandidate(PrefabKey key) const override;
+
+		void								PushReplayStates(const std::vector<ActorContext>& contexts) override;
+		void								PullCorrectionState(ObjectId oid, OUT CharacterState& state) override;
+		
+		void								PushAuthorityStates(const std::vector<ActorContext>& contexts) override;
+		void								PullProxyStates(OUT std::vector<ActorContext>& contexts) override;
+
+		void								ApplyCharacterInput(ObjectId id, const CharacterInput& input) override;
+		void								PullPredictedState(ObjectId oid, OUT CharacterState& state) override;
+
 
 		bool								GetCharacterState(ObjectId id, CharacterState& state) const override;
 		bool								SetCharacterState(ObjectId id, const CharacterState& state) override;
@@ -57,14 +72,10 @@ namespace jam::px
 		bool								GetRigidState(ObjectId id, RigidState& state) const override;
 		bool								SetRigidState(ObjectId id, const RigidState& state) override;
 
-		void								ApplyCharacterInput(ObjectId id, const CharacterInput& input) override;
 
 
 		bool								RaycastLOS(const Vec3& from, const Vec3& to) const override;
-
-
 		HitscanResult						Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const override;
-
 
 		std::vector<SimEvent>				ConsumeSimEvents();
 		std::vector<ObjectId>				PopActiveList() override;
@@ -72,12 +83,12 @@ namespace jam::px
 	private:
 		void								MarkDirty(ObjectId id);
 
-		void								StepCharacters(float dt);
-		void								StepKinematics(float dt);
-		void								StepProjectiles(float dt);
+		void								StepCharacters(ePxSceneSlot slot, float dt);
+		void								StepKinematics(ePxSceneSlot slot, float dt);
+		void								StepProjectiles(ePxSceneSlot slot, float dt);
 
-		void								SyncKinematics();
-		void								SyncProjectiles();
+		void								SyncKinematics(ePxSceneSlot slot);
+		void								SyncProjectiles(ePxSceneSlot slot);
 
 	private:
 		std::atomic<bool>									m_inited			= false;
