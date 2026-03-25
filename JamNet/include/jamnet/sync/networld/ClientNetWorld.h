@@ -33,7 +33,7 @@ namespace jam::net
 		void								Send(const shared_ptr<SendBuffer>& buf);
 		void								OnRecvPacket(const PacketView& view);
 
-		void								SpawnActor(const SpawnParams& params);
+		void								SpawnActor(SpawnParams params);
 		void								DespawnActor(NetId netId);
 
 		void								PushInput(uint32 inputFlags, float facingYaw, float facingPitch);
@@ -52,7 +52,7 @@ namespace jam::net
 		
 		void								ProcessSnapshot(const PacketView& view);
 
-		void								SpawnActorImpl(const SpawnParams& params);
+		void								SpawnActorImpl(SpawnParams params);
 		void								DespawnActorImpl(NetId netId);
 
 		void								RequestSpawnActor(const SpawnParams& params);

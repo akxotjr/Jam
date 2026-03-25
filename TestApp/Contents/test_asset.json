@@ -18,6 +18,18 @@
       "static_friction": 0.6,
       "dynamic_friction": 0.5,
       "restitution": 0.1
+    },
+    "mat_drone": {
+      "name": "mat_drone",
+      "static_friction": 0.5,
+      "dynamic_friction": 0.5,
+      "restitution": 0.0
+    },
+    "mat_bullet": {
+      "name": "mat_bullet",
+      "static_friction": 0.3,
+      "dynamic_friction": 0.4,
+      "restitution": 0.0
     }
   },
 
@@ -116,6 +128,94 @@
         "word3": 0
       },
       "half_extents": [ 1.5, 0.2, 1.5 ]
+    },
+    "shape_curve_platform": {
+      "type": "box",
+      "local_pose": {
+        "p": [ 0.0, 0.0, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_floor",
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "half_extents": [ 1.5, 0.2, 1.5 ]
+    },
+    "shape_orbit_platform": {
+      "type": "box",
+      "local_pose": {
+        "p": [ 0.0, 0.0, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_floor",
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "half_extents": [ 1.5, 0.2, 1.5 ]
+    },
+    "shape_orbit_drone": {
+      "type": "box",
+      "local_pose": {
+        "p": [ 0.0, 0.0, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_drone",
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "half_extents": [ 0.5, 0.5, 0.5 ]
+    },
+    "shape_bullet": {
+      "type": "sphere",
+      "local_pose": {
+        "p": [ 0.0, 0.0, 0.0 ],
+        "q": [ 0.0, 0.0, 0.0, 1.0 ]
+      },
+      "material": "mat_bullet",
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "radius": 0.3
     }
   },
 
@@ -169,6 +269,103 @@
             "pause_duration": 0.5
           }
         ]
+      }
+    },
+    "curve_platform_path": {
+      "common": {
+        "compute_derived_vel": true,
+        "carry_riders": true,
+        "sweep": true,
+        "max_speed": 10.0
+      },
+      "source": {
+        "source_type": "curve",
+        "type": "catmull_rom",
+        "speed": 2.0,
+        "duration": 8.0,
+        "loop": true,
+        "build_segments": 64,
+        "use_ease_profile": false,
+        "ease_type": "smooth_step",
+        "control_points": [
+          [ -12.0, 1.5, 8.0 ],
+          [ -10.8, 2.8, 10.8 ],
+          [ -8.0, 4.2, 12.0 ],
+          [ -5.2, 2.8, 10.8 ],
+          [ -4.0, 1.5, 8.0 ],
+          [ -5.2, 0.8, 5.2 ],
+          [ -8.0, 0.3, 4.0 ],
+          [ -10.8, 0.8, 5.2 ]
+        ],
+        "alpha": 0.5
+      }
+    },
+    "orbit_platform_path": {
+      "common": {
+        "compute_derived_vel": true,
+        "carry_riders": true,
+        "sweep": true,
+        "max_speed": 10.0
+      },
+      "source": {
+        "source_type": "orbit",
+        "center_mode": "fixed_point",
+        "fixed_center": [ 20.0, 2.0, 10.0 ],
+        "plane_mode": "xz",
+        "radius_mode": "circle",
+        "radius": 3.5,
+        "initial_angle_rad": 0.0,
+        "angular_speed_rad": 1.1,
+        "end_mode": "loop",
+        "orientation_mode": "orient_along_velocity",
+        "compute_derived_velocity": true
+      }
+    },
+    "orbit_drone": {
+      "common": {
+        "compute_derived_vel": true,
+        "carry_riders": false,
+        "sweep": true,
+        "max_speed": 10.0
+      },
+      "source": {
+        "source_type": "orbit",
+        "center_mode": "follow_target",
+        "target_offset": [ 1.0, 0.0, 0.0 ],
+        "plane_mode": "xz",
+        "radius_mode": "circle",
+        "radius": 5.0,
+        "initial_angle_rad": 0.0,
+        "angular_speed_rad": 2.0,
+        "end_mode": "loop",
+        "orientation_mode": "orient_along_velocity",
+        "compute_derived_velocity": true
+      }
+    }
+  },
+
+  "projectile_configs": {
+    "linear_projectile": {
+      "kind": "analytic",
+      "motion": {
+        "model": "linear",
+        "initial_velocity": [ 0.0, 0.0, 0.0 ],
+        "gravity_scale": 1.0
+      },
+      "hit": {
+        "model": "shape_sweep",
+        "use_shape_sweep": true,
+        "fallback_raycast": true,
+        "request_fd": {
+          "word0": 1,
+          "word1": 0,
+          "word2": 0,
+          "word3": 0
+        }
+      },
+      "lifetime": {
+        "max_range": 1000.0,
+        "max_lifetime": 10.0
       }
     }
   },
@@ -226,6 +423,70 @@
         "behavior": {
           "kind": "kinematic_driver",
           "config": "elevator_waypoint"
+        }
+      }
+    },
+    "CurvePlatform": {
+      "name": "CurvePlatform",
+      "actor_type": "generic",
+      "body_type": "rigid_body",
+      "motion_type": "kinematic",
+      "motion_flags": [],
+      "spawn_policy": "level_only",
+      "allow_replication": false,
+      "body": {
+        "shapes": [ "shape_curve_platform" ],
+        "behavior": {
+          "kind": "kinematic_driver",
+          "config": "curve_platform_path"
+        }
+      }
+    },
+    "OrbitPlatform": {
+      "name": "OrbitPlatform",
+      "actor_type": "generic",
+      "body_type": "rigid_body",
+      "motion_type": "kinematic",
+      "motion_flags": [],
+      "spawn_policy": "level_only",
+      "allow_replication": false,
+      "body": {
+        "shapes": [ "shape_orbit_platform" ],
+        "behavior": {
+          "kind": "kinematic_driver",
+          "config": "orbit_platform_path"
+        }
+      }
+    },
+    "OrbitDrone": {
+      "name": "OrbitDrone",
+      "actor_type": "generic",
+      "body_type": "rigid_body",
+      "motion_type": "kinematic",
+      "motion_flags": [],
+      "spawn_policy": "runtime_only",
+      "allow_replication": true,
+      "body": {
+        "shapes": [ "shape_orbit_drone" ],
+        "behavior": {
+          "kind": "kinematic_driver",
+          "config": "orbit_drone"
+        }
+      }
+    },
+    "LinearProjectile": {
+      "name": "LinearProjectile",
+      "actor_type": "projectile",
+      "body_type": "rigid_body",
+      "motion_type": "kinematic",
+      "motion_flags": [],
+      "spawn_policy": "runtime_only",
+      "allow_replication": true,
+      "body": {
+        "shapes": [ "shape_bullet" ],
+        "behavior": {
+          "kind": "projectile",
+          "config": "linear_projectile"
         }
       }
     }

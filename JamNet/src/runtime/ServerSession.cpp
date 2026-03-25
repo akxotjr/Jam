@@ -241,8 +241,9 @@ namespace jam::net
 		params.spawnId		= req.spawn_req_id;
 		params.owner		= req.owner_user_id;
 		params.controller	= req.controller_user_id;
+		params.targetNetId  = NetId::MakeRaw(req.target_net_id);
 		params.desc.prefab	= key;
-		params.desc.pose = { .p = { req.pos->x(), req.pos->y(), req.pos->z() }, .q = { req.rot->x(), req.rot->y(), req.rot->z(), req.rot->w() } };
+		params.desc.pose    = { .p = { req.pos->x(), req.pos->y(), req.pos->z() }, .q = { req.rot->x(), req.rot->y(), req.rot->z(), req.rot->w() } };
 		params.desc.team	= static_cast<uint16>(req.team_id);
 		params.desc.part	= static_cast<uint8>(req.part_id);
 		params.desc.role	= static_cast<uint8>(req.role_id);

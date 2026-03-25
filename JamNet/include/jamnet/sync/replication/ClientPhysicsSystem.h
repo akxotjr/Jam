@@ -27,7 +27,6 @@ namespace jam::net
         const ReconcileConfig&              GetReconcileConfig() const { return m_config; }
 
     private:
-
         void                                LivePredict();
 
         void                                Reconcile();
@@ -41,16 +40,36 @@ namespace jam::net
         void                                Simulate();
         void                                Resimulate();
 
+        void                                CommitPendingActorOps() const;
+
+	private:
+
+        struct PendingActorOp
+        {
+            enum class eType
+            {
+                Spawn,
+                Despawn,
+            };
+
+            eType           type{};
+            entt::entity    e{ entt::null };
+            bool            isLocal = false;
+            bool            isRigid = false;
+        };
+
     private:
         entt::registry&                     m_world;
-        px::IPhysicsFacade*                 m_physics       = nullptr;
-        std::unique_ptr<IReplayRunner>      m_replayRunner  = nullptr;
+        px::IPhysicsFacade*                 m_physics           = nullptr;
+        std::unique_ptr<IReplayRunner>      m_replayRunner      = nullptr;
 
-        uint64                              m_userId = 0;
-        ReconcileConfig                     m_config{};
+        uint64                              m_userId            = 0;
+        ReconcileConfig                     m_config            = {};
 
-        bool                                m_tickFiberRunning = false;
-        uint64                              m_awaitSeq = 0;
+        bool                                m_tickFiberRunning  = false;
+        uint64                              m_awaitSeq          = 0;
+
+        mutable std::vector<PendingActorOp> m_pendingActorOps;
     };
 }
 

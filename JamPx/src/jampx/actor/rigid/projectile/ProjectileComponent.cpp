@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "jampx/actor/rigid/projectile/ProjectileComponent.h"
+#include "jampx/PhysicsUtils.h"
 
 namespace jam::px
 {
@@ -62,7 +63,6 @@ namespace jam::px
 			const PxTransform shapePose = actorPose.transform(shape->getLocalPose());
 
 			return scene->sweep(geom.any(), shapePose, unitDir, dist, buf, PxHitFlag::eDEFAULT, fd, cb, nullptr, inflation);
-
 		}
 
 		bool SweepWithSphere(
@@ -97,8 +97,7 @@ namespace jam::px
 
 		bool WriteSweepHit(const PxSweepBuffer& buf, OUT ProjectileHitResult& result)
 		{
-			if (!buf.hasBlock)
-				return false;
+			if (!buf.hasBlock) return false;
 
 			result.hit		= true;
 			result.position	= buf.block.position;
@@ -109,8 +108,7 @@ namespace jam::px
 
 		bool WriteRayHit(const PxRaycastBuffer& buf, OUT ProjectileHitResult& result)
 		{
-			if (!buf.hasBlock)
-				return false;
+			if (!buf.hasBlock) return false;
 
 			result.hit		= true;
 			result.position	= buf.block.position;
@@ -203,8 +201,8 @@ namespace jam::px
 	// -------------------------------------------------------------------------
 	// HomingLead
 	//
-	// futurePos = targetPos + targetVel * predictTime
-	// 를 향해 steering 한다.
+    //  analytic intercept
+	//  fallback: futurePos = targetPos + targetVel * predictTime 를 향해 steering
 	// -------------------------------------------------------------------------
 	void ProjectileComponent::IntegrateHomingLead(float dt, OUT PxVec3& disp)
 	{
@@ -221,23 +219,44 @@ namespace jam::px
 			return;
 		}
 
-		const float	 speed      = physx::PxMax(m_state.velocity.magnitude(), 0.01f);
-		const PxVec3 toNow      = target.position - m_state.position;
-		const float  distance   = toNow.magnitude();
-
-		const float timeToGo    = distance / speed;
-		const float predictTime = physx::PxMin(m_config.homing.maxPredictTime, timeToGo * m_config.homing.leadTimeScale);
-
-		const PxVec3 futurePos  = target.position + target.velocity * predictTime;
-		const PxVec3 toFuture   = futurePos - m_state.position;
-
-		const PxVec3 desiredDir = SafeNormalize(toFuture);
-		const PxVec3 currentDir = SafeNormalize(m_state.velocity, desiredDir);
-		const PxVec3 newDir		= RotateTowards(currentDir, desiredDir, m_config.homing.maxTurnRate * dt);
-
 		const float  nextSpeed  = NextSpeed(m_config.homing, m_state.velocity.magnitude(), dt);
-		m_state.velocity = newDir * nextSpeed;
+		const PxVec3 currentDir = SafeNormalize(m_state.velocity, SafeNormalize(target.position - m_state.position));
 
+		float  interceptTime  = 0.0f;
+		PxVec3 interceptPoint = PxVec3(physx::PxZero);
+
+		bool hasIntercept = SolveIntercept(
+			m_state.position,
+			PxVec3(physx::PxZero),	// ignore the existing speed added to the projectile
+			target.position,
+			target.velocity,
+			nextSpeed,
+			m_config.homing.maxPredictTime,
+			interceptTime,
+			interceptPoint);
+
+		PxVec3 desiredDir = PxVec3(physx::PxZero);
+
+		if (hasIntercept)
+		{
+			desiredDir = SafeNormalize(interceptPoint - m_state.position, currentDir);
+		}
+		else
+		{
+			const float	 speed      = physx::PxMax(m_state.velocity.magnitude(), 0.01f);
+			const PxVec3 toNow      = target.position - m_state.position;
+			const float  distance   = toNow.magnitude();
+
+			const float timeToGo    = distance / speed;
+			const float predictTime = physx::PxMin(m_config.homing.maxPredictTime, timeToGo * m_config.homing.leadTimeScale);
+		
+			const PxVec3 futurePos = target.position + target.velocity * predictTime;
+			desiredDir = SafeNormalize(futurePos - m_state.position, currentDir);
+		}
+
+		const PxVec3 newDir	= RotateTowards(currentDir, desiredDir, m_config.homing.maxTurnRate * dt);
+
+		m_state.velocity = newDir * nextSpeed;
 		disp = m_state.velocity * dt;
 	}
 

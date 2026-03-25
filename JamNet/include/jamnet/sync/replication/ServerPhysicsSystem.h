@@ -22,12 +22,29 @@ namespace jam::net
         void                    SyncActiveTransforms() const;
         void                    SyncTransforms() const;
 
+        void					CommitPendingActorOps();
+
     private:
-        entt::registry&         m_world;
-        px::IPhysicsFacade*     m_physics = nullptr;
+        struct PendingActorOp
+        {
+            enum class eType
+            {
+                Spawn,
+                Despawn,
+            };
 
-        uint64                  m_awaitSeq = 0;
+            eType           type     = eType::Spawn;
+            entt::entity    e        = entt::null;
+            px::eBodyType   bodyType = px::eBodyType::None;
+        };
 
-        bool                    m_tickFiberRunning = false;
+    private:
+        entt::registry&                     m_world;
+        px::IPhysicsFacade*                 m_physics           = nullptr;
+
+        uint64                              m_awaitSeq          = 0;
+        bool                                m_tickFiberRunning  = false;
+
+        mutable std::vector<PendingActorOp> m_pendingActorOps;
 	};
 }

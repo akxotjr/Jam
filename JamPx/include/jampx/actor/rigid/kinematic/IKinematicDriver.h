@@ -13,6 +13,9 @@ namespace jam::px
 		virtual bool			IsDone() const { return false; }
 
 		virtual KinematicState  BuildState() const { return {}; }
+
+		/// @brief runtime binding hook for eKineDrivenType == TargetDerived
+		virtual bool			SetTargetId(ObjectId oid) { return false; }
 	};
 
 } // namespace jam::px

@@ -37,6 +37,8 @@ namespace jam::px
 		std::vector<ObjectId>				UnloadLevel(const std::string& layer) override;
 		std::vector<ObjectId>				UnloadAllLevel() override;
 
+		bool								IsStepPending() const override;
+
 		void								Simulate(float dt) override;
 		bool								BeginSimulate(float dt, uint64 awaitKey) override;
 		void								EndSimulate() override;
@@ -82,6 +84,9 @@ namespace jam::px
 
 	private:
 		void								MarkDirty(ObjectId id);
+		void								FlushPendingSceneOps();
+		bool								SpawnNow(ObjectId id, const SpawnDesc& desc);
+		bool								DespawnNow(ObjectId id);
 
 		void								StepCharacters(ePxSceneSlot slot, float dt);
 		void								StepKinematics(ePxSceneSlot slot, float dt);
@@ -89,6 +94,23 @@ namespace jam::px
 
 		void								SyncKinematics(ePxSceneSlot slot);
 		void								SyncProjectiles(ePxSceneSlot slot);
+
+		std::optional<PxTransform>			ResolveTargetPose(ObjectId oid);
+
+	private:
+		enum class ePendingSceneOpType
+		{
+			Spawn,
+			Despawn,
+		};
+
+		struct PendingSceneOp
+		{
+			ePendingSceneOpType type = ePendingSceneOpType::Spawn;
+			ObjectId			id	 = INVALID_OBJ_ID;
+			SpawnDesc			desc = {};
+		};
+
 
 	private:
 		std::atomic<bool>									m_inited			= false;
@@ -101,6 +123,7 @@ namespace jam::px
 		std::unique_ptr<ShardPxCpuDispacter>				m_dispacter; 
 		PhysicsCompletionTask								m_completionTask;
 		bool												m_stepPending		= false;
+		std::vector<PendingSceneOp>							m_pendingSceneOps;
 
 		std::unordered_map<ObjectId, RigidBody>				m_rigidMap;			// None / Static / Dynamic -> PhysX Simulate
 		std::unordered_map<ObjectId, RigidBody>				m_kinematicMap;		// Kinematic -> StepKinematics()

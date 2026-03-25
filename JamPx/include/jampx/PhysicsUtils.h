@@ -146,5 +146,86 @@ namespace jam::px
 			return v;
 		return v * (maxMag / m);
 	}
+
+
+
+	static bool SolveIntercept(
+		const PxVec3& shooterPos,
+		const PxVec3& shooterVel,
+		const PxVec3& targetPos,
+		const PxVec3& targetVel,
+		float projectileSpeed,
+		float maxTime,
+		OUT float& interceptTime,
+		OUT PxVec3& interceptPoint)
+	{
+		interceptTime  = 0.0f;
+		interceptPoint = targetPos;
+
+		if (projectileSpeed <= EPSILON)
+			return false;
+
+		const PxVec3 relPos = targetPos - shooterPos;
+		const PxVec3 relVel = targetVel - shooterVel;
+
+		const float speed2	= projectileSpeed * projectileSpeed;
+		const float a		= relVel.dot(relVel) - speed2;
+		const float b		= 2.0f * relPos.dot(relVel);
+		const float c		= relPos.dot(relPos);
+
+		float t = -1.0f;
+
+		if (physx::PxAbs(a) <= EPSILON)
+		{
+			if (physx::PxAbs(b) <= EPSILON)
+			{
+				if (c <= EPSILON)
+					t = 0.0f;
+				else
+					return false;
+			}
+			else
+			{
+				t = -c / b;
+				if (t <= EPSILON) return false;
+			}
+		}
+		else
+		{
+			const float discriminant = b * b - 4.0f * a * c;
+			if (discriminant < 0.0f) return false;
+
+			const float sqrdD = physx::PxSqrt(discriminant);
+			const float inv2A = 0.5f / a;
+
+			const float t0 = (-b - sqrdD) * inv2A;
+			const float t1 = (-b + sqrdD) * inv2A;
+
+			const bool t0Valid = (t0 > EPSILON);
+			const bool t1Valid = (t1 > EPSILON);
+
+			if (t0Valid && t1Valid) t = physx::PxMin(t0, t1);
+			else if (t0Valid)		t = t0;
+			else if (t1Valid)		t = t1;
+
+			if (t < 0.0f) return false;
+		}
+
+		if (maxTime > EPSILON && t > maxTime)
+			return false;
+
+		interceptTime  = t;
+		interceptPoint = targetPos + targetVel * t;
+
+		return true;
+	}
+
+
+
+
+
+
+
+
 	
 } // namespace jam::px

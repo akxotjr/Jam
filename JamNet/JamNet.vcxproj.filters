@@ -207,9 +207,6 @@
     <ClInclude Include="include\jamnet\core\net\Session.h">
       <Filter>core\net</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\core\net\SessionBootstrap.h">
-      <Filter>core\net</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\core\net\SessionComponents.h">
       <Filter>core\net</Filter>
     </ClInclude>
@@ -354,7 +351,7 @@
     <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h">
       <Filter>sync\replication\server system</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\AoiSystem.h">
+    <ClInclude Include="include\jamnet\sync\replication\ServerAoiSystem.h">
       <Filter>sync\replication\server system</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\replication\CorrectionReplayRunner.h">
@@ -560,7 +557,7 @@
     <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp">
       <Filter>sync\replication\server system</Filter>
     </ClCompile>
-    <ClCompile Include="src\sync\replication\AoiSystem.cpp">
+    <ClCompile Include="src\sync\replication\ServerAoiSystem.cpp">
       <Filter>sync\replication\server system</Filter>
     </ClCompile>
     <ClCompile Include="src\sync\replication\CorrectionReplayRunner.cpp">

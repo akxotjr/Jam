@@ -23,10 +23,10 @@ namespace jam::net
 
 		PacketHeader(uint8 type, uint8 id, uint16 size, uint8 flags, uint8 channel, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0)
 		{
-			data |= (static_cast<uint64>(type & MAX_TYPE) << TYPE_SHIFT);
-			data |= (static_cast<uint64>(id & MAX_ID) << ID_SHIFT);
-			data |= (static_cast<uint64>(size & MAX_SIZE) << SIZE_SHIFT);
-			data |= (static_cast<uint64>(flags & MAX_FLAGS) << FLAGS_SHIFT);
+			data |= (static_cast<uint64>(type	 & MAX_TYPE)	<< TYPE_SHIFT);
+			data |= (static_cast<uint64>(id		 & MAX_ID)		<< ID_SHIFT);
+			data |= (static_cast<uint64>(size    & MAX_SIZE)	<< SIZE_SHIFT);
+			data |= (static_cast<uint64>(flags   & MAX_FLAGS)	<< FLAGS_SHIFT);
 			data |= (static_cast<uint64>(channel & MAX_CHANNEL) << CHANNEL_SHIFT);
 
 			// sequence (16비트, optional)
@@ -38,13 +38,13 @@ namespace jam::net
 		}
 
 		// Getter
-		uint8			GetType() const { return static_cast<uint8>((data & TYPE_MASK) >> TYPE_SHIFT); }				// 2 bit
-		uint8			GetId() const { return static_cast<uint8>((data & ID_MASK) >> ID_SHIFT); }						// 6 bit  
-		uint16			GetSize() const { return static_cast<uint16>((data & SIZE_MASK) >> SIZE_SHIFT); }				// 11 bit
-		uint8			GetFlags() const { return static_cast<uint8>((data & FLAGS_MASK) >> FLAGS_SHIFT); }				// 5 bit
-		uint8			GetChannel() const { return static_cast<uint8>((data & CHANNEL_MASK) >> CHANNEL_SHIFT); }
-		uint16			GetSequence() const { return static_cast<uint16>((data & SEQUENCE_MASK) >> SEQUENCE_SHIFT); }
-		uint8			GetFragmentIndex() const { return static_cast<uint8>((data & FRAG_INDEX_MASK) >> FRAG_INDEX_SHIFT); }
+		uint8			GetType()			const { return static_cast<uint8>((data & TYPE_MASK) >> TYPE_SHIFT); }				// 2 bit
+		uint8			GetId()				const { return static_cast<uint8>((data & ID_MASK) >> ID_SHIFT); }						// 6 bit  
+		uint16			GetSize()			const { return static_cast<uint16>((data & SIZE_MASK) >> SIZE_SHIFT); }				// 11 bit
+		uint8			GetFlags()			const { return static_cast<uint8>((data & FLAGS_MASK) >> FLAGS_SHIFT); }				// 5 bit
+		uint8			GetChannel()		const { return static_cast<uint8>((data & CHANNEL_MASK) >> CHANNEL_SHIFT); }
+		uint16			GetSequence()		const { return static_cast<uint16>((data & SEQUENCE_MASK) >> SEQUENCE_SHIFT); }
+		uint8			GetFragmentIndex()	const { return static_cast<uint8>((data & FRAG_INDEX_MASK) >> FRAG_INDEX_SHIFT); }
 		uint8			GetTotalFragments() const { return static_cast<uint8>((data & FRAG_TOTAL_MASK) >> FRAG_TOTAL_SHIFT); }
 
 		ePacketGroup	GetGroup() const { return U2E(ePacketGroup, (data & GROUP_MASK) >> GROUP_SHIFT); }
@@ -178,7 +178,7 @@ namespace jam::net
 			BufferReader br(buf, size);
 
 			// 1. Base 헤더 읽기
-			view.data = buf;
+			view.data   = buf;
 			view.header = reinterpret_cast<PacketHeader*>(buf);
 
 			if (!view.header->IsValid())
@@ -200,42 +200,42 @@ namespace jam::net
 			}
 			// 4. 페이로드 설정
 			view.payloadSize = view.totalSize - view.headerSize;
-			view.payload = buf + view.headerSize;
+			view.payload     = buf + view.headerSize;
+			view.isValid     = true;
 
-			view.isValid = true;
 			return view;
 		}
 
-		bool			IsValid() const { return isValid; }
-		bool			IsReliable() const { return header && header->IsReliable(); }
+		bool			IsValid()      const { return isValid; }
+		bool			IsReliable()   const { return header && header->IsReliable(); }
 		bool			IsFragmented() const { return header && header->IsFragmented(); }
 		bool			IsNeedToFragmentation() const { return header && header->GetGroup() == ePacketGroup::NORMAL && header->IsReliable() && header->GetSize() > JAMNET_MTU; }
-		bool			IsCtrlGroup() const { return header && header->GetGroup() == ePacketGroup::CTRL; }
+		bool			IsCtrlGroup()   const { return header && header->GetGroup() == ePacketGroup::CTRL; }
 		bool			IsNormalGroup() const { return header && header->GetGroup() == ePacketGroup::NORMAL; }
 
-		ePacketGroup    Group() const { return header->GetGroup(); }
-		ePacketType     Type() const { return U2E(ePacketType, header->GetType()); }
-		uint8           Id() const { return header->GetId(); }
-		uint8           Flags() const { return header->GetFlags(); }
-		eChannelType    Channel() const { return U2E(eChannelType, header->GetChannel()); }
-		uint16          Sequence() const { return header->GetSequence(); }
-		uint8           FragmentIndex() const { return header->GetFragmentIndex(); }
+		ePacketGroup    Group()			 const { return header->GetGroup(); }
+		ePacketType     Type()			 const { return U2E(ePacketType, header->GetType()); }
+		uint8           Id()			 const { return header->GetId(); }
+		uint8           Flags()			 const { return header->GetFlags(); }
+		eChannelType    Channel()		 const { return U2E(eChannelType, header->GetChannel()); }
+		uint16          Sequence()		 const { return header->GetSequence(); }
+		uint8           FragmentIndex()  const { return header->GetFragmentIndex(); }
 		uint8           TotalFragments() const { return header->GetTotalFragments(); }
 
-		PacketHeader*	Header() const { return header; }
-		uint32			HeaderSize() const { return headerSize; }
-		BYTE*			Payload() const { return payload; }
+		PacketHeader*	Header()	  const { return header; }
+		uint32			HeaderSize()  const { return headerSize; }
+		BYTE*			Payload()	  const { return payload; }
 		uint32          PayloadSize() const { return payloadSize; }
-		uint32          TotalSize() const { return totalSize; }
+		uint32          TotalSize()   const { return totalSize; }
 	};
 
 
 	struct RpcPacketOpenResult
 	{
-		shared_ptr<SendBuffer>		buf;     // 생성된 송신 버퍼
-		BufferWriter				writer;  // PacketHeader 후부터 쓰기 시작하도록 설정됨
+		shared_ptr<SendBuffer>		buf;			// 생성된 송신 버퍼
+		BufferWriter				writer;			// PacketHeader 후부터 쓰기 시작하도록 설정됨
 		uint32						headerSize = 0; // PacketHeader 실제 크기
-		uint32						totalSize = 0; // headerSize + payloadSize
+		uint32						totalSize  = 0; // headerSize + payloadSize
 
 		bool						IsValid() const { return static_cast<bool>(buf); }
 	};

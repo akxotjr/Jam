@@ -108,7 +108,23 @@ namespace jam::net
             };
         }
 
+        if (auto* target = m_world.try_get<TargetInfo>(e))
+        {
+            desc.targetId = target->targetObjId;
+        }
+
         if (!m_physics->Spawn(id, desc)) return;
+
+        if (m_physics->IsStepPending())
+        {
+            m_pendingActorOps.push_back(PendingActorOp{
+                .type    = PendingActorOp::eType::Spawn,
+                .e       = e,
+                .isLocal = isLocal,
+                .isRigid = isRigid
+            });
+            return;
+        }
 
         m_world.emplace_or_replace<PhysicsSpawnedTag>(e);
 
@@ -129,8 +145,19 @@ namespace jam::net
             return;
 
         const px::ObjectId id = MakeObjectId(e);
-		if (m_physics->Despawn(id))
-			m_world.erase<PhysicsSpawnedTag>(e);
+        if (!m_physics->Despawn(id))
+            return;
+
+        if (m_physics->IsStepPending())
+        {
+            m_pendingActorOps.push_back(PendingActorOp{
+                .type = PendingActorOp::eType::Despawn,
+                .e    = e
+            });
+            return;
+        }
+
+        m_world.erase<PhysicsSpawnedTag>(e);
     }
 
 
@@ -332,6 +359,7 @@ namespace jam::net
             sched->Suspend(awaitKey, NOW_NS() + 1_s);
 
         m_physics->EndSimulate();
+        CommitPendingActorOps();
     }
 
     void ClientPhysicsSystem::Resimulate()
@@ -348,7 +376,39 @@ namespace jam::net
             sched->Suspend(awaitKey, NOW_NS() + 1_s);
         
         m_physics->EndResimulate();
+        CommitPendingActorOps();
     }
 
+    void ClientPhysicsSystem::CommitPendingActorOps() const
+    {
+        if (m_pendingActorOps.empty())
+            return;
 
+        auto ops = std::move(m_pendingActorOps);
+        m_pendingActorOps.clear();
+
+        for (const auto& op : ops)
+        {
+            if (!m_world.valid(op.e)) continue;
+
+            if (op.type == PendingActorOp::eType::Spawn)
+            {
+                m_world.emplace_or_replace<PhysicsSpawnedTag>(op.e);
+
+                if (op.isLocal)
+                {
+                    if (!op.isRigid)
+                        m_world.emplace_or_replace<LocalActorTag>(op.e);
+                }
+                else
+                {
+                    m_world.emplace_or_replace<RemoteActorTag>(op.e);
+                }
+            }
+            else
+            {
+                m_world.erase<PhysicsSpawnedTag>(op.e);
+            }
+        }
+    }
 }

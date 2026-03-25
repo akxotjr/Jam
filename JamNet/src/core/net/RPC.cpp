@@ -19,33 +19,27 @@ namespace jam::net
         if (view.Type() != ePacketType::RPC)
             return;
 
-        BYTE* payload = view.Payload();
-        uint32 len = view.payloadSize;
+        BYTE*  payload = view.Payload();
+        uint32 len     = view.payloadSize;
+
+        if (HasFlag(view.Flags(), PacketFlags::PIGGYBACK_ACK) && view.IsReliable())
+        {
+            if (len < sizeof(ACK_DATA))
+                return;
+            len -= static_cast<uint32>(sizeof(ACK_DATA));
+        }
+
         if (len < sizeof(RpcHeader))
             return;
 
         RpcHeader hdr{};
         std::memcpy(&hdr, payload, sizeof(RpcHeader));
 
-        uint16 rpcId = hdr.rpcId;
-        uint32 requestId = hdr.requestId;
-        uint8 flags = hdr.flags;
+        const uint16 rpcId     = hdr.rpcId;
+        const uint32 requestId = hdr.requestId;
+        const uint8  flags     = hdr.flags;
 
-        // 임시 진단: piggyback ACK 의심 시 한 번 더 시도 (EcsRpc.hpp 로직 유지)
-        const bool piggy = HasFlag(view.Flags(), PacketFlags::PIGGYBACK_ACK) && view.IsReliable();
-        EntityRPCKey diagKey{ e, rpcId };
-        if (piggy &&
-            len >= sizeof(ACK_DATA) + sizeof(RpcHeader) &&
-            R.ctx().contains<RPCHandlersRegistry>() &&
-            R.ctx().get<RPCHandlersRegistry>().reqHandlers.find(diagKey) == R.ctx().get<RPCHandlersRegistry>().reqHandlers.end())
-        {
-            std::memcpy(&hdr, payload + sizeof(ACK_DATA), sizeof(RpcHeader));
-            rpcId = hdr.rpcId;
-            requestId = hdr.requestId;
-            flags = hdr.flags;
-        }
-
-        const BYTE* body = payload + sizeof(RpcHeader);
+        const BYTE*  body    = payload + sizeof(RpcHeader);
         const uint32 bodyLen = len - static_cast<uint32>(sizeof(RpcHeader));
 
         // RESPONSE: RpcState inflight 우선 처리
@@ -53,8 +47,7 @@ namespace jam::net
         {
             if (auto* rpcState = R.try_get<RpcState>(e))
             {
-                auto st = rpcState->PopRequest(requestId);
-                if (st)
+	            if (auto st = rpcState->PopRequest(requestId))
                 {
                     if (st->onPayload) st->onPayload(body, bodyLen);
                     if (st->onDone)    st->onDone(true);
@@ -66,7 +59,7 @@ namespace jam::net
             {
                 auto& reg = R.ctx().get<RPCHandlersRegistry>();
 
-                EntityRPCKey key{ e, rpcId };
+                EntityRPCKey key{ .entity = e, .rpcId = rpcId };
                 auto it = reg.resHandlers.find(key);
                 if (it != reg.resHandlers.end())
                 {
@@ -90,7 +83,7 @@ namespace jam::net
         {
             auto& reg = R.ctx().get<RPCHandlersRegistry>();
 
-            EntityRPCKey key{ e, rpcId };
+            EntityRPCKey key{ .entity = e, .rpcId = rpcId };
             auto it = reg.reqHandlers.find(key);
             if (it != reg.reqHandlers.end())
             {

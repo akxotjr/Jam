@@ -16,6 +16,38 @@
 namespace jam::net
 {
 
+	namespace
+	{
+		
+		px::ObjectId BindingTarget(entt::registry& world, const entt::entity e, NetId target)
+		{
+			if (!target.IsValid()) return px::INVALID_OBJ_ID;
+
+			px::ObjectId resolved = px::INVALID_OBJ_ID;
+			auto view = world.view<NetId, PhysicsSpawnedTag>();
+
+			for (auto candidate : view)
+			{
+				if (view.get<NetId>(candidate) == target)
+				{
+					resolved = MakeObjectId(candidate);
+					world.emplace<TargetInfo>(e, TargetInfo{ .targetNetId = target, .targetObjId = resolved });
+
+					return resolved;
+				}
+			}
+
+			return px::INVALID_OBJ_ID;
+		}
+
+
+	} // anonymous namespace
+
+
+
+
+
+
 	void ServerNetWorld::Init()
 	{
 		NetWorld::Init();
@@ -118,11 +150,11 @@ namespace jam::net
 	}
 
 
-	void ServerNetWorld::SpawnActor(const SpawnParams& params)
+	void ServerNetWorld::SpawnActor(SpawnParams params)
 	{
-		Post(Job([this, params]()
+		Post(Job([this, params = std::move(params)]()
 			{
-				SpawnActorImpl(params);
+				SpawnActorImpl(std::move(params));
 			}));
 	}
 
@@ -150,11 +182,25 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::SpawnActorAsync(const SpawnParams& params, std::function<void(NetId)> onDone)
+	void ServerNetWorld::SpawnActorAsync(SpawnParams params, std::function<void(NetId)> onDone)
 	{
-		Post(Job([this, params, onDone = std::move(onDone)]()
+		Post(Job([this, params = params, onDone = std::move(onDone)]()
 			{
-				const NetId nid = SpawnActorImpl(params);
+				//const NetId nid = SpawnActorImpl(params);
+				//if (onDone) onDone(nid);
+
+				NetId nid = NetId::Invalid();
+
+				try
+				{
+					nid = SpawnActorImpl(std::move(params));
+				}
+				catch (...)
+				{
+					JAMNET_LOG_ERROR_LOC("[ServerNetWorld::SpawnActorAsync] SpawnActorImpl threw exception");
+					nid = NetId::Invalid();
+				}
+
 				if (onDone) onDone(nid);
 			}));
 	}
@@ -257,7 +303,7 @@ namespace jam::net
 		}
 	}
 
-	NetId ServerNetWorld::SpawnActorImpl(const SpawnParams& params)
+	NetId ServerNetWorld::SpawnActorImpl(SpawnParams params)
 	{
 		if (!params.desc.prefab.IsValid())
 			return NetId::Invalid();
@@ -278,7 +324,12 @@ namespace jam::net
 			.role = params.desc.role
 		});
 
+		params.desc.targetId = BindingTarget(m_world, e, params.targetNetId);
+
 		m_world.ctx().get<ServerPhysicsSystem>().SpawnActor(e, params.desc);
+
+		//if (params.targetNetId.IsValid())
+		//	BindingTarget(m_world, *m_physics, e, params.targetNetId);
 
 		JAMNET_LOG_DEBUG("[ServerNetWorld::SpawnActorImpl] netId = {}, owner = {}, reqId = {}", nid.Raw(), params.owner, params.spawnId);
 

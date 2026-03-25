@@ -88,7 +88,6 @@ namespace jam::net
 				for (auto e : view)
 				{
 					const NetId nid  = m_world.get<NetId>(e);
-					const auto	body = m_world.get<NetActorBodyType>(e).body;
 					const MetaSentKey key{ .userId = user, .netId = nid.Raw() };
 
 					if (forceFullMetaUser)
@@ -277,11 +276,21 @@ namespace jam::net
 			auto& kineBs = m_kineBaselineStatesPerUser[userId][netId];
 			kineBs = rs.kineState;
 
+			uint32 targetNetRaw = NetId::Invalid().Raw();
+			if (rs.kineState.targetId != px::INVALID_OBJ_ID)
+			{
+				const entt::entity targetEntity = static_cast<entt::entity>(rs.kineState.targetId);
+				if (m_world.valid(targetEntity) && m_world.all_of<NetId>(targetEntity))
+				{
+					targetNetRaw = m_world.get<NetId>(targetEntity).Raw();
+				}
+			}
+
 			const fb::fbKinematicState kine(
 				rs.kineState.startEpoch,
 				rs.kineState.phase,
 				rs.kineState.t,
-				rs.kineState.targetId,
+				targetNetRaw,
 				rs.kineState.eventMask,
 				static_cast<uint8>(rs.kineType)
 			);
@@ -290,7 +299,15 @@ namespace jam::net
 			if (auto it = userEntityBase.find(netId); it != userEntityBase.end())
 				base = it->second;
 
-			auto off = fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, 0, nullptr, nullptr, nullptr, nullptr, &kine);
+			flatbuffers::Offset<fb::fbActorMeta> meta = 0;
+			if (includeMeta) meta = BuildActorMeta(e, userId);
+
+			auto off = fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, meta, nullptr, nullptr, nullptr, nullptr, &kine);
+			if (!off.IsNull() && includeMeta)
+			{
+				const MetaSentKey key{ .userId = userId, .netId = netId.Raw() };
+				OnMetaSent(e, key);
+			}
 			return off;
 		}
 
@@ -387,7 +404,7 @@ namespace jam::net
 		{
 			if (rs.kineState.startEpoch == 0)
 			{
-				rs.kineState.startEpoch = static_cast<uint64>(m_world.ctx().get<TickCounter>().tick);
+				rs.kineState.startEpoch = m_world.ctx().get<TickCounter>().tick;
 			}
 
 			auto& userKineBaseline = m_kineBaselineStatesPerUser[userId];
@@ -402,13 +419,23 @@ namespace jam::net
 
 			uint32& base = userEntityBase[netId];
 
+			uint32 targetNetRaw = NetId::Invalid().Raw();
+			if (rs.kineState.targetId != px::INVALID_OBJ_ID)
+			{
+				const entt::entity targetEntity = static_cast<entt::entity>(rs.kineState.targetId);
+				if (m_world.valid(targetEntity) && m_world.all_of<NetId>(targetEntity))
+				{
+					targetNetRaw = m_world.get<NetId>(targetEntity).Raw();
+				}
+			}
+
 			const fb::fbKinematicState kine(
 				rs.kineState.startEpoch,
 				rs.kineState.phase,
 				rs.kineState.t,
-				rs.kineState.targetId,
+				targetNetRaw,
 				rs.kineState.eventMask,
-				static_cast<uint8>(rs.kineType)
+				E2U(rs.kineType)
 			);
 
 			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, 0, nullptr, nullptr, nullptr, nullptr, &kine);

@@ -14,6 +14,9 @@ namespace jam::px
 	{
 		void ApplyRigidOverrides(PxRigidDynamic& dyn, const RigidSpawnOverrides& overrides)
 		{
+			if (dyn.getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC))
+				return;
+
 			if (overrides.mask.has_any(SpawnOverrideMask::LINEAR_VEL))
 				dyn.setLinearVelocity(ToPhysX(overrides.linearVelocity));
 			if (overrides.mask.has_any(SpawnOverrideMask::ANGULAR_VEL))
@@ -52,7 +55,7 @@ namespace jam::px
 			return tplDef.motionType;
 		}
 
-		std::unique_ptr<IKinematicDriver> CreateKinematicDriver(const KinematicDriverConfig& cfg)
+		std::unique_ptr<IKinematicDriver> CreateKinematicDriver(const KinematicDriverConfig& cfg, const TargetPoseResolver& resolver)
 		{
 			if (const auto* src = std::get_if<WaypointSource>(&cfg.source))
 				return std::make_unique<WaypointKinematicDriver>(cfg.common, *src);
@@ -61,10 +64,10 @@ namespace jam::px
 				return std::make_unique<CurveKinematicDriver>(cfg.common, *src);
 
 			if (const auto* src = std::get_if<OrbitSource>(&cfg.source))
-				return std::make_unique<OrbitKinematicDriver>(cfg.common, *src);
+				return std::make_unique<OrbitKinematicDriver>(cfg.common, *src, resolver);
 
 			if (const auto* src = std::get_if<FollowSource>(&cfg.source))
-				return std::make_unique<FollowKinematicDriver>(cfg.common, *src, nullptr);
+				return std::make_unique<FollowKinematicDriver>(cfg.common, *src, resolver);
 
 			if (const auto* src = std::get_if<NetworkPoseSource>(&cfg.source))
 				return std::make_unique<NetworkPoseKinematicDriver>(cfg.common, *src);
@@ -72,7 +75,10 @@ namespace jam::px
 			return nullptr;
 		}
 
-		std::unique_ptr<IRigidBehavior> CreateRigidBehavior(const ActorTemplateDef& tplDef)
+		std::unique_ptr<IRigidBehavior> CreateRigidBehavior(
+			const ActorTemplateDef& tplDef, 
+			const TargetPoseResolver& resolver,
+			const RigidSpawnOverrides* overrides)
 		{
 			if (!tplDef.IsRigid())
 				return nullptr;
@@ -83,34 +89,28 @@ namespace jam::px
 
 			if (const auto* kHandle = bodyDef.GetBehavior<KinematicDriverConfigHandle>())
 			{
-				const KinematicDriverConfig& cfg = JAM_PX_KINE_DRIVER_CFG(*kHandle);
+				const KinematicDriverConfig& cfg = JAMPX_KINE_DRIVER_CFG(*kHandle);
 
-				auto mainDriver   = CreateKinematicDriver(cfg);
-				auto replayDriver = CreateKinematicDriver(cfg);
+				auto mainDriver   = CreateKinematicDriver(cfg, resolver);
+				auto replayDriver = CreateKinematicDriver(cfg, resolver);
 
 				if (mainDriver && replayDriver)
 					return std::make_unique<KinematicRigidBehavior>(std::move(mainDriver), std::move(replayDriver));
 			}
 			else if (const auto* pHandle = bodyDef.GetBehavior<ProjectileConfigHandle>())
 			{
-				const ProjectileConfig& cfg = JAM_PX_PROJ_CFG(*pHandle);
+				ProjectileConfig cfg = JAMPX_PROJ_CFG(*pHandle);
 
-				auto mainProjectile = std::make_unique<ProjectileComponent>(cfg);
+				if (overrides && overrides->mask.has_any(SpawnOverrideMask::LINEAR_VEL))
+					cfg.motion.initialVelocity = ToPhysX(overrides->linearVelocity);
+
+				auto mainProjectile   = std::make_unique<ProjectileComponent>(cfg);
 				auto replayProjectile = std::make_unique<ProjectileComponent>(cfg);
 
 				return std::make_unique<ProjectileRigidBehavior>(std::move(mainProjectile), std::move(replayProjectile));
 			}
 
 			return nullptr;
-		}
-
-		bool ShouldForceNetworkPoseDriver(eSpawnSource spawnSource, const ActorTemplateDef& tplDef, eMotionType resolvedMotion)
-		{
-			if (spawnSource != eSpawnSource::Network)		return false;
-			if (tplDef.bodyType != eBodyType::Rigid)		return false;
-			if (resolvedMotion != eMotionType::Kinematic)	return false;
-
-			return (tplDef.motionType == eMotionType::Dynamic || tplDef.motionType == eMotionType::Kinematic);
 		}
 
 		eKineDrivenType ResolveKineDrivenType(const ActorTemplateDef& tplDef)
@@ -124,8 +124,8 @@ namespace jam::px
 
 			if (const auto* kHandle = bodyDef.GetBehavior<KinematicDriverConfigHandle>())
 			{
-				const KinematicDriverConfig& cfg = JAM_PX_KINE_DRIVER_CFG(*kHandle);
-				const PoseSource&			 src = cfg.source;
+				const KinematicDriverConfig& cfg = JAMPX_KINE_DRIVER_CFG(*kHandle);
+				const PoseSource& src = cfg.source;
 
 				if (std::holds_alternative<WaypointSource>(src))
 					return eKineDrivenType::Deterministic;
@@ -150,17 +150,39 @@ namespace jam::px
 			return eKineDrivenType::None;
 		}
 
+		bool ShouldForceNetworkPoseDriver(eSpawnSource spawnSource, const ActorTemplateDef& tplDef, eMotionType resolvedMotion)
+		{
+			if (spawnSource != eSpawnSource::Network)		return false;
+			if (tplDef.bodyType != eBodyType::Rigid)		return false;
+			if (resolvedMotion != eMotionType::Kinematic)	return false;
+
+			if (tplDef.motionType == eMotionType::Dynamic)
+				return false;
+
+			if (tplDef.motionType == eMotionType::Kinematic)
+			{
+				const eKineDrivenType kineType = ResolveKineDrivenType(tplDef);
+				if (IsLocalDrivenKine(kineType))
+					return false;
+
+				return true;
+			}
+
+			return false;
+		}
+
 	} // anonymous namespace
 
 
 	std::optional<RigidBody> ActorFactory::CreateRigidBody(
-		PhysicsWorld&			world,
-		TemplateHandle			tpl,
-		const ActorTemplateDef& tplDef,
-		const SpawnDesc&		desc,
-		ObjectId				id)
+		PhysicsWorld&				world,
+		TemplateHandle				tpl,
+		const ActorTemplateDef&		tplDef,
+		const SpawnDesc&			desc,
+		ObjectId					id,
+		const TargetPoseResolver&	resolver)
 	{
-		JAM_ASSERT(desc.IsRigid());
+		JAM_ASSERT(desc.IsRigid())
 
 		void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(id));
 
@@ -179,6 +201,7 @@ namespace jam::px
 		ApplyRigidOverridesToActor(replayActor, overrides);
 
 		RigidBody body{ mainActor, replayActor };
+		RigidState s = body.GetMainState();
 
 		const eMotionType resolvedMotion = ResolveMotionType(desc.spawnSrc, tplDef);
 		eKineDrivenType kineType = eKineDrivenType::None;
@@ -197,24 +220,26 @@ namespace jam::px
 
 			kineType = eKineDrivenType::RuntimeDynamic;
 		}
-		else if (auto behavior = CreateRigidBehavior(tplDef))
+		else if (auto behavior = CreateRigidBehavior(tplDef, resolver, &overrides))
 		{
 			body.AttachBehavior(std::move(behavior));
 
 			if (resolvedMotion == eMotionType::Kinematic)
 				kineType = ResolveKineDrivenType(tplDef);
+
+			if (kineType == eKineDrivenType::TargetDerived)
+			{
+				s.kineState.targetId = desc.targetId;
+			}
 		}
 
 		ApplyPackedId(*mainActor, desc.team, desc.part, desc.role);
 		ApplyPackedId(*replayActor, desc.team, desc.part, desc.role);
 
-		RigidState s = body.GetMainState();
 		s.pose		= desc.pose;
 		s.kineType	= kineType;
-		s.kineState = {};
 
-		body.SetMainState(s);
-		body.SetReplayState(s);
+		body.ApplyStateBoth(s, true);
 
 		return body;
 	}

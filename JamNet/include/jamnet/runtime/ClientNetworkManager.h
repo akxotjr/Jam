@@ -11,8 +11,8 @@ namespace jam::net
 
     struct ClientConfig
     {
-        NetAddress  serverTcpAddress{"127.0.0.1", 7777};
-        NetAddress  serverUdpAddress{"127.0.0.1", 8888};
+        NetAddress  serverTcpAddress{ "127.0.0.1", 7777 };
+        NetAddress  serverUdpAddress{ "127.0.0.1", 8888 };
 
         using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
         PhysicsFactory physicsFactory = nullptr;
@@ -64,6 +64,9 @@ namespace jam::net
 
         // groupId 결과 통지 (udp session -> manager)
         void                                NotifyMatchmakingSuccess(uint32 groupId);
+
+    private:
+        void                                UpdateSessionReadyState();
 
     private:
         ClientConfig                        m_config;

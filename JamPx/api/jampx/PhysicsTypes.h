@@ -457,23 +457,42 @@ namespace jam::px
 		enum Enum : uint32
 		{
 			NONE			= 0,
-			LINEAR_VEL		= 1 << 0,
-			ANGULAR_VEL		= 1 << 1,
-			LINEAR_DAMP		= 1 << 2,
-			ANGULAR_DAMP	= 1 << 3,
+			
+			RIGID_MASK		= 1 << 0,
+			LINEAR_VEL		= 1 << 1,
+			ANGULAR_VEL		= 1 << 2,
+			LINEAR_DAMP		= 1 << 3,
+			ANGULAR_DAMP	= 1 << 4,
 
+			CHAR_MASK		= 1 << 7, 
 			VIEW_YAW		= 1 << 8,
 			VIEW_PITCH		= 1 << 9,
 		};
 
 		using Flag = FlagsT<Enum, uint32>;
 	};
-	static bool IsRigidOverrideMask(SpawnOverrideMask::Flag mask) noexcept { return mask.has_any(SpawnOverrideMask::LINEAR_VEL | SpawnOverrideMask::ANGULAR_VEL | SpawnOverrideMask::LINEAR_DAMP | SpawnOverrideMask::ANGULAR_DAMP); }
-	static bool IsCharacterOverrideMask(SpawnOverrideMask::Flag mask) noexcept { return mask.has_any(SpawnOverrideMask::VIEW_YAW | SpawnOverrideMask::VIEW_PITCH); }
+	
+	static bool IsRigidOverrideMask(SpawnOverrideMask::Flag mask) noexcept
+	{
+		return mask.has_any(
+			SpawnOverrideMask::RIGID_MASK 
+			| SpawnOverrideMask::LINEAR_VEL 
+			| SpawnOverrideMask::ANGULAR_VEL 
+			| SpawnOverrideMask::LINEAR_DAMP 
+			| SpawnOverrideMask::ANGULAR_DAMP);
+	}
+
+	static bool IsCharacterOverrideMask(SpawnOverrideMask::Flag mask) noexcept
+	{
+		return mask.has_any(
+			SpawnOverrideMask::CHAR_MASK 
+			| SpawnOverrideMask::VIEW_YAW 
+			| SpawnOverrideMask::VIEW_PITCH);
+	}
 
 	struct RigidSpawnOverrides
 	{
-		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
+		SpawnOverrideMask::Flag mask = SpawnOverrideMask::RIGID_MASK;
 
 		Vec3				linearVelocity  = Vec3::Zero();
 		Vec3				angularVelocity = Vec3::Zero();
@@ -483,7 +502,7 @@ namespace jam::px
 
 	struct CharacterSpawnOverrides
 	{
-		SpawnOverrideMask::Flag mask = SpawnOverrideMask::NONE;
+		SpawnOverrideMask::Flag mask = SpawnOverrideMask::CHAR_MASK;
 
 		float				yaw   = 0.0f;
 		float				pitch = 0.0f;
@@ -500,6 +519,8 @@ namespace jam::px
 		uint8				role = 0;
 
 		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
+
+		ObjectId			targetId = INVALID_OBJ_ID;
 
 		constexpr bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
 		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterSpawnOverrides>(overrides); }

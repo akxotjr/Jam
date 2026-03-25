@@ -115,6 +115,11 @@ namespace jam::px
 		return ids;
 	}
 
+	bool PhysicsFacade::IsStepPending() const
+	{
+		return m_stepPending;
+	}
+
 	void PhysicsFacade::Simulate(float dt)
 	{
 		if (!m_inited.load(std::memory_order_relaxed) || !m_world) return;
@@ -156,6 +161,8 @@ namespace jam::px
 		if (!m_world || !m_stepPending) return;
 		m_world->EndSimulate(ePxSceneSlot::Main);
 		m_stepPending = false;
+
+		FlushPendingSceneOps();
 
 		SyncKinematics(ePxSceneSlot::Main);
 		SyncProjectiles(ePxSceneSlot::Main);
@@ -204,6 +211,8 @@ namespace jam::px
 		m_world->EndSimulate(ePxSceneSlot::Replay);
 		m_stepPending = false;
 
+		FlushPendingSceneOps();
+
 		SyncKinematics(ePxSceneSlot::Replay);
 		SyncProjectiles(ePxSceneSlot::Replay);
 	}
@@ -212,99 +221,31 @@ namespace jam::px
 	{
 		if (!m_inited.load(std::memory_order_relaxed) || !m_world) return false;
 
-		const TemplateHandle	tpl		= ToTemplateHandle(desc.prefab);
-		const ActorTemplateDef* tplDef	= PHYSICS_PREFAB_REGISTRY.FindTemplateDef(tpl);
-		if (!tplDef) return false;
-
-		const auto actorType  = tplDef->actorType;
-		const auto bodyType   = tplDef->bodyType;
-		const auto motionType = tplDef->motionType;
-
-		if (bodyType == eBodyType::Rigid)
+		if (m_stepPending)
 		{
-			auto body = ActorFactory::CreateRigidBody(*m_world, tpl, *tplDef, desc, id);
-			if (!body.has_value()) return {};
-
-			switch (motionType)
-			{
-			case eMotionType::Static:
-			case eMotionType::Dynamic:
-				{
-					m_rigidMap.emplace(id, std::move(body.value()));
-					return true;
-				}
-
-			case eMotionType::Kinematic:
-				{
-					if (actorType == eActorType::Projectile)
-					{
-						m_projectileMap.emplace(id, std::move(body.value()));
-						return true;
-					}
-					m_kinematicMap.emplace(id, std::move(body.value()));
-					return true;
-				}
-
-			default: break;
-			}
-		}
-		else if (bodyType == eBodyType::Character)
-		{
-			auto body = ActorFactory::CreateCharacterBody(*m_world, tpl, *tplDef, desc, id);
-			if (!body.has_value()) return {};
-
-			if (motionType == eMotionType::CCT)
-			{
-				m_cctMap.emplace(id, std::move(body.value()));
-				return true;
-			}
-			if (motionType == eMotionType::RemoteCCT)
-			{
-				m_remoteCctMap.emplace(id, std::move(body.value()));
-				return true;
-			}
+			m_pendingSceneOps.push_back(PendingSceneOp{ 
+				.type = ePendingSceneOpType::Spawn, 
+				.id   = id, 
+				.desc = desc });
+			return true;
 		}
 
-		JAM_ASSERT(false, "Unknown body type in template: {}", tplDef->name);
-		return false;
+		return SpawnNow(id, desc);
 	}
 
 	bool PhysicsFacade::Despawn(ObjectId id)
 	{
-		if (!m_world) return false;
+		if (!m_inited.load(std::memory_order_relaxed) || !m_world) return false;
 
-		if (auto it = m_rigidMap.find(id); it != m_rigidMap.end())
+		if (m_stepPending)
 		{
-			ActorFactory::DestroyRigidBody(*m_world, it->second);
-			m_rigidMap.erase(it);
-			return true;
-		}
-		if (auto it = m_kinematicMap.find(id); it != m_kinematicMap.end())
-		{
-			ActorFactory::DestroyRigidBody(*m_world, it->second);
-			m_kinematicMap.erase(it);
-			return true;
-		}
-		if (auto it = m_projectileMap.find(id); it != m_projectileMap.end())
-		{
-			ActorFactory::DestroyRigidBody(*m_world, it->second);
-			m_projectileMap.erase(it);
-			return true;
-		}
-		if (auto it = m_cctMap.find(id); it != m_cctMap.end())
-		{
-			ActorFactory::DestroyCharacterBody(*m_world, it->second);
-			m_cctMap.erase(it);
-			return true;
-		}
-		if (auto it = m_remoteCctMap.find(id); it != m_remoteCctMap.end())
-		{
-			ActorFactory::DestroyCharacterBody(*m_world, it->second);
-			m_remoteCctMap.erase(it);
+			m_pendingSceneOps.push_back(PendingSceneOp{
+				.type = ePendingSceneOpType::Despawn, 
+				.id   = id });
 			return true;
 		}
 
-		return false;
+		return DespawnNow(id);
 	}
 
 	eBodyType PhysicsFacade::GetBodyType(ObjectId id) const
@@ -638,6 +579,124 @@ namespace jam::px
 		m_dirtySet.insert(id);
 	}
 
+	void PhysicsFacade::FlushPendingSceneOps()
+	{
+		if (!m_world || m_pendingSceneOps.empty())
+			return;
+
+		auto pending = std::move(m_pendingSceneOps);
+		m_pendingSceneOps.clear();
+
+		for (const auto& op : pending)
+		{
+			if (op.type == ePendingSceneOpType::Spawn)
+				SpawnNow(op.id, op.desc);
+			else
+				DespawnNow(op.id);
+		}
+	}
+
+	bool PhysicsFacade::SpawnNow(ObjectId id, const SpawnDesc& desc)
+	{
+		if (!m_inited.load(std::memory_order_relaxed) || !m_world)
+			return false;
+
+		const TemplateHandle tpl = ToTemplateHandle(desc.prefab);
+		const ActorTemplateDef* tplDef = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(tpl);
+		if (!tplDef)
+			return false;
+
+		const auto actorType = tplDef->actorType;
+		const auto bodyType = tplDef->bodyType;
+		const auto motionType = tplDef->motionType;
+
+		if (bodyType == eBodyType::Rigid)
+		{
+			auto resolver = [this](ObjectId oid) -> std::optional<PxTransform>
+				{
+					return ResolveTargetPose(oid);
+				};
+
+			auto body = ActorFactory::CreateRigidBody(*m_world, tpl, *tplDef, desc, id, resolver);
+			if (!body.has_value()) return false;
+
+			switch (motionType)
+			{
+			case eMotionType::Static:
+			case eMotionType::Dynamic:
+				m_rigidMap.emplace(id, std::move(body.value()));
+				return true;
+
+			case eMotionType::Kinematic:
+				if (actorType == eActorType::Projectile)
+					m_projectileMap.emplace(id, std::move(body.value()));
+				else
+					m_kinematicMap.emplace(id, std::move(body.value()));
+				return true;
+
+			default:
+				break;
+			}
+		}
+		else if (bodyType == eBodyType::Character)
+		{
+			auto body = ActorFactory::CreateCharacterBody(*m_world, tpl, *tplDef, desc, id);
+			if (!body.has_value()) return false;
+
+			if (motionType == eMotionType::CCT)
+			{
+				m_cctMap.emplace(id, std::move(body.value()));
+				return true;
+			}
+			if (motionType == eMotionType::RemoteCCT)
+			{
+				m_remoteCctMap.emplace(id, std::move(body.value()));
+				return true;
+			}
+		}
+
+		JAM_ASSERT(false, "Unknown body type in template: {}", tplDef->name);
+		return false;
+	}
+
+	bool PhysicsFacade::DespawnNow(ObjectId id)
+	{
+		if (!m_world) return false;
+
+		if (auto it = m_rigidMap.find(id); it != m_rigidMap.end())
+		{
+			ActorFactory::DestroyRigidBody(*m_world, it->second);
+			m_rigidMap.erase(it);
+			return true;
+		}
+		if (auto it = m_kinematicMap.find(id); it != m_kinematicMap.end())
+		{
+			ActorFactory::DestroyRigidBody(*m_world, it->second);
+			m_kinematicMap.erase(it);
+			return true;
+		}
+		if (auto it = m_projectileMap.find(id); it != m_projectileMap.end())
+		{
+			ActorFactory::DestroyRigidBody(*m_world, it->second);
+			m_projectileMap.erase(it);
+			return true;
+		}
+		if (auto it = m_cctMap.find(id); it != m_cctMap.end())
+		{
+			ActorFactory::DestroyCharacterBody(*m_world, it->second);
+			m_cctMap.erase(it);
+			return true;
+		}
+		if (auto it = m_remoteCctMap.find(id); it != m_remoteCctMap.end())
+		{
+			ActorFactory::DestroyCharacterBody(*m_world, it->second);
+			m_remoteCctMap.erase(it);
+			return true;
+		}
+
+		return false;
+	}
+
 	void PhysicsFacade::StepCharacters(ePxSceneSlot slot, float dt)
 	{
 		for (auto& [id, body] : m_cctMap)
@@ -739,5 +798,21 @@ namespace jam::px
 				body.SyncReplayState(body);
 			}
 		}
+	}
+
+	std::optional<PxTransform> PhysicsFacade::ResolveTargetPose(ObjectId oid)
+	{
+		if (auto it = m_rigidMap.find(oid); it != m_rigidMap.end())
+			return ToPhysX(it->second.GetMainState().pose);
+		if (auto it = m_kinematicMap.find(oid); it != m_kinematicMap.end())
+			return ToPhysX(it->second.GetMainState().pose);
+		if (auto it = m_projectileMap.find(oid); it != m_projectileMap.end())
+			return ToPhysX(it->second.GetMainState().pose);
+		if (auto it = m_cctMap.find(oid); it != m_cctMap.end())
+			return PxTransform(ToPhysX(it->second.GetMainState().pos));
+		if (auto it = m_remoteCctMap.find(oid); it != m_remoteCctMap.end())
+			return PxTransform(ToPhysX(it->second.GetMainState().pos));
+
+		return std::nullopt;
 	}
 }

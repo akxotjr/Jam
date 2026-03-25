@@ -23,6 +23,12 @@ namespace jam::net
     };
 
 
+    struct PendingSnapshot
+    {
+        fb::fbSnapshotT snapshot = {};
+        uint64          recvNs   = 0;
+    };
+
     /**
      * @class ClientReplicationSystem
      * 
@@ -42,7 +48,7 @@ namespace jam::net
         void                                Clear();
         void                                Tick();
 
-        void                                EnqueueSnapshot(fb::fbSnapshotT snapshot);
+        void                                EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs);
 
         bool                                IsLocalActor(NetId netId) const { return netId == m_localNetId; }
 
@@ -76,7 +82,7 @@ namespace jam::net
         uint64                              m_userId = 0;
 
         unordered_map<NetId, Replica>       m_replicas;     // net id -> Replica
-        deque<fb::fbSnapshotT>              m_pendingSnapshots;
+        deque<PendingSnapshot>              m_pendingSnapshots;
 
         NetId                               m_localNetId = NetId::Invalid();
         entt::entity                        m_localEntity = entt::null;

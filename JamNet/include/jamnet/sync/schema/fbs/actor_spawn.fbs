@@ -26,6 +26,8 @@ table fbSpawnActorReq
 	angular_damping			: float;
 	yaw						: float;
 	pitch					: float;
+
+	target_net_id			: uint;
 }
 
 table fbSpawnActorRes

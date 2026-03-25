@@ -15,7 +15,6 @@ namespace jam::px
     };
 
 
-
     // ---------------------------------------------------------------
 	// Waipoint Source : path-driven
 	// ---------------------------------------------------------------
@@ -72,9 +71,13 @@ namespace jam::px
 
 
 
+    /// @brief Loopup callback: ObjectId -> PxTransform.
+    /// If target is not found, returns std::nullopt
+    using TargetPoseResolver = std::function<std::optional<PxTransform>(ObjectId)>;
+
 
     // ---------------------------------------------------------------
-	// Orbit Source : path-driven
+	// Orbit Source : path-driven or target-driven
 	// ---------------------------------------------------------------
 
     enum class eOrbitPlaneMode : uint8

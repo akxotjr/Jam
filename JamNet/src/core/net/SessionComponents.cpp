@@ -183,7 +183,7 @@ namespace jam::net
 
 	void CompNetworkStats::UpdatePacketLoss(const uint32 lost, const uint32 expected)
 	{
-		lostPackets += lost;
+		lostPackets   += lost;
 		totalExpected += expected;
 
 		if (totalExpected > 0)
@@ -408,8 +408,8 @@ namespace jam::net
 	void TimeSyncState::ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4)
 	{
 		const uint64 rtt = (t4 - t1) - (t3 - t2);
-		minRtt_ns = std::min(minRtt_ns, rtt);
-		offset_ns = static_cast<int64>((static_cast<int64>(t2 - t1) + static_cast<int64>(t3 - t4)) / 2);
+		minRtt_ns		= std::min(minRtt_ns, rtt);
+		offset_ns		= (static_cast<int64>(t2 - t1) + static_cast<int64>(t3 - t4)) / 2;
 		lastPingSend_ns = t1;
 		lastPongRecv_ns = t4;
 
@@ -470,11 +470,11 @@ namespace jam::net
 
 	void CongestionState::OnLoss()
 	{
-		ssthresh = std::max(minCwnd, cwnd / 2);
-		cwnd = minCwnd;
-		bytesInFlight = 0;
-		duplicateAcks = 0;
-		state = SLOW_START;
+		ssthresh		= std::max(minCwnd, cwnd / 2);
+		cwnd			= minCwnd;
+		bytesInFlight	= 0;
+		duplicateAcks	= 0;
+		state			= SLOW_START;
 	}
 
 	void CongestionState::OnTimeout()
@@ -521,8 +521,8 @@ namespace jam::net
 	void TransmissionWaitingQueue::Clear()
 	{
 		queue.clear();
-		bytesQueued = 0;
-		flushRequested = false;
+		bytesQueued		= 0;
+		flushRequested	= false;
 	}
 
 
@@ -536,8 +536,8 @@ namespace jam::net
 		NetworkStatsView view{};
 		if (auto* stats = R.try_get<CompNetworkStats>(e))
 		{
-			view.rtt_ms = stats->rtt_ms;
-			view.jitter_ms = stats->jitter_ms;
+			view.rtt_ms		= stats->rtt_ms;
+			view.jitter_ms	= stats->jitter_ms;
 			view.packetLoss = stats->packetLoss;
 		}
 		if (auto* counter = R.try_get<NetworkCounter>(e))

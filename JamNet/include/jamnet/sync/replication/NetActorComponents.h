@@ -230,7 +230,11 @@ namespace jam::net
 	};
 
 
-	
+	struct TargetInfo
+	{
+		NetId		 targetNetId = NetId::Invalid();
+		px::ObjectId targetObjId = px::INVALID_OBJ_ID;
+	};
 
 
 	// --- helpers ---

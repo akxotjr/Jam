@@ -7,6 +7,7 @@
 namespace jam::px
 {
 
+
     // -----------------------------------------------------------
     // Waypoint
     // -----------------------------------------------------------
@@ -81,13 +82,14 @@ namespace jam::px
     class OrbitKinematicDriver : public IKinematicDriver
     {
     public:
-        explicit OrbitKinematicDriver(KinematicCommon common, OrbitSource src);
+        explicit OrbitKinematicDriver(KinematicCommon common, OrbitSource src, TargetPoseResolver resolver = nullptr);
 
 
         PxTransform         Tick(float dt) override;
         bool                IsDone() const override { return m_done; }
         KinematicState      BuildState() const override;
 
+        bool                SetTargetId(ObjectId id) override { m_src.targetId = id; return true; }
         void                SetDynamicCenter(const PxVec3& center) { m_dynamicCenter = center; }
 
     private:
@@ -100,6 +102,7 @@ namespace jam::px
     private:
         KinematicCommon     m_common        = {};
         OrbitSource         m_src           = {};
+        TargetPoseResolver  m_resolver      = nullptr;
 
         bool                m_done          = false;
         PxTransform         m_pose          = PxTransform(physx::PxIdentity);
@@ -123,9 +126,6 @@ namespace jam::px
      -----------------------------------------------------------
      */
 
-	/// Lookup callback: ObjectId -> PxTransform 
-	/// If target is not found, returns std::nullopt.
-    using TargetPoseResolver = std::function<std::optional<PxTransform>(ObjectId)>;
 
     class FollowKinematicDriver : public IKinematicDriver
     {
@@ -135,6 +135,8 @@ namespace jam::px
         PxTransform         Tick(float dt) override;
         bool                IsDone() const override { return false; }
         KinematicState      BuildState() const override;
+
+        bool                SetTargetId(ObjectId id) override { m_src.targetId = id; return true; }
 
     private:
         PxQuat              ComputeTargetRotation(const PxTransform& targetPose, const PxVec3& desiredPos) const;

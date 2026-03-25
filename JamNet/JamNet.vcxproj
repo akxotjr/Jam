@@ -218,7 +218,6 @@
     <ClInclude Include="include\jamnet\core\net\SendBuffer.h" />
     <ClInclude Include="include\jamnet\core\net\Service.h" />
     <ClInclude Include="include\jamnet\core\net\Session.h" />
-    <ClInclude Include="include\jamnet\core\net\SessionBootstrap.h" />
     <ClInclude Include="include\jamnet\core\net\SessionComponents.h" />
     <ClInclude Include="include\jamnet\core\net\SessionSystems.h" />
     <ClInclude Include="include\jamnet\core\net\SocketUtils.h" />
@@ -245,7 +244,7 @@
     <ClInclude Include="include\jamnet\sync\networld\NetWorld.h" />
     <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h" />
     <ClInclude Include="include\jamnet\sync\physics\ShardJobBridge.h" />
-    <ClInclude Include="include\jamnet\sync\replication\AoiSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ServerAoiSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientReplaySystem.h" />
@@ -335,7 +334,7 @@
     <ClCompile Include="src\sync\networld\NetWorld.cpp" />
     <ClCompile Include="src\sync\networld\ServerNetWorld.cpp" />
     <ClCompile Include="src\sync\physics\ShardJobBridge.cpp" />
-    <ClCompile Include="src\sync\replication\AoiSystem.cpp" />
+    <ClCompile Include="src\sync\replication\ServerAoiSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientInputSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientReplaySystem.cpp" />

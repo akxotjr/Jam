@@ -353,8 +353,8 @@ namespace jam::px
 
 
 
-	OrbitKinematicDriver::OrbitKinematicDriver(KinematicCommon common, OrbitSource src)
-		: m_common(common), m_src(src), m_angle(src.initialAngleRad)
+	OrbitKinematicDriver::OrbitKinematicDriver(KinematicCommon common, OrbitSource src, TargetPoseResolver resolver)
+		: m_common(common), m_src(src), m_angle(src.initialAngleRad), m_resolver(std::move(resolver))
 	{
 		// planeMode → axis → Gram-Schmidt로 궤도 평면 기저 사전 계산
 		m_axisN = AxisFromPlaneMode(m_src.planeMode, m_src.customPlaneNormal);
@@ -375,6 +375,14 @@ namespace jam::px
 	PxTransform OrbitKinematicDriver::Tick(float dt)
 	{
 		if (m_done) return m_pose;
+
+		if (m_src.centerMode == eOrbitCenterMode::FollowTarget
+			&& m_src.targetId != INVALID_OBJ_ID
+			&& m_resolver)
+		{
+			if (auto target = m_resolver(m_src.targetId); target.has_value())
+				m_dynamicCenter = target->p;
+		}
 
 		AdvanceAngle(dt);
 

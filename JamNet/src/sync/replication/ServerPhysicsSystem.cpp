@@ -67,6 +67,17 @@ namespace jam::net
 			return;
 
 		const px::eBodyType bodyType = desc.IsCharacter() ? px::eBodyType::Character : px::eBodyType::Rigid;
+		
+		if (m_physics->IsStepPending())
+		{
+			m_pendingActorOps.push_back(PendingActorOp{
+				.type	  = PendingActorOp::eType::Spawn,
+				.e        = e,
+				.bodyType = bodyType
+			});
+			return;
+		}
+		
 		m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
 		m_world.emplace<PhysicsSpawnedTag>(e);
 
@@ -96,8 +107,23 @@ namespace jam::net
 			return;
 
 		const px::ObjectId id = MakeObjectId(e);
-		if (m_physics->Despawn(id))
-			m_world.erase<PhysicsSpawnedTag>(e);
+		if (!m_physics->Despawn(id))
+			return;
+
+		if (m_physics->IsStepPending())
+		{
+			const px::eBodyType bodyType =
+				m_world.all_of<NetActorBodyType>(e) ? m_world.get<NetActorBodyType>(e).body : px::eBodyType::None;
+
+			m_pendingActorOps.push_back(PendingActorOp{
+				.type	  = PendingActorOp::eType::Despawn,
+				.e		  = e,
+				.bodyType = bodyType
+			});
+			return;
+		}
+
+		m_world.erase<PhysicsSpawnedTag>(e);
 	}
 
 	void ServerPhysicsSystem::ApplyInputs() const
@@ -128,6 +154,7 @@ namespace jam::net
 
 		// 파이버가 Resume 된 후 (또는 동기 실행 시) 결과를 가져옵니다.
 		m_physics->EndSimulate();
+		CommitPendingActorOps();
 	}
 
 	void ServerPhysicsSystem::SyncActiveTransforms() const
@@ -171,7 +198,7 @@ namespace jam::net
 		if (!m_physics)
 			return;
 
-		auto view = m_world.view<NetId, NetActorBodyType>();
+		auto view = m_world.view<NetId, NetActorBodyType, PhysicsSpawnedTag>();
 
 		for (auto e : view)
 		{
@@ -195,6 +222,52 @@ namespace jam::net
 					auto& state = m_world.get<px::RigidState>(e);
 					state = rs;
 				}
+			}
+		}
+	}
+
+	void ServerPhysicsSystem::CommitPendingActorOps()
+	{
+		if (m_pendingActorOps.empty())
+			return;
+
+		auto ops = std::move(m_pendingActorOps);
+		m_pendingActorOps.clear();
+
+		for (const auto& op : ops)
+		{
+			if (!m_world.valid(op.e))
+				continue;
+
+			if (op.type == PendingActorOp::eType::Spawn)
+			{
+				const px::ObjectId oid = MakeObjectId(op.e);
+
+				m_world.emplace_or_replace<NetActorBodyType>(op.e, NetActorBodyType{ op.bodyType });
+				m_world.emplace_or_replace<PhysicsSpawnedTag>(op.e);
+
+				if (op.bodyType == px::eBodyType::Character)
+				{
+					auto& cs = m_world.emplace_or_replace<px::CharacterState>(op.e);
+					JAM_ASSERT(m_physics->GetCharacterState(oid, cs))
+
+					const uint64 controller = m_world.get<ControlTag>(op.e).userId;
+					const uint64 owner	    = m_world.get<OwnershipTag>(op.e).userId;
+
+					if (owner && owner == controller)
+					{
+						m_world.emplace_or_replace<px::CharacterInput>(op.e);
+					}
+				}
+				else if (op.bodyType == px::eBodyType::Rigid)
+				{
+					auto& rs = m_world.emplace_or_replace<px::RigidState>(op.e);
+					JAM_ASSERT(m_physics->GetRigidState(oid, rs))
+				}
+			}
+			else
+			{
+				m_world.erase<PhysicsSpawnedTag>(op.e);
 			}
 		}
 	}

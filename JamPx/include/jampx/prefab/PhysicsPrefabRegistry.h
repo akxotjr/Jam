@@ -71,5 +71,5 @@ namespace jam::px
 #define JAM_PX_DYN_DEF(handle)          jam::px::PhysicsPrefabRegistry::Instance().GetDynamicBodyDef(handle)
 #define JAM_PX_CCT_DEF(handle)          jam::px::PhysicsPrefabRegistry::Instance().GetCCTBodyDef(handle)
 #define JAM_PX_CHAR_MOVE_CFG(handle)    jam::px::PhysicsPrefabRegistry::Instance().GetCharacterMoveConfig(handle)
-#define JAM_PX_KINE_DRIVER_CFG(handle)  jam::px::PhysicsPrefabRegistry::Instance().GetKinematicDriverConfig(handle)
-#define JAM_PX_PROJ_CFG(handle)         jam::px::PhysicsPrefabRegistry::Instance().GetProjectileConfig(handle)
+#define JAMPX_KINE_DRIVER_CFG(handle)  jam::px::PhysicsPrefabRegistry::Instance().GetKinematicDriverConfig(handle)
+#define JAMPX_PROJ_CFG(handle)         jam::px::PhysicsPrefabRegistry::Instance().GetProjectileConfig(handle)

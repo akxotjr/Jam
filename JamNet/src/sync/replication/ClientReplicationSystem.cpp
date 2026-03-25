@@ -31,14 +31,19 @@ namespace jam::net
 		m_localEntity		= entt::null;
 		m_lastServerTick	= 0;
 		m_lastInputAck		= 0;
+
+		if (auto* est = m_world.ctx().find<EstimatedServerTick>())
+			est->Reset();
 	}
 
 	void ClientReplicationSystem::Tick()
 	{
 		while (!m_pendingSnapshots.empty())
 		{
-			fb::fbSnapshotT snapshot = std::move(m_pendingSnapshots.front());
+			PendingSnapshot pending = std::move(m_pendingSnapshots.front());
 			m_pendingSnapshots.pop_front();
+
+			fb::fbSnapshotT& snapshot = pending.snapshot;
 
 			const auto* hdr = snapshot.header.get();
 			if (!hdr) continue;
@@ -58,9 +63,12 @@ namespace jam::net
 	}
 
 
-	void ClientReplicationSystem::EnqueueSnapshot(fb::fbSnapshotT snapshot)
+	void ClientReplicationSystem::EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs)
 	{
-		m_pendingSnapshots.emplace_back(std::move(snapshot));
+		m_pendingSnapshots.emplace_back(PendingSnapshot{
+			.snapshot = std::move(snapshot),
+			.recvNs = recvNs
+		});
 	}
 
 	void ClientReplicationSystem::ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick)
@@ -216,12 +224,42 @@ namespace jam::net
 				return;
 		}
 
+		const px::eKineDrivenType kineType = static_cast<px::eKineDrivenType>(ks->kine_type());
+
 		px::KinematicState kine{};
 		kine.startEpoch = ks->start_epoch();
 		kine.phase		= ks->phase();
 		kine.t			= ks->t();
-		kine.targetId	= ks->target_id();
 		kine.eventMask	= ks->event_mask();
+
+		kine.targetId = px::INVALID_OBJ_ID;
+		const NetId targetNetId = NetId::MakeRaw(ks->target_id());
+		if (targetNetId.IsValid())
+		{
+			if (auto* nwPtr = m_world.ctx().find<ClientNetWorld*>(); nwPtr && *nwPtr)
+			{
+				const entt::entity targetEntity = (*nwPtr)->GetEntity(targetNetId);
+				if (targetEntity != entt::null && m_world.valid(targetEntity))
+				{
+					kine.targetId = MakeObjectId(targetEntity);
+
+					TargetInfo target{ .targetNetId = targetNetId, .targetObjId = kine.targetId };
+					m_world.emplace_or_replace<TargetInfo>(replica.e, target);
+				}
+			}
+		}
+
+		if (px::IsLocalDrivenKine(kineType))
+		{
+			if (const auto* est = m_world.ctx().find<EstimatedServerTick>(); est && est->valid)
+			{
+				const double dtTick = est->estimatedNowTick - static_cast<double>(serverTick);
+				if (dtTick > 0.0)
+				{
+					kine.t += static_cast<float>(dtTick * static_cast<double>(SIMULATION_TICK_SEC));
+				}
+			}
+		}
 
 		auto& [rs] = m_world.get<RigidAuthorityState>(replica.e);
 		rs.kineType  = static_cast<px::eKineDrivenType>(ks->kine_type());

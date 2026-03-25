@@ -25,6 +25,7 @@ namespace jam::px
 		virtual std::vector<ObjectId>	UnloadLevel(const std::string& layer) = 0;
 		virtual std::vector<ObjectId>	UnloadAllLevel() = 0;
 
+		virtual bool					IsStepPending() const = 0;
 
 		virtual void					Simulate(float dt) = 0;
 		virtual bool					BeginSimulate(float dt, uint64 awaitKey) = 0;

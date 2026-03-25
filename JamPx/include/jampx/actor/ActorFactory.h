@@ -21,7 +21,8 @@ namespace jam::px
 			TemplateHandle				tpl,
 			const ActorTemplateDef&		tplDef,
 			const SpawnDesc&			desc,
-			ObjectId					id);
+			ObjectId					id,
+			const TargetPoseResolver&	resolver = nullptr);
 
 		/// @brief CCT / RemoteCCT CharacterBody 생성
 		static std::optional<CharacterBody> CreateCharacterBody(

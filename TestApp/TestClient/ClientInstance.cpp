@@ -110,9 +110,6 @@ bool ClientInstance::Connect(const string& serverIp, uint16 tcpPort, uint16 udpP
 		return true;
 	}
 
-	m_spawnedActorNetIds.clear();  
-	m_controllableActorNetId = 0;
-
 	net::ClientConfig config{};
 	config.serverTcpAddress = net::NetAddress(serverIp, tcpPort);
 	config.serverUdpAddress = net::NetAddress(serverIp, udpPort);
@@ -140,8 +137,6 @@ void ClientInstance::Disconnect()
 	m_networkManager->Disconnect();
 	m_networkManager.reset();
 
-	m_spawnedActorNetIds.clear();
-	m_controllableActorNetId = 0;
 	m_actorRenderData.clear();
 
 	JAMNET_LOG_INFO("[Client #{}] Disconnected", m_instanceId);
@@ -194,34 +189,107 @@ void ClientInstance::Render()
 
 void ClientInstance::SpawnActor()
 {
+
+}
+
+void ClientInstance::SpawnPlayer()
+{
 	if (!m_networkManager) return;
 
 	auto* world = m_networkManager->GetWorld();
-	if (!world)
-		return;
+	if (!world) return;
 
-	net::SpawnParams params{};
-	params.spawnId		= m_nextSpawnReqId++;
-	params.owned		= true;
-	params.controlled	= true;
+	net::SpawnParams charParams{};
+	charParams.spawnId		= m_nextSpawnReqId++;
+	charParams.owned		= true;
+	charParams.controlled	= true;
 
-	params.desc.prefab  = px::MakePrefabKey("Character");
-	params.desc.pose    = { .p = { 15.0f * static_cast<float>(m_windowIndex), 50.f, 0.f} };
-	params.desc.overrides = px::CharacterSpawnOverrides{};
+	charParams.desc.prefab	  = px::MakePrefabKey("Character");
+	charParams.desc.pose	  = { .p = { 15.0f * static_cast<float>(m_windowIndex), 50.f, 0.f} };
+	charParams.desc.overrides = px::CharacterSpawnOverrides{};
 
 	{
 		ActorRenderingData data{};
 		data.ensured			= false;
-		data.pendingSpawnReqId	= params.spawnId;
+		data.pendingSpawnReqId	= charParams.spawnId;
 
 		data.shape				= px::eShapeType::Capsule;
 		data.capsuleRadius		= 0.35f;
 		data.capsuleHalfHeight	= 0.5f;
 		data.color				= glm::vec4(0.9f, 0.25f, 0.25f, 1.0f);
 
-		m_pendingSpawnToRenderData.emplace(params.spawnId, data);
+		m_pendingSpawnToRenderData.emplace(charParams.spawnId, data);
 	}
-	world->SpawnActor(params);
+	world->SpawnActor(charParams);
+}
+
+void ClientInstance::SpawnPlayerDrone()
+{
+	if (!m_networkManager) return;
+
+	auto* world = m_networkManager->GetWorld();
+	if (!world) return;
+
+	net::SpawnParams droneParams{};
+	droneParams.spawnId			= m_nextSpawnReqId++;
+	droneParams.owned			= true;
+	droneParams.controlled		= false;
+	droneParams.targetObjectId	= m_localObjectId;
+
+	droneParams.desc.prefab		= px::MakePrefabKey("OrbitDrone");
+	droneParams.desc.spawnSrc	= px::eSpawnSource::Runtime;
+	droneParams.desc.pose		= {};
+	droneParams.desc.overrides	= px::RigidSpawnOverrides{};
+
+	{
+		ActorRenderingData data{};
+		data.ensured		   = false;
+		data.pendingSpawnReqId = droneParams.spawnId;
+
+		data.shape			= px::eShapeType::Box;
+		data.boxHalfExtents = px::Vec3{ 0.5f, 0.5f, 0.5f };
+		data.color			= glm::vec4(0.20f, 0.85f, 1.00f, 1.0f);
+
+		m_pendingSpawnToRenderData.emplace(droneParams.spawnId, data);
+	}
+
+	world->SpawnActor(droneParams);
+}
+
+void ClientInstance::SpawnBullet()
+{
+	if (!m_networkManager) return;
+
+	auto* world = m_networkManager->GetWorld();
+	if (!world) return;
+
+	net::SpawnParams bulletParams{};
+	bulletParams.spawnId		= m_nextSpawnReqId++;
+	bulletParams.owned		    = true;
+	bulletParams.controlled     = false;
+	bulletParams.targetObjectId = m_localObjectId;
+
+	bulletParams.desc.prefab    = px::MakePrefabKey("LinearProjectile");
+	bulletParams.desc.spawnSrc  = px::eSpawnSource::Runtime;
+	bulletParams.desc.pose      = {};
+	bulletParams.desc.overrides = px::RigidSpawnOverrides{
+		.mask			= px::SpawnOverrideMask::LINEAR_VEL,
+		.linearVelocity = px::Vec3(0.0, 0.0, 10.0)
+	};
+
+	{
+		ActorRenderingData data{};
+		data.ensured		   = false;
+		data.pendingSpawnReqId = bulletParams.spawnId;
+
+		data.shape			= px::eShapeType::Sphere;
+		data.sphereRadius	= 0.3f;
+		data.color			= glm::vec4(0.20f, 0.45f, 1.00f, 1.0f);
+
+		m_pendingSpawnToRenderData.emplace(bulletParams.spawnId, data);
+	}
+
+	world->SpawnActor(bulletParams);
 }
 
 void ClientInstance::DespawnActor()
@@ -273,6 +341,9 @@ void ClientInstance::ProcessControlInput()
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 		}
 	}
+
+	//if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT))
+	//	SpawnBullet();
 
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)			inputFlags |= px::INPUT_BACKWARD;
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)			inputFlags |= px::INPUT_FORWARD;
@@ -397,7 +468,6 @@ ActorRenderingData* ClientInstance::EnsureRenderingActorData(const net::RenderAc
 
 			data.color = ResolveColor(def->actorType, def->bodyType, def->motionType, charBody.controllerType);
 
-			JAMNET_LOG_DEBUG("Render SpawnEvent: UserId= {}, ObjectId= {} ", m_userId, data.oid);
 		}
 	}
 
@@ -437,6 +507,8 @@ void ClientInstance::BuildRenderFrames()
 }
 
 
+
+
 void ClientInstance::OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt)
 {
 	if (evt.userId != m_userId)
@@ -459,16 +531,28 @@ void ClientInstance::OnActorSpawned(const net::RenderActorSpawnedEvent& evt)
 		data.oid	 = evt.objectId;
 		data.isLocal = evt.isLocal;
 
+		if (data.isLocal)
+		{
+			m_localObjectId = data.oid;
+
+			SpawnPlayerDrone();
+		}
+
+		JAMNET_LOG_DEBUG("PendingSpawn : UserId= {}, ObjectId= {}, local= {}", m_userId, data.oid, data.isLocal ? "yes" : "no");
+
 		m_actorRenderData.emplace(evt.objectId, std::move(data));
 		return;
 	}
 
 
 	ActorRenderingData* data = EnsureRenderingActorData(evt);
+	if (!data) return;
+
 	data->ensured			= true;
 	data->pendingSpawnReqId = 0;
 	data->isLocal			= evt.isLocal;
 
+	JAMNET_LOG_DEBUG("EnsureSpawn : UserId= {}, ObjectId= {}, local= {}", m_userId, data->oid, data->isLocal ? "yes" : "no");
 }
 
 void ClientInstance::OnActorDespawned(const net::RenderActorDespawnedEvent& evt)
@@ -489,7 +573,7 @@ void ClientInstance::OnRenderSamples(const net::RenderSamplesEvent& evt)
 	for (const auto& actor : evt.actors)
 	{
 		ActorRenderingData* data = GetRenderingActorData(actor.objectId);
-		if (!data) return;
+		if (!data) continue;
 
 		// isLocal은 소유권 변경 가능하므로 매 프레임 업데이트
 		data->isLocal = actor.isLocal;

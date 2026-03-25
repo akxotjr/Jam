@@ -137,8 +137,6 @@ namespace jam::net
             return;
         }
 
-        SetReady(true);
-
         if (m_manager) m_manager->NotifyUdpBound();
     }
 

@@ -242,12 +242,13 @@ namespace jam::net
 	void ClientNetworkManager::NotifyTcpBound()
 	{
 		m_tcpBound.store(true, std::memory_order_release);
+		UpdateSessionReadyState();
 	}
 
 	void ClientNetworkManager::NotifyUdpBound()
 	{
 		m_udpBound.store(true, std::memory_order_release);
-
+		UpdateSessionReadyState();
 		// TEMP: bind 완료 직후 자동 매치메이킹 트리거
 		// ui trigger 로 변경 필요
 		TryMatchmaking();
@@ -277,5 +278,13 @@ namespace jam::net
 		evt.userId	= m_userId;
 		evt.groupId = groupId;
 		GLOBAL_EVENTBUS_PUBLISH(evt);
+	}
+
+	void ClientNetworkManager::UpdateSessionReadyState()
+	{
+		const bool ready = m_tcpBound.load(std::memory_order_acquire) && m_udpBound.load(std::memory_order_acquire);
+
+		if (m_tcp) m_tcp->SetReady(ready);
+		if (m_udp) m_udp->SetReady(ready);
 	}
 }

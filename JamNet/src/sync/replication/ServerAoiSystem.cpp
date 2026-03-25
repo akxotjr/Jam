@@ -1,6 +1,5 @@
 #include "pch.h"
-#include "jamnet/sync/replication/AoiSystem.h"
-
+#include "jamnet/sync/replication/ServerAoiSystem.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 #include "jamnet/sync/replication/NetWorldContext.h"
 
@@ -24,7 +23,7 @@ namespace jam::net
 		}
 
 		/// @brief 조건식별 XZ leave 반-크기 계산 (격자 쿼리 범위 결정에 사용)
-		pair<float, float> CalcLeaveHalfExtents(const AoiConfig& cfg) noexcept
+		std::pair<float, float> CalcLeaveHalfExtents(const AoiConfig& cfg) noexcept
 		{
 			switch (cfg.condition)
 			{
@@ -42,11 +41,11 @@ namespace jam::net
 		}
 	}
 
-	AoiSystem::AoiSystem(entt::registry& world)
+	ServerAoiSystem::ServerAoiSystem(entt::registry& world)
 		: m_world(world) {
 	}
 
-	void AoiSystem::Init(const AoiConfig& cfg)
+	void ServerAoiSystem::Init(const AoiConfig& cfg)
 	{
 		m_cfg = cfg;
 		m_physics = nullptr;
@@ -57,7 +56,7 @@ namespace jam::net
 		m_entityPositions.clear();
 	}
 
-	void AoiSystem::Tick()
+	void ServerAoiSystem::Tick()
 	{
 		const uint32 tick = m_world.ctx().get<TickCounter>().tick;
 
@@ -74,7 +73,7 @@ namespace jam::net
 		}
 	}
 
-	void AoiSystem::OnEnter(uint64 userId)
+	void ServerAoiSystem::OnEnter(uint64 userId)
 	{
 		if (userId == 0) return;
 		auto& s = m_states[userId];
@@ -83,17 +82,17 @@ namespace jam::net
 		s.left.clear();
 	}
 
-	void AoiSystem::OnLeave(uint64 userId)
+	void ServerAoiSystem::OnLeave(uint64 userId)
 	{
 		m_states.erase(userId);
 	}
 
-	void AoiSystem::SetPhysicsFacade(px::IPhysicsFacade* physics)
+	void ServerAoiSystem::SetPhysicsFacade(px::IPhysicsFacade* physics)
 	{
 		m_physics = physics;
 	}
 
-	bool AoiSystem::IsVisible(uint64 userId, NetId netId) const
+	bool ServerAoiSystem::IsVisible(uint64 userId, NetId netId) const
 	{
 		if (m_alwaysVisible.contains(netId)) return true;
 		if (auto it = m_states.find(userId); it != m_states.end())
@@ -101,14 +100,14 @@ namespace jam::net
 		return false;
 	}
 
-	const UserAoiState* AoiSystem::GetState(uint64 userId) const
+	const UserAoiState* ServerAoiSystem::GetState(uint64 userId) const
 	{
 		if (auto it = m_states.find(userId); it != m_states.end())
 			return &it->second;
 		return nullptr;
 	}
 
-	void AoiSystem::SetAlwaysVisible(NetId netId, bool always)
+	void ServerAoiSystem::SetAlwaysVisible(NetId netId, bool always)
 	{
 		if (always) m_alwaysVisible.insert(netId);
 		else        m_alwaysVisible.erase(netId);
@@ -117,7 +116,7 @@ namespace jam::net
 	// ============================================================
 	// Rebuild
 	// ============================================================
-	void AoiSystem::Rebuild()
+	void ServerAoiSystem::Rebuild()
 	{
 		RebuildGrid();
 
@@ -198,7 +197,7 @@ namespace jam::net
 	// ============================================================
 	// Uniform Grid
 	// ============================================================
-	void AoiSystem::RebuildGrid()
+	void ServerAoiSystem::RebuildGrid()
 	{
 		m_grid.clear();
 		m_entityPositions.clear();
@@ -216,7 +215,7 @@ namespace jam::net
 		}
 	}
 
-	void AoiSystem::GetCandidatesFromGrid(const px::Vec3& userPos, vector<entt::entity>& out) const
+	void ServerAoiSystem::GetCandidatesFromGrid(const px::Vec3& userPos, vector<entt::entity>& out) const
 	{
 		const float cellSize = std::max(1.f, m_cfg.gridCellSize);
 
@@ -236,7 +235,7 @@ namespace jam::net
 	// ============================================================
 	// 조건식 (Hysteresis bias 포함)
 	// ============================================================
-	bool AoiSystem::TestCondition(const px::Vec3& origin, const px::Vec3& target, float bias) const
+	bool ServerAoiSystem::TestCondition(const px::Vec3& origin, const px::Vec3& target, float bias) const
 	{
 		switch (m_cfg.condition)
 		{
@@ -273,7 +272,7 @@ namespace jam::net
 	// ============================================================
 	// LOS
 	// ============================================================
-	bool AoiSystem::TestLos(const px::Vec3& userPos, const px::Vec3& targetPos) const
+	bool ServerAoiSystem::TestLos(const px::Vec3& userPos, const px::Vec3& targetPos) const
 	{
 		if (!m_physics) return true;
 
@@ -284,14 +283,14 @@ namespace jam::net
 	// ============================================================
 	// 위치 쿼리
 	// ============================================================
-	px::Vec3 AoiSystem::GetEntityPosition(entt::entity e) const
+	px::Vec3 ServerAoiSystem::GetEntityPosition(entt::entity e) const
 	{
 		if (const auto* cs = m_world.try_get<px::CharacterState>(e)) return cs->pos;
 		if (const auto* rs = m_world.try_get<px::RigidState>(e))	  return rs->pose.p;
 		return {};
 	}
 
-	px::Vec3 AoiSystem::GetUserPosition(uint64 userId) const
+	px::Vec3 ServerAoiSystem::GetUserPosition(uint64 userId) const
 	{
 		auto view = m_world.view<ControlTag>();
 		for (auto e : view)

@@ -47,10 +47,10 @@ namespace jam::net
 	};
 
 	/// @brief Server side Area-of-Interest system
-	class AoiSystem
+	class ServerAoiSystem
 	{
 	public:
-		explicit AoiSystem(entt::registry& world);
+		explicit ServerAoiSystem(entt::registry& world);
 
 		void						Init(const AoiConfig& cfg = {});
 		void						Tick();

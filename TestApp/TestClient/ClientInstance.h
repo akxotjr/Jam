@@ -65,6 +65,12 @@ public:
 	void                                Render();
 
 	void								SpawnActor();
+
+	void								SpawnPlayer();		// contents
+	void								SpawnPlayerDrone(); // contents
+	void								SpawnBullet();
+
+
 	void								DespawnActor();
 	void								PossessActor();
 	void								UnpossessActor();
@@ -79,8 +85,7 @@ public:
 	uint32                              GetInstanceId() const { return m_instanceId; }
 	uint64                              GetUserId() const { return m_userId; }
 	
-	bool                                HasControllableActor() const { return m_controllableActorNetId != 0; }
-	
+
 private:
 
 	void								OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt);
@@ -121,9 +126,6 @@ private:
 	GlobalEventBus::Subscription				m_subActorDespawned;
 	GlobalEventBus::Subscription				m_subRenderSamples;
 
-	vector<uint32>								m_spawnedActorNetIds;
-	uint64										m_controllableActorNetId = 0;
-
 	// 카메라 상태
 	glm::vec3									m_cameraPos = glm::vec3(0, 10, 20);
 	glm::vec3									m_cameraTarget = glm::vec3(0, 0, 0);
@@ -131,6 +133,8 @@ private:
 
 	static constexpr uint32						MAX_SNAPSHOT_BUFFER = 10;
 	static constexpr uint32						INTERPOLATION_DELAY = 4;
+
+	px::ObjectId								m_localObjectId = px::INVALID_OBJ_ID;
 
 
 	unordered_map<px::ObjectId, ActorRenderingData>   m_actorRenderData;		

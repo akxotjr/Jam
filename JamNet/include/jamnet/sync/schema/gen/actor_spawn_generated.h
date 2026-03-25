@@ -55,6 +55,7 @@ struct fbSpawnActorReqT : public ::flatbuffers::NativeTable {
   float angular_damping = 0.0f;
   float yaw = 0.0f;
   float pitch = 0.0f;
+  uint32_t target_net_id = 0;
   fbSpawnActorReqT() = default;
   fbSpawnActorReqT(const fbSpawnActorReqT &o);
   fbSpawnActorReqT(fbSpawnActorReqT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -81,7 +82,8 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_LINEAR_DAMPING = 30,
     VT_ANGULAR_DAMPING = 32,
     VT_YAW = 34,
-    VT_PITCH = 36
+    VT_PITCH = 36,
+    VT_TARGET_NET_ID = 38
   };
   uint32_t spawn_req_id() const {
     return GetField<uint32_t>(VT_SPAWN_REQ_ID, 0);
@@ -134,6 +136,9 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   float pitch() const {
     return GetField<float>(VT_PITCH, 0.0f);
   }
+  uint32_t target_net_id() const {
+    return GetField<uint32_t>(VT_TARGET_NET_ID, 0);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_REQ_ID, 4) &&
@@ -153,6 +158,7 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<float>(verifier, VT_ANGULAR_DAMPING, 4) &&
            VerifyField<float>(verifier, VT_YAW, 4) &&
            VerifyField<float>(verifier, VT_PITCH, 4) &&
+           VerifyField<uint32_t>(verifier, VT_TARGET_NET_ID, 4) &&
            verifier.EndTable();
   }
   fbSpawnActorReqT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -215,6 +221,9 @@ struct fbSpawnActorReqBuilder {
   void add_pitch(float pitch) {
     fbb_.AddElement<float>(fbSpawnActorReq::VT_PITCH, pitch, 0.0f);
   }
+  void add_target_net_id(uint32_t target_net_id) {
+    fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_TARGET_NET_ID, target_net_id, 0);
+  }
   explicit fbSpawnActorReqBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -244,11 +253,13 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     float linear_damping = 0.0f,
     float angular_damping = 0.0f,
     float yaw = 0.0f,
-    float pitch = 0.0f) {
+    float pitch = 0.0f,
+    uint32_t target_net_id = 0) {
   fbSpawnActorReqBuilder builder_(_fbb);
   builder_.add_prefab_key(prefab_key);
   builder_.add_controller_user_id(controller_user_id);
   builder_.add_owner_user_id(owner_user_id);
+  builder_.add_target_net_id(target_net_id);
   builder_.add_pitch(pitch);
   builder_.add_yaw(yaw);
   builder_.add_angular_damping(angular_damping);
@@ -463,7 +474,8 @@ inline fbSpawnActorReqT::fbSpawnActorReqT(const fbSpawnActorReqT &o)
         linear_damping(o.linear_damping),
         angular_damping(o.angular_damping),
         yaw(o.yaw),
-        pitch(o.pitch) {
+        pitch(o.pitch),
+        target_net_id(o.target_net_id) {
 }
 
 inline fbSpawnActorReqT &fbSpawnActorReqT::operator=(fbSpawnActorReqT o) FLATBUFFERS_NOEXCEPT {
@@ -484,6 +496,7 @@ inline fbSpawnActorReqT &fbSpawnActorReqT::operator=(fbSpawnActorReqT o) FLATBUF
   std::swap(angular_damping, o.angular_damping);
   std::swap(yaw, o.yaw);
   std::swap(pitch, o.pitch);
+  std::swap(target_net_id, o.target_net_id);
   return *this;
 }
 
@@ -513,6 +526,7 @@ inline void fbSpawnActorReq::UnPackTo(fbSpawnActorReqT *_o, const ::flatbuffers:
   { auto _e = angular_damping(); _o->angular_damping = _e; }
   { auto _e = yaw(); _o->yaw = _e; }
   { auto _e = pitch(); _o->pitch = _e; }
+  { auto _e = target_net_id(); _o->target_net_id = _e; }
 }
 
 inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -540,6 +554,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(::flatbuffer
   auto _angular_damping = _o->angular_damping;
   auto _yaw = _o->yaw;
   auto _pitch = _o->pitch;
+  auto _target_net_id = _o->target_net_id;
   return jam::net::fb::CreatefbSpawnActorReq(
       _fbb,
       _spawn_req_id,
@@ -558,7 +573,8 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(::flatbuffer
       _linear_damping,
       _angular_damping,
       _yaw,
-      _pitch);
+      _pitch,
+      _target_net_id);
 }
 
 inline fbSpawnActorResT *fbSpawnActorRes::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

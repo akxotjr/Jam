@@ -113,7 +113,7 @@ static void Run(const TestConfig& config)
     {
         if (i < windowCount)
         {
-            clients[i]->SpawnActor();
+            clients[i]->SpawnPlayer();
         }
     }
 

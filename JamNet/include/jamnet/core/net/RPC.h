@@ -69,82 +69,81 @@ namespace jam::net
     };
 
     template<class C, class T>
-    inline std::function<void(entt::entity, const T&, uint32)> BindRPC(C* obj, void (C::* mf)(entt::entity, const T&, uint32))
+    std::function<void(entt::entity, const T&, uint32)> BindRPC(C* obj, void (C::* mf)(entt::entity, const T&, uint32))
     {
         return [obj, mf](entt::entity e, const T& msg, uint32 reqId) { (obj->*mf)(e, msg, reqId); };
     }
 
     template<class C, class T>
-    inline std::function<void(entt::entity, const T&, uint32)> BindRPC(const C* obj, void (C::* mf)(entt::entity, const T&, uint32) const)
+    std::function<void(entt::entity, const T&, uint32)> BindRPC(const C* obj, void (C::* mf)(entt::entity, const T&, uint32) const)
     {
         return [obj, mf](entt::entity e, const T& msg, uint32 reqId) { (obj->*mf)(e, msg, reqId); };
     }
 
     template<class C, class T>
-    inline std::function<void(entt::entity, const T&, uint32)> BindRPC(std::shared_ptr<C> sp, void (C::* mf)(entt::entity, const T&, uint32))
+    std::function<void(entt::entity, const T&, uint32)> BindRPC(std::shared_ptr<C> sp, void (C::* mf)(entt::entity, const T&, uint32))
     {
         return [sp = std::move(sp), mf](entt::entity e, const T& msg, uint32 reqId) { (sp.get()->*mf)(e, msg, reqId); };
     }
 
     template<class C, class T>
-    inline std::function<void(entt::entity, const T&, uint32)> BindRPC(std::weak_ptr<C> wp, void (C::* mf)(entt::entity, const T&, uint32))
+    std::function<void(entt::entity, const T&, uint32)> BindRPC(std::weak_ptr<C> wp, void (C::* mf)(entt::entity, const T&, uint32))
     {
         return [wp = std::move(wp), mf](entt::entity e, const T& msg, uint32 reqId) { if (auto sp = wp.lock()) (sp.get()->*mf)(e, msg, reqId); };
     }
 
 
-    // fwd decl
 
     template<typename T>
-    inline void RPCRegisterRequest(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn);
+    void RPCRegisterRequest(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn);
     template<typename T>
-    inline void RPCRegisterRequest(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn);
+    void RPCRegisterRequest(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn);
 
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, entt::entity e, C* obj, void (C::* mf)(entt::entity, const T&, uint32))
+    void RPCRegisterRequest(entt::registry& R, entt::entity e, C* obj, void (C::* mf)(entt::entity, const T&, uint32))
     {
         RPCRegisterRequest<T>(R, e, BindRPC<C, T>(obj, mf));
     }
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, entt::entity e, const C* obj, void (C::* mf)(entt::entity, const T&, uint32) const)
+    void RPCRegisterRequest(entt::registry& R, entt::entity e, const C* obj, void (C::* mf)(entt::entity, const T&, uint32) const)
     {
         RPCRegisterRequest<T>(R, e, BindRPC<C, T>(obj, mf));
     }
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, entt::entity e, std::shared_ptr<C> sp, void (C::* mf)(entt::entity, const T&, uint32))
+    void RPCRegisterRequest(entt::registry& R, entt::entity e, std::shared_ptr<C> sp, void (C::* mf)(entt::entity, const T&, uint32))
     {
         RPCRegisterRequest<T>(R, e, BindRPC<C, T>(std::move(sp), mf));
     }
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, entt::entity e, std::weak_ptr<C> wp, void (C::* mf)(entt::entity, const T&, uint32))
+    void RPCRegisterRequest(entt::registry& R, entt::entity e, std::weak_ptr<C> wp, void (C::* mf)(entt::entity, const T&, uint32))
     {
         RPCRegisterRequest<T>(R, e, BindRPC<C, T>(std::move(wp), mf));
     }
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, C* obj, void (C::* mf)(entt::entity, const T&, uint32))
+    void RPCRegisterRequest(entt::registry& R, C* obj, void (C::* mf)(entt::entity, const T&, uint32))
     {
         RPCRegisterRequest<T>(R, BindRPC<C, T>(obj, mf));
     }
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, const C* obj, void (C::* mf)(entt::entity, const T&, uint32) const)
+    void RPCRegisterRequest(entt::registry& R, const C* obj, void (C::* mf)(entt::entity, const T&, uint32) const)
     {
         RPCRegisterRequest<T>(R, BindRPC<C, T>(obj, mf));
     }
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, std::shared_ptr<C> sp, void (C::* mf)(entt::entity, const T&, uint32))
+    void RPCRegisterRequest(entt::registry& R, std::shared_ptr<C> sp, void (C::* mf)(entt::entity, const T&, uint32))
     {
         RPCRegisterRequest<T>(R, BindRPC<C, T>(std::move(sp), mf));
     }
 
     template<typename T, class C>
-    inline void RPCRegisterRequest(entt::registry& R, std::weak_ptr<C> wp, void (C::* mf)(entt::entity, const T&, uint32))
+    void RPCRegisterRequest(entt::registry& R, std::weak_ptr<C> wp, void (C::* mf)(entt::entity, const T&, uint32))
     {
         RPCRegisterRequest<T>(R, BindRPC<C, T>(std::move(wp), mf));
     }
@@ -301,35 +300,33 @@ namespace jam::net
 
 
     template<typename Req>
-    inline std::shared_ptr<SendBuffer> RPCBuildRequestPacket(const Req& req, const RPCCallOptions& opt, uint32 requestId)
+    std::shared_ptr<SendBuffer> RPCBuildRequestPacket(const Req& req, const RPCCallOptions& opt, uint32 requestId)
     {
         flatbuffers::FlatBufferBuilder fbb;
         auto offset = Req::TableType::Pack(fbb, &req);
         fbb.Finish(offset);
 
-        const uint8_t* bufPtr = fbb.GetBufferPointer();
-        const size_t bufSize = fbb.GetSize();
+        const uint8_t* bufPtr  = fbb.GetBufferPointer();
+        const size_t   bufSize = fbb.GetSize();
 
         const uint16 rpcId = RPCIdOf<Req>();
         constexpr auto rpcPktId = eRpcPacketId::FLATBUFFER_RPC;
 
         const uint32 payloadSize = sizeof(RpcHeader) + static_cast<uint32>(bufSize);
         auto open = PacketBuilder::OpenRpcPacket(rpcPktId, PacketFlags::NONE, opt.channel, payloadSize);
-        if (!open.IsValid())
-            return {};
+        if (!open.IsValid()) return {};
 
         auto* rh = open.writer.Reserve<RpcHeader>();
-        if (!rh)
-            return {};
+        if (!rh) return {};
 
-        rh->rpcId = rpcId;
+        rh->rpcId     = rpcId;
         rh->requestId = requestId;
-        rh->flags = RpcFlags::REQUEST;
+        rh->flags     = RpcFlags::REQUEST;
 
         if (!open.writer.WriteBytes(bufPtr, static_cast<uint32>(bufSize)))
             return {};
 
-        open.buf->Close(open.writer.WriteSize());
+        open.buf->CloseWithReserve(open.writer.WriteSize(), open.buf->AllocSize());
         return open.buf;
     }
 
@@ -361,7 +358,7 @@ namespace jam::net
         if (!open.writer.WriteBytes(bufPtr, static_cast<uint32>(bufSize)))
             return {};
 
-        open.buf->Close(open.writer.WriteSize());
+        open.buf->CloseWithReserve(open.writer.WriteSize(), open.buf->AllocSize());
         return open.buf;
     }
 

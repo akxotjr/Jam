@@ -80,9 +80,9 @@ namespace jam::net
         }
     }
 
-    void ClientNetWorld::SpawnActor(const SpawnParams& params)
+    void ClientNetWorld::SpawnActor(SpawnParams params)
     {
-        Post(Job([this, params]()
+        Post(Job([this, params = params]()
             {
                 SpawnActorImpl(params);
             }));
@@ -119,6 +119,7 @@ namespace jam::net
 		req.team_id             = params.desc.team;
 		req.part_id             = params.desc.part;
 		req.role_id             = params.desc.role;
+        req.target_net_id       = params.targetNetId.Raw();
 		
 		if (params.desc.IsRigid())
         {
@@ -303,16 +304,18 @@ namespace jam::net
         if (!fb::VerifyfbSnapshotBuffer(verifier))
             return;
 
+        const uint64 recvNs = NOW_NS();
+
         auto fbSnap = fb::UnPackfbSnapshot(view.Payload());
         if (!fbSnap) return;
 
         auto snap = std::make_shared<fb::fbSnapshotT>(std::move(*fbSnap));
 
-        Post(Job([this, snap]()
+        Post(Job([this, snap, recvNs]()
             {
 				if (auto* repl = m_world.ctx().find<ClientReplicationSystem>())
 				{
-                    repl->EnqueueSnapshot(std::move(*snap));
+                    repl->EnqueueSnapshot(std::move(*snap), recvNs);
 				}
             }));
     }
@@ -330,6 +333,8 @@ namespace jam::net
 
         const NetId  nid        = NetId::MakeRaw(res->net_id);
         const uint64 spawnReqId = res->spawn_req_id;
+
+        JAMNET_LOG_DEBUG("OnSpawnActorResponse: NetId= {}, SpawnReqId= {}", nid.Raw(), spawnReqId);
 
         if (!res->success)
         {
@@ -475,7 +480,7 @@ namespace jam::net
 			GLOBAL_EVENTBUS_PUBLISH(event);
     }
 
-    void ClientNetWorld::SpawnActorImpl(const SpawnParams& params)
+    void ClientNetWorld::SpawnActorImpl(SpawnParams params)
     {
         entt::entity e = m_world.create();
 
@@ -509,6 +514,17 @@ namespace jam::net
         {
             m_world.emplace<ReplayCandidateTag>(e);
             m_world.emplace<ReplayRetention>(e, ReplayRetention{});
+        }
+
+        if (params.targetObjectId != px::INVALID_OBJ_ID)
+        {
+            TargetInfo target{};
+            target.targetObjId = params.targetObjectId;
+            target.targetNetId = m_world.get<NetId>(static_cast<entt::entity>(params.targetObjectId));
+
+            m_world.emplace<TargetInfo>(e, target);
+
+            params.targetNetId = target.targetNetId;
         }
 
         m_spawnReqIdToEntity.emplace(params.spawnId, e);

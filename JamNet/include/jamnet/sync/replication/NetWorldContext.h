@@ -16,17 +16,60 @@ namespace jam::net
 
 	// ---- client ----
 
+	struct EstimatedServerTick
+	{
+		bool	valid				= false;
+
+		uint64	anchorServerTick	= 0;
+		uint64	anchorRecvNs		= 0;
+
+		uint64	lastSnapshotTick	= 0;
+		uint64	lastSnapshotRecvNs	= 0;
+
+		double	estimatedNowTick	= 0.0;
+
+		void Reset()
+		{
+			valid				= false;
+			anchorServerTick	= 0;
+			anchorRecvNs		= 0;
+			lastSnapshotTick	= 0;
+			lastSnapshotRecvNs	= 0;
+			estimatedNowTick	= 0.0;
+		}
+
+		void Update(uint64 snapshotServerTick, uint64 snapshotRecvNs, uint64 nowNs)
+		{
+			// out-of-order snapshot 보호: 더 최신 tick만 anchor 갱신
+			if (!valid || snapshotServerTick >= anchorServerTick)
+			{
+				anchorServerTick = snapshotServerTick;
+				anchorRecvNs	 = snapshotRecvNs;
+				valid = true;
+			}
+
+			lastSnapshotTick   = snapshotServerTick;
+			lastSnapshotRecvNs = snapshotRecvNs;
+
+			const uint64 elapsedNs = (nowNs > anchorRecvNs) ? (nowNs - anchorRecvNs) : 0;
+			estimatedNowTick = static_cast<double>(anchorServerTick) + (static_cast<double>(elapsedNs) / static_cast<double>(SIMULATION_TICK_NS));
+		}
+	};
+
+
+
+
 	struct ReconcileSignal
 	{
-		uint64 serverTick	= 0;
-		uint32 inputAck		= 0;
-		bool   dirty		= false;
+		uint64		serverTick	= 0;
+		uint32		inputAck	= 0;
+		bool		dirty		= false;
 	};
 
 	struct InputHistoryBuffer
 	{
-		InputCmd current = {};
-		uint32 maxSamples = 256;
+		InputCmd	current		= {};
+		uint32		maxSamples	= 256;
 
 		InputHistoryBuffer()
 		{
@@ -202,6 +245,7 @@ namespace jam::net
 	{
 		world.ctx().emplace<TickCounter>();
 
+		world.ctx().emplace<EstimatedServerTick>();
 		world.ctx().emplace<ReconcileSignal>();
 		world.ctx().emplace<InputHistoryBuffer>();
 		world.ctx().emplace<PredictedHistoryBuffer>();

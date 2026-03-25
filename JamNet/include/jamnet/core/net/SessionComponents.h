@@ -47,11 +47,11 @@ namespace jam::net
 
 	struct SessionInfo
 	{
-		Session*					session = nullptr;
+		Session*					session				= nullptr;
 									
-		uint64						connectedTime_ns = 0;
-		uint64						lastRecvTime_ns  = 0;
-		uint64						lastSendTime_ns  = 0;
+		uint64						connectedTime_ns	= 0;
+		uint64						lastRecvTime_ns		= 0;
+		uint64						lastSendTime_ns		= 0;
 
 		enum State : uint8
 		{
@@ -60,14 +60,11 @@ namespace jam::net
 			DISCONNECTING	= 2,
 			DISCONNECTED	= 3
 		};
-		State						state = DISCONNECTED;
+		State						state				= DISCONNECTED;
 
-		static constexpr uint64		kTimeout_ns = 30_s;
-		static constexpr uint64		kKeepAlive_ns = 5_s;
+		static constexpr uint64		kTimeout_ns			= 30_s;
 
 		static SessionInfo			FromSession(Session* sess, uint64 now_ns);
-		bool						IsTimedOut(uint64 now_ns) const { return (now_ns - lastRecvTime_ns) > kTimeout_ns; }
-		bool						NeedsKeepalive(uint64 now_ns) const { return (now_ns - lastSendTime_ns) > kKeepAlive_ns; }
 	};
 
 

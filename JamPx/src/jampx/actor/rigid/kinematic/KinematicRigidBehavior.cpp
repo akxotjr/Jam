@@ -96,14 +96,22 @@ namespace jam::px
 
 	bool KinematicRigidBehavior::ApplyMainState(const RigidState& state)
 	{
-		auto* net = dynamic_cast<NetworkPoseKinematicDriver*>(m_mainDriver.get());
-		if (!net) return false;
+		if (auto* netDriver = dynamic_cast<NetworkPoseKinematicDriver*>(m_replayDriver.get()))
+		{
+			netDriver->SetAuthoritativePose(ToPhysX(state.pose));
+			netDriver->SetAuthoritativeLinearVelocity(ToPhysX(state.linVel));
+			netDriver->SetAuthoritativeAngularVelocity(ToPhysX(state.angVel));
+			return true;
+		}
 
-		net->SetAuthoritativePose(ToPhysX(state.pose));
-		net->SetAuthoritativeLinearVelocity(ToPhysX(state.linVel));
-		net->SetAuthoritativeAngularVelocity(ToPhysX(state.angVel));
+		if (state.kineType == eKineDrivenType::TargetDerived)
+		{
+			const ObjectId target = state.kineState.targetId;
+			if (target != INVALID_OBJ_ID && m_mainDriver)
+				m_mainDriver->SetTargetId(target);
+		}
 
-		return true;
+		return false;
 	}
 
 	bool KinematicRigidBehavior::ApplyReplayState(const RigidState& state)
@@ -114,6 +122,14 @@ namespace jam::px
 		netDriver->SetAuthoritativePose(ToPhysX(state.pose));
 		netDriver->SetAuthoritativeLinearVelocity(ToPhysX(state.linVel));
 		netDriver->SetAuthoritativeAngularVelocity(ToPhysX(state.angVel));
+
+
+		if (state.kineType == eKineDrivenType::TargetDerived)
+		{
+			const ObjectId target = state.kineState.targetId;
+			if (target != INVALID_OBJ_ID && m_replayDriver)
+				m_replayDriver->SetTargetId(target);
+		}
 
 		return true;
 	}

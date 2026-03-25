@@ -7,10 +7,10 @@ namespace jam::net
 
 	enum class ePacketType : uint8
 	{
-		SYSTEM = 0,	// 0b 00
-		ACK = 1,	// 0b 01
-		RPC = 2,	// 0b 10
-		CUSTOM = 3	// 0b 11
+		SYSTEM	= 0,	// 0b 00
+		ACK		= 1,	// 0b 01
+		RPC		= 2,	// 0b 10
+		CUSTOM	= 3		// 0b 11
 	};
 
 	enum class ePacketGroup : uint8
@@ -137,8 +137,8 @@ namespace jam::net
 
 	namespace RpcFlags
 	{
-		constexpr uint8 NONE = 0x00;
-		constexpr uint8 REQUEST = 0x01;
+		constexpr uint8 NONE     = 0x00;
+		constexpr uint8 REQUEST  = 0x01;
 		constexpr uint8 RESPONSE = 0x02;
 	}
 

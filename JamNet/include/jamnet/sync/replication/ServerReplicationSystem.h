@@ -85,8 +85,8 @@ namespace jam::net
         unordered_map<uint64, int32>                        m_forceFullMetaPerUsers;
 
         uint32                                              m_fullCacheTick = 0;
-        unordered_map<NetId, PackedRigidFull192>           m_cachedRigidFull;
-        unordered_map<NetId, PackedCharacterFull160>       m_cachedCharacterFull;
+        unordered_map<NetId, PackedRigidFull192>            m_cachedRigidFull;
+        unordered_map<NetId, PackedCharacterFull160>        m_cachedCharacterFull;
 
         // --- Snapshot cadence ---
         uint32                                              m_tickCounter = 0;

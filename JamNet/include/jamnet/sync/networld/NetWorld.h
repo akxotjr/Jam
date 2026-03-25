@@ -3,6 +3,7 @@
 #include <jampx/PhysicsTypes.h>
 
 #include "jamnet/sync/physics/ShardJobBridge.h"
+#include "jamnet/sync/replication/NetActorComponents.h"
 
 namespace jam::net
 {
@@ -19,6 +20,9 @@ namespace jam::net
 		
 		uint64					owner = 0;		// owner userId
 		uint64					controller = 0;	// controller userId
+
+		px::ObjectId			targetObjectId = px::INVALID_OBJ_ID;	// for client-side
+		NetId					targetNetId    = NetId::Invalid();			// for server-side
 	};
 
 

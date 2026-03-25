@@ -34,13 +34,13 @@ namespace jam::net
 		void								OnRecvPacket(const PacketView& pkt);
 
 		
-		void								SpawnActor(const SpawnParams& params);
+		void								SpawnActor(SpawnParams params);
 		void								DespawnActor(NetId netId, uint64 userId);
 		void								PossessActor(NetId netId, uint64 userId);
 		void								UnpossessActor(NetId netId, uint64 userId);
 
 
-		void								SpawnActorAsync(const SpawnParams& params, std::function<void(NetId)> onDone);
+		void								SpawnActorAsync(SpawnParams params, std::function<void(NetId)> onDone);
 		void								DespawnActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone);
 		void								PossessActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone);
 		void								UnpossessActorAsync(NetId netId, uint64 userId, std::function<void(bool)> onDone);
@@ -54,7 +54,7 @@ namespace jam::net
 		void								TickOnShard() override;
 		void								BootstrapLevelActors();
 
-		NetId								SpawnActorImpl(const SpawnParams& params);
+		NetId								SpawnActorImpl(SpawnParams params);
 		bool								DespawnActorImpl(NetId netId, uint64 userId = 0);
 		bool								PossessActorImpl(NetId netId, uint64 userId = 0);
 		bool								UnpossessActorImpl(NetId netId, uint64 userId = 0);
