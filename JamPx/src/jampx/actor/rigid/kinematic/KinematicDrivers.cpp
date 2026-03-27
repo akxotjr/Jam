@@ -419,7 +419,7 @@ namespace jam::px
 		}
 
 		const float range = std::max(1e-6f, m_src.maxAngleRad - m_src.minAngleRad);
-		state.t	 = std::clamp((m_angle - m_src.minAngleRad) / range, 0.0f, 1.0f);
+		state.t	    = std::clamp((m_angle - m_src.minAngleRad) / range, 0.0f, 1.0f);
 		state.phase = (m_dir < 0.0f) ? 1u : 0u;
 		
 		return state;

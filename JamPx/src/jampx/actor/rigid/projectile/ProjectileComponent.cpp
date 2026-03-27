@@ -99,6 +99,9 @@ namespace jam::px
 		{
 			if (!buf.hasBlock) return false;
 
+			if (buf.block.distance <= EPSILON)
+				return false;
+
 			result.hit		= true;
 			result.position	= buf.block.position;
 			result.normal	= buf.block.normal;
@@ -109,6 +112,9 @@ namespace jam::px
 		bool WriteRayHit(const PxRaycastBuffer& buf, OUT ProjectileHitResult& result)
 		{
 			if (!buf.hasBlock) return false;
+
+			if (buf.block.distance <= EPSILON)
+				return false;
 
 			result.hit		= true;
 			result.position	= buf.block.position;

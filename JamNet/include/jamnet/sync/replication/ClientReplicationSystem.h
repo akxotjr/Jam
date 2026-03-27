@@ -76,6 +76,9 @@ namespace jam::net
         // local = owner == myUserId && controller == myUserId, and only when meta exists.
         void                                UpdateUniqueLocalFromMeta(NetId netId, const fb::fbActorMetaT& meta, Replica& replica);
 
+        void                                ResolveDeferredTargetBindingsAndSpawn();
+        bool                                TryResolveTargetObjId(NetId targetNetId, OUT px::ObjectId& outObjId);
+
     private:
         entt::registry&                     m_world;
 

@@ -22,7 +22,7 @@ namespace jam::px
 		ICharacterController*			GetBrain() const { return m_brain.get(); }
 
 		// --- tick ---
-		void                            TickOnMain(float dt);
+		bool                            TickOnMain(float dt);
 		void							TickOnReplay(float dt);
 
 		// --- state / config ---

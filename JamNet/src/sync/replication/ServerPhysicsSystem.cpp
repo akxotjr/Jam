@@ -43,7 +43,7 @@ namespace jam::net
 				{
 					ApplyInputs();
 					Simulate();      
-					SyncTransforms();
+					SyncActiveTransforms();
 				}
 				catch (...)
 				{
@@ -161,6 +161,8 @@ namespace jam::net
 	{
 		if (!m_physics) return;
 
+		m_world.clear<ReplicationActiveTag>();
+
 		// PopActiveList = onAdvance(dynamic) + dirty set(kinematic / character move / setGlobalPose)
 		const auto activeList = m_physics->PopActiveList();
 		if (activeList.empty()) return;
@@ -169,6 +171,8 @@ namespace jam::net
 		{
 			const entt::entity e = static_cast<entt::entity>(id);
 			if (!m_world.valid(e)) continue;
+
+			m_world.emplace<ReplicationActiveTag>(e);
 
 			const auto bodyType = m_world.get<NetActorBodyType>(e).body;
 

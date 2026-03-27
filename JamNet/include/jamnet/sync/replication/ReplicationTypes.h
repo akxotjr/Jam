@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "jamnet/sync/replication/NetActorComponents.h"
 
 #include <jampx/PhysicsTypes.h>
 
@@ -20,13 +21,6 @@ namespace jam::net
 	};
 
 
-	/// @brief 클라이언트 예측 상태 (Reconciliation 비교용)
-	//struct PredictedState
-	//{
-	//	uint32						inputSeq = 0;
-	//	px::CharacterState			state{};
-	//};
-
 	/// @brief Reconiliation 설정
 	struct ReconcileConfig
 	{
@@ -34,6 +28,26 @@ namespace jam::net
 		float			rotationErrorThreshold = 0.05f;	// 회전 오차 임계값 (rad)
 		float			smoothCorrectionAlpha = 0.2f;		// 보정 계수
 		uint32			maxReplayInputs = 64;			// 최대 재생 입력 수
+	};
+
+
+	enum class eBucket : uint8
+	{
+		B0_MustSendFullMeta = 0,
+		B1_MustSendFull		= 1,
+		B2_HighDelta		= 2,
+		B3_NormalDelta		= 3,
+		B4_LowPriority		= 4,
+
+		Count
+	};
+
+	struct Candidate
+	{
+		entt::entity	e			= entt::null;
+		NetId			netId		= NetId::Invalid();
+		bool			includeMeta	= false;
+		bool			useFull		= false;
 	};
 
 }

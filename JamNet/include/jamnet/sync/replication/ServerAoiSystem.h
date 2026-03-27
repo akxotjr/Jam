@@ -50,33 +50,33 @@ namespace jam::net
 	class ServerAoiSystem
 	{
 	public:
-		explicit ServerAoiSystem(entt::registry& world);
+		explicit ServerAoiSystem(entt::registry& world, px::IPhysicsFacade* physics);
 
-		void						Init(const AoiConfig& cfg = {});
-		void						Tick();
+		void							Init(const AoiConfig& cfg = {});
+		void							Tick();
 
-		void						OnEnter(uint64 userId);
-		void						OnLeave(uint64 userId);
+		void							OnEnter(uint64 userId);
+		void							OnLeave(uint64 userId);
 
-		void						SetPhysicsFacade(px::IPhysicsFacade* physics);
+		bool							IsVisible(uint64 userId, NetId netId) const;
+		const UserAoiState*				GetState(uint64 userId) const;
+		void							SetAlwaysVisible(NetId netId, bool always);
 
-		bool						IsVisible(uint64 userId, NetId netId) const;
-		const UserAoiState*			GetState(uint64 userId) const;
-		void						SetAlwaysVisible(NetId netId, bool always);
+		
 
 	private:
-		void						Rebuild();
-		void						RebuildGrid();
+		void							Rebuild();
+		void							RebuildGrid();
 
-		void						GetCandidatesFromGrid(const px::Vec3& userPos, OUT vector<entt::entity>& out) const;
+		void							GetCandidatesFromGrid(const px::Vec3& userPos, OUT vector<entt::entity>& out) const;
 		/// @brief 조건식 검사 (bias=0: enter 임계, bias=hysteresis: leave 임계)
-		bool						TestCondition(const px::Vec3& origin, const px::Vec3& target, float bias) const;
+		bool							TestCondition(const px::Vec3& origin, const px::Vec3& target, float bias) const;
 
 		/// @brief LOS 레이캐스트 (true = 시야 통과)
-		bool						TestLos(const px::Vec3& userPos, const px::Vec3& targetPos) const;
+		bool							TestLos(const px::Vec3& userPos, const px::Vec3& targetPos) const;
 
-		px::Vec3					GetEntityPosition(entt::entity e) const;
-		px::Vec3					GetUserPosition(uint64 userId) const;
+		px::Vec3						GetEntityPosition(entt::entity e) const;
+		px::Vec3						GetUserPosition(uint64 userId) const;
 
 	private:
 		entt::registry&								m_world;

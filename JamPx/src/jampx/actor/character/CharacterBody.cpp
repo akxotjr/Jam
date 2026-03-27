@@ -4,6 +4,25 @@
 
 namespace jam::px
 {
+	namespace 
+	{
+		bool IsMeaningFulChanged(const CharacterState& prev, const CharacterState& now)
+		{
+			constexpr float posEps   = EPS_3;
+			constexpr float yawEps   = 0.0025f;
+			constexpr float pitchEps = 0.0025f;
+			constexpr float spdEps	 = EPS_3;
+
+			if ((prev.pos - now.pos).MagnitudeSquared() > (posEps * posEps))		return true;
+			if (std::fabs(prev.facingYaw - now.facingYaw) > yawEps)					return true;
+			if (std::fabs(prev.facingPitch - now.facingPitch) > pitchEps)			return true;
+			if (std::fabs(prev.verticalSpeed - now.verticalSpeed) > spdEps)			return true;
+			if (std::fabs(prev.horizontalSpeed - now.horizontalSpeed) > spdEps)		return true;
+			if ((prev.moveDir - now.moveDir).MagnitudeSquared() > (EPS_2 * EPS_2))	return true;
+			if (prev.stateFlags != now.stateFlags)									return true;
+			return false;
+		}
+	}
 
 	CharacterBody::CharacterBody(PxCapsuleController* mainCCT, PxCapsuleController* replayCCT, PxRigidActor* hitbox, const CharacterMoveConfig& cfg)
 		: m_mainCCT(mainCCT),
@@ -23,16 +42,20 @@ namespace jam::px
 		m_brain = std::move(brain);
 	}
 
-	void CharacterBody::TickOnMain(float dt)
+	bool CharacterBody::TickOnMain(float dt)
 	{
 		const MoveIntent intent = m_brain ? m_brain->BuildIntent(dt) : MoveIntent{};
+		if (!m_mainMover) return false;
+		
+		CharacterState prev = m_mainState;
 
-		if (!m_mainMover) return;
 		m_mainMover->Tick(dt, intent);
 
 		const float savedPitch = m_mainState.facingPitch;
 		m_mainMover->GetCharacterState(m_mainState);
 		m_mainState.facingPitch = savedPitch;
+
+		return IsMeaningFulChanged(prev, m_mainState);
 	}
 
 	void CharacterBody::TickOnReplay(float dt)

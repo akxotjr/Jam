@@ -5,6 +5,29 @@
 
 namespace jam::px
 {
+	namespace 
+	{
+		bool IsMeaningFulChanged(const RigidState& prev, const RigidState& now, bool isLocalDriven)
+		{
+			if (isLocalDriven)
+			{
+				return (prev.kineState.startEpoch != now.kineState.startEpoch)
+					|| (prev.kineState.phase	  != now.kineState.phase)
+					|| (prev.kineState.targetId   != now.kineState.targetId)
+					|| (prev.kineState.eventMask  != now.kineState.eventMask);
+			}
+			
+			if ((prev.pose.p - now.pose.p).MagnitudeSquared() > (EPS_3 * EPS_3))						 return true;
+			if (std::fabs(prev.pose.q.GetNormalized().Dot(now.pose.q.GetNormalized())) < (1.0f - EPS_4)) return true;
+			if ((prev.linVel - now.linVel).MagnitudeSquared() > (EPS_2 * EPS_2))						 return true;
+			if ((prev.angVel - now.angVel).MagnitudeSquared() > (EPS_2 * EPS_2))						 return true;
+			
+			return false;
+		}
+
+	} // anonymous namespace
+
+
 	KinematicRigidBehavior::KinematicRigidBehavior(
 		std::unique_ptr<IKinematicDriver> mainDriver,
 		std::unique_ptr<IKinematicDriver> replayDriver)
@@ -40,13 +63,13 @@ namespace jam::px
 
 	bool KinematicRigidBehavior::SyncMainState(RigidBody& body)
 	{
-		auto* dyn = body.GetMainActor()->is<PxRigidDynamic>();
+		const auto* dyn = body.GetMainActor()->is<PxRigidDynamic>();
 		if (!dyn) return false;
 
 		const RigidState prev = body.GetMainState();
 
 		const PxTransform prevPose = ToPhysX(prev.pose);
-		const PxTransform nowPose = dyn->getGlobalPose();
+		const PxTransform nowPose  = dyn->getGlobalPose();
 
 		RigidState now = {
 			.pose	  = ToPx(nowPose),
@@ -55,14 +78,15 @@ namespace jam::px
 			.kineType = prev.kineType
 		};
 
-		bool changed = !IsNearlyEqual(prevPose, nowPose);
-
-		if (prev.kineType != eKineDrivenType::RuntimeDynamic)
+		bool changed = false;
+		if (IsLocalDrivenKine(prev.kineType))
 		{
-			const auto newKineState = m_mainDriver->BuildState();
-			const bool kineStateChanged = prev.kineState != newKineState;
-			now.kineState = newKineState;
-			changed = changed || kineStateChanged;
+			now.kineState = m_mainDriver ? m_mainDriver->BuildState() : prev.kineState;
+			changed = IsMeaningFulChanged(prev, now, true);
+		}
+		else
+		{
+			changed = IsMeaningFulChanged(prev, now, false);
 		}
 
 		body.SetMainState(now);
@@ -71,7 +95,7 @@ namespace jam::px
 
 	void KinematicRigidBehavior::SyncReplayState(RigidBody& body)
 	{
-		auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
+		const auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
 		if (!dyn) return;
 
 		const RigidState prev = body.GetReplayState();

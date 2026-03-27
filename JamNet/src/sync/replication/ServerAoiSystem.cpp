@@ -41,8 +41,9 @@ namespace jam::net
 		}
 	}
 
-	ServerAoiSystem::ServerAoiSystem(entt::registry& world)
-		: m_world(world) {
+	ServerAoiSystem::ServerAoiSystem(entt::registry& world, px::IPhysicsFacade* physics)
+		: m_world(world), m_physics(physics)
+	{
 	}
 
 	void ServerAoiSystem::Init(const AoiConfig& cfg)
@@ -87,10 +88,6 @@ namespace jam::net
 		m_states.erase(userId);
 	}
 
-	void ServerAoiSystem::SetPhysicsFacade(px::IPhysicsFacade* physics)
-	{
-		m_physics = physics;
-	}
 
 	bool ServerAoiSystem::IsVisible(uint64 userId, NetId netId) const
 	{
@@ -163,7 +160,7 @@ namespace jam::net
 
 				// Hysteresis: 이미 보이던 엔티티는 leave 임계(더 넓음) 적용
 				const bool  wasVisible = state.visible.contains(netId);
-				const float bias = wasVisible ? m_cfg.hysteresisOffset : 0.f;
+				const float bias	   = wasVisible ? m_cfg.hysteresisOffset : 0.f;
 
 				if (!TestCondition(userPos, entityPos, bias))
 					continue;
@@ -241,7 +238,7 @@ namespace jam::net
 		{
 		case eAoiCondition::CIRCLE:
 		{
-			const float r = m_cfg.radius + bias;
+			const float r  = m_cfg.radius + bias;
 			const float dx = target.x - origin.x;
 			const float dz = target.z - origin.z;
 			return (dx * dx + dz * dz) <= (r * r);
@@ -286,7 +283,7 @@ namespace jam::net
 	px::Vec3 ServerAoiSystem::GetEntityPosition(entt::entity e) const
 	{
 		if (const auto* cs = m_world.try_get<px::CharacterState>(e)) return cs->pos;
-		if (const auto* rs = m_world.try_get<px::RigidState>(e))	  return rs->pose.p;
+		if (const auto* rs = m_world.try_get<px::RigidState>(e))	 return rs->pose.p;
 		return {};
 	}
 

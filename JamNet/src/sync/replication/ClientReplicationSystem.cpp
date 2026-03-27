@@ -49,14 +49,24 @@ namespace jam::net
 			if (!hdr) continue;
 
 			const uint64 serverTick = hdr->server_tick;
-			m_lastInputAck	 = hdr->input_ack;
+			const uint32 inputAck   = hdr->input_ack;
+			
+			if (serverTick < m_lastServerTick)
+				continue;
+
 			m_lastServerTick = serverTick;
+			m_lastInputAck	 = std::max(m_lastInputAck, inputAck);
+
+			if (auto* est = m_world.ctx().find<EstimatedServerTick>())
+				est->Update(serverTick, pending.recvNs, NOW_NS());
 
 			for (const auto& entPtr : snapshot.entities)
 			{
 				if (!entPtr) continue;
 				ProcessEntity(*entPtr, serverTick);
 			}
+
+			ResolveDeferredTargetBindingsAndSpawn();
 
 			PruneOldReplicas(serverTick);
 		}
@@ -122,6 +132,22 @@ namespace jam::net
 
 		if (m_world.all_of<PhysicsSpawnedTag>(resolved))
 			return;
+
+		// TargetDerived는 target resolve 전에는 스폰 지연
+		if (m_world.all_of<NetActorBodyType, RigidAuthorityState>(resolved))
+		{
+			const auto bodyType = m_world.get<NetActorBodyType>(resolved).body;
+			if (bodyType == px::eBodyType::Rigid)
+			{
+				const auto& auth = m_world.get<RigidAuthorityState>(resolved).state;
+				if (auth.kineType == px::eKineDrivenType::TargetDerived)
+				{
+					const auto* ti = m_world.try_get<TargetInfo>(resolved);
+					if (!ti || ti->targetObjId == px::INVALID_OBJ_ID)
+						return; // defer spawn
+				}
+			}
+		}
 
 		if (auto* phys = m_world.ctx().find<ClientPhysicsSystem>())
 			phys->SpawnActor(resolved, replica.isLocal);
@@ -232,22 +258,23 @@ namespace jam::net
 		kine.t			= ks->t();
 		kine.eventMask	= ks->event_mask();
 
-		kine.targetId = px::INVALID_OBJ_ID;
 		const NetId targetNetId = NetId::MakeRaw(ks->target_id());
+		kine.targetId = px::INVALID_OBJ_ID;
+
+		TargetInfo targetInfo{};
+		targetInfo.targetNetId = targetNetId;
+		targetInfo.targetObjId = px::INVALID_OBJ_ID;
+
 		if (targetNetId.IsValid())
 		{
-			if (auto* nwPtr = m_world.ctx().find<ClientNetWorld*>(); nwPtr && *nwPtr)
+			px::ObjectId resolved = px::INVALID_OBJ_ID;
+			if (TryResolveTargetObjId(targetNetId, resolved))
 			{
-				const entt::entity targetEntity = (*nwPtr)->GetEntity(targetNetId);
-				if (targetEntity != entt::null && m_world.valid(targetEntity))
-				{
-					kine.targetId = MakeObjectId(targetEntity);
-
-					TargetInfo target{ .targetNetId = targetNetId, .targetObjId = kine.targetId };
-					m_world.emplace_or_replace<TargetInfo>(replica.e, target);
-				}
+				kine.targetId = resolved;
+				targetInfo.targetObjId = resolved;
 			}
 		}
+		m_world.emplace_or_replace<TargetInfo>(replica.e, targetInfo);
 
 		if (px::IsLocalDrivenKine(kineType))
 		{
@@ -255,14 +282,12 @@ namespace jam::net
 			{
 				const double dtTick = est->estimatedNowTick - static_cast<double>(serverTick);
 				if (dtTick > 0.0)
-				{
 					kine.t += static_cast<float>(dtTick * static_cast<double>(SIMULATION_TICK_SEC));
-				}
 			}
 		}
 
 		auto& [rs] = m_world.get<RigidAuthorityState>(replica.e);
-		rs.kineType  = static_cast<px::eKineDrivenType>(ks->kine_type());
+		rs.kineType  = kineType;
 		rs.kineState = kine;
 	}
 
@@ -421,5 +446,60 @@ namespace jam::net
 		m_localEntity = replica.e;
 
 		replica.isLocal = true;
+	}
+
+	void ClientReplicationSystem::ResolveDeferredTargetBindingsAndSpawn()
+	{
+		auto* phys = m_world.ctx().find<ClientPhysicsSystem>();
+		if (!phys) return;
+
+		auto view = m_world.view<NetId, NetActorBodyType, RigidAuthorityState, TargetInfo>(entt::exclude<PhysicsSpawnedTag>);
+
+		for (auto e : view)
+		{
+			const auto bodyType = view.get<NetActorBodyType>(e).body;
+			if (bodyType != px::eBodyType::Rigid)
+				continue;
+
+			const auto& auth = view.get<RigidAuthorityState>(e).state;
+			if (auth.kineType != px::eKineDrivenType::TargetDerived)
+				continue;
+
+			auto& ti = view.get<TargetInfo>(e);
+			if (!ti.targetNetId.IsValid())
+				continue;
+
+			if (ti.targetObjId == px::INVALID_OBJ_ID)
+			{
+				px::ObjectId resolved = px::INVALID_OBJ_ID;
+				if (!TryResolveTargetObjId(ti.targetNetId, resolved))
+					continue;
+
+				ti.targetObjId = resolved;
+			}
+
+			const NetId nid = view.get<NetId>(e);
+			Replica& replica = GetOrCreateReplica(nid);
+			phys->SpawnActor(e, replica.isLocal);
+		}
+	}
+
+	bool ClientReplicationSystem::TryResolveTargetObjId(NetId targetNetId, px::ObjectId& outObjId)
+	{
+		outObjId = px::INVALID_OBJ_ID;
+
+		if (!targetNetId.IsValid())
+			return false;
+
+		auto* nwPtr = m_world.ctx().find<ClientNetWorld*>();
+		if (!nwPtr || !*nwPtr)
+			return false;
+
+		const entt::entity targetEntity = (*nwPtr)->GetEntity(targetNetId);
+		if (targetEntity == entt::null || !m_world.valid(targetEntity))
+			return false;
+
+		outObjId = MakeObjectId(targetEntity);
+		return true;
 	}
 }

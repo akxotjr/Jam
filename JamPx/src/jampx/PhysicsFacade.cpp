@@ -6,14 +6,12 @@
 
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
 #include "jampx/actor/ActorFactory.h"
-#include "jampx/actor/character/controller/PlayerControllerComponent.h"
 #include "jampx/actor/rigid/projectile/ProjectileRigidBehavior.h"
 
 namespace jam::px
 {
 	namespace
 	{
-
 
 		TemplateHandle ToTemplateHandle(PrefabKey k)
 		{
@@ -477,7 +475,6 @@ namespace jam::px
 
 		CharacterBody& body = it->second;
 		body.SetPlayerInput(input);
-		MarkDirty(id);
 	}
 
 	bool PhysicsFacade::RaycastLOS(const Vec3& from, const Vec3& to) const
@@ -601,13 +598,12 @@ namespace jam::px
 		if (!m_inited.load(std::memory_order_relaxed) || !m_world)
 			return false;
 
-		const TemplateHandle tpl = ToTemplateHandle(desc.prefab);
+		const TemplateHandle    tpl    = ToTemplateHandle(desc.prefab);
 		const ActorTemplateDef* tplDef = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(tpl);
-		if (!tplDef)
-			return false;
+		if (!tplDef) return false;
 
-		const auto actorType = tplDef->actorType;
-		const auto bodyType = tplDef->bodyType;
+		const auto actorType  = tplDef->actorType;
+		const auto bodyType   = tplDef->bodyType;
 		const auto motionType = tplDef->motionType;
 
 		if (bodyType == eBodyType::Rigid)
@@ -703,8 +699,8 @@ namespace jam::px
 		{
 			if (slot == ePxSceneSlot::Main)
 			{
-				body.TickOnMain(dt);
-				MarkDirty(id);
+				if (body.TickOnMain(dt))
+					MarkDirty(id);
 			}
 			else if (slot == ePxSceneSlot::Replay)
 			{
@@ -737,7 +733,6 @@ namespace jam::px
 			if (slot == ePxSceneSlot::Main)
 			{
 				body.TickOnMain(dt);
-				MarkDirty(id);
 
 				auto* proj = dynamic_cast<ProjectileRigidBehavior*>(body.GetBehavior());
 				if (!proj) continue;
@@ -804,12 +799,16 @@ namespace jam::px
 	{
 		if (auto it = m_rigidMap.find(oid); it != m_rigidMap.end())
 			return ToPhysX(it->second.GetMainState().pose);
+
 		if (auto it = m_kinematicMap.find(oid); it != m_kinematicMap.end())
 			return ToPhysX(it->second.GetMainState().pose);
+
 		if (auto it = m_projectileMap.find(oid); it != m_projectileMap.end())
 			return ToPhysX(it->second.GetMainState().pose);
+
 		if (auto it = m_cctMap.find(oid); it != m_cctMap.end())
 			return PxTransform(ToPhysX(it->second.GetMainState().pos));
+
 		if (auto it = m_remoteCctMap.find(oid); it != m_remoteCctMap.end())
 			return PxTransform(ToPhysX(it->second.GetMainState().pos));
 

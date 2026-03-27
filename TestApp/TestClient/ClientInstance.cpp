@@ -271,10 +271,10 @@ void ClientInstance::SpawnBullet()
 
 	bulletParams.desc.prefab    = px::MakePrefabKey("LinearProjectile");
 	bulletParams.desc.spawnSrc  = px::eSpawnSource::Runtime;
-	bulletParams.desc.pose      = {};
+	bulletParams.desc.pose		= { .p = { 0.0, 0.75, 0.5 } };
 	bulletParams.desc.overrides = px::RigidSpawnOverrides{
 		.mask			= px::SpawnOverrideMask::LINEAR_VEL,
-		.linearVelocity = px::Vec3(0.0, 0.0, 10.0)
+		.linearVelocity = px::Vec3(0.0, 1.0, 10.0)
 	};
 
 	{

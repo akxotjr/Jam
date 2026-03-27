@@ -78,6 +78,8 @@ namespace jam::net
 
         default: break;
         }
+
+        JAMNET_LOG_DEBUG("Snapshot total size= {}, header size= {}, payload size= {}", view.TotalSize(), view.HeaderSize(), view.PayloadSize());
     }
 
     void ClientNetWorld::SpawnActor(SpawnParams params)

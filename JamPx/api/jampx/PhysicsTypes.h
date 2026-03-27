@@ -249,6 +249,8 @@ namespace jam::px
 			return q;
 		}
 
+		float Dot(const Quat& r) const noexcept { return x * r.x + y * r.y + z * r.z + w * r.w; }
+
 		// Hamilton product (PxQuat와 동일 의미)
 		Quat operator*(const Quat& r) const noexcept
 		{

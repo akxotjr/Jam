@@ -2,7 +2,6 @@
 
 #include <jampx/PhysicsTypes.h>
 
-#include "ReplicationTypes.h"
 
 namespace jam::net
 {
@@ -235,6 +234,17 @@ namespace jam::net
 		NetId		 targetNetId = NetId::Invalid();
 		px::ObjectId targetObjId = px::INVALID_OBJ_ID;
 	};
+
+
+	/**-----------------------------------------------------------
+		Server-side Components
+	 -----------------------------------------------------------**/
+
+	struct ReplicationStaticTag {};
+
+	/// @brief PhyiscsFacade 로 받은 ActiveList 에 포함된 경우에만 부착.
+	struct ReplicationActiveTag{};
+
 
 
 	// --- helpers ---

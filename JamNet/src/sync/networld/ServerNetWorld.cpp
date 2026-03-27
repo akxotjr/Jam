@@ -8,6 +8,7 @@
 #include "jamnet/sync/replication/NetWorldContext.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
 #include "jamnet/sync/replication/ServerPhysicsSystem.h"
+#include "jamnet/sync/replication/ServerAoiSystem.h"
 #include "jamnet/sync/replication/ServerReplicationSystem.h"
 
 #include "jamnet/sync/schema/gen/actor_spawn_generated.h"
@@ -61,6 +62,7 @@ namespace jam::net
 		m_world.ctx().emplace<TickCounter>().Init();
 		m_world.ctx().emplace<ServerInputSystem>(m_world).Init();
 		m_world.ctx().emplace<ServerPhysicsSystem>(m_world, m_physics.get()).Init();
+		m_world.ctx().emplace<ServerAoiSystem>(m_world, m_physics.get()).Init();
 		m_world.ctx().emplace<ServerReplicationSystem>(m_world).Init();
 
 		BootstrapLevelActors();
@@ -88,6 +90,9 @@ namespace jam::net
 				if (ranges::find(m_members, userId) == m_members.end())
 					m_members.push_back(userId);
 
+				if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
+					aoi->OnEnter(userId);
+
 				if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 					repl->OnEnter(userId);
 			}));
@@ -101,6 +106,9 @@ namespace jam::net
 		Post(Job([this, userId]()
 			{
 				std::erase(m_members, userId);
+
+				if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
+					aoi->OnLeave(userId);
 
 				if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 					repl->OnLeave(userId);
@@ -241,15 +249,17 @@ namespace jam::net
 
 	void ServerNetWorld::TickOnShard()
 	{
-		if (!m_world.ctx().contains<TickCounter>() ||
-			!m_world.ctx().contains<ServerInputSystem>() ||
-			!m_world.ctx().contains<ServerPhysicsSystem>() ||
-			!m_world.ctx().contains<ServerReplicationSystem>())
+		if (!m_world.ctx().contains<TickCounter>() 
+			|| !m_world.ctx().contains<ServerInputSystem>() 
+			|| !m_world.ctx().contains<ServerPhysicsSystem>()
+			|| !m_world.ctx().contains<ServerAoiSystem>()
+			|| !m_world.ctx().contains<ServerReplicationSystem>())
 			return;
 
 		m_world.ctx().get<TickCounter>().Tick();
 		m_world.ctx().get<ServerInputSystem>().Tick();
 		m_world.ctx().get<ServerPhysicsSystem>().Tick();
+		m_world.ctx().get<ServerAoiSystem>().Tick();
 		m_world.ctx().get<ServerReplicationSystem>().Tick();
 	}
 
@@ -299,6 +309,9 @@ namespace jam::net
 				m_world.emplace_or_replace<NetPrefabKey>(e, NetPrefabKey{ inst.prefab });
 				m_world.emplace_or_replace<px::RigidState>(e, inst.state);
 				m_world.emplace_or_replace<NewlyCreatedTag>(e);
+
+				if (m_physics->GetMotionType(inst.objectId) == px::eMotionType::Static)
+					m_world.emplace<ReplicationStaticTag>(e);
 			}
 		}
 	}

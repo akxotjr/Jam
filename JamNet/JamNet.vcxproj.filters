@@ -587,4 +587,7 @@
       <Filter>runtime\schema\fbs</Filter>
     </CustomBuild>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Snapshot Refactoring Guide.md" />
+  </ItemGroup>
 </Project>
