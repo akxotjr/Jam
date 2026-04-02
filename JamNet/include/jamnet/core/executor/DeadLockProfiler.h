@@ -22,7 +22,6 @@ namespace jam
 
 		Mutex										m_lock;
 
-	private:
 		std::vector<int32>							m_discoveredOrder;
 		int32										m_discoveredCount = 0;
 		std::vector<bool>							m_finished;

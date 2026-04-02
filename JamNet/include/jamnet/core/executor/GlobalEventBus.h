@@ -2,8 +2,8 @@
 
 #include <typeindex>
 
-#include "Job.h"
-#include "IExecutor.h"
+#include "jamnet/core/executor/Job.h"
+#include "jamnet/core/executor/IExecutor.h"
 
 namespace jam
 {
@@ -11,16 +11,16 @@ namespace jam
 
 	enum class eDispatchPolicy
 	{
-	    IMMEDIATE,			// 발행 스레드에서 즉시 실행
-		MAIN_EXECUTOR,		// MainExecutor에서 실행
-		GLOBAL_EXECUTOR,	// GlobalExecutor에서 실행
-	    EXECUTOR			// 지정한 Executor(e.g. ShardExecutor)에서 실행
+	    Immediate,			// 발행 스레드에서 즉시 실행
+		MainExecutor,		// MainExecutor에서 실행
+		GlobalExecutor,		// GlobalExecutor에서 실행
+	    Executor			// 지정한 Executor(e.g. ShardExecutor)에서 실행
 	};
 
 	struct SubscribeOptions
 	{
-	    eDispatchPolicy policy{ eDispatchPolicy::IMMEDIATE };
-	    IExecutor*      executor{ nullptr }; // policy == EXECUTOR 일 때만 사용
+	    eDispatchPolicy policy   = eDispatchPolicy::Immediate;
+	    IExecutor*      executor = nullptr; // policy == EXECUTOR 일 때만 사용
 	};
 
 	class GlobalEventBus
@@ -30,12 +30,12 @@ namespace jam
 	public:
 	    struct Subscription
 		{
-	        GlobalEventBus*			bus{ nullptr };
-	        type_index				type{ typeid(void) };
-	        size_t					id{ 0 };
+	        GlobalEventBus*			bus  = nullptr;
+	        std::type_index			type = typeid(void);
+	        size_t					id	 = 0;
 
 	        Subscription() = default;
-	        Subscription(GlobalEventBus* b, type_index t, size_t i) : bus(b), type(t), id(i) {}
+	        Subscription(GlobalEventBus* b, std::type_index t, size_t i) : bus(b), type(t), id(i) {}
 	        Subscription(const Subscription&) = delete;
 	        Subscription& operator=(const Subscription&) = delete;
 	        Subscription(Subscription&& o) noexcept : bus(o.bus), type(o.type), id(o.id) { o.bus = nullptr; o.id = 0; }
@@ -68,7 +68,6 @@ namespace jam
 	        return Subscription{ this, type, newId };
 	    }
 
-	    // 값으로 받는 오버로드: 호출 측이 move를 넘기면 복사 비용 감소
 	    template<typename E>
 	    void Publish(E&& ev) 
 		{
@@ -123,14 +122,14 @@ namespace jam
 
 	    struct Slot
 		{
-	        size_t id;
-	        unique_ptr<HandlerBase> h;
-	        function<void(Job)> dispatch;
+	        size_t							id		 = 0;
+	        std::unique_ptr<HandlerBase>	h		 = nullptr;
+	        std::function<void(Job)>		dispatch = nullptr;
 	    };
 	    struct SlotView
 		{
-	        HandlerBase* h;
-	        function<void(Job)>* dispatch;
+	        HandlerBase*					h		 = nullptr;
+	        std::function<void(Job)>*		dispatch = nullptr;
 	    };
 
 
@@ -144,9 +143,9 @@ namespace jam
 
 		USE_LOCK
 			
-		InlineExecutor							m_defaultExec;
-	    unordered_map<type_index, vector<Slot>>	m_handlers;
-	    size_t									m_nextId{ 0 };
+		InlineExecutor											m_defaultExec;
+		std::unordered_map<std::type_index, std::vector<Slot>>	m_handlers;
+	    size_t													m_nextId		= 0;
 	};
 
 } 

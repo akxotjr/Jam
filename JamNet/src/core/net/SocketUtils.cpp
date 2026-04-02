@@ -4,9 +4,9 @@
 
 namespace jam::net
 {
-	LPFN_CONNECTEX		SocketUtils::ConnectEx = nullptr;
+	LPFN_CONNECTEX		SocketUtils::ConnectEx	  = nullptr;
 	LPFN_DISCONNECTEX	SocketUtils::DisconnectEx = nullptr;
-	LPFN_ACCEPTEX		SocketUtils::AcceptEx = nullptr;
+	LPFN_ACCEPTEX		SocketUtils::AcceptEx	  = nullptr;
 
 	void SocketUtils::Init()
 	{
@@ -46,7 +46,7 @@ namespace jam::net
 	bool SocketUtils::SetLinger(SOCKET socket, uint16 onoff, uint16 linger)
 	{
 		LINGER option;
-		option.l_onoff = onoff;
+		option.l_onoff  = onoff;
 		option.l_linger = linger;
 		return SetSockOpt(socket, SOL_SOCKET, SO_LINGER, option);
 	}
@@ -84,9 +84,9 @@ namespace jam::net
 	bool SocketUtils::BindAnyAddress(SOCKET socket, uint16 port)
 	{
 		SOCKADDR_IN myAddress;
-		myAddress.sin_family = AF_INET;
+		myAddress.sin_family	  = AF_INET;
 		myAddress.sin_addr.s_addr = ::htonl(INADDR_ANY);
-		myAddress.sin_port = ::htons(port);
+		myAddress.sin_port		  = ::htons(port);
 
 		return SOCKET_ERROR != ::bind(socket, reinterpret_cast<const SOCKADDR*>(&myAddress), sizeof(myAddress));
 	}

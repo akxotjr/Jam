@@ -28,9 +28,9 @@ namespace jam
 
 		struct ThreadData
 		{
-			ShardLocal*			local = nullptr;
-			std::thread::id		expectedThreadId{};
-			bool				bound = false;
+			ShardLocal*			local				= nullptr;
+			std::thread::id		expectedThreadId	= {};
+			bool				bound				= false;
 		};
 
 		static thread_local ThreadData tl_threadData;

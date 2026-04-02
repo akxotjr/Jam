@@ -158,7 +158,7 @@ int main()
 
     RuntimeConfig runtimeConfig{};
     runtimeConfig.geConfig.autoTune     = true;
-    runtimeConfig.geConfig.layoutCfg = { .mode = jam::BALANCE, .reserved_threads = 1, .profile = jam::CORE_PROFILE_CLIENT };
+    runtimeConfig.geConfig.layoutCfg = { .mode = jam::Balance, .reserved_threads = 1, .profile = jam::CoreProfileClient };
 
     JamNetRuntime runtime(runtimeConfig);
 

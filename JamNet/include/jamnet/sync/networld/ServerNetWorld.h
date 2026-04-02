@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "NetWorld.h"
+#include "jamnet/sync/networld/NetWorld.h"
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 
 #include <jampx/IPhysicsFacade.h>
@@ -20,15 +20,15 @@ namespace jam::net
 		void								Init() override;
 
 		void								SetTransportAdapter(ITransportEndpoint* transport);
-		void								SetPhysicsFacade(unique_ptr<px::IPhysicsFacade> physics);
-		void								SetLevelPath(const string& levelPath) { m_levelPath = levelPath; }
+		void								SetPhysicsFacade(std::unique_ptr<px::IPhysicsFacade> physics);
+		void								SetLevelPath(const std::string& levelPath) { m_levelPath = levelPath; }
 
 
 		void								Enter(uint64 userId);
 		void								Leave(uint64 userId);
 
-		void								Send(const TransportInfo& info, const shared_ptr<SendBuffer>& buf);
-		void								Multicast(const shared_ptr<SendBuffer>& buf);
+		void								Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf);
+		void								Multicast(const std::shared_ptr<SendBuffer>& buf);
 		void								FanOut(TransportInfo::PayloadFactory factory);
 		
 		void								OnRecvPacket(const PacketView& pkt);
@@ -47,7 +47,7 @@ namespace jam::net
 
 		void								RequestInitialSnapshotNewClient();
 
-		void								GetMembers(OUT vector<uint64>& users) { users = m_members; };
+		void								GetMembers(OUT std::vector<uint64>& users) { users = m_members; };
 
 
 	private:
@@ -62,15 +62,15 @@ namespace jam::net
 		void								ProcessGameInput(const PacketView& pkt);
 
 	private:
-		atomic<uint32>						m_netIdGenerator{ 1 };
-		ITransportEndpoint*					m_transport;
-		unique_ptr<px::IPhysicsFacade>		m_physics = nullptr;
+		std::atomic<uint32>						m_netIdGenerator{ 1 };
+		ITransportEndpoint*						m_transport;
+		std::unique_ptr<px::IPhysicsFacade>		m_physics = nullptr;
 
-		string								m_levelPath;
-		px::LevelLayerInfo					m_levelLayerInfo = {};
+		std::string								m_levelPath;
+		px::LevelLayerInfo						m_levelLayerInfo = {};
 
-		atomic<bool>						m_pendingInitialFullSnapshot{ false };
+		std::atomic<bool>						m_pendingInitialFullSnapshot{ false };
 
-		vector<uint64>						m_members;
+		std::vector<uint64>						m_members;
 	};
 }

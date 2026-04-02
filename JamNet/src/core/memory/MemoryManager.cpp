@@ -7,7 +7,7 @@ namespace jam
 
 	void MemoryManager::Init()
 	{
-		int32 size = 0;
+		int32 size		 = 0;
 		int32 tableIndex = 0;
 
 		for (size = 32; size <= 1024; size += 32)
@@ -60,7 +60,7 @@ namespace jam
 	void* MemoryManager::Allocate(int32 size)
 	{
 		MemoryHeader* header = nullptr;
-		const int32 allocSize = size + sizeof(MemoryHeader);
+		const int32 allocSize = size + static_cast<int32>(sizeof(MemoryHeader));
 
 		if (allocSize > MAX_ALLOC_SIZE)
 		{

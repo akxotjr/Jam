@@ -18,11 +18,11 @@ namespace jam::net
 	void RecvBuffer::Init(int32 bufferSize, int32 count)
 	{
 		m_bufferSize = bufferSize;
-		m_capacity = bufferSize * std::max(1, count);
+		m_capacity   = bufferSize * std::max(1, count);
 		m_buffer.clear();
 		m_buffer.resize(m_capacity);
-		m_readPos = 0;
-		m_writePos = 0;
+		m_readPos   = 0;
+		m_writePos  = 0;
 	}
 
 	void RecvBuffer::Clean()
@@ -37,8 +37,8 @@ namespace jam::net
 		{
 			if (FreeSize() > m_bufferSize)
 			{
-				::memcpy(&m_buffer[0], &m_buffer[m_readPos], dataSize);
-				m_readPos = 0;
+				::memcpy(m_buffer.data(), &m_buffer[m_readPos], dataSize);
+				m_readPos  = 0;
 				m_writePos = dataSize;
 			}
 		}

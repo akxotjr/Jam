@@ -5,6 +5,8 @@ namespace jam::net
 	class IocpObject : public std::enable_shared_from_this<IocpObject>
 	{
 	public:
+		virtual ~IocpObject() = default;
+
 		virtual HANDLE	GetHandle() = 0;
 		virtual void	Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) = 0;
 	};
@@ -17,7 +19,7 @@ namespace jam::net
 
 		HANDLE			GetHandle() const { return m_iocpHandle; }
 
-		bool			Register(const shared_ptr<IocpObject>& obj);
+		bool			Register(const std::shared_ptr<IocpObject>& obj);
 		bool			Dispatch(uint32 timeoutMs = INFINITE);
 
 	private:

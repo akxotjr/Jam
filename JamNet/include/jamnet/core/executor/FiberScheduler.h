@@ -1,6 +1,7 @@
 ﻿#pragma once
-#include "FiberCommon.h"
-#include "WinFiberBackend.h"
+#include "jamnet/core/executor/FiberCommon.h"
+#include "jamnet/core/executor/WinFiberBackend.h"
+
 #include "concurrentqueue/concurrentqueue.h"
 
 namespace jam
@@ -9,11 +10,11 @@ namespace jam
 
     struct FiberDesc
     {
-        uint64          stackReserve = 0;
-        uint64          stackCommit = 0;
-        const char*     name = nullptr;
-        int32           priority = 0;
-        CancelToken*    cancelToken = nullptr;
+        uint64          stackReserve    = 512 * 1024;
+        uint64          stackCommit     = 128 * 1024;
+        const char*     name            = nullptr;
+        int32           priority        = 0;
+        CancelToken*    cancelToken     = nullptr;
     };
 
 	class FiberScheduler
@@ -22,99 +23,100 @@ namespace jam
         explicit FiberScheduler(WinFiberBackend& backend);
 		~FiberScheduler() = default;
 
-		void        AttachToCurrentThread();
-		void        DetachFromThread();
+		void                    AttachToCurrentThread();
+		void                    DetachFromThread();
 
-		uint32      SpawnFiber(FiberFn fn, const FiberDesc& desc = {});
-		void        YieldFiber();
-		void        SleepUntil(uint64 wakeup_ns);
-		bool        Suspend(AwaitKey key, uint64 deadline_ns); // true=정상, false=타임아웃/취소
+		uint32                  SpawnFiber(FiberFn fn, const FiberDesc& desc = {});
+		void                    YieldFiber();
+		void                    SleepUntil(uint64 wakeup_ns);
+		bool                    Suspend(FiberAwaitKey key, uint64 deadline_ns); // true=정상, false=타임아웃/취소
 
         // inside
-		bool        Resume(AwaitKey key);
-        bool        CancelByKey(AwaitKey key, eCancelCode code = eCancelCode::MANUAL);
-        bool        CancelById(uint32 id, eCancelCode code = eCancelCode::MANUAL);
+		bool                    Resume(FiberAwaitKey key);
+        bool                    CancelByKey(FiberAwaitKey key, eCancelCode code = eCancelCode::Manual);
+        bool                    CancelById(uint32 id, eCancelCode code = eCancelCode::Manual);
 
         // outside
-		void        PostResume(AwaitKey key);
-		void        PostSpawn(FiberFn fn, FiberDesc desc = {});
-        void        PostCancelByKey(AwaitKey key, eCancelCode code);
-        void        PostCancelById(uint32 id, eCancelCode code);
+		void                    PostResume(FiberAwaitKey key);
+		void                    PostSpawn(FiberFn fn, const FiberDesc& desc = {});
+        void                    PostCancelByKey(FiberAwaitKey key, eCancelCode code);
+        void                    PostCancelById(uint32 id, eCancelCode code);
 
 
-		void        DrainInbox();
-		void        Poll(int32 budget, uint64 now_ns);
+		void                    DrainInbox();
+		void                    Poll(int32 budget, uint64 now_ns);
+        void                    ResetProfile() { m_profile = {}; }
 
-		uint32      Current() const;
+		uint32                  Current() const;
 
-        const ProfileSample& Profile() const { return m_profile; }
+        const ProfileSample&    Profile() const { return m_profile; }
 
 
 	private:
         struct TrampolineParam
         {
-	        FiberScheduler*     self;
-        	uint32              id;
+	        FiberScheduler*     self = nullptr;
+        	uint32              id   = 0;
         };
 
         // Fiber Meta Data
         struct Fiber
 		{
-            uint32          id = 0;
-            const char*     name = nullptr;
-            void*           ctx = nullptr;                // Win Fiber Handle
-            uint64          reserve = 0;
-        	uint64          commit = 0;
+            uint32          id              = 0;
+            const char*     name            = nullptr;
+            void*           ctx             = nullptr;                // Win Fiber Handle
+            uint64          reserve         = 0;
+        	uint64          commit          = 0;
 
-            eFiberState     state = eFiberState::READY;
-            eResumeCode     resume = eResumeCode::NONE;
-            uint64          wakeup_ns = 0;
-            uint64          deadline_ns = 0;
-            AwaitKey        awaitKey = 0;
-            bool            inReadyQ = false;
+            eFiberState     state           = eFiberState::Ready;
+            eResumeCode     resume          = eResumeCode::None;
+            uint64          wakeup_ns       = 0;
+            uint64          deadline_ns     = 0;
+            FiberAwaitKey   awaitKey        = 0;
+            bool            inReadyQ        = false;
 
-            int32           priority = 0;
-            uint64          enqSequence = 0;
+            int32           priority        = 0;
+            uint64          enqSequence     = 0;
 
-            CancelToken*    cancel = nullptr;
-            uint64          switches = 0;
-            uint64          steps = 0;
-            uint64          runtimeAcc_ns = 0;
+            CancelToken*    cancel          = nullptr;
+            uint64          switches        = 0;
+            uint64          steps           = 0;
+            uint64          runtimeAcc_ns   = 0;
             uint64          lastRunStart_ns = 0;
 
-            FiberFn         entry = nullptr;
-            TrampolineParam param = {};
-            FlsFiberCtx     fls = {};
+            FiberFn         entry           = nullptr;
+            TrampolineParam param           = {};
+            FlsFiberCtx     fls             = {};
         };
 
         struct ResumeMsg
         {
-	        AwaitKey    key;
+	        FiberAwaitKey    key     = 0;
         };
 
         struct SpawnMsg
         {
-	        FiberFn     fn;
-        	FiberDesc   desc;
+	        FiberFn         fn       = nullptr;
+        	FiberDesc       desc     = {};
         };
 
         struct CancelKeyMsg
         {
-            AwaitKey    key;
-            eCancelCode code;
+            FiberAwaitKey   key      = 0;
+            eCancelCode     code     = eCancelCode::None;
         };
 
         struct CancelIdMsg
         {
-            uint32      id;
-            eCancelCode code;
+            uint32          id       = 0;
+            eCancelCode     code     = eCancelCode::None;
         };
 
         struct ReadyItem
         {
-            int32       priority;
-            uint64      seq;
-            uint32      id; 
+            int32           priority = 0;
+            uint64          seq      = 0;
+            uint32          id       = 0; 
         };
 
         struct ReadyCmp
@@ -123,14 +125,14 @@ namespace jam
 	        {
                 if (a.priority != b.priority)
                     return a.priority > b.priority;
-                return a.seq > b.seq;   // FIFO
+                return a.seq > b.seq;
 	        }
         };
 
         struct SleepItem
         {
-            uint64 wakeup_ns;
-            uint32 fiberId;
+            uint64          wakeup_ns = 0;
+            uint32          fiberId   = 0;
         };
 
         struct SleepCmp
@@ -154,7 +156,7 @@ namespace jam
         void                        BindFls(Fiber* f);
         void                        StartRun(Fiber* f);
         void                        EndRun(Fiber* f);
-        void                        CompleteAwait(Fiber* f, eResumeCode rc, eCancelCode cc = eCancelCode::NONE);
+        void                        CompleteAwait(Fiber* f, eResumeCode rc, eCancelCode cc = eCancelCode::None);
 
         void                        WakeupTimed(uint64 wakeup_ns);
 
@@ -163,21 +165,20 @@ namespace jam
         std::thread::id                                                     m_ownerThreadId;
 
         WinFiberBackend&                                                    m_backend;
-        void*                                                               m_main = nullptr;
-        FlsFiberCtx                                                         m_mainCtx = {};
+        void*                                                               m_main      = nullptr;
+        FlsFiberCtx                                                         m_mainCtx   = {};
         uint32                                                              m_currentId = 0;
 
-        uint64                                                              m_readySeq = 0;
+        uint64                                                              m_readySeq  = 0;
 
 
-
-        uint32                                                              m_nextId = 1;
+        uint32                                                              m_nextId    = 1;
         std::unordered_map<uint32, Fiber*>                                  m_fibers;
 
         std::priority_queue<ReadyItem, std::vector<ReadyItem>, ReadyCmp>    m_readyPQ;
         std::priority_queue<SleepItem, std::vector<SleepItem>, SleepCmp>    m_sleepPQ;
 
-        std::unordered_map<AwaitKey, uint32>                                m_waitMap;
+        std::unordered_map<FiberAwaitKey, uint32>                           m_waitMap;
 
         // Inbox
         moodycamel::ConcurrentQueue<ResumeMsg>                              m_resumeInbox;
@@ -190,7 +191,7 @@ namespace jam
         moodycamel::ConsumerToken                                           m_cancelKeyCtok;
         moodycamel::ConsumerToken                                           m_cancelIdCtok;
 
-        ProfileSample                                                       m_profile = {};
+        ProfileSample                                                       m_profile   = {};
 
         // 기본 스택 크기
         static constexpr size_t kDefReserve = 512 * 1024;

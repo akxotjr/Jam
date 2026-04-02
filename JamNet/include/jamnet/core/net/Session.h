@@ -1,9 +1,8 @@
 ﻿#pragma once
-#include "IocpCore.h"
-#include "NetAddress.h"
-#include "PacketBuilder.h"
-
-#include "SessionComponents.h"
+#include "jamnet/core/net/IocpCore.h"
+#include "jamnet/core/net/NetAddress.h"
+#include "jamnet/core/net/PacketBuilder.h"
+#include "jamnet/core/net/SessionComponents.h"
 
 namespace jam::net
 {
@@ -11,6 +10,7 @@ namespace jam::net
 
 	class Service;
 	class PacketBuilder;
+
 
 	enum class eProtocolType : uint8
 	{
@@ -33,13 +33,13 @@ namespace jam::net
 
 	public:
 		Session();
-		virtual ~Session() = default;
+		virtual ~Session() override = default;
 
-		virtual void Init();
+		virtual void							Init();
 
 		virtual bool							Connect() = 0;
 		virtual void							Disconnect() = 0;
-		virtual void							Send(const shared_ptr<SendBuffer>& buf) = 0;
+		virtual void							Send(const std::shared_ptr<SendBuffer>& buf) = 0;
 
 		virtual void							HandleCustomPacket(const PacketView& view) {}
 
@@ -92,30 +92,29 @@ namespace jam::net
 
 
 	protected:   
-		SOCKET									m_socket = INVALID_SOCKET;
+		SOCKET									m_socket		= INVALID_SOCKET;
 
-		Service*								m_service = nullptr;	
+		Service*								m_service		= nullptr;	
 		NetAddress								m_remoteAddress = {};
-		eProtocolType							m_protocol = eProtocolType::NONE;
+		eProtocolType							m_protocol		= eProtocolType::NONE;
 
 		static std::atomic<uint64>				s_sessionIdGenerator;
 		uint64									m_sessionId;
 
-		atomic<eSessionState>					m_state{ eSessionState::DISCONNECTED };
+		std::atomic<eSessionState>				m_state{ eSessionState::DISCONNECTED };
 
 		bool									m_isReady = false;
 
-
 	private:
 		RouteKey								m_key{};
-		weak_ptr<ShardExecutor>					m_boundShard;
-		shared_ptr<Mailbox>						m_mailbox;
+		std::weak_ptr<ShardExecutor>			m_boundShard;
+		std::shared_ptr<Mailbox>				m_mailbox;
 
 		entt::entity							m_entity{entt::null };
 
-		atomic_bool								m_closed{ false };
-		atomic_bool								m_entityReady{ false };
-		atomic_bool								m_entityCreating{ false };
-		atomic_bool								m_pendingConnect{ false };
+		std::atomic_bool						m_closed{ false };
+		std::atomic_bool						m_entityReady{ false };
+		std::atomic_bool						m_entityCreating{ false };
+		std::atomic_bool						m_pendingConnect{ false };
 	};
 }

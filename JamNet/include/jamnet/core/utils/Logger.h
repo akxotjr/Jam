@@ -12,10 +12,10 @@ namespace jam
 		void			Init();
 		void			Shutdown();
 
-		spdlogRef&		GetLogger() { return _logger; }
+		spdlogRef&		GetLogger() { return m_logger; }
 
 	private:
-		spdlogRef		_logger;
+		spdlogRef		m_logger;
 	};
 }
 

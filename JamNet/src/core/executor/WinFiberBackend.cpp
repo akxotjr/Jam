@@ -87,8 +87,7 @@ namespace jam
 		using Fn = VOID(WINAPI*)(PULONG_PTR, PULONG_PTR);
 		static auto p = reinterpret_cast<Fn>(::GetProcAddress(::GetModuleHandleW(L"kernel32.dll"), "GetCurrentThreadStackLimits"));
 
-		if (!p)
-			return false;
+		if (!p) return false;
 
 		ULONG_PTR lo = 0, hi = 0;
 		p(&lo, &hi);
@@ -98,7 +97,7 @@ namespace jam
 			return false;
 
 		total = static_cast<uint64>(hi - lo);
-		used = static_cast<uint64>(hi - sp);
+		used  = static_cast<uint64>(hi - sp);
 
 		return true;
 	}

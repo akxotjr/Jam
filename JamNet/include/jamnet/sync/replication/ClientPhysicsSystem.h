@@ -1,6 +1,5 @@
 ﻿#pragma once
-#include "NetActorComponents.h"
-#include "ReplicationTypes.h"
+#include "jamnet/sync/replication/ReplicationTypes.h"
 #include "jamnet/sync/replication/IReplayRunner.h"
 
 namespace jam::px

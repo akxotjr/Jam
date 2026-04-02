@@ -34,7 +34,7 @@ namespace jam::net
 	{
 		JAMNET_LOG_INFO("JamNet Runtime shutting down... ");
 
-		GLOBAL_EXEC.Stop();
+		GLOBAL_EXEC_SHUTDOWN();
 		SocketUtils::Clear();
 
 		LOGGER_SHUTDOWN();

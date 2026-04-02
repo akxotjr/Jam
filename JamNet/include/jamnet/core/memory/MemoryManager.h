@@ -1,12 +1,12 @@
 ﻿#pragma once
-#include "MemoryPool.h"
+#include "jamnet/core/memory/MemoryPool.h"
 
 namespace jam
 {
 	class MemoryPool;
 
-	inline constexpr int32 POOL_COUNT = (1024 / 32) + (1024 / 128) + (2048 / 256);
-	inline constexpr int32 MAX_ALLOC_SIZE = 4096;
+	inline constexpr int32 POOL_COUNT		= (1024 / 32) + (1024 / 128) + (2048 / 256);
+	inline constexpr int32 MAX_ALLOC_SIZE	= 4096;
 
 
 	class MemoryManager
@@ -14,15 +14,15 @@ namespace jam
 		DECLARE_SINGLETON(MemoryManager)
 
 	public:
-		void	Init();
-		void	Shutdown();
+		void		Init();
+		void		Shutdown();
 
-		void*	Allocate(int32 size);
-		void	Release(void* ptr);
+		void*		Allocate(int32 size);
+		void		Release(void* ptr);
 
 	private:
-		vector<MemoryPool*>		m_pools;
-		MemoryPool*				m_poolTable[MAX_ALLOC_SIZE + 1];
+		std::vector<MemoryPool*>	m_pools;
+		MemoryPool*					m_poolTable[MAX_ALLOC_SIZE + 1];
 	};
 
 

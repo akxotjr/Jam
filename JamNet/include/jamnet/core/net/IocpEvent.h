@@ -101,8 +101,8 @@ namespace jam::net
 		NetAddress									remoteAddress;
 
 		// TCP partial-send 재시도용
-		size_t										curIndex = 0;   // 현재 WSABUF 인덱스
-		ULONG										curOffset = 0;  // 현재 WSABUF 내 오프셋
+		size_t										curIndex   = 0;   // 현재 WSABUF 인덱스
+		ULONG										curOffset  = 0;  // 현재 WSABUF 내 오프셋
 		uint32										totalBytes = 0;
 	};
 }

@@ -8,8 +8,10 @@ namespace jam
 		WRITE_LOCK
 		auto it = m_handlers.find(type);
 		if (it == m_handlers.end()) return;
+
 		auto& vec = it->second;
 		erase_if(vec, [id](const Slot& s) { return s.id == id; });
+
 		if (vec.empty()) m_handlers.erase(it);
 	}
 
@@ -17,20 +19,17 @@ namespace jam
 	{
 		switch (opt.policy)
 		{
-		case eDispatchPolicy::IMMEDIATE:
+		case eDispatchPolicy::Immediate:
 			return [](Job j) { j.Execute(); };
-		case eDispatchPolicy::MAIN_EXECUTOR:
-			return [](Job j) {
-				MainExecutor::Instance().Submit(std::move(j));
-				};
-		case eDispatchPolicy::GLOBAL_EXECUTOR:
-			return [](Job j) {
-				GlobalExecutor::Instance().Submit(std::move(j));
-				};
-		case eDispatchPolicy::EXECUTOR:
-			return [exec = opt.executor ? opt.executor : &m_defaultExec](Job j) mutable {
-				exec->Submit(std::move(j));
-				};
+
+		case eDispatchPolicy::MainExecutor:
+			return [](Job j) { MainExecutor::Instance().Submit(std::move(j)); };
+
+		case eDispatchPolicy::GlobalExecutor:
+			return [](Job j) { GlobalExecutor::Instance().Submit(std::move(j)); };
+
+		case eDispatchPolicy::Executor:
+			return [exec = opt.executor ? opt.executor : &m_defaultExec](Job j) mutable { exec->Submit(std::move(j)); };
 		}
 		return [](Job j) { j.Execute(); };
 	}

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "jamnet/sync/replication/NetActorComponents.h"
-
 namespace jam::net
 {
 	

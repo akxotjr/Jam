@@ -6,7 +6,7 @@ namespace jam::net
 {
 	Service::Service(const ServiceConfig& config) : m_config(config)
 	{
-		m_iocpCore = make_unique<IocpCore>();
+		m_iocpCore = std::make_unique<IocpCore>();
 	}
 
 	Service::~Service()
@@ -30,8 +30,8 @@ namespace jam::net
 		GlobalExecutor::Instance().CancelPerioidc(m_periodicHandle);
 
 
-		vector<shared_ptr<TcpSession>> tcp;
-		vector<shared_ptr<UdpSession>> udp;
+		std::vector<std::shared_ptr<TcpSession>> tcp;
+		std::vector<std::shared_ptr<UdpSession>> udp;
 		{
 			READ_LOCK
 			tcp.reserve(m_tcpSessions.size());
@@ -57,9 +57,9 @@ namespace jam::net
 	}
 
 
-	shared_ptr<Session> Service::CreateSession(eProtocolType protocol)
+	std::shared_ptr<Session> Service::CreateSession(eProtocolType protocol)
 	{
-		shared_ptr<Session> session = nullptr;
+		std::shared_ptr<Session> session = nullptr;
 
 		switch (protocol)
 		{

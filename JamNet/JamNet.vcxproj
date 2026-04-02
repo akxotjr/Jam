@@ -173,10 +173,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="include\JamNetAPI.h" />
-    <ClInclude Include="include\jamnet\core\executor\ConcurrentPriorityQueue.h" />
     <ClInclude Include="include\jamnet\core\executor\ConcurrentQueueToken.h" />
     <ClInclude Include="include\jamnet\core\executor\CoreTopology.h" />
     <ClInclude Include="include\jamnet\core\executor\DeadLockProfiler.h" />
+    <ClInclude Include="include\jamnet\core\executor\ExecutorMetrics.h" />
     <ClInclude Include="include\jamnet\core\executor\ExecutorTLS.h" />
     <ClInclude Include="include\jamnet\core\executor\FiberCommon.h" />
     <ClInclude Include="include\jamnet\core\executor\FiberScheduler.h" />
@@ -192,6 +192,7 @@
     <ClInclude Include="include\jamnet\core\executor\MainExecutor.h" />
     <ClInclude Include="include\jamnet\core\executor\NumaTopology.h" />
     <ClInclude Include="include\jamnet\core\executor\RoutingPolicy.h" />
+    <ClInclude Include="include\jamnet\core\executor\SeqLock.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardDirectory.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardDomain.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardExecutor.h" />
@@ -229,7 +230,6 @@
     <ClInclude Include="include\jamnet\core\utils\Logger.h" />
     <ClInclude Include="include\jamnet\core\utils\TaggedKey.h" />
     <ClInclude Include="include\jamnet\core\utils\TimeUnits.h" />
-    <ClInclude Include="include\jamnet\executor\SeqLock.h" />
     <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\ClientSession.h" />
     <ClInclude Include="include\jamnet\runtime\ClientTransportAdapter.h" />
@@ -280,15 +280,11 @@
     <ClCompile Include="src\core\executor\CoreTopology.cpp" />
     <ClCompile Include="src\core\executor\DeadLockProfiler.cpp" />
     <ClCompile Include="src\core\executor\ExecutorTLS.cpp" />
-    <ClCompile Include="src\core\executor\FiberCommon.cpp" />
     <ClCompile Include="src\core\executor\FiberScheduler.cpp" />
     <ClCompile Include="src\core\executor\GlobalEventBus.cpp" />
     <ClCompile Include="src\core\executor\GlobalExecutor.cpp" />
-    <ClCompile Include="src\core\executor\IExecutor.cpp" />
     <ClCompile Include="src\core\executor\Job.cpp" />
     <ClCompile Include="src\core\executor\Lock.cpp" />
-    <ClCompile Include="src\core\executor\LockDeque.cpp" />
-    <ClCompile Include="src\core\executor\LockQueue.cpp" />
     <ClCompile Include="src\core\executor\Mailbox.cpp" />
     <ClCompile Include="src\core\executor\MainExecutor.cpp" />
     <ClCompile Include="src\core\executor\NumaTopology.cpp" />
@@ -621,6 +617,8 @@ endlocal
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\Jam\JamNet Benchmark.md" />
+    <None Include="..\Jam\JamNet.md" />
     <None Include="Snapshot Refactoring Guide.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

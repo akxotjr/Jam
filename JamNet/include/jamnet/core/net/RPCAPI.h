@@ -1,7 +1,7 @@
 ﻿#pragma once
 
-#include "RPC.h"
-#include "Session.h"
+#include "jamnet/core/net/RPC.h"
+#include "jamnet/core/net/Session.h"
 
 namespace jam::net
 {
@@ -219,7 +219,7 @@ namespace jam::net
 
 				scheduler->PostSpawn([fnsp, e]() mutable { (*fnsp)(e); }, desc);
 
-			}, eJobPriority::CTRL));
+			}, eJobPriority::Control));
 	}
 
 	// Req/Res 타입만 알면, 파이버에서 RPCCallAwait 하고 cb를 호출하는 단일 진입점

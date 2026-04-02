@@ -2,10 +2,6 @@
 
 namespace jam::net
 {
-	/*----------------
-		RecvBuffer
-	-----------------*/
-
 
 	class RecvBuffer
 	{
@@ -19,12 +15,12 @@ namespace jam::net
 		bool			OnRead(int32 numOfBytes);
 		bool			OnWrite(int32 numOfBytes);
 
-		BYTE*			ReadPos() { return &m_buffer[m_readPos]; }
+		BYTE*			ReadPos()  { return &m_buffer[m_readPos]; }
 		BYTE*			WritePos() { return &m_buffer[m_writePos]; }
 		int32			DataSize() const { return m_writePos - m_readPos; }
 		int32			FreeSize() const { return m_capacity - m_writePos; }
 
-		static shared_ptr<RecvBuffer> FromSpan(const BYTE* data, uint32 size)
+		static std::shared_ptr<RecvBuffer> FromSpan(const BYTE* data, uint32 size)
 		{
 			auto buf = MakeShared<RecvBuffer>();
 			buf->Init(size, 1);
@@ -34,11 +30,11 @@ namespace jam::net
 		}
 
 	private:
-		int32			m_capacity = 0;
-		int32			m_bufferSize = 0;
-		int32			m_readPos = 0;
-		int32			m_writePos = 0;
-		vector<BYTE>	m_buffer;
+		int32				m_capacity	 = 0;
+		int32				m_bufferSize = 0;
+		int32				m_readPos	 = 0;
+		int32				m_writePos	 = 0;
+		std::vector<BYTE>	m_buffer;
 	};
 }
 

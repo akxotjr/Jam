@@ -24,10 +24,10 @@ namespace jam::net
 	/// @brief Reconiliation 설정
 	struct ReconcileConfig
 	{
-		float			positionErrorThreshold = 0.1f;	// 위치 오차 임계값 (m)
-		float			rotationErrorThreshold = 0.05f;	// 회전 오차 임계값 (rad)
-		float			smoothCorrectionAlpha = 0.2f;		// 보정 계수
-		uint32			maxReplayInputs = 64;			// 최대 재생 입력 수
+		float			positionErrorThreshold = 0.1f;		// 위치 오차 임계값 (m)
+		float			rotationErrorThreshold = 0.05f;		// 회전 오차 임계값 (rad)
+		float			smoothCorrectionAlpha  = 0.2f;		// 보정 계수
+		uint32			maxReplayInputs		   = 64;		// 최대 재생 입력 수
 	};
 
 

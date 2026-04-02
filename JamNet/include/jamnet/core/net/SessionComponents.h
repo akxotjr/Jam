@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <bitset>
 
-#include "RecvBuffer.h"
+#include "jamnet/core/net/RecvBuffer.h"
 
 
 namespace jam::net
@@ -85,9 +85,9 @@ namespace jam::net
 	/// 시퀀스 상태 - 4개 채널 모두 사용
 	struct SequenceState
 	{
-		array<uint16, 4> sendSeq{};			// 다음 보낼 seq (채널별)
-		array<uint16, 4> latestRecvSeq{};	// 최신 받은 seq (채널별)
-		array<uint16, 4> expectedSeq{};		// 예상 수신 seq (채널별)
+		std::array<uint16, 4> sendSeq{};			// 다음 보낼 seq (채널별)
+		std::array<uint16, 4> latestRecvSeq{};	// 최신 받은 seq (채널별)
+		std::array<uint16, 4> expectedSeq{};		// 예상 수신 seq (채널별)
 
 		uint16 GetNextSendSeq(eChannelType ch)
 		{
@@ -132,15 +132,15 @@ namespace jam::net
 		{
 			uint16					seq = 0;
 			uint64					recvTime_ns = 0;
-			shared_ptr<RecvBuffer>  buf;
+			std::shared_ptr<RecvBuffer>  buf;
 		};
 
-		map<uint16, RecvPacket>		pendings;
+		std::map<uint16, RecvPacket>		pendings;
 
 		static constexpr uint32		kMaxRecvBufferSize = 256;
 
-		bool						StoreRecvPacket(uint16 seq, const shared_ptr<RecvBuffer>& buf, uint64 now_ns);
-		vector<RecvPacket>			PopOrderedPackets(uint16& expectedSeq);
+		bool						StoreRecvPacket(uint16 seq, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns);
+		std::vector<RecvPacket>		PopOrderedPackets(uint16& expectedSeq);
 	};
 
 	/// 신뢰성 상태 - RELIABLE_ORDERED, RELIABLE_UNORDERED 2개만 사용
@@ -148,34 +148,34 @@ namespace jam::net
 	{
 		struct PendingPacket
 		{
-			uint16						seq = 0;
-			uint64						sendTime_ns = 0;
-			uint64						lastRetransmitTime_ns = 0;
-			uint8						retryCount = 0;
-			shared_ptr<SendBuffer>		buf;
+			uint16							seq = 0;
+			uint64							sendTime_ns = 0;
+			uint64							lastRetransmitTime_ns = 0;
+			uint8							retryCount = 0;
+			std::shared_ptr<SendBuffer>		buf;
 		};
 
 		// 채널별 데이터 (RELIABLE_ORDERED=2, RELIABLE_UNORDERED=3)
 		struct ChannelData
 		{
 			// 송신 추적
-			map<uint16, PendingPacket>  pendings;
-			uint32						inflightSize = 0;
+			std::map<uint16, PendingPacket>		pendings;
+			uint32								inflightSize = 0;
 
 			// 수신 추적 (ACK)
-			uint16						latestAckSeq = 0;
-			uint16						lastAckedSeq = 0;
-			bitset<ACK_TRACK_SIZE>		ackTrack;
+			uint16								latestAckSeq = 0;
+			uint16								lastAckedSeq = 0;
+			std::bitset<ACK_TRACK_SIZE>			ackTrack;
 
 			// 지연 ACK
-			bool						hasPendingAck = false;
-			uint16						pendingAckSeq = 0;
-			uint32						pendingAckBitfield = 0;
-			uint64						firstPendingAckTime_ns = 0;
+			bool								hasPendingAck = false;
+			uint16								pendingAckSeq = 0;
+			uint32								pendingAckBitfield = 0;
+			uint64								firstPendingAckTime_ns = 0;
 
 			// NACK
-			unordered_set<uint16>		sentNackSeqs;
-			uint64						lastNackTime_ns = 0;
+			std::unordered_set<uint16>			sentNackSeqs;
+			uint64								lastNackTime_ns = 0;
 		};
 
 		// RELIABLE_ORDERED와 RELIABLE_UNORDERED만 저장
@@ -192,8 +192,8 @@ namespace jam::net
 			return (ch == eChannelType::RELIABLE_ORDERED) ? reliableOrdered : reliableUnordered;
 		}
 
-		bool							StoreSendPacket(eChannelType ch, const shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns);
-		vector<uint16>					GetRetransmitNeeded(eChannelType ch, uint64 now_ns) const;
+		bool							StoreSendPacket(eChannelType ch, const std::shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns);
+		std::vector<uint16>				GetRetransmitNeeded(eChannelType ch, uint64 now_ns) const;
 		void							ProcessAck(eChannelType ch, uint16 ackSeq, uint32 ackBitfield);
 		bool							ShouldSendAck(eChannelType ch, uint64 now_ns) const;
 		uint32							BuildAckWindow(eChannelType ch) const;
@@ -208,18 +208,18 @@ namespace jam::net
 	{
 		struct Reassembly
 		{
-			uint16					fragmentId;
-			uint8					totalFragments;
-			uint8					receivedCount = 0;
+			uint16							fragmentId;
+			uint8							totalFragments;
+			uint8							receivedCount = 0;
 
-			bitset<256>				receivedMask;
-			vector<vector<BYTE>>	fragments;
+			std::bitset<256>				receivedMask;
+			std::vector<std::vector<BYTE>>	fragments;
 
-			uint64					startTime_ns;
-			uint64					lastRecvTime_ns;
+			uint64							startTime_ns;
+			uint64							lastRecvTime_ns;
 
-			PacketHeader			originalHeader{};
-			bool					headerSaved = false;
+			PacketHeader					originalHeader{};
+			bool							headerSaved = false;
 
 			Reassembly(uint16 id, uint8 total, uint64 now_ns)
 				: fragmentId(id), totalFragments(total), startTime_ns(now_ns), lastRecvTime_ns(now_ns)
@@ -228,18 +228,18 @@ namespace jam::net
 			}
 
 			bool					AddFragment(uint8 index, const BYTE* data, uint32 size, uint64 now_ns);
-			vector<BYTE>			Assemble() const;
+			std::vector<BYTE>		Assemble() const;
 			bool					IsComplete() const { return receivedCount == totalFragments; }
 		};
 
-		unordered_map<uint16, Reassembly>	reassemblies;
+		std::unordered_map<uint16, Reassembly>	reassemblies;
 
 		static constexpr uint16				kMaxFragmentSize = JAMNET_MTU;
 		static constexpr uint16				kMaxFragmentPayloadSize = kMaxFragmentSize - PacketHeader::FULL_SIZE - sizeof(ACK_DATA);
 		static constexpr uint8				kMaxFragments = UINT8_MAX;
 
 		bool								AddFragment(uint16 fragmentId, uint8 totalFragments, uint8 index, const BYTE* data, uint32 size, uint64 now_ns);
-		optional<vector<BYTE>>				PopCompleted(uint16 fragmentId);
+		std::optional<std::vector<BYTE>>	PopCompleted(uint16 fragmentId);
 		void								CleanupTimeouts(uint64 now_ns);
 	};
 
@@ -251,19 +251,19 @@ namespace jam::net
 	{
 		struct AwaitState
 		{
-			function<void(const BYTE*, size_t)>		onPayload;
-			function<void(bool)>					onDone;
-			uint64									deadline_ns = 0;
-			bool									hasDeadline = false;
+			std::function<void(const BYTE*, size_t)>	onPayload;
+			std::function<void(bool)>					onDone;
+			uint64										deadline_ns = 0_ns;
+			bool										hasDeadline = false;
 		};
 
 		uint32										nextRequestId = 1;
-		unordered_map<uint32, AwaitState>			inflight;
+		std::unordered_map<uint32, AwaitState>		inflight;
 
 		uint32										GenerateRequestId() { return nextRequestId++; }
 		void										RegisterRequest(uint32 reqId, AwaitState&& state);
-		optional<AwaitState>						PopRequest(uint32 reqId);
-		vector<uint32>								GetTimedOutRequests(uint64 now_ns) const;
+		std::optional<AwaitState>					PopRequest(uint32 reqId);
+		std::vector<uint32>							GetTimedOutRequests(uint64 now_ns) const;
 	};
 
 	// ============================================================
@@ -290,7 +290,7 @@ namespace jam::net
 		float					rttMax_ms			   = 0.0f;
 		float					rttAvg_ms			   = 0.0f;
 
-		array<float, 32>		rttSamples			   = {};
+		std::array<float, 32>	rttSamples			   = {};
 		uint8					rttSampleIndex		   = 0;
 		uint8					rttSampleCount		   = 0;
 
@@ -307,7 +307,8 @@ namespace jam::net
 			uint32 recvPackets	= 0;
 			uint32 sendPackets	= 0;
 		};
-		array<ChannelStats, 4>	channelStats;
+
+		std::array<ChannelStats, 4>	channelStats;
 
 		void					AddRttSample(float newRtt_ms);
 		void					UpdateJitter();
@@ -349,8 +350,8 @@ namespace jam::net
 		uint64					lastT4ClientRecv_ns = 0;
 
 		static constexpr uint8	WIN = 32;
-		array<uint64, WIN>		rwnd{};
-		array<int64, WIN>		ownd{};
+		std::array<uint64, WIN>	rwnd{};
+		std::array<int64, WIN>	ownd{};
 		uint8					winCount = 0;
 		uint8					winHead = 0;
 		uint64					minRtt_ns = UINT64_MAX;
@@ -453,21 +454,22 @@ namespace jam::net
 
 		struct PendingPacket
 		{
-			Priority				priority = NORMAL;
-			uint32					size = 0;
-			shared_ptr<SendBuffer>	buf;
+			Priority					priority = NORMAL;
+			uint32						size	 = 0;
+			std::shared_ptr<SendBuffer>	buf;
 		};
-		vector<PendingPacket>		queue;
-		uint64						lastFlushTime_ns = 0;
-		uint64						bytesQueued		 = 0;
-		bool						flushRequested	 = false;
+
+		std::vector<PendingPacket>		queue;
+		uint64							lastFlushTime_ns = 0;
+		uint64							bytesQueued		 = 0;
+		bool							flushRequested	 = false;
 
 
 		static constexpr uint32		kMaxTransportBatch			= 32;
 		static constexpr uint64		kTransportFlushInterval_ns = 1_ms;
 		static constexpr uint64		kTransportImmediateCtrl_ns = 0_ns;
 
-		void						Enqueue(const shared_ptr<SendBuffer>& buf, Priority prio);
+		void						Enqueue(const std::shared_ptr<SendBuffer>& buf, Priority prio);
 		bool						ShouldFlush(uint64 now_ns) const;
 		void						Clear();
 	};

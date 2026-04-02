@@ -66,7 +66,7 @@ namespace jam::net
 		const bool periodicFull = ((m_tickCounter % kFullIntervalTicks) == 0);
 		const uint32 tick = m_world.ctx().get<TickCounter>().tick;
 
-		vector<uint64> users;
+		std::vector<uint64> users;
 		nw->GetMembers(users);
 		if (users.empty()) return;
 
@@ -74,7 +74,7 @@ namespace jam::net
 		{
 			const uint32 ack = m_world.ctx().get<ServerInputSystem>().LastProcessedSeq(user);
 
-			unordered_set<NetId> sentThisTick;
+			std::unordered_set<NetId> sentThisTick;
 			sentThisTick.reserve(256);
 
 			bool forceFullMetaUser	   = false;
@@ -84,7 +84,7 @@ namespace jam::net
 			if (it != m_forceFullMetaPerUsers.end() && it->second > 0)
 				forceFullMetaUser = true;
 
-			unordered_set<uint32> enteredSet;
+			std::unordered_set<uint32> enteredSet;
 			if (aoi)
 			{
 				if (const UserAoiState* st = aoi->GetState(user))
@@ -95,7 +95,7 @@ namespace jam::net
 				}
 			}
 
-			std::array<vector<Candidate>, static_cast<size_t>(eBucket::Count)> buckets;
+			std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)> buckets;
 			auto view = m_world.view<NetId, NetActorBodyType>();
 
 			// 1) candidate 분류
@@ -146,7 +146,7 @@ namespace jam::net
 			}
 
 			// 2) 버킷 순서대로 전송 큐 구성
-			vector<Candidate> ordered;
+			std::vector<Candidate> ordered;
 			ordered.reserve(
 				buckets[0].size() + buckets[1].size() + buckets[2].size() +
 				buckets[3].size() + buckets[4].size());
@@ -220,7 +220,7 @@ namespace jam::net
 			{
 				m_fbb->Clear();
 
-				vector<flatbuffers::Offset<fb::fbActorEntity>> offs;
+				std::vector<flatbuffers::Offset<fb::fbActorEntity>> offs;
 				offs.reserve(kBatch);
 
 				size_t usedPayloadBudget = 0;
@@ -295,7 +295,7 @@ namespace jam::net
 					continue;
 
 				TransportInfo info{};
-				info.method = eTransportMethod::SINGLE;
+				info.method = eTransportMethod::Single;
 				info.userId = user;
 				nw->Send(info, buf);
 			}
@@ -414,9 +414,6 @@ namespace jam::net
 
 			const fb::fbCharacterFull160 charFull(packed.data0, packed.data1, packed.data2);
 
-			//uint32 base = 0;
-			//if (auto it = userEntityBase.find(netId); it != userEntityBase.end())
-			//	base = it->second;
 			uint32& base = userEntityBase.try_emplace(netId, 0u).first->second;
 
 			flatbuffers::Offset<fb::fbActorMeta> meta = 0;
@@ -457,9 +454,6 @@ namespace jam::net
 				static_cast<uint8>(rs.kineType)
 			);
 
-			//uint32 base = 0;
-			//if (auto it = userEntityBase.find(netId); it != userEntityBase.end())
-			//	base = it->second;
 			uint32& base = userEntityBase.try_emplace(netId, 0u).first->second;
 
 			flatbuffers::Offset<fb::fbActorMeta> meta = 0;
@@ -493,10 +487,6 @@ namespace jam::net
 		}
 
 		fb::fbTransformFull rigidFull(packed.data0, packed.data1, packed.data2);
-
-		//uint32 base = 0;
-		//if (auto it = userEntityBase.find(netId); it != userEntityBase.end())
-		//	base = it->second;
 
 		uint32& base = userEntityBase.try_emplace(netId, 0u).first->second;
 
@@ -678,8 +668,6 @@ namespace jam::net
 		if (!m_world.valid(e) || !m_world.all_of<NewlyCreatedTag>(e))
 			return;
 
-		// 1) spawn_req_id는 요청자(= owner)에게만 의미가 있으므로
-		//    "요청자에게 충분히 보냈는가"만 보고 제거한다.
 		if (done && m_world.all_of<NetSpawnRequestId>(e))
 		{
 			const uint64 owner = m_world.get<OwnershipTag>(e).userId;
@@ -691,15 +679,11 @@ namespace jam::net
 			}
 		}
 
-		// 2) NewlyCreatedTag는 "모든 유저에게 meta를 충분히 보냈는가" 관점으로 제거한다.
-		//    - spawn_req_id는 요청자 전용이므로, 여기 판단에서 제외되어도 됨.
-		//    - CanClearNewlyCreatedTag는 (metaSent/metaResendBudget) 기준으로 유저 전체를 검사한다.
 		const NetId netId = m_world.get<NetId>(e);
 		if (CanClearNewlyCreatedTag(netId))
 		{
 			m_world.remove<NewlyCreatedTag>(e);
 
-			// 하위 호환/안전: 혹시 남아있으면 제거(요청자에게만 보내도록 마스킹했지만, 누수 방지)
 			if (m_world.all_of<NetSpawnRequestId>(e))
 				m_world.remove<NetSpawnRequestId>(e);
 		}
@@ -710,7 +694,7 @@ namespace jam::net
 		auto* nw = m_world.ctx().get<ServerNetWorld*>();
 		if (!nw) return true;
 
-		vector<uint64> users;
+		std::vector<uint64> users;
 		nw->GetMembers(users);
 
 		if (users.empty())

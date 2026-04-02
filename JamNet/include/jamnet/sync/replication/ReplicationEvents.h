@@ -33,7 +33,7 @@ namespace jam::net
 	/// @brief 렌더링 계층으로 전달할액터 제거 이벤트
 	struct RenderActorDespawnedEvent
 	{
-		uint64				userId = 0;
+		uint64				userId   = 0;
 		uint32				objectId = 0;
 	};
 
@@ -45,14 +45,14 @@ namespace jam::net
 			uint32							objectId = 0;
 			bool							isLocal = false;  
 
-			optional<px::RigidState>		rs{};
-			optional<px::CharacterState>	cs{};
+			std::optional<px::RigidState>		rs{};
+			std::optional<px::CharacterState>	cs{};
 		};
 
-		uint32					tick	  = 0;
-		uint64					userId	  = 0;
-		float					timestamp = 0.f;  // 이 샘플의 시간 (렌더러 보간용)
-		vector<ActorSample>		actors;
+		uint32						tick	  = 0;
+		uint64						userId	  = 0;
+		float						timestamp = 0.f;  // 이 샘플의 시간 (렌더러 보간용)
+		std::vector<ActorSample>	actors;
 	};
 
 }

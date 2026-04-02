@@ -1,5 +1,5 @@
 #pragma once
-#include "ReplicationTypes.h"
+#include "jamnet/sync/replication/ReplicationTypes.h"
 
 
 namespace jam::net
@@ -219,9 +219,9 @@ namespace jam::net
 
 	struct RenderCorrectionDelta
 	{
-		px::Vec3 pos = px::Vec3::Zero();
-		float yaw = 0.0f;
-		float pitch = 0.0f;
+		px::Vec3 pos	= px::Vec3::Zero();
+		float	 yaw	= 0.0f;
+		float	 pitch	= 0.0f;
 	};
 
 	// current input -> main scene -> local char state

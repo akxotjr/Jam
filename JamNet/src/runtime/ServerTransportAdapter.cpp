@@ -12,7 +12,7 @@ namespace jam::net
 	}
 
 
-	void ServerTransportAdapter::Send(const TransportInfo& info, const shared_ptr<SendBuffer>& buf)
+	void ServerTransportAdapter::Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf)
 	{
 		ServerNetworkManager* nm = nullptr;
 		{
@@ -42,19 +42,19 @@ namespace jam::net
 
 		switch (info.method)
 		{
-		case eTransportMethod::SINGLE:
+		case eTransportMethod::Single:
 			if (info.userId == 0) return;
 			nm->SendToUser(info.userId, buf, protocol);
 			return;
 
-		case eTransportMethod::BROADCAST:
+		case eTransportMethod::Broadcast:
 			nm->EnumerateConnectedUsers([&](uint64 uid)
 				{
 					nm->SendToUser(uid, CloneBuffer(buf), protocol);
 				});
 			return;
 
-		case eTransportMethod::MULTICAST:
+		case eTransportMethod::Multicast:
 			if (info.groupId == 0) return;
 			nm->EnumerateGroupUsers(info.groupId, [&](uint64 uid)
 				{
@@ -62,7 +62,7 @@ namespace jam::net
 				});
 			return;
 
-		case eTransportMethod::FAN_OUT:
+		case eTransportMethod::FanOut:
 			if (info.groupId == 0) return;
 			nm->EnumerateGroupUsers(info.groupId, [&](uint64 uid)
 				{
@@ -93,7 +93,7 @@ namespace jam::net
 	}
 
 
-	void ServerTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const function<void(weak_ptr<Session>)>& fn)
+	void ServerTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn)
 	{
 		if (!fn || userId == 0)
 			return;
@@ -122,7 +122,7 @@ namespace jam::net
 		JAMNET_LOG_ERROR_LOC("invalid protocol for RPC call");
 	}
 
-	shared_ptr<SendBuffer> ServerTransportAdapter::CloneBuffer(const shared_ptr<SendBuffer>& buf) const
+	std::shared_ptr<SendBuffer> ServerTransportAdapter::CloneBuffer(const std::shared_ptr<SendBuffer>& buf) const
 	{
 		if (!buf) return nullptr;
 

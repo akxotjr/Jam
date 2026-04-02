@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "ReplicationTypes.h"
+#include "jamnet/sync/replication/ReplicationTypes.h"
 #include "jamnet/sync/schema/gen/snapshot_generated.h"
 
 namespace jam::net
@@ -84,14 +84,14 @@ namespace jam::net
 
         uint64                              m_userId = 0;
 
-        unordered_map<NetId, Replica>       m_replicas;     // net id -> Replica
-        deque<PendingSnapshot>              m_pendingSnapshots;
+        std::unordered_map<NetId, Replica>  m_replicas;     // net id -> Replica
+        std::deque<PendingSnapshot>         m_pendingSnapshots;
 
-        NetId                               m_localNetId = NetId::Invalid();
-        entt::entity                        m_localEntity = entt::null;
+        NetId                               m_localNetId     = NetId::Invalid();
+        entt::entity                        m_localEntity    = entt::null;
 
 		uint64                              m_lastServerTick = 0;
-        uint32                              m_lastInputAck = 0;
+        uint32                              m_lastInputAck   = 0;
 	};
 
 }

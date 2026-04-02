@@ -48,17 +48,17 @@ namespace jam::net
 		virtual void					TickOnShard() = 0;
 
 	protected:
-		entt::registry					m_world;
-		unique_ptr<ShardJobBridge>		m_bridge;
+		entt::registry						m_world;
+		std::unique_ptr<ShardJobBridge>		m_bridge;
 
 	private:
-		RouteKey						m_key;
-		weak_ptr<ShardExecutor>			m_boundShard;
-		shared_ptr<Mailbox>				m_mailbox;
+		RouteKey							m_key;
+		std::weak_ptr<ShardExecutor>		m_boundShard;
+		std::shared_ptr<Mailbox>			m_mailbox;
 
-		bool							m_tickActive = false;
+		bool								m_tickActive = false;
 
-		uint32							m_groupId = 0;
+		uint32								m_groupId = 0;
 	};
 
 }

@@ -22,7 +22,7 @@ namespace jam::net
         using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
         PhysicsFactory physicsFactory = nullptr;
 
-        string levelPath;
+        std::string levelPath;
     };
 
     class ServerNetworkManager
@@ -35,25 +35,25 @@ namespace jam::net
         void                            Stop();
         bool                            IsRunning() const { return m_running.load(std::memory_order_acquire); };
 
-        void                            SetMatchmaker(unique_ptr<IMatchmaker> matchmaker);
+        void                            SetMatchmaker(std::unique_ptr<IMatchmaker> matchmaker);
         IMatchmaker*                    GetMatchmaker() const { return m_matchmaker.get(); }
 
-        shared_ptr<ServerService>       GetService() const { return m_service; }
+        std::shared_ptr<ServerService>       GetService() const { return m_service; }
 
         ServerNetWorld*                 GetWorld(uint32 groupId);
         ServerNetWorld*                 GetOrCreateWorld(uint32 groupId);
         void                            DestroyWorld(uint32 groupId);
 
     	
-    	void                            RegisterTcpSession(uint64 userId, const shared_ptr<ServerTcpSession>& tcp);
-        void                            RegisterUdpSession(uint64 userId, const shared_ptr<ServerUdpSession>& udp);
+    	void                            RegisterTcpSession(uint64 userId, const std::shared_ptr<ServerTcpSession>& tcp);
+        void                            RegisterUdpSession(uint64 userId, const std::shared_ptr<ServerUdpSession>& udp);
         void                            UnregisterSession(uint64 userId);
 
-        shared_ptr<ServerTcpSession>    FindTcpSession(uint64 userId);
-        shared_ptr<ServerUdpSession>    FindUdpSession(uint64 userId);
+        std::shared_ptr<ServerTcpSession>    FindTcpSession(uint64 userId);
+        std::shared_ptr<ServerUdpSession>    FindUdpSession(uint64 userId);
 
-        void                            BroadcastPacket(const shared_ptr<SendBuffer>& buf, eProtocolType protocol);
-        void                            SendToUser(uint64 userId, const shared_ptr<SendBuffer>& buf, eProtocolType protocol);
+        void                            BroadcastPacket(const std::shared_ptr<SendBuffer>& buf, eProtocolType protocol);
+        void                            SendToUser(uint64 userId, const std::shared_ptr<SendBuffer>& buf, eProtocolType protocol);
 
         void							JoinGroup(uint32 groupId, uint64 userId);
         void							LeaveGroup(uint32 groupId, uint64 userId);
@@ -71,18 +71,18 @@ namespace jam::net
 
     	ServerConfig                                        m_config;
 
-        shared_ptr<ServerService>                           m_service;
-        shared_ptr<ServerTransportAdapter>                  m_tranportAdapter;
+        std::shared_ptr<ServerService>                           m_service;
+        std::shared_ptr<ServerTransportAdapter>                  m_tranportAdapter;
 
-        unique_ptr<IMatchmaker>                             m_matchmaker = nullptr;
+        std::unique_ptr<IMatchmaker>                             m_matchmaker = nullptr;
 
-        unordered_map<uint32, shared_ptr<ServerNetWorld>>   m_worlds;           // groupId -> NetWorld
+        std::unordered_map<uint32, std::shared_ptr<ServerNetWorld>>   m_worlds;           // groupId -> NetWorld
 
-        unordered_map<uint64, shared_ptr<ServerTcpSession>> m_tcpSessions;      // userId -> Session mapping
-        unordered_map<uint64, shared_ptr<ServerUdpSession>> m_udpSessions;
+        std::unordered_map<uint64, std::shared_ptr<ServerTcpSession>> m_tcpSessions;      // userId -> Session mapping
+        std::unordered_map<uint64, std::shared_ptr<ServerUdpSession>> m_udpSessions;
 
-        unordered_map<uint32, vector<uint64>>				m_groupMembers;     // groupId -> members(userId)
+        std::unordered_map<uint32, std::vector<uint64>>				m_groupMembers;     // groupId -> members(userId)
 
-        atomic<bool>                                        m_running{ false };
+        std::atomic<bool>                                        m_running{ false };
     };
 }

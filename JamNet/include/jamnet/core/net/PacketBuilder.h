@@ -1,8 +1,8 @@
 ﻿#pragma once
-#include "BufferReader.h"
-#include "BufferWriter.h"
-#include "PacketStructure.h"
-#include "SendBuffer.h"
+#include "jamnet/core/net/BufferReader.h"
+#include "jamnet/core/net/BufferWriter.h"
+#include "jamnet/core/net/PacketStructure.h"
+#include "jamnet/core/net/SendBuffer.h"
 
 
 namespace jam::net
@@ -163,11 +163,8 @@ namespace jam::net
 		uint32          totalSize   = 0;
 
 
-
-		// 기본 생성자 (무효한 상태)
 		PacketView() = default;
 
-		// 버퍼에서 직접 파싱 (AnalyzePacket 로직 통합)
 		static PacketView Parse(BYTE* buf, uint32 size)
 		{
 			PacketView view{};
@@ -177,20 +174,17 @@ namespace jam::net
 
 			BufferReader br(buf, size);
 
-			// 1. Base 헤더 읽기
 			view.data   = buf;
 			view.header = reinterpret_cast<PacketHeader*>(buf);
 
 			if (!view.header->IsValid())
 				return view;
 
-			// 2. 실제 헤더 크기 확인
 			view.headerSize = view.header->GetActualSize();
 
 			if (size < view.headerSize)
 				return view;
 
-			// 3. 전체 패킷 크기 검증
 			view.totalSize = view.header->GetSize();
 
 			if (size < view.totalSize || view.totalSize < view.headerSize)
@@ -198,7 +192,7 @@ namespace jam::net
 				JAMNET_LOG_CRITICAL("view.headerSize= {}, view.totalSize= {} size= {}", view.headerSize, view.totalSize, size);
 				return view;
 			}
-			// 4. 페이로드 설정
+
 			view.payloadSize = view.totalSize - view.headerSize;
 			view.payload     = buf + view.headerSize;
 			view.isValid     = true;
@@ -232,7 +226,7 @@ namespace jam::net
 
 	struct RpcPacketOpenResult
 	{
-		shared_ptr<SendBuffer>		buf;			// 생성된 송신 버퍼
+		std::shared_ptr<SendBuffer>	buf;			// 생성된 송신 버퍼
 		BufferWriter				writer;			// PacketHeader 후부터 쓰기 시작하도록 설정됨
 		uint32						headerSize = 0; // PacketHeader 실제 크기
 		uint32						totalSize  = 0; // headerSize + payloadSize
@@ -245,28 +239,28 @@ namespace jam::net
 	{
 	public:
 		// Common
-		static shared_ptr<SendBuffer>		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static std::shared_ptr<SendBuffer>		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 
 		// System 
-		static shared_ptr<SendBuffer>		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
-		static shared_ptr<SendBuffer>		CreateHandshakePacket(eSystemPacketId id);
-		static shared_ptr<SendBuffer>		CreatePingPacket(const PING_DATA& ping);
-		static shared_ptr<SendBuffer>		CreatePongPacket(const PONG_DATA& pong);
+		static std::shared_ptr<SendBuffer>		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
+		static std::shared_ptr<SendBuffer>		CreateHandshakePacket(eSystemPacketId id);
+		static std::shared_ptr<SendBuffer>		CreatePingPacket(const PING_DATA& ping);
+		static std::shared_ptr<SendBuffer>		CreatePongPacket(const PONG_DATA& pong);
 
 		// Ack 
-		static shared_ptr<SendBuffer>		CreateAckPacket(const ACK_DATA& ack);
-		static shared_ptr<SendBuffer>		CreateNackPacket(const NACK_DATA& nack);
+		static std::shared_ptr<SendBuffer>		CreateAckPacket(const ACK_DATA& ack);
+		static std::shared_ptr<SendBuffer>		CreateNackPacket(const NACK_DATA& nack);
 
 		// Rpc
-		static shared_ptr<SendBuffer>		CreateRpcPacket(eRpcPacketId id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::RELIABLE_ORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
-		static RpcPacketOpenResult			OpenRpcPacket(eRpcPacketId id, uint8 flags, eChannelType channel, uint32 payloadSize);
+		static std::shared_ptr<SendBuffer>		CreateRpcPacket(eRpcPacketId id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::RELIABLE_ORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
+		static RpcPacketOpenResult				OpenRpcPacket(eRpcPacketId id, uint8 flags, eChannelType channel, uint32 payloadSize);
 
 		// Custom
-		static shared_ptr<SendBuffer>		CreateCustomPacket(uint8 id, uint8 flags, eChannelType channel, const void* payload, uint32 payloadSize);
+		static std::shared_ptr<SendBuffer>		CreateCustomPacket(uint8 id, uint8 flags, eChannelType channel, const void* payload, uint32 payloadSize);
 
 
 	private:
-		static shared_ptr<SendBuffer>		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 channel, const void* payload, uint32 payloadSize, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static std::shared_ptr<SendBuffer>		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 channel, const void* payload, uint32 payloadSize, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 	};
 }
 

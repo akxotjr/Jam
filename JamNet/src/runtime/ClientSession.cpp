@@ -48,7 +48,7 @@ namespace jam::net
         RPCCallAsyncMember<fb::fbTcpBindReqT, fb::fbTcpBindResT>(self, std::move(req), opt, this, &ClientTcpSession::OnTcpBindResponse);
     }
 
-    void ClientTcpSession::OnTcpBindResponse(optional<fb::fbTcpBindResT> res)
+    void ClientTcpSession::OnTcpBindResponse(std::optional<fb::fbTcpBindResT> res)
     {
         if (!res.has_value())
         {
@@ -119,7 +119,7 @@ namespace jam::net
         RPCCallAsyncMember<fb::fbRequestGroupIdReqT, fb::fbRequestGroupIdResT>(self, std::move(req), opt, this, &ClientUdpSession::OnRequestGroupIdRes);
     }
 
-    void ClientUdpSession::OnUdpBindResponse(optional<fb::fbUdpBindResT> res)
+    void ClientUdpSession::OnUdpBindResponse(std::optional<fb::fbUdpBindResT> res)
     {
         if (!res.has_value())
         {
@@ -141,7 +141,7 @@ namespace jam::net
     }
 
 
-    void ClientUdpSession::OnRequestGroupIdRes(optional<fb::fbRequestGroupIdResT> res)
+    void ClientUdpSession::OnRequestGroupIdRes(std::optional<fb::fbRequestGroupIdResT> res)
     {
         if (!res.has_value())
         {

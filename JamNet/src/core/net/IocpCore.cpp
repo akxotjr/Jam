@@ -15,7 +15,7 @@ namespace jam::net
 		::CloseHandle(m_iocpHandle);
 	}
 
-	bool IocpCore::Register(const shared_ptr<IocpObject>& obj)
+	bool IocpCore::Register(const std::shared_ptr<IocpObject>& obj)
 	{
 		if (!obj) return false;
 		HANDLE h = obj->GetHandle();
@@ -25,7 +25,7 @@ namespace jam::net
 		if (::CreateIoCompletionPort(h, m_iocpHandle, 0, 0) == NULL)
 		{
 			DWORD ec = ::GetLastError();
-			cout << "[IOCP] Register failed ec=" << ec << "\n";
+			std::cout << "[IOCP] Register failed ec=" << ec << "\n";
 			return false;
 		}
 		return true;
@@ -33,16 +33,16 @@ namespace jam::net
 
 	bool IocpCore::Dispatch(uint32 timeoutMs)
 	{
-		DWORD numOfBytes = 0;
-		ULONG_PTR key = 0;
-		IocpEvent* iocpEvent = nullptr;
+		DWORD	   numOfBytes = 0;
+		ULONG_PTR  key		  = 0;
+		IocpEvent* iocpEvent  = nullptr;
 
 		if (::GetQueuedCompletionStatus(m_iocpHandle, OUT &numOfBytes, OUT &key, OUT reinterpret_cast<LPOVERLAPPED*>(&iocpEvent), timeoutMs))
 		{
 			if (iocpEvent == nullptr) return false;
 
-			shared_ptr<IocpObject> iocpObject = iocpEvent->m_owner;
-			iocpObject->Dispatch(iocpEvent, numOfBytes);
+			std::shared_ptr<IocpObject> iocpObject = iocpEvent->m_owner;
+			iocpObject->Dispatch(iocpEvent, static_cast<int32>(numOfBytes));
 		}
 		else
 		{
@@ -51,8 +51,8 @@ namespace jam::net
 			case WAIT_TIMEOUT:
 				return false;
 			default:
-				shared_ptr<IocpObject> iocpObject = iocpEvent->m_owner;
-				iocpObject->Dispatch(iocpEvent, numOfBytes);
+				std::shared_ptr<IocpObject> iocpObject = iocpEvent->m_owner;
+				iocpObject->Dispatch(iocpEvent, static_cast<int32>(numOfBytes));
 				break;
 			}
 		}

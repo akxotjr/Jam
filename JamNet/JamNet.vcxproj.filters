@@ -72,9 +72,6 @@
     <ClInclude Include="include\JamNetAPI.h">
       <Filter>Header</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\core\executor\ConcurrentPriorityQueue.h">
-      <Filter>core\executor</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\core\executor\ConcurrentQueueToken.h">
       <Filter>core\executor</Filter>
     </ClInclude>
@@ -303,9 +300,6 @@
     <ClInclude Include="include\jamnet\sync\transport\CustomPacketHelper.h">
       <Filter>sync\transport</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\executor\SeqLock.h">
-      <Filter>core\executor</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\matchmaking\IMatchmaker.h">
       <Filter>runtime\matchmaking</Filter>
     </ClInclude>
@@ -357,6 +351,10 @@
     <ClInclude Include="include\jamnet\sync\replication\CorrectionReplayRunner.h">
       <Filter>sync\replication\client system</Filter>
     </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\SeqLock.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ExecutorMetrics.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -371,9 +369,6 @@
     <ClCompile Include="src\core\executor\ExecutorTLS.cpp">
       <Filter>core\executor</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\executor\FiberCommon.cpp">
-      <Filter>core\executor</Filter>
-    </ClCompile>
     <ClCompile Include="src\core\executor\FiberScheduler.cpp">
       <Filter>core\executor</Filter>
     </ClCompile>
@@ -383,19 +378,10 @@
     <ClCompile Include="src\core\executor\GlobalExecutor.cpp">
       <Filter>core\executor</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\executor\IExecutor.cpp">
-      <Filter>core\executor</Filter>
-    </ClCompile>
     <ClCompile Include="src\core\executor\Job.cpp">
       <Filter>core\executor</Filter>
     </ClCompile>
     <ClCompile Include="src\core\executor\Lock.cpp">
-      <Filter>core\executor</Filter>
-    </ClCompile>
-    <ClCompile Include="src\core\executor\LockDeque.cpp">
-      <Filter>core\executor</Filter>
-    </ClCompile>
-    <ClCompile Include="src\core\executor\LockQueue.cpp">
       <Filter>core\executor</Filter>
     </ClCompile>
     <ClCompile Include="src\core\executor\Mailbox.cpp">
@@ -589,5 +575,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Snapshot Refactoring Guide.md" />
+    <None Include="..\Jam\JamNet.md" />
+    <None Include="..\Jam\JamNet Benchmark.md" />
   </ItemGroup>
 </Project>

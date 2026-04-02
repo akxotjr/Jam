@@ -26,7 +26,7 @@ namespace jam::net
 		BYTE*										m_buffer;
 		uint32										m_allocSize = 0;
 		uint32										m_writeSize = 0;
-		shared_ptr<SendBufferChunk>					m_owner;
+		std::shared_ptr<SendBufferChunk>			m_owner;
 	};
 
 	/*---------------------
@@ -45,7 +45,7 @@ namespace jam::net
 		~SendBufferChunk();
 
 		void										Reset();
-		shared_ptr<SendBuffer>						Open(uint32 allocSize);
+		std::shared_ptr<SendBuffer>					Open(uint32 allocSize);
 		void										Close(uint32 commitedSize);
 
 		bool										IsOpen() { return m_open; }
@@ -53,7 +53,7 @@ namespace jam::net
 		uint32										FreeSize() { return static_cast<uint32>(m_buffer.size()) - m_usedSize; }
 
 	private:
-		array<BYTE, SEND_BUFFER_CHUNK_SIZE>			m_buffer = {};
+		std::array<BYTE, SEND_BUFFER_CHUNK_SIZE>	m_buffer = {};
 		bool										m_open = false;
 		uint32										m_usedSize = 0;
 	};
@@ -69,16 +69,16 @@ namespace jam::net
 		DECLARE_SINGLETON(SendBufferManager)
 
 	public:
-		std::shared_ptr<SendBuffer>							Open(uint32 size);
+		std::shared_ptr<SendBuffer>					Open(uint32 size);
 
 	private:
-		std::shared_ptr<SendBufferChunk>						Pop();
+		std::shared_ptr<SendBufferChunk>			Pop();
 		void										Push(std::shared_ptr<SendBufferChunk> buffer);
 		static void									PushGlobal(SendBufferChunk* buffer);
 
 	private:
 		USE_LOCK
-		std::vector<std::shared_ptr<SendBufferChunk>>				m_sendBufferChunks;
+		std::vector<std::shared_ptr<SendBufferChunk>>	m_sendBufferChunks;
 	};
 
 

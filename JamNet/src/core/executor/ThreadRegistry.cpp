@@ -13,9 +13,9 @@ namespace jam
 
 	void ThreadRegistry::InitExecutorThread(std::string_view name, IExecutor* executor)
 	{
-		tl_ThreadId = AllocateThreadID();
+		tl_ThreadId	  = AllocateThreadID();
 		tl_ThreadName = name;
-		tl_Executor = executor;
+		tl_Executor   = executor;
 	}
 
 	std::string ThreadRegistry::GetCurrentThreadInfo()

@@ -33,7 +33,7 @@ namespace jam::net
 		ConcurrentQueue<UserInputData>			m_inputQueue;
 
 		// 유저별 최신 입력 (deque 제거)
-		unordered_map<uint64, InputCmd>			m_latestInputs;
+		std::unordered_map<uint64, InputCmd>	m_latestInputs;
 	};
 }
 

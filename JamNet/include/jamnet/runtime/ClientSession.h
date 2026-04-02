@@ -22,7 +22,7 @@ namespace jam::net
 
     private:
         void                    RequestTcpBind();
-        void                    OnTcpBindResponse(optional<fb::fbTcpBindResT> res);
+        void                    OnTcpBindResponse(std::optional<fb::fbTcpBindResT> res);
 
     private:
         ClientNetworkManager*   m_manager = nullptr;
@@ -48,8 +48,8 @@ namespace jam::net
     private:
         void                    RequestUdpBind();
 
-        void                    OnUdpBindResponse(optional<fb::fbUdpBindResT> res);
-        void                    OnRequestGroupIdRes(optional<fb::fbRequestGroupIdResT> res);
+        void                    OnUdpBindResponse(std::optional<fb::fbUdpBindResT> res);
+        void                    OnRequestGroupIdRes(std::optional<fb::fbRequestGroupIdResT> res);
 
     private:
         ClientNetworkManager*   m_manager = nullptr;

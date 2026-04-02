@@ -6,17 +6,17 @@ namespace jam
 
 	enum class eShardState : uint8
 	{
-		CLOSED		= 0,
-		OPEN		= 1,
-		DRAINING	= 2,
-		DEAD		= 3
+		Closed		= 0,
+		Open		= 1,
+		Draining	= 2,
+		Dead		= 3
 	};
 
 	struct QueueSlot
 	{
-		atomic<Mailbox*> q{ nullptr };                         // 현재 게시된 큐(없으면 nullptr)
-		atomic<uint32>   gen{ 0 };                             // 세대 카운터(ABA/교체 감지)
-		atomic<uint8>    state{ E2U(eShardState::CLOSED) };    // 운영 상태
+		std::atomic<Mailbox*> q{ nullptr };                         // 현재 게시된 큐(없으면 nullptr)
+		std::atomic<uint32>   gen{ 0 };                             // 세대 카운터(ABA/교체 감지)
+		std::atomic<uint8>    state{ E2U(eShardState::Closed) };    // 운영 상태
 
 		QueueSlot() = default;
 

@@ -68,7 +68,7 @@ namespace jam::net
         JAMNET_LOG_INFO("ServerNetworkManager stopped");
     }
 
-    void ServerNetworkManager::SetMatchmaker(unique_ptr<IMatchmaker> matchmaker)
+    void ServerNetworkManager::SetMatchmaker(std::unique_ptr<IMatchmaker> matchmaker)
     {
         if (m_matchmaker)
             m_matchmaker->Init(nullptr);
@@ -120,7 +120,7 @@ namespace jam::net
         if (groupId == 0)
             return;
 
-        shared_ptr<ServerNetWorld> victim;
+        std::shared_ptr<ServerNetWorld> victim;
         {
             WRITE_LOCK
         	auto it = m_worlds.find(groupId);
@@ -135,7 +135,7 @@ namespace jam::net
             victim->Stop();
     }
 
-    void ServerNetworkManager::RegisterTcpSession(uint64 userId, const shared_ptr<ServerTcpSession>& tcp)
+    void ServerNetworkManager::RegisterTcpSession(uint64 userId, const std::shared_ptr<ServerTcpSession>& tcp)
     {
         if (!userId || !tcp)
             return;
@@ -146,7 +146,7 @@ namespace jam::net
         JAMNET_LOG_INFO("UserId = {}] TCP Session registered", userId);
     }
 
-    void ServerNetworkManager::RegisterUdpSession(uint64 userId, const shared_ptr<ServerUdpSession>& udp)
+    void ServerNetworkManager::RegisterUdpSession(uint64 userId, const std::shared_ptr<ServerUdpSession>& udp)
     {
         if (!userId || !udp)
             return;
@@ -162,7 +162,7 @@ namespace jam::net
         if (!userId)
             return;
 
-        vector<uint32> groupsToNotify;
+        std::vector<uint32> groupsToNotify;
         {
             WRITE_LOCK
                 m_tcpSessions.erase(userId);
@@ -184,21 +184,21 @@ namespace jam::net
         JAMNET_LOG_INFO("UserId = {}] Session unregistered", userId);
     }
 
-    shared_ptr<ServerTcpSession> ServerNetworkManager::FindTcpSession(uint64 userId)
+    std::shared_ptr<ServerTcpSession> ServerNetworkManager::FindTcpSession(uint64 userId)
     {
         READ_LOCK
     	auto it = m_tcpSessions.find(userId);
         return (it != m_tcpSessions.end()) ? it->second : nullptr;
     }
 
-    shared_ptr<ServerUdpSession> ServerNetworkManager::FindUdpSession(uint64 userId)
+    std::shared_ptr<ServerUdpSession> ServerNetworkManager::FindUdpSession(uint64 userId)
     {
         READ_LOCK
     	auto it = m_udpSessions.find(userId);
         return (it != m_udpSessions.end()) ? it->second : nullptr;
     }
 
-    void ServerNetworkManager::BroadcastPacket(const shared_ptr<SendBuffer>& buf, eProtocolType protocol)
+    void ServerNetworkManager::BroadcastPacket(const std::shared_ptr<SendBuffer>& buf, eProtocolType protocol)
     {
         if (!buf)
             return;
@@ -207,7 +207,7 @@ namespace jam::net
 
         if (protocol == eProtocolType::TCP)
         {
-            for (auto& session : m_tcpSessions | views::values)
+            for (auto& session : m_tcpSessions | std::views::values)
             {
                 if (session && session->IsConnected())
                 {
@@ -218,7 +218,7 @@ namespace jam::net
 
         if (protocol == eProtocolType::UDP)
         {
-            for (auto& session : m_udpSessions | views::values)
+            for (auto& session : m_udpSessions | std::views::values)
             {
                 if (session && session->IsConnected())
                 {
@@ -228,7 +228,7 @@ namespace jam::net
         }
     }
 
-    void ServerNetworkManager::SendToUser(uint64 userId, const shared_ptr<SendBuffer>& buf, eProtocolType protocol)
+    void ServerNetworkManager::SendToUser(uint64 userId, const std::shared_ptr<SendBuffer>& buf, eProtocolType protocol)
     {
         if (!buf)
             return;
@@ -263,7 +263,7 @@ namespace jam::net
 
         WRITE_LOCK
     	auto& members = m_groupMembers[groupId];
-        if (ranges::find(members, userId) == members.end())
+        if (std::ranges::find(members, userId) == members.end())
             members.push_back(userId);
     }
 
@@ -290,7 +290,7 @@ namespace jam::net
         {
             READ_LOCK
         	users.reserve(m_tcpSessions.size());
-            for (const auto& uid : m_tcpSessions | views::keys)
+            for (const auto& uid : m_tcpSessions | std::views::keys)
                 users.push_back(uid);
         }
 
@@ -330,7 +330,7 @@ namespace jam::net
             return false;
 
         m_service->SetSessionFactory<ServerTcpSession, ServerUdpSession>();
-        m_service->SetSessionInitCallback([this](const shared_ptr<Session>& session)
+        m_service->SetSessionInitCallback([this](const std::shared_ptr<Session>& session)
             {
                 if (auto tcp = dynamic_pointer_cast<ServerTcpSession>(session))
                 {
@@ -341,11 +341,7 @@ namespace jam::net
                 {
                     udp->SetNetworkManager(this);
 					RPCRegisterRequest<fb::fbUdpBindReqT>(udp, udp.get(), &ServerUdpSession::OnUdpBindRequest);
-                    // matchmaking
-                        // (현재 ServerTcpSession에 OnRequestGroupIdReq가 있는데, UDP로 옮기는 게 자연스러움)
                     RPCRegisterRequest<fb::fbRequestGroupIdReqT>(udp, udp.get(), &ServerUdpSession::OnRequestGroupIdReq);
-
-                    // world RPC는 m_world가 아니라 "udp session 라우터"에 등록
                     RPCRegisterRequest<fb::fbSpawnActorReqT>(udp, udp.get(), &ServerUdpSession::OnSpawnActorRequest);
                     RPCRegisterRequest<fb::fbDespawnActorReqT>(udp, udp.get(), &ServerUdpSession::OnDespawnActorRequest);
                     RPCRegisterRequest<fb::fbPossessActorReqT>(udp, udp.get(), &ServerUdpSession::OnPossessActorRequest);

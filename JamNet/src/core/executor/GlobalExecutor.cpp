@@ -22,7 +22,7 @@ namespace jam
 		m_directory = std::make_shared<ShardDirectory>(dirCfg);
 		m_directory->Init();
 
-		m_backend = WinFiberBackend();
+		m_backend   = WinFiberBackend();
 		m_scheduler = std::make_unique<FiberScheduler>(m_backend);
 	}
 
@@ -98,7 +98,7 @@ namespace jam
 		m_scheduler->PostSpawn(
 			[this, deadline, j = std::move(j)]() mutable
 			{
-				m_scheduler->SleepUntil(deadline); // AwaitKey 불필요
+				m_scheduler->SleepUntil(deadline);
 				Submit(std::move(j));
 			},
 			FiberDesc{ .name = "GE.SubmitAfter" }
@@ -118,7 +118,7 @@ namespace jam
 			if (i + 1 == n)
 				sh->Submit(std::move(j));  
 			else
-				sh->Submit(j);          // todo: ?
+				sh->Submit(j);        
 		}
 	}
 
@@ -127,12 +127,12 @@ namespace jam
 		if (m_scheduler) m_scheduler->PostSpawn(std::move(fn), desc);
 	}
 
-	void GlobalExecutor::ResumeFiber(AwaitKey key) const
+	void GlobalExecutor::ResumeFiber(FiberAwaitKey key) const
 	{
 		if (m_scheduler) m_scheduler->PostResume(key);
 	}
 
-	void GlobalExecutor::CancelFiberByKey(AwaitKey key, eCancelCode code) const
+	void GlobalExecutor::CancelFiberByKey(FiberAwaitKey key, eCancelCode code) const
 	{
 		if (m_scheduler) m_scheduler->PostCancelByKey(key, code);
 	}
@@ -256,14 +256,28 @@ namespace jam
 	{
 		static std::atomic<uint32> workerIndex{ 0 };
 		uint32	myIndex = workerIndex.fetch_add(1, std::memory_order_relaxed);
-		string threadName = std::format("GlobalExecutor#Worker{}", myIndex);
+		std::string threadName = std::format("GlobalExecutor#Worker{}", myIndex);
 		ThreadRegistry::InitExecutorThread(threadName, this);
 
 		while (m_running.load())
 		{
+           m_metricWorkerLoopCount.fetch_add(1, std::memory_order_relaxed);
 			Job j([] {});
-			if (m_offload.wait_dequeue_timed(j, 1))
+         const uint64 waitStart_ns = NOW_NS();
+			const bool dequeued = m_offload.wait_dequeue_timed(j, 1);
+			m_metricWorkerWaitCost_ns.fetch_add(NOW_NS() - waitStart_ns, std::memory_order_relaxed);
+
+			if (dequeued)
+			{
+				const uint64 execStart_ns = NOW_NS();
 				j.Execute();
+               m_metricWorkerJobExecCount.fetch_add(1, std::memory_order_relaxed);
+				m_metricWorkerJobExecCost_ns.fetch_add(NOW_NS() - execStart_ns, std::memory_order_relaxed);
+			}
+			else
+			{
+				m_metricWorkerIdleLoopCount.fetch_add(1, std::memory_order_relaxed);
+			}
 		}
 	}
 
@@ -275,10 +289,88 @@ namespace jam
 
 		while (m_running.load(std::memory_order_acquire))
 		{
-			m_scheduler->Poll(64, NOW_NS());
+            m_metricFiberLoopCount.fetch_add(1, std::memory_order_relaxed);
+
+			const uint64 pollStart_ns = NOW_NS();
+			m_scheduler->Poll(64, pollStart_ns);
+			const uint64 pollCost_ns = NOW_NS() - pollStart_ns;
+			m_metricFiberPollCount.fetch_add(1, std::memory_order_relaxed);
+			m_metricFiberPollCost_ns.fetch_add(pollCost_ns, std::memory_order_relaxed);
+
+			const auto& profile = m_scheduler->Profile();
+			if (profile.lastPollReadyRunCount == 0)
+				m_metricFiberEmptyPollCount.fetch_add(1, std::memory_order_relaxed);
+			m_metricFiberReadyRunCount.store(profile.readyRunCount, std::memory_order_relaxed);
+
+			const uint64 idleStart_ns = NOW_NS();
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+           m_metricFiberSleepCost_ns.fetch_add(NOW_NS() - idleStart_ns, std::memory_order_relaxed);
 		}
 
 		m_scheduler->DetachFromThread();
+	}
+
+	GlobalExecutorMetricsSnapshot GlobalExecutor::GetMetricsSnapshot() const
+	{
+		GlobalExecutorMetricsSnapshot s{};
+		s.workerLoopCount		= m_metricWorkerLoopCount.load(std::memory_order_relaxed);
+		s.workerJobExecCount	= m_metricWorkerJobExecCount.load(std::memory_order_relaxed);
+		s.workerIdleLoopCount	= m_metricWorkerIdleLoopCount.load(std::memory_order_relaxed);
+		s.workerWaitCost_ns		= m_metricWorkerWaitCost_ns.load(std::memory_order_relaxed);
+		s.workerJobExecCost_ns	= m_metricWorkerJobExecCost_ns.load(std::memory_order_relaxed);
+
+		s.fiberLoopCount		= m_metricFiberLoopCount.load(std::memory_order_relaxed);
+		s.fiberPollCount		= m_metricFiberPollCount.load(std::memory_order_relaxed);
+		s.fiberEmptyPollCount	= m_metricFiberEmptyPollCount.load(std::memory_order_relaxed);
+		s.fiberPollCost_ns		= m_metricFiberPollCost_ns.load(std::memory_order_relaxed);
+		s.fiberSleepCost_ns		= m_metricFiberSleepCost_ns.load(std::memory_order_relaxed);
+		s.fiberReadyRunCount	= m_metricFiberReadyRunCount.load(std::memory_order_relaxed);
+		return s;
+	}
+
+	std::vector<ShardExecutorMetricsSnapshot> GlobalExecutor::GetShardMetricsSnapshots() const
+	{
+		std::vector<ShardExecutorMetricsSnapshot> snapshots;
+		if (!m_directory)
+			return snapshots;
+
+		auto& shards = m_directory->Shards();
+		snapshots.reserve(shards.size());
+		for (auto& shard : shards)
+		{
+			if (!shard)
+				continue;
+			snapshots.push_back(shard->GetMetricsSnapshot());
+		}
+
+		return snapshots;
+	}
+
+	void GlobalExecutor::ResetMetrics()
+	{
+		m_metricWorkerLoopCount.store(0, std::memory_order_relaxed);
+		m_metricWorkerJobExecCount.store(0, std::memory_order_relaxed);
+		m_metricWorkerIdleLoopCount.store(0, std::memory_order_relaxed);
+		m_metricWorkerWaitCost_ns.store(0, std::memory_order_relaxed);
+		m_metricWorkerJobExecCost_ns.store(0, std::memory_order_relaxed);
+
+		m_metricFiberLoopCount.store(0, std::memory_order_relaxed);
+		m_metricFiberPollCount.store(0, std::memory_order_relaxed);
+		m_metricFiberEmptyPollCount.store(0, std::memory_order_relaxed);
+		m_metricFiberPollCost_ns.store(0, std::memory_order_relaxed);
+		m_metricFiberSleepCost_ns.store(0, std::memory_order_relaxed);
+		m_metricFiberReadyRunCount.store(0, std::memory_order_relaxed);
+
+		if (m_scheduler)
+			m_scheduler->ResetProfile();
+
+		if (m_directory)
+		{
+			for (auto& shard : m_directory->Shards())
+			{
+				if (shard)
+					shard->ResetMetrics();
+			}
+		}
 	}
 }

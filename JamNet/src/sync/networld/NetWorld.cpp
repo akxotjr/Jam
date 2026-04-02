@@ -27,7 +27,7 @@ namespace jam::net
 
 		shard->Submit(Job([this, shard, dt_ns, self, groupId]
 			{
-				auto& L = shard->Local();
+				auto& L		= shard->Local();
 				auto& group = L.domainGroups[{ DOMAIN_NETWORK, groupId }]; // subType = groupId
 
 				group.tickPeriod_ns = dt_ns;

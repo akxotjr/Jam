@@ -6,9 +6,9 @@ namespace jam::net
 {
 	struct ReplayRelevanceConfig
 	{
-		float enterRadius = 8.0f;
-		float leaveRadius = 10.f;
-		uint32 minHoldTicks = 3;
+		float  enterRadius   = 8.0f;
+		float  leaveRadius   = 10.f;
+		uint32 minHoldTicks  = 3;
 	};
 
 	class ClientReplaySystem

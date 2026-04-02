@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "IExecutor.h"
+#include "jamnet/core/executor/IExecutor.h"
 
 namespace jam
 {

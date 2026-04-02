@@ -67,7 +67,7 @@ namespace jam
 		return Mix64(key) % n;		// return shard index
 	}
 
-	shared_ptr<ShardExecutor> ShardDirectory::ShardAt(uint64 index) const
+	std::shared_ptr<ShardExecutor> ShardDirectory::ShardAt(uint64 index) const
 	{
 		if (index >= Size()) return {};
 		return m_shards[index];

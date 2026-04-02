@@ -21,7 +21,7 @@ namespace jam
 	{
 		GROUP_AFFINITY ga = {};
 		ga.Group = slot.group;
-		ga.Mask = slot.mask;
+		ga.Mask  = slot.mask;
 		return SetThreadGroupAffinity(GetCurrentThread(), &ga, nullptr) != 0;
 	}
 

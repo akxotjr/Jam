@@ -3,22 +3,18 @@
 
 namespace jam
 {
-	/*--------------------
-		DeadLockProfiler
-	---------------------*/
 
 	void DeadLockProfiler::PushLock(const char* name)
 	{
 		LockGuard guard(m_lock);
 
-		// 아이디를 찾거나 발급한다.
 		int32 lockId = 0;
 
 		auto findIt = m_nameToId.find(name);
 		if (findIt == m_nameToId.end())
 		{
 			lockId = static_cast<int32>(m_nameToId.size());
-			m_nameToId[name] = lockId;
+			m_nameToId[name]   = lockId;
 			m_idToName[lockId] = name;
 		}
 		else
@@ -26,10 +22,8 @@ namespace jam
 			lockId = findIt->second;
 		}
 
-		// 잡고 있는 락이 있었다면
 		if (tl_LockStack.empty() == false)
 		{
-			// 기존에 발견되지 않은 케이스라면 데드락 여부 다시 확인한다.
 			const int32 prevId = tl_LockStack.top();
 			if (lockId != prevId)
 			{
@@ -64,8 +58,8 @@ namespace jam
 		const int32 lockCount = static_cast<int32>(m_nameToId.size());
 		m_discoveredOrder = std::vector<int32>(lockCount, -1);
 		m_discoveredCount = 0;
-		m_finished = std::vector<bool>(lockCount, false);
-		m_parent = std::vector<int32>(lockCount, -1);
+		m_finished		  = std::vector<bool>(lockCount, false);
+		m_parent		  = std::vector<int32>(lockCount, -1);
 
 		for (int32 lockId = 0; lockId < lockCount; lockId++)
 			Dfs(lockId);
@@ -102,7 +96,6 @@ namespace jam
 			if (m_discoveredOrder[here] < m_discoveredOrder[there])
 				continue;
 
-			// 순방향이 아니고, Dfs(there)가 아직 종료하지 않았다면, there는 here의 선조이다. (역방향 간선)
 			if (m_finished[there] == false)
 			{
 				printf("%s -> %s\n", m_idToName[here], m_idToName[there]);

@@ -66,7 +66,7 @@ namespace jam::net
 			Rebuild();
 		else
 		{
-			for (auto& s : m_states | views::values)
+			for (auto& s : m_states | std::views::values)
 			{
 				s.entered.clear(); 
 				s.left.clear();
@@ -117,7 +117,7 @@ namespace jam::net
 	{
 		RebuildGrid();
 
-		vector<entt::entity> candidates;
+		std::vector<entt::entity> candidates;
 		candidates.reserve(64);
 
 		for (auto& [userId, state] : m_states)
@@ -129,7 +129,7 @@ namespace jam::net
 			GetCandidatesFromGrid(userPos, candidates);
 
 			// 2. 새 visible 집합 구성
-			unordered_set<NetId> newVisible;
+			std::unordered_set<NetId> newVisible;
 			newVisible.reserve(state.visible.size() + 16);
 
 			// alwaysVisible 먼저 삽입 (격자 쿼리 불필요)
@@ -212,7 +212,7 @@ namespace jam::net
 		}
 	}
 
-	void ServerAoiSystem::GetCandidatesFromGrid(const px::Vec3& userPos, vector<entt::entity>& out) const
+	void ServerAoiSystem::GetCandidatesFromGrid(const px::Vec3& userPos, std::vector<entt::entity>& out) const
 	{
 		const float cellSize = std::max(1.f, m_cfg.gridCellSize);
 

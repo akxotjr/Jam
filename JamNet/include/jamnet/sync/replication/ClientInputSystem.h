@@ -1,9 +1,9 @@
 ﻿#pragma once
-#include "ReplicationTypes.h"
+#include "jamnet/sync/replication/ReplicationTypes.h"
 
 namespace jam::net
 {
-	class ClientNetWorld; // forward
+	class ClientNetWorld;
 
 	/**
 	 * @name ClientInputSystem
@@ -35,12 +35,12 @@ namespace jam::net
 
 
 	private:
-		entt::registry&								m_world;
-		bool										m_bInitialized = false;
-		unique_ptr<flatbuffers::FlatBufferBuilder>	m_fbb;
+		entt::registry&									m_world;
+		bool											m_bInitialized = false;
+		std::unique_ptr<flatbuffers::FlatBufferBuilder>	m_fbb;
 
-		SeqLockBox<px::CharacterInput>				m_inputSample{};
+		SeqLockBox<px::CharacterInput>					m_inputSample = {};
 
-		static constexpr size_t						kMaxHistorySize = 512;
+		static constexpr size_t							kMaxHistorySize = 512;
 	};
 }

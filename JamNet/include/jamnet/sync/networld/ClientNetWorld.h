@@ -1,14 +1,15 @@
 ﻿#pragma once
-#include "NetWorld.h"
+#include "jamnet/sync/networld/NetWorld.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
-#include "jamnet/sync/replication/ReplicationTypes.h"
 #include "jamnet/sync/transport/ITransportEndpoint.h"
+#include "jamnet/sync/replication/NetActorComponents.h"
+
 #include "jamnet/sync/schema/gen/actor_spawn_generated.h"
 #include "jamnet/sync/schema/gen/actor_control_generated.h"
 
 #include <jampx/IPhysicsFacade.h>
 
-#include "jamnet/sync/replication/NetActorComponents.h"
+
 
 namespace jam::net
 {
@@ -20,9 +21,9 @@ namespace jam::net
 
 		void								Init() override;
 
-		void								SetTransportSystem(shared_ptr<ITransportEndpoint> transport);
-		void								SetPhysicsFacade(unique_ptr<px::IPhysicsFacade> physics);
-		void								SetLevelPath(const string& levelPath) { m_levelPath = levelPath; }
+		void								SetTransportSystem(std::shared_ptr<ITransportEndpoint> transport);
+		void								SetPhysicsFacade(std::unique_ptr<px::IPhysicsFacade> physics);
+		void								SetLevelPath(const std::string& levelPath) { m_levelPath = levelPath; }
 
 
 		void								SetUserId(uint64 userId) { m_userId = userId; }
@@ -30,7 +31,7 @@ namespace jam::net
 
 		entt::entity						GetEntity(NetId netId);
 
-		void								Send(const shared_ptr<SendBuffer>& buf);
+		void								Send(const std::shared_ptr<SendBuffer>& buf);
 		void								OnRecvPacket(const PacketView& view);
 
 		void								SpawnActor(SpawnParams params);
@@ -57,25 +58,25 @@ namespace jam::net
 
 		void								RequestSpawnActor(const SpawnParams& params);
 
-		void								OnSpawnActorResponse(optional<fb::fbSpawnActorResT> res);
-		void								OnDespawnActorResponse(optional<fb::fbDespawnActorResT> res);
-		void								OnPossessActorResponse(optional<fb::fbPossessActorResT> res);
-		void								OnUnpossesActorResponse(optional<fb::fbUnpossessActorResT> res);
+		void								OnSpawnActorResponse(std::optional<fb::fbSpawnActorResT> res);
+		void								OnDespawnActorResponse(std::optional<fb::fbDespawnActorResT> res);
+		void								OnPossessActorResponse(std::optional<fb::fbPossessActorResT> res);
+		void								OnUnpossesActorResponse(std::optional<fb::fbUnpossessActorResT> res);
 
 		void								BootstrapLevelActors();
 
 	private:
-		shared_ptr<ITransportEndpoint>			m_transport;
-		
-		unique_ptr<px::IPhysicsFacade>			m_physics;
+		std::shared_ptr<ITransportEndpoint>				m_transport;
 
-		string									m_levelPath;
-		px::LevelLayerInfo						m_levelLayerInfo = {};
+		std::unique_ptr<px::IPhysicsFacade>				m_physics;
 
-		uint64									m_userId = 0;
-		NetId									m_localNetId = NetId::Invalid();
+		std::string										m_levelPath;
+		px::LevelLayerInfo								m_levelLayerInfo = {};
 
-		unordered_map<NetId, entt::entity>		m_netIdToEntity;		// netId -> entity (for ensure by server)
-		unordered_map<uint32, entt::entity>		m_spawnReqIdToEntity;	// spawnReqId -> pending entities
+		uint64											m_userId = 0;
+		NetId											m_localNetId = NetId::Invalid();
+
+		std::unordered_map<NetId, entt::entity>			m_netIdToEntity;		// netId -> entity (for ensure by server)
+		std::unordered_map<uint32, entt::entity>		m_spawnReqIdToEntity;	// spawnReqId -> pending entities
 	};
 }

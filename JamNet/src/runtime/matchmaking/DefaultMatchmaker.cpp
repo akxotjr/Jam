@@ -12,10 +12,10 @@ namespace jam::net
 	MatchmakeResult DefaultMatchmaker::RequestGroupId(const MatchmakeRequest& req)
 	{
 		if (!m_netManager || req.principalId == 0)
-			return { eMatchmakeStatus::FAILED, 0 };
+			return { eMatchmakeStatus::Failed, 0 };
 
 		MatchmakeResult result{};
-		result.status  = eMatchmakeStatus::ASSIGNED;
+		result.status  = eMatchmakeStatus::Assigned;
 		result.groupId = 1;
 
 		return result;

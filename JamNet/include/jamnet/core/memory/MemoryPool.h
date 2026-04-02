@@ -2,9 +2,6 @@
 
 namespace jam
 {
-	/*-----------------
-		MemoryHeader
-	------------------*/
 
 	inline constexpr int32 SLIST_ALIGNMENT = 16;
 
@@ -26,14 +23,9 @@ namespace jam
 			return header;
 		}
 
-		int32 allocSize;
+		int32 allocSize = 0;
 	};
 
-
-
-	/*-----------------
-		MemoryPool
-	------------------*/
 
 
 	DECLSPEC_ALIGN(SLIST_ALIGNMENT)
@@ -48,9 +40,9 @@ namespace jam
 
 	private:
 		SLIST_HEADER			m_header;
-		int32					m_allocSize = 0;
-		std::atomic<int32>		m_useCount = 0;
-		std::atomic<int32>		m_reserveCount = 0;
+		int32					m_allocSize		= 0;
+		std::atomic<int32>		m_useCount		= 0;
+		std::atomic<int32>		m_reserveCount  = 0;
 	};
 }
 

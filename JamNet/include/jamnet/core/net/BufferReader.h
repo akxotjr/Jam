@@ -9,8 +9,8 @@ namespace jam::net
 		BufferReader(BYTE* buffer, uint32 size, uint32 pos = 0)
 			: m_buffer(buffer), m_size(size), m_pos(pos) {}
 
-		BYTE*	Buffer() const { return m_buffer; }
-		uint32	Size() const { return m_size; }
+		BYTE*	Buffer()   const { return m_buffer; }
+		uint32	Size()	   const { return m_size; }
 		uint32	ReadSize() const { return m_pos; }
 		uint32	FreeSize() const { return m_size - m_pos; }
 
@@ -64,8 +64,8 @@ namespace jam::net
 
 	private:
 		BYTE*	m_buffer = nullptr;
-		uint32	m_size = 0;
-		uint32	m_pos = 0;
+		uint32	m_size   = 0;
+		uint32	m_pos	 = 0;
 	};
 
 }

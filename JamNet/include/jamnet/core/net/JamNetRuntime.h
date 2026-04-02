@@ -6,7 +6,7 @@ namespace jam::net
 	struct RuntimeConfig
 	{
 		uint32					clockTick = 30;
-		GlobalExecutorConfig	geConfig{};
+		GlobalExecutorConfig	geConfig  = {};
 	};
 
 	class JamNetRuntime

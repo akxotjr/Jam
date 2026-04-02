@@ -9,10 +9,7 @@
 #include "jamnet/sync/replication/ClientReplicationSystem.h"
 #include "jamnet/sync/replication/ClientPhysicsSystem.h"
 #include "jamnet/sync/replication/ClientSamplingSystem.h"
-
-#include "jamnet/sync/replication/ReplicationUtils.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
-
 
 #include "jamnet/sync/schema/gen/snapshot_generated.h"
 
@@ -40,12 +37,12 @@ namespace jam::net
         BootstrapLevelActors();
 	}
 
-    void ClientNetWorld::SetTransportSystem(shared_ptr<ITransportEndpoint> transport)
+    void ClientNetWorld::SetTransportSystem(std::shared_ptr<ITransportEndpoint> transport)
     {
 		m_transport = std::move(transport);
     }
 
-    void ClientNetWorld::SetPhysicsFacade(unique_ptr<px::IPhysicsFacade> physics)
+    void ClientNetWorld::SetPhysicsFacade(std::unique_ptr<px::IPhysicsFacade> physics)
     {
         m_physics = std::move(physics);
     }
@@ -61,7 +58,7 @@ namespace jam::net
     }
 
 
-    void ClientNetWorld::Send(const shared_ptr<SendBuffer>& buf)
+    void ClientNetWorld::Send(const std::shared_ptr<SendBuffer>& buf)
     {
         if (m_transport) m_transport->Send({}, buf);
     }
@@ -79,7 +76,7 @@ namespace jam::net
         default: break;
         }
 
-        JAMNET_LOG_DEBUG("Snapshot total size= {}, header size= {}, payload size= {}", view.TotalSize(), view.HeaderSize(), view.PayloadSize());
+        //JAMNET_LOG_DEBUG("Snapshot total size= {}, header size= {}, payload size= {}", view.TotalSize(), view.HeaderSize(), view.PayloadSize());
     }
 
     void ClientNetWorld::SpawnActor(SpawnParams params)
@@ -115,8 +112,8 @@ namespace jam::net
         req.owner_user_id       = params.owned ? m_userId : 0;
 		req.controller_user_id  = params.controlled ? m_userId : 0;
         req.prefab_key          = params.desc.prefab.value;
-		req.pos                 = make_unique<fb::fbVec3>(params.desc.pose.p.x, params.desc.pose.p.y, params.desc.pose.p.z);
-		req.rot                 = make_unique<fb::fbQuat>(params.desc.pose.q.x, params.desc.pose.q.y, params.desc.pose.q.z, params.desc.pose.q.w);
+		req.pos                 = std::make_unique<fb::fbVec3>(params.desc.pose.p.x, params.desc.pose.p.y, params.desc.pose.p.z);
+		req.rot                 = std::make_unique<fb::fbQuat>(params.desc.pose.q.x, params.desc.pose.q.y, params.desc.pose.q.z, params.desc.pose.q.w);
 		req.spawn_src           = static_cast<uint32>(params.desc.spawnSrc);
 		req.team_id             = params.desc.team;
 		req.part_id             = params.desc.part;
@@ -129,9 +126,9 @@ namespace jam::net
 			req.override_mask = overrides.mask.bits();
         
             if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_VEL))
-				req.linear_vel = make_unique<fb::fbVec3>(overrides.linearVelocity.x, overrides.linearVelocity.y, overrides.linearVelocity.z);
+				req.linear_vel = std::make_unique<fb::fbVec3>(overrides.linearVelocity.x, overrides.linearVelocity.y, overrides.linearVelocity.z);
 			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_VEL))
-				req.angular_vel = make_unique<fb::fbVec3>(overrides.angularVelocity.x, overrides.angularVelocity.y, overrides.angularVelocity.z);
+				req.angular_vel = std::make_unique<fb::fbVec3>(overrides.angularVelocity.x, overrides.angularVelocity.y, overrides.angularVelocity.z);
 			if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_DAMP))
 				req.linear_damping = overrides.linearDamping;
 			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_DAMP))
@@ -323,9 +320,7 @@ namespace jam::net
     }
 
 
-
-
-    void ClientNetWorld::OnSpawnActorResponse(optional<fb::fbSpawnActorResT> res)
+    void ClientNetWorld::OnSpawnActorResponse(std::optional<fb::fbSpawnActorResT> res)
     {
         if (!res)
         {
@@ -353,7 +348,7 @@ namespace jam::net
         TryConfirmPendingSpawn(nid, spawnReqId);
     }
 
-    void ClientNetWorld::OnDespawnActorResponse(optional<fb::fbDespawnActorResT> res)
+    void ClientNetWorld::OnDespawnActorResponse(std::optional<fb::fbDespawnActorResT> res)
     {
         if (!res.has_value())
         {
@@ -370,7 +365,7 @@ namespace jam::net
 
     }
 
-    void ClientNetWorld::OnPossessActorResponse(optional<fb::fbPossessActorResT> res)
+    void ClientNetWorld::OnPossessActorResponse(std::optional<fb::fbPossessActorResT> res)
     {
 		if (!res.has_value() || !res.value().success)
         {
@@ -390,7 +385,7 @@ namespace jam::net
         }
     }
 
-    void ClientNetWorld::OnUnpossesActorResponse(optional<fb::fbUnpossessActorResT> res)
+    void ClientNetWorld::OnUnpossesActorResponse(std::optional<fb::fbUnpossessActorResT> res)
     {
         if (!res || !res->success)
         {

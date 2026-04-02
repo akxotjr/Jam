@@ -42,6 +42,37 @@ namespace jam::px
 			return false;
 		}
 
+		void ApplyAuthorityState(ProjectileComponent* projectile, const RigidState& state)
+		{
+			if (!projectile) return;
+
+			ProjectileState s = projectile->GetState();
+
+			// 위치/회전 기준점은 권한 상태로 맞추되
+			s.position = ToPhysX(state.pose.p);
+
+			// 속도는 0 덮어쓰기 방지 (초기 velocity 보존)
+			constexpr float velEps = EPS_3;
+			if (state.linVel.MagnitudeSquared() > (velEps * velEps))
+			{
+				s.velocity = ToPhysX(state.linVel);
+			}
+
+			projectile->SetState(s);
+		}
+
+
+		void BuildRigidStateFromProjectile(const ProjectileComponent* projectile, const RigidState& prev, OUT RigidState& out)
+		{
+			out = prev;
+			if (!projectile) return;
+
+			const ProjectileState& ps = projectile->GetState();
+			out.pose.p = ToPx(ps.position);
+			out.linVel = ToPx(ps.velocity);
+			out.angVel = Vec3::Zero();
+		}
+
 	} // anonymous namespace
 
 
@@ -96,23 +127,27 @@ namespace jam::px
 		if (!dyn) return false;
 
 		const RigidState prev = body.GetMainState();
-
-		const PxTransform prevPose = ToPhysX(prev.pose);
-		const PxTransform nowPose  = dyn->getGlobalPose();
-
 		RigidState now = prev;
-		now.pose   = ToPx(nowPose);
-		now.linVel = ToPx(GetLinearVelocity(nowPose.p, prevPose.p, m_lastDtMain));
-		now.angVel = ToPx(GetAngularVelocity(nowPose.q, prevPose.q, m_lastDtMain));
+
+		if (IsLocalDrivenProjectile(m_mainProjectile.get()))
+		{
+			BuildRigidStateFromProjectile(m_mainProjectile.get(), prev, now);
+			now.pose.q = ToPx(dyn->getGlobalPose().q); // 회전은 actor 기준 유지
+		}
+		else
+		{
+			const PxTransform prevPose = ToPhysX(prev.pose);
+			const PxTransform nowPose = dyn->getGlobalPose();
+
+			now.pose = ToPx(nowPose);
+			now.linVel = ToPx(GetLinearVelocity(nowPose.p, prevPose.p, m_lastDtMain));
+			now.angVel = ToPx(GetAngularVelocity(nowPose.q, prevPose.q, m_lastDtMain));
+		}
 
 		body.SetMainState(now);
 
-		// LocalDriven projectile: lifetime/hit 같은 이벤트 시에만 dirty
-		if (IsLocalDrivenProjectile(m_mainProjectile.get()))
-			return m_lastHitResult.IsTerminal() || m_lastHitResult.hit;
-
-		// Non-local-driven(DYN_SIM): 상태 변화 기반 dirty
-		return IsMeaningfulChanged(prev, now);
+		const bool changed = IsMeaningfulChanged(prev, now);
+		return changed || m_lastHitResult.IsTerminal() || m_lastHitResult.hit;
 	}
 
 
@@ -121,16 +156,36 @@ namespace jam::px
 		auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
 		if (!dyn) return;
 
-		RigidState state = body.GetReplayState();
-		const PxTransform prevPose = ToPhysX(state.pose);
-		const PxTransform nowPose  = dyn->getGlobalPose();
+		const RigidState prev = body.GetReplayState();
+		RigidState now = prev;
 
-		state.pose   = ToPx(nowPose);
-		state.linVel = ToPx(GetLinearVelocity(nowPose.p, prevPose.p, m_lastDtReplay));
-		state.angVel = ToPx(GetAngularVelocity(nowPose.q, prevPose.q, m_lastDtReplay));
+		if (IsLocalDrivenProjectile(m_replayProjectile.get()))
+		{
+			BuildRigidStateFromProjectile(m_replayProjectile.get(), prev, now);
+			now.pose.q = ToPx(dyn->getGlobalPose().q);
+		}
+		else
+		{
+			const PxTransform prevPose = ToPhysX(prev.pose);
+			const PxTransform nowPose = dyn->getGlobalPose();
 
-		body.SetReplayState(state);
+			now.pose = ToPx(nowPose);
+			now.linVel = ToPx(GetLinearVelocity(nowPose.p, prevPose.p, m_lastDtReplay));
+			now.angVel = ToPx(GetAngularVelocity(nowPose.q, prevPose.q, m_lastDtReplay));
+		}
+
+		body.SetReplayState(now);
 	}
 
+	bool ProjectileRigidBehavior::ApplyMainState(const RigidState& state)
+	{
+		ApplyAuthorityState(m_mainProjectile.get(), state);
+		return false;
+	}
 
+	bool ProjectileRigidBehavior::ApplyReplayState(const RigidState& state)
+	{
+		ApplyAuthorityState(m_replayProjectile.get(), state);
+		return false;
+	}
 } // namespace jam::px

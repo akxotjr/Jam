@@ -30,7 +30,6 @@ namespace jam::net
 
 		PING = 10,
 		PONG = 11,
-		HEARTBEAT = 12,
 
 		SERVER_INFO = 20,
 		CLIENT_INFO = 21,

@@ -161,7 +161,7 @@ namespace jam::net
 
 		if (!m_manager)
 		{
-			res.status	 = static_cast<uint8>(eMatchmakeStatus::FAILED);
+			res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
 			res.group_id = 0;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
@@ -169,7 +169,7 @@ namespace jam::net
 
 		if (m_userId == 0)
 		{
-			res.status	 = static_cast<uint8>(eMatchmakeStatus::FAILED);
+			res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
 			res.group_id = 0;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
@@ -178,7 +178,7 @@ namespace jam::net
 		auto* mm = m_manager->GetMatchmaker();
 		if (!mm)
 		{
-			res.status	 = static_cast<uint8>(eMatchmakeStatus::FAILED);
+			res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
 			res.group_id = 0;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
@@ -188,14 +188,14 @@ namespace jam::net
 		const MatchmakeResult  mres = mm->RequestGroupId(mreq);
 
 		res.status	 = static_cast<uint8>(mres.status);
-		res.group_id = (mres.status == eMatchmakeStatus::ASSIGNED) ? mres.groupId : 0;
+		res.group_id = (mres.status == eMatchmakeStatus::Assigned) ? mres.groupId : 0;
 
-		if (mres.status == eMatchmakeStatus::ASSIGNED && mres.groupId != 0)
+		if (mres.status == eMatchmakeStatus::Assigned && mres.groupId != 0)
 		{
 			auto* world = m_manager->GetOrCreateWorld(mres.groupId);
 			if (!world)
 			{
-				res.status	 = static_cast<uint8>(eMatchmakeStatus::FAILED);
+				res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
 				res.group_id = 0;
 				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 				return;
@@ -292,7 +292,6 @@ namespace jam::net
 
 				self->Post(Job([self, asyncRes = asyncRes, reqId]() mutable
 					{
-						// 세션 shard에서 실행되므로 registry가 일치함
 						RPCSendResponse(self->GetEntity(), asyncRes, reqId, eChannelType::RELIABLE_ORDERED);
 					}));
 			});

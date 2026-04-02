@@ -7,7 +7,7 @@ namespace jam
     inline moodycamel::ProducerToken& TlsTokenFor(Q& q)
     {
         using Token = moodycamel::ProducerToken;
-        using Map = std::unordered_map<const void*, Token>;
+        using Map   = std::unordered_map<const void*, Token>;
 
         thread_local Map tl_tokens;
 

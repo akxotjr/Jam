@@ -5,6 +5,7 @@
 #include "jamnet/runtime/ClientTransportAdapter.h"
 
 #include "jamnet/sync/networld/ClientNetWorld.h"
+#include "jamnet/sync/replication/ReplicationTypes.h"
 
 
 namespace jam::net

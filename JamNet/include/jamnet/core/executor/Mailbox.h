@@ -1,7 +1,8 @@
 ﻿#pragma once
 #include "concurrentqueue/concurrentqueue.h"
-#include "Job.h"
-#include "ShardSlot.h"
+
+#include "jamnet/core/executor/Job.h"
+
 
 namespace jam
 {
@@ -24,7 +25,7 @@ namespace jam
 
 		bool								TryDequeue(OUT Job& j);
 		uint64								TryDequeueBulk(OUT Job* j, uint64 count);
-		uint64								TryDequeueBulk(OUT span<Job> jobs);
+		uint64								TryDequeueBulk(OUT std::span<Job> jobs);
 
 		template<typename OutputIt>
 		uint64								TryDequeueBulk(OUT OutputIt out, uint64 count);
@@ -41,18 +42,18 @@ namespace jam
 		void								NotifyReadyIfFirst();
 
 	private:
-		uint32								m_id = 0;
-		weak_ptr<ShardExecutor>				m_owner;
-		ConcurrentQueue<Job>				m_queue; // MPSC
+		uint32								m_id			= 0;
+		std::weak_ptr<ShardExecutor>		m_owner;
+		ConcurrentQueue<Job>				m_queue;				// MPSC
 		ConsumerToken						m_consumerToken;
-		atomic<uint64>						m_size{ 0 };
-		atomic<bool>						m_processing{ false };
+		std::atomic<uint64>					m_size			= 0;
+		std::atomic<bool>					m_processing	= false;
 	};
 
 
 
 	template<typename OutputIt>
-	inline uint64 Mailbox::TryDequeueBulk(OUT OutputIt out, uint64 count)
+	uint64 Mailbox::TryDequeueBulk(OUT OutputIt out, uint64 count)
 	{
 		uint64 n = m_queue.try_dequeue_bulk(m_consumerToken, out, count);
 		if (n > 0)

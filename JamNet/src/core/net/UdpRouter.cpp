@@ -1,6 +1,5 @@
 ﻿#include "pch.h"
 #include "jamnet/core/net/UdpRouter.h"
-        
 #include "jamnet/core/net/IocpEvent.h"
 #include "jamnet/core/net/SocketUtils.h"
 
@@ -121,7 +120,7 @@ namespace jam::net
 
     void UdpRouter::RegisterRecv()
     {
-        auto* ev = ObjectPool<RecvEvent>::Pop();
+        auto* ev  = ObjectPool<RecvEvent>::Pop();
         auto* buf = ObjectPool<RecvBuffer>::Pop();
         buf->Init(1500, 1);
 

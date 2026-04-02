@@ -20,7 +20,7 @@ namespace jam::net
 				const entt::entity e = self->GetEntity();
 				if (e == entt::null) return;
 				ConnectHandshake(e);
-			}, eJobPriority::CTRL));
+			}, eJobPriority::Control));
 
 		return true;
 	}
@@ -33,10 +33,10 @@ namespace jam::net
 				const entt::entity e = self->GetEntity();
 				if (e == entt::null) return;
 				DisconnectHandshake(e);
-			}, eJobPriority::CTRL));
+			}, eJobPriority::Control));
 	}
 
-	void UdpSession::Send(const shared_ptr<SendBuffer>& buf)
+	void UdpSession::Send(const std::shared_ptr<SendBuffer>& buf)
 	{
 		if (!buf || !buf->Buffer())
 			return;
@@ -75,10 +75,10 @@ namespace jam::net
 		if (!recvBuffer.OnWrite(numOfBytes))
 			return;
 
-		BYTE* data = recvBuffer.ReadPos();
+		const BYTE* data = recvBuffer.ReadPos();
 		const int32 size = numOfBytes;
 
-		shared_ptr<RecvBuffer> buf = RecvBuffer::FromSpan(data, size);
+		std::shared_ptr<RecvBuffer> buf = RecvBuffer::FromSpan(data, size);
 
 		auto self = static_pointer_cast<UdpSession>(shared_from_this());
 		Post(Job([self, buf]
@@ -107,7 +107,7 @@ namespace jam::net
 		}
 	}
 
-	void UdpSession::RegisterSend(const vector<shared_ptr<SendBuffer>>& bufs)
+	void UdpSession::RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs)
 	{
 		GetService()->m_udpRouter->RegisterSend(bufs, GetRemoteNetAddress());
 	}

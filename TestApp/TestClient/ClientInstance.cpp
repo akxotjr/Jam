@@ -67,26 +67,26 @@ ClientInstance::ClientInstance(uint32 instanceId, uint64 userId)
 	m_subLevelSpawned = GLOBAL_EVENTBUS_SUBSCRIBE(
 		jam::net::RenderLevelSpawnedEvent,
 		[this](const jam::net::RenderLevelSpawnedEvent& evt) { OnLevelSpawned(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MAIN_EXECUTOR }
+		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
 	);
 
 	m_subActorSpawned = GLOBAL_EVENTBUS_SUBSCRIBE(
 		jam::net::RenderActorSpawnedEvent,
 		[this](const jam::net::RenderActorSpawnedEvent& evt) { OnActorSpawned(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MAIN_EXECUTOR }
+		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
 	);
 
 	// 액터 제거 이벤트 구독
 	m_subActorDespawned = GLOBAL_EVENTBUS_SUBSCRIBE(
 		jam::net::RenderActorDespawnedEvent,
 		[this](const jam::net::RenderActorDespawnedEvent& evt) { OnActorDespawned(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MAIN_EXECUTOR }
+		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
 	);
 
 
 	m_subRenderSamples = GLOBAL_EVENTBUS_SUBSCRIBE(jam::net::RenderSamplesEvent,
 		[this](const jam::net::RenderSamplesEvent& evt) { OnRenderSamples(evt); }, 
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MAIN_EXECUTOR });
+		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor });
 
 
 	JAMNET_LOG_INFO("[Client #{}] Created", m_instanceId);
@@ -342,8 +342,8 @@ void ClientInstance::ProcessControlInput()
 		}
 	}
 
-	//if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT))
-	//	SpawnBullet();
+	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT))
+		SpawnBullet();
 
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)			inputFlags |= px::INPUT_BACKWARD;
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)			inputFlags |= px::INPUT_FORWARD;

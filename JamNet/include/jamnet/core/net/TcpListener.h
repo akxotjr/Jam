@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "IocpCore.h"
+#include "jamnet/core/net/IocpCore.h"
 
 namespace jam::net
 {
@@ -14,7 +14,7 @@ namespace jam::net
 	{
 	public:
 		TcpListener() = default;
-		~TcpListener();
+		~TcpListener() override;
 
 
 		bool					StartAccept(Service* service);
@@ -31,10 +31,10 @@ namespace jam::net
 		void					ProcessAccept(AcceptEvent* acceptEvent);
 
 	private:
-		Service*				m_service = nullptr;
+		Service*					m_service = nullptr;
 
-		SOCKET					m_socket = INVALID_SOCKET;
-		vector<AcceptEvent*>	m_acceptEvents;
+		SOCKET						m_socket  = INVALID_SOCKET;
+		std::vector<AcceptEvent*>	m_acceptEvents;
 	};
 }
 

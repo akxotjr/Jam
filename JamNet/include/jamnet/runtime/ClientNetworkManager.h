@@ -69,7 +69,7 @@ namespace jam::net
         void                                UpdateSessionReadyState();
 
     private:
-        ClientConfig                        m_config;
+        ClientConfig                             m_config;
 
         std::shared_ptr<ClientService>           m_service;
         std::shared_ptr<ClientTcpSession>        m_tcp;
@@ -77,14 +77,14 @@ namespace jam::net
         std::shared_ptr<ClientTransportAdapter>  m_transportAdapter;
         std::shared_ptr<ClientNetWorld>          m_world;
 
-        uint64                              m_userId{ 0 };
-        atomic_bool                         m_running{ false };
+        uint64                                   m_userId{ 0 };
+        std::atomic_bool                         m_running{ false };
 
-        std::atomic_bool                    m_tcpBound{ false };
-        std::atomic_bool                    m_udpBound{ false };
-        std::atomic_bool                    m_worldRunning{ false };
-        std::atomic_bool                    m_matchmakingInFlight{ false };
+        std::atomic_bool                        m_tcpBound{ false };
+        std::atomic_bool                        m_udpBound{ false };
+        std::atomic_bool                        m_worldRunning{ false };
+        std::atomic_bool                        m_matchmakingInFlight{ false };
 
-        std::atomic<uint32>                      m_groupId{ 0 };
+        std::atomic<uint32>                     m_groupId{ 0 };
     };
 }

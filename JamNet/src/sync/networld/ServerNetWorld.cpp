@@ -87,7 +87,7 @@ namespace jam::net
 
 		Post(Job([this, userId]()
 			{
-				if (ranges::find(m_members, userId) == m_members.end())
+				if (std::ranges::find(m_members, userId) == m_members.end())
 					m_members.push_back(userId);
 
 				if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
@@ -115,16 +115,16 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::Send(const TransportInfo& info, const shared_ptr<SendBuffer>& buf)
+	void ServerNetWorld::Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf)
 	{
 		if (m_transport)
 			m_transport->Send(info, buf);
 	}
 
-	void ServerNetWorld::Multicast(const shared_ptr<SendBuffer>& buf)
+	void ServerNetWorld::Multicast(const std::shared_ptr<SendBuffer>& buf)
 	{
 		TransportInfo info{};
-		info.method = eTransportMethod::MULTICAST;
+		info.method = eTransportMethod::Multicast;
 		info.groupId = GetGroupId();
 
 		if (m_transport)
@@ -134,7 +134,7 @@ namespace jam::net
 	void ServerNetWorld::FanOut(TransportInfo::PayloadFactory factory)
 	{
 		TransportInfo info{};
-		info.method			= eTransportMethod::FAN_OUT;
+		info.method			= eTransportMethod::FanOut;
 		info.groupId		= GetGroupId();
 		info.payloadFactory = std::move(factory);
 
@@ -340,9 +340,6 @@ namespace jam::net
 		params.desc.targetId = BindingTarget(m_world, e, params.targetNetId);
 
 		m_world.ctx().get<ServerPhysicsSystem>().SpawnActor(e, params.desc);
-
-		//if (params.targetNetId.IsValid())
-		//	BindingTarget(m_world, *m_physics, e, params.targetNetId);
 
 		JAMNET_LOG_DEBUG("[ServerNetWorld::SpawnActorImpl] netId = {}, owner = {}, reqId = {}", nid.Raw(), params.owner, params.spawnId);
 

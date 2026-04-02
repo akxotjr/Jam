@@ -3,17 +3,17 @@
 
 namespace jam::net
 {
-	void ClientTransportAdapter::SetTcpSession(weak_ptr<Session> session)
+	void ClientTransportAdapter::SetTcpSession(std::weak_ptr<Session> session)
 	{
 		m_tcp = std::move(session);
 	}
 
-	void ClientTransportAdapter::SetUdpSession(weak_ptr<Session> session)
+	void ClientTransportAdapter::SetUdpSession(std::weak_ptr<Session> session)
 	{
 		m_udp = std::move(session);
 	}
 
-	void ClientTransportAdapter::Send(const TransportInfo& info, const shared_ptr<SendBuffer>& buf)
+	void ClientTransportAdapter::Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf)
 	{
 		(void)info;
 
@@ -24,7 +24,7 @@ namespace jam::net
 		}
 
 		// client는 1:1만 지원
-		if (info.method != eTransportMethod::SINGLE)
+		if (info.method != eTransportMethod::Single)
 		{
 			JAMNET_LOG_WARN_LOC("ClientTransportAdapter supports SINGLE only. method={}", static_cast<int>(info.method));
 			return;
@@ -43,7 +43,7 @@ namespace jam::net
 
 
 
-	void ClientTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const function<void(weak_ptr<Session>)>& fn)
+	void ClientTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn)
 	{
 		(void)userId;
 

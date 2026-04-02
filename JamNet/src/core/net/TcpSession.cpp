@@ -88,7 +88,7 @@ namespace jam::net
 	bool TcpSession::RegisterConnect()
 	{
 		if (SocketUtils::SetReuseAddress(m_socket, true) == false) return false;
-		if (SocketUtils::BindAnyAddress(m_socket, 0) == false) return false;
+		if (SocketUtils::BindAnyAddress(m_socket, 0) == false)	   return false;
 
 		m_connectEvent.Init();
 		m_connectEvent.m_owner = shared_from_this();
@@ -199,7 +199,7 @@ namespace jam::net
 		GetService()->RegisterTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
 
 		auto self = static_pointer_cast<TcpSession>(shared_from_this());
-		self->Post(Job(self, &TcpSession::OnConnected, eJobPriority::CTRL));
+		self->Post(Job(self, &TcpSession::OnConnected, eJobPriority::Control));
 
 		RegisterRecv();
 	}
@@ -209,7 +209,7 @@ namespace jam::net
 		m_disconnectEvent.m_owner = nullptr;
 
 		auto self = static_pointer_cast<TcpSession>(shared_from_this());
-		self->Post(Job(self, &TcpSession::OnDisconnected, eJobPriority::CTRL));
+		self->Post(Job(self, &TcpSession::OnDisconnected, eJobPriority::Control));
 
 		GetService()->ReleaseTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
 	}
@@ -256,7 +256,7 @@ namespace jam::net
 			{
 				self->ProcessRecvOnShard(snap);
 			},
-			eJobPriority::CTRL
+			eJobPriority::Control
 		));
 
 
@@ -329,7 +329,7 @@ namespace jam::net
 				break;
 
 			// 패킷 단위로 ECS에 전달
-			shared_ptr<RecvBuffer> pkt = RecvBuffer::FromSpan(base, totalSize);
+			std::shared_ptr<RecvBuffer> pkt = RecvBuffer::FromSpan(base, totalSize);
 			const entt::entity e = GetEntity();
 			if (e != entt::null)
 			{

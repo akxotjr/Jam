@@ -277,7 +277,7 @@ namespace jam::px
 	// omega  = (r x vRel) / |r|^2
 	// accel  = N * (vel x omega)
 	//
-	// accel은 velocity와 수직인 횡가속으로 작용하는 것이 핵심.
+	// accel은 velocity와 수직인 횡가속으로 작용.
 	// -------------------------------------------------------------------------
 	void ProjectileComponent::IntegrateHomingPN(float dt, OUT PxVec3& disp)
 	{
@@ -455,6 +455,7 @@ namespace jam::px
 		ProjectileHitResult result{};
 		if (!scene || !actor || dt <= 0.f)
 			return result;
+
 
 		const PxTransform pose = actor->getGlobalPose();
 		m_state.position = pose.p;

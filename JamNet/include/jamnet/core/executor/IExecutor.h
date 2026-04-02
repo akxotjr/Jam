@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "Job.h"
+#include "jamnet/core/executor/Job.h"
 
 
 namespace jam

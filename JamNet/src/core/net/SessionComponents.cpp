@@ -43,9 +43,9 @@ namespace jam::net
 		return true;
 	}
 
-	vector<BYTE> FragmentState::Reassembly::Assemble() const
+	std::vector<BYTE> FragmentState::Reassembly::Assemble() const
 	{
-		vector<BYTE> result;
+		std::vector<BYTE> result;
 		for (const auto& frag : fragments)
 		{
 			result.insert(result.end(), frag.begin(), frag.end());
@@ -70,7 +70,7 @@ namespace jam::net
 		return it->second.AddFragment(index, data, size, now_ns);
 	}
 
-	optional<vector<BYTE>> FragmentState::PopCompleted(const uint16 fragmentId)
+	std::optional<std::vector<BYTE>> FragmentState::PopCompleted(const uint16 fragmentId)
 	{
 		const auto it = reassemblies.find(fragmentId);
 		if (it == reassemblies.end())
@@ -218,7 +218,7 @@ namespace jam::net
 	//  OrderState
 	// ============================================================
 
-	bool OrderState::StoreRecvPacket(uint16 seq, const shared_ptr<RecvBuffer>& buf, uint64 now_ns)
+	bool OrderState::StoreRecvPacket(uint16 seq, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns)
 	{
 		if (pendings.size() >= kMaxRecvBufferSize)
 			return false;
@@ -227,9 +227,9 @@ namespace jam::net
 		return true;
 	}
 
-	vector<OrderState::RecvPacket> OrderState::PopOrderedPackets(uint16& expectedSeq)
+	std::vector<OrderState::RecvPacket> OrderState::PopOrderedPackets(uint16& expectedSeq)
 	{
-		vector<RecvPacket> out;
+		std::vector<RecvPacket> out;
 		while (true)
 		{
 			auto it = pendings.find(expectedSeq);
@@ -248,7 +248,7 @@ namespace jam::net
 	//  ReliabilityState
 	// ============================================================
 
-	bool ReliabilityState::StoreSendPacket(eChannelType ch, const shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns)
+	bool ReliabilityState::StoreSendPacket(eChannelType ch, const std::shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns)
 	{
 		auto& chData = GetChannelData(ch);
 		if (chData.pendings.contains(seq))
@@ -260,9 +260,9 @@ namespace jam::net
 		return true;
 	}
 
-	vector<uint16> ReliabilityState::GetRetransmitNeeded(eChannelType ch, uint64 now_ns) const
+	std::vector<uint16> ReliabilityState::GetRetransmitNeeded(eChannelType ch, uint64 now_ns) const
 	{
-		vector<uint16> out;
+		std::vector<uint16> out;
 		const auto& chData = GetChannel(ch);
 		for (const auto& [seq, pkt] : chData.pendings)
 		{
@@ -379,7 +379,7 @@ namespace jam::net
 		inflight.emplace(reqId, std::move(state));
 	}
 
-	optional<RpcState::AwaitState> RpcState::PopRequest(uint32 reqId)
+	std::optional<RpcState::AwaitState> RpcState::PopRequest(uint32 reqId)
 	{
 		const auto it = inflight.find(reqId);
 		if (it == inflight.end())
@@ -390,9 +390,9 @@ namespace jam::net
 		return st;
 	}
 
-	vector<uint32> RpcState::GetTimedOutRequests(uint64 now_ns) const
+	std::vector<uint32> RpcState::GetTimedOutRequests(uint64 now_ns) const
 	{
-		vector<uint32> out;
+		std::vector<uint32> out;
 		for (const auto& [id, st] : inflight)
 		{
 			if (st.hasDeadline && now_ns >= st.deadline_ns)
@@ -491,10 +491,10 @@ namespace jam::net
 	//  TransmissionWaitingQueue
 	// ============================================================
 
-	void TransmissionWaitingQueue::Enqueue(const shared_ptr<SendBuffer>& buf, Priority prio)
+	void TransmissionWaitingQueue::Enqueue(const std::shared_ptr<SendBuffer>& buf, Priority prio)
 	{
-		if (!buf)
-			return;
+		if (!buf) return;
+
 		const uint32 size = buf->WriteSize();
 		queue.push_back({ prio, size, buf });
 		bytesQueued += size;
@@ -549,4 +549,5 @@ namespace jam::net
 		return view;
 	}
 
-}
+
+} // namespace jam::net

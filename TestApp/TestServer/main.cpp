@@ -1,7 +1,10 @@
 ﻿#include "pch.h"
 #include <conio.h>
+#include <filesystem>
+
 
 #include "jamnet/runtime/ServerNetworkManager.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jampx/PhysicsCore.h"
 #include "jampx/PhysicsFacade.h"
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
@@ -16,9 +19,9 @@ int main()
 	config.geConfig = {
 		.autoTune = true,
 		.layoutCfg = {
-			.mode = jam::BALANCE,
+			.mode = jam::Balance,
 			.reserved_threads = 1,
-			.profile = jam::CORE_PROFILE_SERVER,
+			.profile = jam::CoreProfileServer,
 		}
 	};
 	JamNetRuntime runtime(config);
@@ -39,6 +42,7 @@ int main()
 		JAMNET_LOG_INFO("TestServer started successfully");
 		JAMNET_LOG_INFO("   TCP: 127.0.0.1:7777");
 		JAMNET_LOG_INFO("   UDP: 127.0.0.1:8888");
+		JAMNET_LOG_INFO("   key: [m]=executor metrics, [r]=metrics reset, [q]=quit");
 		
 		PHYSICS_CORE_INIT();
 		JAMNET_LOG_INFO("PhysicsCore initialized successfully");

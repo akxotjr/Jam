@@ -7,12 +7,12 @@ namespace jam::net
 	{
 	}
 
-	NetAddress::NetAddress(std::string ip, uint16 port)
+	NetAddress::NetAddress(const std::string& ip, uint16 port)
 	{
 		::memset(&m_sockAddr, 0, sizeof(m_sockAddr));
 		m_sockAddr.sin_family = AF_INET;
-		m_sockAddr.sin_addr = Ip2Address(ip.c_str());
-		m_sockAddr.sin_port = ::htons(port);
+		m_sockAddr.sin_addr   = Ip2Address(ip.c_str());
+		m_sockAddr.sin_port   = ::htons(port);
 	}
 
 	std::string NetAddress::GetIpAddress() const

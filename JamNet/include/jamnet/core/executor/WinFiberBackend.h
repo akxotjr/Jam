@@ -1,12 +1,11 @@
 ﻿#pragma once
-#include "FiberCommon.h"
 
 namespace jam
 {
 	struct FlsFiberCtx
 	{
 		void*	scheduler = nullptr;
-		uint32	fiberId = 0;
+		uint32	fiberId   = 0;
 	};
 
 	DWORD			EnsureFlsKey();
@@ -16,7 +15,7 @@ namespace jam
 	struct FiberBackendConfig
 	{
 		uint64	stackReserve = 512 * 1024;
-		uint64	stackCommit = 128 * 1024;
+		uint64	stackCommit  = 128 * 1024;
 	};
 
 	class WinFiberBackend
@@ -37,7 +36,7 @@ namespace jam
 		uint64				DefaultCommit() const { return m_config.stackCommit; }
 
 	private:
-		FiberBackendConfig	m_config;
+		FiberBackendConfig	m_config   = {};
 		bool				m_attached = false;
 	};
 }

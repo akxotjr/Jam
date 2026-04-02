@@ -2,7 +2,7 @@
 #include <jampx/PhysicsTypes.h>
 #include <jampx/IPhysicsFacade.h>
 
-#include "NetActorComponents.h"
+#include "jamnet/sync/replication/NetActorComponents.h"
 
 namespace jam::net
 {
@@ -41,9 +41,9 @@ namespace jam::net
 	/// @brief Per-User AOI state
 	struct UserAoiState
 	{
-		unordered_set<NetId>	visible;		// currently visible set of netIds
-		vector<NetId>			entered;		// new netId in this tick
-		vector<NetId>			left;			// leave netId in this tick
+		std::unordered_set<NetId>	visible;		// currently visible set of netIds
+		std::vector<NetId>			entered;		// new netId in this tick
+		std::vector<NetId>			left;			// leave netId in this tick
 	};
 
 	/// @brief Server side Area-of-Interest system
@@ -68,7 +68,7 @@ namespace jam::net
 		void							Rebuild();
 		void							RebuildGrid();
 
-		void							GetCandidatesFromGrid(const px::Vec3& userPos, OUT vector<entt::entity>& out) const;
+		void							GetCandidatesFromGrid(const px::Vec3& userPos, OUT std::vector<entt::entity>& out) const;
 		/// @brief 조건식 검사 (bias=0: enter 임계, bias=hysteresis: leave 임계)
 		bool							TestCondition(const px::Vec3& origin, const px::Vec3& target, float bias) const;
 
@@ -80,14 +80,14 @@ namespace jam::net
 
 	private:
 		entt::registry&								m_world;
-		AoiConfig									m_cfg{};
+		AoiConfig									m_cfg	  = {};
 		px::IPhysicsFacade*							m_physics = nullptr;
 
-		unordered_map<uint64, UserAoiState>			m_states;
-		unordered_set<NetId>						m_alwaysVisible;
+		std::unordered_map<uint64, UserAoiState>				m_states;
+		std::unordered_set<NetId>								m_alwaysVisible;
 
-		unordered_map<uint64, vector<entt::entity>> m_grid;
+		std::unordered_map<uint64, std::vector<entt::entity>>   m_grid;
 
-		unordered_map<entt::entity, px::Vec3>		m_entityPositions;
+		std::unordered_map<entt::entity, px::Vec3>				m_entityPositions;
 	};
 }

@@ -1,6 +1,6 @@
 ﻿#pragma once
-#include "IocpEvent.h"
-#include "Session.h"
+#include "jamnet/core/net/IocpEvent.h"
+#include "jamnet/core/net/Session.h"
 
 
 
@@ -27,39 +27,37 @@ namespace jam::net
 		TcpSession();
 		virtual ~TcpSession() override;
 
-		virtual bool							Connect() override;
-		virtual void							Disconnect() override;
-		virtual void							Send(const std::shared_ptr<SendBuffer>& buf) override;
+		virtual bool					Connect() override;
+		virtual void					Disconnect() override;
+		virtual void					Send(const std::shared_ptr<SendBuffer>& buf) override;
 
-		void									OnLinkEstablished() override;
-		void									OnLinkTerminated() override;
-
-	private:
-
-		/** IOCP Object impl **/
-		virtual HANDLE							GetHandle() override;
-		virtual void							Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
-
-		/** Transport **/
-		bool									RegisterConnect();
-		bool									RegisterDisconnect();
-		void									RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs);
-		void									RegisterRecv();
-
-		void									ProcessConnect();
-		void									ProcessDisconnect();
-		void									ProcessSend(SendEvent* ev, int32 numOfBytes);
-		void									ProcessRecv(RecvEvent* ev, int32 numOfBytes);
-
-		void                                    ProcessRecvOnShard(const std::shared_ptr<RecvBuffer>& snap);
-
-		void									HandleError(int32 errorCode);
+		void							OnLinkEstablished() override;
+		void							OnLinkTerminated() override;
 
 	private:
-		ConnectEvent							m_connectEvent;
-		DisconnectEvent							m_disconnectEvent;
+		
+		HANDLE							GetHandle() override;
+		void							Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
-		RecvBuffer                              m_streamBuffer;
+		bool							RegisterConnect();
+		bool							RegisterDisconnect();
+		void							RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs);
+		void							RegisterRecv();
+
+		void							ProcessConnect();
+		void							ProcessDisconnect();
+		void							ProcessSend(SendEvent* ev, int32 numOfBytes);
+		void							ProcessRecv(RecvEvent* ev, int32 numOfBytes);
+
+		void                            ProcessRecvOnShard(const std::shared_ptr<RecvBuffer>& snap);
+
+		void							HandleError(int32 errorCode);
+
+	private:
+		ConnectEvent					m_connectEvent;
+		DisconnectEvent					m_disconnectEvent;
+
+		RecvBuffer                      m_streamBuffer;
 	};
 }
 

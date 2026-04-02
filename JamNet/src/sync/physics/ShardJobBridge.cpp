@@ -16,7 +16,7 @@ namespace jam::net
 
 	void ShardJobBridge::NotifyComplete(uint64_t awaitKey)
 	{
-		m_executor.ResumeFiber(static_cast<AwaitKey>(awaitKey));
+		m_executor.ResumeFiber(static_cast<FiberAwaitKey>(awaitKey));
 	}
 
 	bool ShardJobBridge::IsInFiberContext() const

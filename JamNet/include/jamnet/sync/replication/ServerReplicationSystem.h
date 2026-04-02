@@ -1,7 +1,8 @@
 ﻿#pragma once
-#include "NetActorComponents.h"
-#include "jamnet/sync/schema/gen/snapshot_generated.h"
+#include "jamnet/sync/replication/NetActorComponents.h"
 #include "jamnet/sync/replication/ReplicationUtils.h"
+
+#include "jamnet/sync/schema/gen/snapshot_generated.h"
 
 namespace jam::net
 {
@@ -68,25 +69,25 @@ namespace jam::net
 
     private:
         entt::registry&                                     m_world;
-        unique_ptr<flatbuffers::FlatBufferBuilder>          m_fbb;
+        std::unique_ptr<flatbuffers::FlatBufferBuilder>     m_fbb;
 
         // Snapshot state
-        unordered_map<uint64, unordered_map<NetId, uint32>>                     m_entityBaselinePerUser;           // user -> (netId -> baselineRev)
-        unordered_map<uint64, unordered_map<NetId, RigidBaselineState>>         m_rigidBaselineStatesPerUser;      // user -> (netId -> baseline)
-        unordered_map<uint64, unordered_map<NetId, CharacterBaselineState>>     m_characterBaselineStatesPerUser;  // user -> (netId -> baseline)
-        unordered_map<uint64, unordered_map<NetId, px::KinematicState>>         m_kineBaselineStatesPerUser;
+        std::unordered_map<uint64, std::unordered_map<NetId, uint32>>                     m_entityBaselinePerUser;           // user -> (netId -> baselineRev)
+        std::unordered_map<uint64, std::unordered_map<NetId, RigidBaselineState>>         m_rigidBaselineStatesPerUser;      // user -> (netId -> baseline)
+        std::unordered_map<uint64, std::unordered_map<NetId, CharacterBaselineState>>     m_characterBaselineStatesPerUser;  // user -> (netId -> baseline)
+        std::unordered_map<uint64, std::unordered_map<NetId, px::KinematicState>>         m_kineBaselineStatesPerUser;
 
-        unordered_map<uint64, unordered_map<NetId, PackedRigidDelta128>>     m_cachedRigidDeltaPerUser;             // user -> (netId -> packed cache)
-        unordered_map<uint64, unordered_map<NetId, PackedCharacterDelta128>> m_cachedCharacterDeltaPerUser;         // user -> (netId -> packed cache)
+        std::unordered_map<uint64, std::unordered_map<NetId, PackedRigidDelta128>>     m_cachedRigidDeltaPerUser;             // user -> (netId -> packed cache)
+        std::unordered_map<uint64, std::unordered_map<NetId, PackedCharacterDelta128>> m_cachedCharacterDeltaPerUser;         // user -> (netId -> packed cache)
 
-        unordered_set<MetaSentKey, MetaSentKeyHash>         m_metaSent;
-        unordered_map<MetaSentKey, uint8, MetaSentKeyHash>  m_metaResendBudget;
+        std::unordered_set<MetaSentKey, MetaSentKeyHash>         m_metaSent;
+        std::unordered_map<MetaSentKey, uint8, MetaSentKeyHash>  m_metaResendBudget;
 
-        unordered_map<uint64, int32>                        m_forceFullMetaPerUsers;
+        std::unordered_map<uint64, int32>                        m_forceFullMetaPerUsers;
 
-        uint32                                              m_fullCacheTick = 0;
-        unordered_map<NetId, PackedRigidFull192>            m_cachedRigidFull;
-        unordered_map<NetId, PackedCharacterFull160>        m_cachedCharacterFull;
+        uint32                                                   m_fullCacheTick = 0;
+        std::unordered_map<NetId, PackedRigidFull192>            m_cachedRigidFull;
+        std::unordered_map<NetId, PackedCharacterFull160>        m_cachedCharacterFull;
 
         // --- Snapshot cadence ---
         uint32                                              m_tickCounter = 0;

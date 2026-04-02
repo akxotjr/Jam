@@ -8,7 +8,7 @@ namespace jam
 	struct ShardDomainKeyTag {};
 	using ShardDomainKey = Key<ShardDomainKeyTag>;
 
-	inline constexpr ShardDomainKey DomainOf(std::string_view name)
+	constexpr ShardDomainKey DomainOf(std::string_view name)
 	{
 		return KeyOf<ShardDomainKey>(name);
 	}

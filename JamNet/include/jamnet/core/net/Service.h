@@ -1,8 +1,8 @@
 ﻿#pragma once
-#include "NetAddress.h"
-#include "Session.h"
-#include "TcpListener.h"
-#include "UdpRouter.h"
+#include "jamnet/core/net/NetAddress.h"
+#include "jamnet/core/net/Session.h"
+#include "jamnet/core/net/TcpListener.h"
+#include "jamnet/core/net/UdpRouter.h"
 
 
 namespace jam::net
@@ -17,10 +17,10 @@ namespace jam::net
 
 	struct ServiceConfig
 	{
-		NetAddress							localTcpAddress = {};
-		NetAddress							localUdpAddress = {};
-		NetAddress							remoteTcpAddress = {};
-		NetAddress							remoteUdpAddress = {};
+		NetAddress							localTcpAddress    = {};
+		NetAddress							localUdpAddress    = {};
+		NetAddress							remoteTcpAddress   = {};
+		NetAddress							remoteUdpAddress   = {};
 		uint32								maxTcpSessionCount = 1;
 		uint32								maxUdpSessionCount = 1;
 	};
@@ -53,19 +53,19 @@ namespace jam::net
 		bool								SetSessionFactory();
 		void								SetSessionInitCallback(const SessionInitCallback& callback) { m_sessionInitCallback = callback; }
 
-		shared_ptr<Session>					CreateSession(eProtocolType protocol);
+		std::shared_ptr<Session>			CreateSession(eProtocolType protocol);
 
-		void								RegisterTcpSession(const shared_ptr<TcpSession>& session);
-		void								ReleaseTcpSession(const shared_ptr<TcpSession>& session);
+		void								RegisterTcpSession(const std::shared_ptr<TcpSession>& session);
+		void								ReleaseTcpSession(const std::shared_ptr<TcpSession>& session);
 
-		void								RegisterUdpSession(const shared_ptr<UdpSession>& session);
-		void								ReleaseUdpSession(const shared_ptr<UdpSession>& session);
+		void								RegisterUdpSession(const std::shared_ptr<UdpSession>& session);
+		void								ReleaseUdpSession(const std::shared_ptr<UdpSession>& session);
 
-		void								RegisterHandshakingUdpSession(const shared_ptr<UdpSession>& session);
-		void								ReleaseHandshakingUdpSession(const shared_ptr<UdpSession>& session);
+		void								RegisterHandshakingUdpSession(const std::shared_ptr<UdpSession>& session);
+		void								ReleaseHandshakingUdpSession(const std::shared_ptr<UdpSession>& session);
 		void								CompleteUdpHandshake(const NetAddress& from);
-		shared_ptr<UdpSession>				FindSessionInConnected(const NetAddress& from);
-		shared_ptr<UdpSession>				FindSessionInHandshaking(const NetAddress& from);
+		std::shared_ptr<UdpSession>			FindSessionInConnected(const NetAddress& from);
+		std::shared_ptr<UdpSession>			FindSessionInHandshaking(const NetAddress& from);
 
 		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer);
 
@@ -103,11 +103,11 @@ namespace jam::net
 		ServiceConfig										m_config;
 		eServiceType										m_type = eServiceType::NONE;
 
-		unique_ptr<IocpCore>								m_iocpCore;
+		std::unique_ptr<IocpCore>							m_iocpCore;
 
-		unordered_map<NetAddress, shared_ptr<TcpSession>>	m_tcpSessions;
-		unordered_map<NetAddress, shared_ptr<UdpSession>>	m_udpSessions;
-		unordered_map<NetAddress, shared_ptr<UdpSession>>	m_handshakingUdpSessions;
+		std::unordered_map<NetAddress, std::shared_ptr<TcpSession>>	m_tcpSessions;
+		std::unordered_map<NetAddress, std::shared_ptr<UdpSession>>	m_udpSessions;
+		std::unordered_map<NetAddress, std::shared_ptr<UdpSession>>	m_handshakingUdpSessions;
 
 
 		int32												m_sessionCount = 0;
@@ -118,10 +118,10 @@ namespace jam::net
 		SessionFactory										m_udpSessionFactory;
 		SessionInitCallback									m_sessionInitCallback;
 
-		shared_ptr<TcpListener>								m_listener = nullptr;
-		shared_ptr<UdpRouter>								m_udpRouter = nullptr;
+		std::shared_ptr<TcpListener>						m_listener = nullptr;
+		std::shared_ptr<UdpRouter>							m_udpRouter = nullptr;
 
-		atomic<bool>										m_running{ false };
+		std::atomic<bool>									m_running{ false };
 		uint64												m_lastUpdateTime_ns = 0_ns;
 
 		GlobalExecutor::PeriodicHandle						m_periodicHandle;

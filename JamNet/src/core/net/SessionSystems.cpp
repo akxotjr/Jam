@@ -888,7 +888,7 @@ namespace jam::net
         {
             auto& rpcState = view.get<RpcState>(entity);
 
-            vector<uint32> timedOut = rpcState.GetTimedOutRequests(now_ns);
+            std::vector<uint32> timedOut = rpcState.GetTimedOutRequests(now_ns);
 
             for (uint32 requestId : timedOut)
             {
@@ -977,7 +977,7 @@ namespace jam::net
 
             // ===== 전송 배치 생성 =====
 
-            vector<shared_ptr<SendBuffer>> batch;
+            std::vector<std::shared_ptr<SendBuffer>> batch;
             batch.reserve(txQueue.queue.size());
 
             NetworkCounter*   counter = R.try_get<NetworkCounter>(entity);
@@ -1317,7 +1317,7 @@ namespace jam::net
         JAMNET_LOG_DEBUG("[Handshake] DISCONNECT_FIN sent. entity= {}", static_cast<uint32>(e));
     }
 
-    void SendPacketToSession(entt::entity e, const shared_ptr<SendBuffer>& buf)
+    void SendPacketToSession(entt::entity e, const std::shared_ptr<SendBuffer>& buf)
     {
 
     	auto& L = SHARD_LOCAL_CHECKED();
@@ -1353,7 +1353,7 @@ namespace jam::net
         PipelineOutgoingPacket(ctx);
     }
 
-    void ProcessReceivedPacket(entt::entity e, const shared_ptr<RecvBuffer>& buf)
+    void ProcessReceivedPacket(entt::entity e, const std::shared_ptr<RecvBuffer>& buf)
     {
         auto& L = SHARD_LOCAL_CHECKED();
         auto& R = L.registry;

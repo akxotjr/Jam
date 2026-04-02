@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "SessionComponents.h"
+#include "jamnet/core/net/SessionComponents.h"
 
 namespace jam::net
 {

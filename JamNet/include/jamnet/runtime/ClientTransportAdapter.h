@@ -12,10 +12,10 @@ namespace jam::net
 		ClientTransportAdapter() = default;
 		~ClientTransportAdapter() override = default;
 
-		void SetTcpSession(weak_ptr<Session> session);
-		void SetUdpSession(weak_ptr<Session> session);
+		void SetTcpSession(std::weak_ptr<Session> session);
+		void SetUdpSession(std::weak_ptr<Session> session);
 
-		void Send(const TransportInfo& info, const shared_ptr<SendBuffer>& buf) override;
+		void Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf) override;
 
 		void EnumerateGroupUsers(uint32 groupId, const std::function<void(uint64)>& fn) override {};
 
@@ -23,7 +23,7 @@ namespace jam::net
 		void DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn) override;
 
 	private:
-		weak_ptr<Session> m_tcp;
-		weak_ptr<Session> m_udp;
+		std::weak_ptr<Session> m_tcp;
+		std::weak_ptr<Session> m_udp;
 	};
 }

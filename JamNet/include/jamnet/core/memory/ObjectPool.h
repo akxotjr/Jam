@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "MemoryPool.h"
+#include "jamnet/core/memory/MemoryPool.h"
 
 
 namespace jam

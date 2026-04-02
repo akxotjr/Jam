@@ -4,23 +4,20 @@
 namespace jam::net
 {
 
-	class UdpRouter : public IocpObject
+	class UdpRouter final : public IocpObject
 	{
 		static constexpr int32 OUTSTANDING_RECVS = 4;
 
 
 	public:
 		UdpRouter() = default;
-		virtual ~UdpRouter() = default;
+		~UdpRouter() override = default;
 
 		bool                    Start(Service* service);
 		void					CloseSocket();
 
-
-		// iocp object impl
-
-		virtual HANDLE			GetHandle() override;
-		virtual void			Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
+		HANDLE					GetHandle() override;
+		void					Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 
 		void					RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs, const NetAddress& to);

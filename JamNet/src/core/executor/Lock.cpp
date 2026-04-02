@@ -11,7 +11,6 @@ namespace jam
 		DeadLockProfiler::Instance().PushLock(name);
 #endif
 
-		// 동일한 쓰레드가 소유하고 있다면 무조건 성공.
 		const uint32 lockThreadId = (m_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
 		if (tl_ThreadId == lockThreadId)
 		{
@@ -19,9 +18,9 @@ namespace jam
 			return;
 		}
 
-		// 아무도 소유 및 공유하고 있지 않을 때, 경합해서 소유권을 얻는다.
-		const int64 beginTick = ::GetTickCount64();
-		const uint32 desired = ((tl_ThreadId << 16) & WRITE_THREAD_MASK);
+		const uint64 beginTick = ::GetTickCount64();
+		const uint32 desired   = ((tl_ThreadId << 16) & WRITE_THREAD_MASK);
+
 		while (true)
 		{
 			for (uint32 spinCount = 0; spinCount < MAX_SPIN_COUNT; spinCount++)
@@ -62,7 +61,6 @@ namespace jam
 		DeadLockProfiler::Instance().PushLock(name);
 #endif
 
-		// 동일한 쓰레드가 소유하고 있다면 무조건 성공.
 		const uint32 lockThreadId = (m_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
 		if (tl_ThreadId == lockThreadId)
 		{
@@ -70,8 +68,7 @@ namespace jam
 			return;
 		}
 
-		// 아무도 소유하고 있지 않을 때 경합해서 공유 카운트를 올린다.
-		const int64 beginTick = ::GetTickCount64();
+		const uint64 beginTick = ::GetTickCount64();
 		while (true)
 		{
 			for (uint32 spinCount = 0; spinCount < MAX_SPIN_COUNT; spinCount++)

@@ -7,12 +7,12 @@ namespace jam::net
 	public:
 		NetAddress() = default;
 		NetAddress(SOCKADDR_IN sockAddr);
-		NetAddress(std::string ip, uint16 port);
+		NetAddress(const std::string& ip, uint16 port);
 
 		SOCKADDR_IN&		GetSockAddr() { return m_sockAddr; }
-		const SOCKADDR_IN&	GetSockAddr() const { return m_sockAddr; }
+		const SOCKADDR_IN&	GetSockAddr()  const { return m_sockAddr; }
 		std::string			GetIpAddress() const;
-		uint64				GetIpAddressU64() const { return static_cast<uint64>(m_sockAddr.sin_addr.S_un.S_addr); }
+		uint64				GetIpAddressU64() const { return m_sockAddr.sin_addr.S_un.S_addr; }
 		uint16				GetPort() const { return ::ntohs(m_sockAddr.sin_port); }
 
 		bool				IsValid() const;

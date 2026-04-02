@@ -18,6 +18,9 @@ namespace jam::px
 
 		bool							SyncMainState(RigidBody& body) override;
 		void							SyncReplayState(RigidBody& body) override;
+
+		bool							ApplyMainState(const RigidState& state) override;
+		bool							ApplyReplayState(const RigidState& state) override;
 		
 		eActorType						GetActorType() const override { return eActorType::Projectile; }
 

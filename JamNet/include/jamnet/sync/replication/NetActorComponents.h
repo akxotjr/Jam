@@ -190,7 +190,7 @@ namespace jam::net
 	template <typename TState>
 	struct ReplayHistoryBuffer
 	{
-		deque<ReplayHistorySample<TState>> samples;
+		std::deque<ReplayHistorySample<TState>> samples;
 		uint32 maxSamples = 128;
 
 		void Push(uint64 tick, const TState& state)

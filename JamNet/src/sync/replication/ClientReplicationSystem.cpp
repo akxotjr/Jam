@@ -404,7 +404,7 @@ namespace jam::net
 
 	void ClientReplicationSystem::PruneOldReplicas(uint64 serverTick, uint64 forgetAfterTicks)
 	{
-		vector<NetId> toErase;
+		std::vector<NetId> toErase;
 		for (const auto& [id, replica] : m_replicas)
 		{
 			if (serverTick > replica.lastSeenTick && (serverTick - replica.lastSeenTick) > forgetAfterTicks)

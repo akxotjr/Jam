@@ -82,7 +82,7 @@ namespace jam::net
 		if (!m_entityCreating.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
 			return;
 		
-		shard->Submit(Job(Self(), &Session::CreateEntity, eJobPriority::CTRL));
+		shard->Submit(Job(Self(), &Session::CreateEntity, eJobPriority::Control));
 	}
 
 	void Session::CreateEntity()
