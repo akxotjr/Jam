@@ -46,25 +46,4 @@ namespace jam
 		std::atomic<int>	m_cancelCode{ static_cast<int32>(eCancelCode::None) };
 	};
 
-	
-	struct ProfileSample
-	{
-        uint64 stepCount				= 0;
-		uint64 switchCount				= 0;
-
-		uint64 pollCount				= 0;
-		uint64 emptyPollCount			= 0;
-		uint64 pollCostAcc_ns			= 0;
-		uint64 lastPollCost_ns			= 0;
-
-		uint64 readyRunCount			= 0;
-        uint64 lastPollReadyRunCount	= 0;
-		uint64 inboxResumeCount			= 0;
-		uint64 inboxSpawnCount			= 0;
-		uint64 inboxCancelByKeyCount	= 0;
-		uint64 inboxCancelByIdCount		= 0;
-
-		uint64 wakeupTimerCount			= 0;
-		uint64 wakeupTimeoutCount		= 0;
-	};
 }

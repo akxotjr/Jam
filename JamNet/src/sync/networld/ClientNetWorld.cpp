@@ -10,6 +10,7 @@
 #include "jamnet/sync/replication/ClientPhysicsSystem.h"
 #include "jamnet/sync/replication/ClientSamplingSystem.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
+#include "jamnet/core/executor/MainExecutor.h"
 
 #include "jamnet/sync/schema/gen/snapshot_generated.h"
 
@@ -100,6 +101,24 @@ namespace jam::net
         }
     }
 
+    void ClientNetWorld::RequestHitscan(const px::Vec3& from, const px::Vec3& dir, float maxRange, std::function<void(const px::HitscanResult&)> onDone)
+    {
+        Post(Job([this, from, dir, maxRange, onDone = std::move(onDone)]() mutable
+            {
+                px::HitscanResult result{};
+                if (m_physics)
+                    result = m_physics->Hitscan(from, dir, maxRange, 0);
+
+                if (onDone)
+                {
+                    MAIN_EXEC.Submit(Job([cb = std::move(onDone), result]()
+                        {
+                            cb(result);
+                        }));
+                }
+            }));
+    }
+
 
     void ClientNetWorld::RequestSpawnActor(const SpawnParams& params)
     {
@@ -159,6 +178,49 @@ namespace jam::net
 
         RPCCallOptions opt{ .channel = eChannelType::RELIABLE_ORDERED, .timeout_ns = 1_s };
         m_transport->RPCCallAwaitMember<fb::fbDespawnActorReqT, fb::fbDespawnActorResT>(m_userId, eProtocolType::UDP, std::move(req), opt, this, &ClientNetWorld::OnDespawnActorResponse);
+    }
+
+    void ClientNetWorld::SetReplicatedActorDormant(NetId netId)
+    {
+        SetActorDormantImpl(netId);
+    }
+
+    void ClientNetWorld::PredictReplicatedActorDespawn(NetId netId)
+    {
+        const auto e = GetEntity(netId);
+        if (e == entt::null || !m_world.valid(e) || m_world.all_of<PredictedDespawnTag>(e))
+            return;
+
+        const bool wasActive = !m_world.all_of<OutOfAoiTag>(e);
+
+        if (m_world.all_of<PhysicsSpawnedTag>(e))
+        {
+            if (m_world.ctx().contains<ClientPhysicsSystem>())
+                m_world.ctx().get<ClientPhysicsSystem>().DespawnActor(e);
+            else
+                m_world.erase<PhysicsSpawnedTag>(e);
+        }
+
+        m_world.remove<ReplayRelevantTag>(e);
+        m_world.emplace_or_replace<PredictedDespawnTag>(e);
+
+        if (wasActive)
+            PublishActorDespawned(e);
+    }
+
+    void ClientNetWorld::ReactivateReplicatedActor(NetId netId, bool isLocal)
+    {
+        const auto e = GetEntity(netId);
+        if (e == entt::null || !m_world.valid(e) || !m_world.all_of<OutOfAoiTag>(e))
+            return;
+
+        m_world.remove<OutOfAoiTag>(e);
+        PublishActorSpawned(e, 0, isLocal);
+    }
+
+    void ClientNetWorld::DestroyReplicatedActor(NetId netId)
+    {
+        DespawnActorImpl(netId);
     }
 
     void ClientNetWorld::RequestPossessActor(NetId netId)
@@ -224,14 +286,7 @@ namespace jam::net
         }
 
         m_netIdToEntity.emplace(netId, e);
-
-        RenderActorSpawnedEvent event{};
-        event.userId    = m_userId;
-        event.isLocal   = false;
-        event.objectId  = MakeObjectId(e);
-        event.prefab    = prefabKey;
-
-        GLOBAL_EVENTBUS_PUBLISH(event);
+        PublishActorSpawned(e, 0, false);
 
         return e;
     }
@@ -260,19 +315,11 @@ namespace jam::net
 
         const uint64        owner      = m_world.get<OwnershipTag>(e).userId;
         const uint64        controller = m_world.get<ControlTag>(e).userId;
-        const px::PrefabKey prefab     = m_world.get<NetPrefabKey>(e).key;
 
         bool isLocal = (owner == controller) && (controller == m_userId);
         if (isLocal) m_localNetId = netId;
 
-        RenderActorSpawnedEvent event{};
-        event.userId        = m_userId;
-        event.spawnReqId    = spawnReqId;
-        event.objectId      = MakeObjectId(e);
-        event.isLocal       = isLocal;
-        event.prefab        = prefab;
-
-        GLOBAL_EVENTBUS_PUBLISH(event);
+        PublishActorSpawned(e, spawnReqId, isLocal);
 
         return e;
     }
@@ -361,8 +408,6 @@ namespace jam::net
             JAMNET_LOG_WARN_LOC("Despawn RPC failed on server\n");
             return;
         }
-
-
     }
 
     void ClientNetWorld::OnPossessActorResponse(std::optional<fb::fbPossessActorResT> res)
@@ -394,6 +439,32 @@ namespace jam::net
         }
 
         JAMNET_LOG_DEBUG("Stopped controlling actor\n");
+    }
+
+    void ClientNetWorld::PublishActorSpawned(entt::entity e, uint32 spawnReqId, bool isLocal)
+    {
+        if (!m_world.valid(e) || !m_world.all_of<NetPrefabKey>(e))
+            return;
+
+        RenderActorSpawnedEvent event{};
+        event.userId        = m_userId;
+        event.spawnReqId    = spawnReqId;
+        event.objectId      = MakeObjectId(e);
+        event.isLocal       = isLocal;
+        event.prefab        = m_world.get<NetPrefabKey>(e).key;
+
+        GLOBAL_EVENTBUS_PUBLISH(event);
+    }
+
+    void ClientNetWorld::PublishActorDespawned(entt::entity e)
+    {
+        if (!m_world.valid(e))
+            return;
+
+        RenderActorDespawnedEvent event{};
+        event.userId   = m_userId;
+        event.objectId = MakeObjectId(e);
+        GLOBAL_EVENTBUS_PUBLISH(event);
     }
 
     void ClientNetWorld::BootstrapLevelActors()
@@ -529,12 +600,36 @@ namespace jam::net
         RequestSpawnActor(params);
     }
 
+    void ClientNetWorld::SetActorDormantImpl(NetId netId)
+    {
+        if (netId == m_localNetId)
+            return;
+
+        const auto e = GetEntity(netId);
+        if (e == entt::null || !m_world.valid(e) || m_world.all_of<OutOfAoiTag>(e) || m_world.all_of<PredictedDespawnTag>(e))
+            return;
+
+        if (m_world.all_of<PhysicsSpawnedTag>(e))
+        {
+            if (m_world.ctx().contains<ClientPhysicsSystem>())
+                m_world.ctx().get<ClientPhysicsSystem>().DespawnActor(e);
+            else
+                m_world.erase<PhysicsSpawnedTag>(e);
+        }
+
+        m_world.remove<ReplayRelevantTag>(e);
+        m_world.emplace_or_replace<OutOfAoiTag>(e);
+        PublishActorDespawned(e);
+    }
+
     void ClientNetWorld::DespawnActorImpl(const NetId netId)
     {
         const auto e = GetEntity(netId);
 
         if (e == entt::null || !m_world.valid(e))
             return;
+
+        const bool wasActive = !m_world.all_of<OutOfAoiTag>(e) && !m_world.all_of<PredictedDespawnTag>(e);
 
         if (const auto* req = m_world.try_get<NetSpawnRequestId>(e))
         {
@@ -548,8 +643,19 @@ namespace jam::net
                 m_netIdToEntity.erase(it);
         }
 
-        if (m_world.ctx().contains<ClientPhysicsSystem>())
-            m_world.ctx().get<ClientPhysicsSystem>().DespawnActor(e);
+        if (m_world.all_of<PhysicsSpawnedTag>(e))
+        {
+            if (m_world.ctx().contains<ClientPhysicsSystem>())
+                m_world.ctx().get<ClientPhysicsSystem>().DespawnActor(e);
+            else
+                m_world.erase<PhysicsSpawnedTag>(e);
+        }
+
+        if (netId == m_localNetId)
+            m_localNetId = NetId::Invalid();
+
+        if (wasActive)
+            PublishActorDespawned(e);
 
         m_world.destroy(e);
     }

@@ -36,6 +36,7 @@ namespace jam::net
 		
 		void								SpawnActor(SpawnParams params);
 		void								DespawnActor(NetId netId, uint64 userId);
+		bool								DespawnActorImmediate(NetId netId, uint64 userId = 0);
 		void								PossessActor(NetId netId, uint64 userId);
 		void								UnpossessActor(NetId netId, uint64 userId);
 

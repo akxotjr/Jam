@@ -521,7 +521,7 @@ namespace
 			shards,
 			totalSubmitted,
 			totalCompleted,
-			10_s // 필요시 5~30s 조절
+			60_s // 필요시 5~30s 조절
 		);
 
 		monitorRunning.store(false, std::memory_order_relaxed);
@@ -961,14 +961,14 @@ int main(int argc, char** argv)
 	const int32 archDurationSec		= std::max<int32>(1, std::stoi(GetArgValue(args, "--arch-duration", std::to_string(defaultDurationSec))));
 	const int32 nonArchDurationSec	= std::max<int32>(1, std::stoi(GetArgValue(args, "--non-arch-duration", std::to_string(defaultDurationSec))));
 	const int32 repeatCount			= std::max<int32>(1, std::stoi(GetArgValue(args, "--repeat", "1")));
-	const string csvPath			= GetArgValue(args, "--csv", "executor_metrics1.csv");
+	const string csvPath			= GetArgValue(args, "--csv", "executor_metrics.csv");
 
 	net::RuntimeConfig config{};
 	config.geConfig = {
 		.autoTune  = true,
 		.layoutCfg = {
 			.mode			  = Balance,
-			.reserved_threads = 1,
+			.reservedThreads = 1,
 			.profile		  = CoreProfileServer,
 		}
 	};

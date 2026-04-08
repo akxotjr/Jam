@@ -53,6 +53,6 @@ using namespace std;
 using namespace physx;
 
 #include "JamNetAPI.h"
-
+#include "jampx/JamPx.h"
 
 

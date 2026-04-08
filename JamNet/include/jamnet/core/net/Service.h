@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "jamnet/core/net/IocpCore.h"
 #include "jamnet/core/net/NetAddress.h"
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/TcpListener.h"
@@ -67,7 +68,7 @@ namespace jam::net
 		std::shared_ptr<UdpSession>			FindSessionInConnected(const NetAddress& from);
 		std::shared_ptr<UdpSession>			FindSessionInHandshaking(const NetAddress& from);
 
-		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer);
+		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer, uint64 ingressRecvTime_ns);
 
 		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount; }
 		int32								GetMaxTcpSessionCount() const { return m_config.maxTcpSessionCount; }
@@ -92,18 +93,13 @@ namespace jam::net
 	private:
 		IocpCore*							GetIocpCore() const { return m_iocpCore.get(); }
 
-	protected:
-		void								PumpIocpBatch(uint32 maxBatch);
-		void								ScheduleIocpPump(uint64 interval_ns, uint32 batch);
-
 
 	protected:
 		USE_LOCK
 
 		ServiceConfig										m_config;
 		eServiceType										m_type = eServiceType::NONE;
-
-		std::unique_ptr<IocpCore>							m_iocpCore;
+		std::shared_ptr<IocpCore>							m_iocpCore;
 
 		std::unordered_map<NetAddress, std::shared_ptr<TcpSession>>	m_tcpSessions;
 		std::unordered_map<NetAddress, std::shared_ptr<UdpSession>>	m_udpSessions;
@@ -123,8 +119,6 @@ namespace jam::net
 
 		std::atomic<bool>									m_running{ false };
 		uint64												m_lastUpdateTime_ns = 0_ns;
-
-		GlobalExecutor::PeriodicHandle						m_periodicHandle;
 
 		void*												m_userData = nullptr;
 	};

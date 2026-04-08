@@ -63,7 +63,10 @@ namespace jam::net
             if (ev->recvBuffer != nullptr)
             {
                 if (numOfBytes > 0)
-					ProcessRecv(numOfBytes, ev->remoteAddress, *ev->recvBuffer);
+                {
+                    const uint64 ingressRecvTime_ns = NOW_NS(); 
+                    ProcessRecv(numOfBytes, ev->remoteAddress, *ev->recvBuffer, ingressRecvTime_ns);
+                }
                 ObjectPool<jam::net::RecvBuffer>::Push(ev->recvBuffer);
                 ev->recvBuffer = nullptr;
             }
@@ -93,6 +96,23 @@ namespace jam::net
         for (auto& buf : bufs)
         {
             if (!buf || !buf->Buffer()) continue;
+
+            PacketView v = PacketView::Parse(buf->Buffer(), buf->WriteSize());
+            if (v.IsValid() && v.Type() == ePacketType::SYSTEM)
+            {
+                const uint64 wireNow_ns = NOW_NS();
+
+                if (U2E(eSystemPacketId, v.Id()) == eSystemPacketId::PING && v.PayloadSize() >= sizeof(PING_DATA))
+                {
+                    auto* ping = reinterpret_cast<PING_DATA*>(v.Payload());
+                    ping->t1Wire_ns = wireNow_ns;
+                }
+                else if (U2E(eSystemPacketId, v.Id()) == eSystemPacketId::PONG && v.PayloadSize() >= sizeof(PONG_DATA))
+                {
+                    auto* pong = reinterpret_cast<PONG_DATA*>(v.Payload());
+                    pong->t3Wire_ns = wireNow_ns;
+                }
+            }
 
             auto* ev = ObjectPool<SendEvent>::Pop();
             ev->Init();
@@ -160,11 +180,11 @@ namespace jam::net
         udpSession->OnSend(numOfBytes);
     }
 
-    void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, RecvBuffer& buf)
+    void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, RecvBuffer& buf, uint64 ingressRecvTime_ns)
     {
         if (numOfBytes == 0 || !m_service) return;
 
-        m_service->ProcessUdpSession(remoteAddress, numOfBytes, buf);
+        m_service->ProcessUdpSession(remoteAddress, numOfBytes, buf, ingressRecvTime_ns);
     }
 
     void UdpRouter::HandleError(int32 errorCode)

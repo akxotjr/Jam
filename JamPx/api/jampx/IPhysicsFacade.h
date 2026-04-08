@@ -72,6 +72,7 @@ namespace jam::px
 
 
 		virtual std::vector<ObjectId>	PopActiveList() = 0;
+		virtual std::vector<PhysicsEvent> ConsumePhysicsEvents() = 0;
 
 	};
 }

@@ -102,10 +102,18 @@ namespace jam::px
         auto* dyn = body.GetMainActor()->is<PxRigidDynamic>();
         if (!dyn) return;
 
-        const PxScene* scene = dyn->getScene();
+		const PxScene* scene = dyn->getScene();
 
 		m_lastDtMain    = dt;
+		const bool wasHit = m_lastHitResult.hit;
+		const bool wasLifetime = m_lastHitResult.maxRangeReached || m_lastHitResult.maxLifetimeReached;
         m_lastHitResult = m_mainProjectile->Tick(dt, scene, dyn);
+
+		if (m_lastHitResult.hit && !wasHit)
+			m_mainHitEventConsumed = false;
+
+		if ((m_lastHitResult.maxRangeReached || m_lastHitResult.maxLifetimeReached) && !wasLifetime)
+			m_mainLifetimeConsumed = false;
 	}
 
 	void ProjectileRigidBehavior::TickOnReplay(RigidBody& body, float dt)
@@ -187,5 +195,25 @@ namespace jam::px
 	{
 		ApplyAuthorityState(m_replayProjectile.get(), state);
 		return false;
+	}
+
+	bool ProjectileRigidBehavior::ConsumeMainHitEvent(OUT ProjectileHitResult& result)
+	{
+		if (!m_lastHitResult.hit || m_mainHitEventConsumed)
+			return false;
+
+		result = m_lastHitResult;
+		m_mainHitEventConsumed = true;
+		return true;
+	}
+
+	bool ProjectileRigidBehavior::ConsumeMainLifetimeEvent(OUT ProjectileHitResult& result)
+	{
+		if ((!(m_lastHitResult.maxRangeReached || m_lastHitResult.maxLifetimeReached)) || m_mainLifetimeConsumed)
+			return false;
+
+		result = m_lastHitResult;
+		m_mainLifetimeConsumed = true;
+		return true;
 	}
 } // namespace jam::px

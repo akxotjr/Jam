@@ -787,6 +787,47 @@ GLFWwindow* Renderer::GetWindow(uint32 index) const
     return m_windows[index];
 }
 
+bool Renderer::ScreenPointToWorldRay(uint32 index, double mouseX, double mouseY, OUT glm::vec3& outOrigin, OUT glm::vec3& outDir) const
+{
+    if (index >= m_windowCount)
+        return false;
+
+    GLFWwindow* window = m_windows[index];
+    if (!window)
+        return false;
+
+    int fbw = 0;
+    int fbh = 0;
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    if (fbw <= 0 || fbh <= 0)
+        return false;
+
+    const float x = static_cast<float>((2.0 * mouseX) / static_cast<double>(fbw) - 1.0);
+    const float y = static_cast<float>(1.0 - (2.0 * mouseY) / static_cast<double>(fbh));
+
+    const glm::vec4 nearNdc(x, y, -1.0f, 1.0f);
+    const glm::vec4 farNdc(x, y, 1.0f, 1.0f);
+
+    const glm::mat4 invViewProj = glm::inverse(m_proj * m_view);
+
+    glm::vec4 nearWorld = invViewProj * nearNdc;
+    glm::vec4 farWorld = invViewProj * farNdc;
+    if (std::abs(nearWorld.w) < 1e-6f || std::abs(farWorld.w) < 1e-6f)
+        return false;
+
+    nearWorld /= nearWorld.w;
+    farWorld /= farWorld.w;
+
+    outOrigin = glm::vec3(nearWorld);
+    const glm::vec3 rayVec = glm::vec3(farWorld - nearWorld);
+    const float rayLen = glm::length(rayVec);
+    if (rayLen < 1e-6f)
+        return false;
+
+    outDir = rayVec / rayLen;
+    return true;
+}
+
 void Renderer::SetCameraPos(const glm::vec3& eye)
 {
     m_cameraEye = eye;

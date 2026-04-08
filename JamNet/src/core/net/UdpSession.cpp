@@ -65,28 +65,42 @@ namespace jam::net
 
 		m_state.store(eSessionState::DISCONNECTED, std::memory_order_relaxed);
 
-		GetService()->ReleaseUdpSession(static_pointer_cast<UdpSession>(shared_from_this()));
+		auto self = static_pointer_cast<UdpSession>(shared_from_this());
+		auto* service = GetService();
+		if (!service)
+			return;
+
+		if (auto connected = service->FindSessionInConnected(m_remoteAddress); connected.get() == this)
+		{
+			service->ReleaseUdpSession(self);
+			return;
+		}
+
+		if (auto handshaking = service->FindSessionInHandshaking(m_remoteAddress); handshaking.get() == this)
+		{
+			service->ReleaseHandshakingUdpSession(self);
+		}
 	}
 
 
 
-	void UdpSession::ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer)
+	void UdpSession::ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer, uint64 ingressRecvTime_ns)
 	{
 		if (!recvBuffer.OnWrite(numOfBytes))
 			return;
 
-		const BYTE* data = recvBuffer.ReadPos();
-		const int32 size = numOfBytes;
+		const BYTE*  data = recvBuffer.ReadPos();
+		const int32  size = numOfBytes;
 
 		std::shared_ptr<RecvBuffer> buf = RecvBuffer::FromSpan(data, size);
 
 		auto self = static_pointer_cast<UdpSession>(shared_from_this());
-		Post(Job([self, buf]
+		Post(Job([self, buf, ingressRecvTime_ns]
 			{
 				const entt::entity e = self->GetEntity();
 				if (e == entt::null) return;
 
-				ProcessReceivedPacket(e, buf);
+				ProcessReceivedPacket(e, buf, ingressRecvTime_ns);
 			}));
 
 		recvBuffer.OnRead(size);

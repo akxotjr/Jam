@@ -14,77 +14,87 @@ namespace jam::net
 	enum class eRpcPacketId : uint8;
 
 
-	// type(2) + id(5) + size(11) + flags(4) + channel(2) = 24bit
-#pragma pack(push, 1)
+	// fixed[3] = type(2) + id(5) + size(11) + flags(4) + channel(2) = 24bit
+	#pragma pack(push, 1)
 	struct PacketHeader
 	{
 	public:
 		PacketHeader() = default;
 
-		PacketHeader(uint8 type, uint8 id, uint16 size, uint8 flags, uint8 channel, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0)
+		PacketHeader(uint8 type, uint8 id, uint16 size, uint8 flags, uint8 channel, uint16 packetSeq = 0, uint16 orderedSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0)
+			: packetSeq(packetSeq), orderedSeq(orderedSeq), fragInfo(PackFragInfo(fragIndex, fragTotal))
 		{
-			data |= (static_cast<uint64>(type	 & MAX_TYPE)	<< TYPE_SHIFT);
-			data |= (static_cast<uint64>(id		 & MAX_ID)		<< ID_SHIFT);
-			data |= (static_cast<uint64>(size    & MAX_SIZE)	<< SIZE_SHIFT);
-			data |= (static_cast<uint64>(flags   & MAX_FLAGS)	<< FLAGS_SHIFT);
-			data |= (static_cast<uint64>(channel & MAX_CHANNEL) << CHANNEL_SHIFT);
-
-			// sequence (16비트, optional)
-			data |= (static_cast<uint64>(seq) << SEQUENCE_SHIFT);
-
-			// fragment (16비트 = 8비트 index + 8비트 total, optional)
-			data |= (static_cast<uint64>(fragIndex) << FRAG_INDEX_SHIFT);
-			data |= (static_cast<uint64>(fragTotal) << FRAG_TOTAL_SHIFT);
+			uint32 bits = 0;
+			bits |= (static_cast<uint32>(type	 & MAX_TYPE)	<< TYPE_SHIFT);
+			bits |= (static_cast<uint32>(id		 & MAX_ID)		<< ID_SHIFT);
+			bits |= (static_cast<uint32>(size    & MAX_PACKET_SIZE_FIELD) << SIZE_SHIFT);
+			bits |= (static_cast<uint32>(flags   & MAX_FLAGS)	<< FLAGS_SHIFT);
+			bits |= (static_cast<uint32>(channel & MAX_CHANNEL) << CHANNEL_SHIFT);
+			SetFixedBits(bits);
 		}
 
 		// Getter
-		uint8			GetType()			const { return static_cast<uint8>((data & TYPE_MASK) >> TYPE_SHIFT); }				// 2 bit
-		uint8			GetId()				const { return static_cast<uint8>((data & ID_MASK) >> ID_SHIFT); }						// 6 bit  
-		uint16			GetSize()			const { return static_cast<uint16>((data & SIZE_MASK) >> SIZE_SHIFT); }				// 11 bit
-		uint8			GetFlags()			const { return static_cast<uint8>((data & FLAGS_MASK) >> FLAGS_SHIFT); }				// 5 bit
-		uint8			GetChannel()		const { return static_cast<uint8>((data & CHANNEL_MASK) >> CHANNEL_SHIFT); }
-		uint16			GetSequence()		const { return static_cast<uint16>((data & SEQUENCE_MASK) >> SEQUENCE_SHIFT); }
-		uint8			GetFragmentIndex()	const { return static_cast<uint8>((data & FRAG_INDEX_MASK) >> FRAG_INDEX_SHIFT); }
-		uint8			GetTotalFragments() const { return static_cast<uint8>((data & FRAG_TOTAL_MASK) >> FRAG_TOTAL_SHIFT); }
+		uint8			GetType()			 const { return static_cast<uint8>((GetFixedBits() & TYPE_MASK) >> TYPE_SHIFT); }				// 2 bit
+		uint8			GetId()				 const { return static_cast<uint8>((GetFixedBits() & ID_MASK) >> ID_SHIFT); }						// 5 bit  
+		uint16			GetSize()			 const { return static_cast<uint16>((GetFixedBits() & SIZE_MASK) >> SIZE_SHIFT); }				// 11 bit
+		uint8			GetFlags()			 const { return static_cast<uint8>((GetFixedBits() & FLAGS_MASK) >> FLAGS_SHIFT); }				// 4 bit
+		uint8			GetChannel()		 const { return static_cast<uint8>((GetFixedBits() & CHANNEL_MASK) >> CHANNEL_SHIFT); }
+		uint16			GetSequence()		 const { return packetSeq; }
+		uint16			GetOrderedSequence() const { return orderedSeq; }
+		uint16			GetFragmentInfo()	 const { return fragInfo; }
+		uint8			GetFragmentIndex()	 const { return static_cast<uint8>(fragInfo & 0x00FFu); }
+		uint8			GetTotalFragments()  const { return static_cast<uint8>((fragInfo & 0xFF00u) >> 8); }
 
-		ePacketGroup	GetGroup() const { return U2E(ePacketGroup, (data & GROUP_MASK) >> GROUP_SHIFT); }
-
+		ePacketGroup	GetGroup() const { return U2E(ePacketGroup, (GetFixedBits() & GROUP_MASK) >> GROUP_SHIFT); }
 
 		void SetType(uint8 type)
 		{
-			data = (data & ~TYPE_MASK) | (static_cast<uint64>(type & MAX_TYPE) << TYPE_SHIFT);
+			uint32 bits = GetFixedBits();
+			bits = (bits & ~TYPE_MASK) | (static_cast<uint32>(type & MAX_TYPE) << TYPE_SHIFT);
+			SetFixedBits(bits);
 		}
 
 		void SetId(uint8 id)
 		{
-			data = (data & ~ID_MASK) | (static_cast<uint64>(id & MAX_ID) << ID_SHIFT);
+			uint32 bits = GetFixedBits();
+			bits = (bits & ~ID_MASK) | (static_cast<uint32>(id & MAX_ID) << ID_SHIFT);
+			SetFixedBits(bits);
 		}
 
 		void SetSize(uint16 size)
 		{
-			data = (data & ~SIZE_MASK) | (static_cast<uint64>(size & MAX_SIZE) << SIZE_SHIFT);
+			uint32 bits = GetFixedBits();
+			bits = (bits & ~SIZE_MASK) | (static_cast<uint32>(size & MAX_PACKET_SIZE_FIELD) << SIZE_SHIFT);
+			SetFixedBits(bits);
 		}
 
 		void SetFlags(uint8 flags)
 		{
-			data = (data & ~FLAGS_MASK) | (static_cast<uint64>(flags & MAX_FLAGS) << FLAGS_SHIFT);
+			uint32 bits = GetFixedBits();
+			bits = (bits & ~FLAGS_MASK) | (static_cast<uint32>(flags & MAX_FLAGS) << FLAGS_SHIFT);
+			SetFixedBits(bits);
 		}
 
 		void SetChannel(eChannelType channel)
 		{
-			data = (data & ~CHANNEL_MASK) | (static_cast<uint64>(E2U(channel) & MAX_CHANNEL) << CHANNEL_SHIFT);
+			uint32 bits = GetFixedBits();
+			bits = (bits & ~CHANNEL_MASK) | (static_cast<uint32>(E2U(channel) & MAX_CHANNEL) << CHANNEL_SHIFT);
+			SetFixedBits(bits);
 		}
 
 		void SetSequence(uint16 seq)
 		{
-			data = (data & ~SEQUENCE_MASK) | (static_cast<uint64>(seq) << SEQUENCE_SHIFT);
+			packetSeq = seq;
+		}
+
+		void SetOrderedSequence(uint16 seq)
+		{
+			orderedSeq = seq;
 		}
 
 		void SetFragmentInfo(uint8 index, uint8 total)
 		{
-			data = (data & ~(FRAG_INDEX_MASK | FRAG_TOTAL_MASK)) |
-				(static_cast<uint64>(index) << FRAG_INDEX_SHIFT) |
-				(static_cast<uint64>(total) << FRAG_TOTAL_SHIFT);
+			fragInfo = PackFragInfo(index, total);
 		}
 
 		bool IsReliable() const
@@ -97,32 +107,65 @@ namespace jam::net
 
 		bool IsValid() const
 		{
-			return (GetType() <= MAX_TYPE) && (GetId() <= MAX_ID) && (GetSize() <= MAX_SIZE) && (GetFlags() <= MAX_FLAGS) && (GetChannel() <= MAX_CHANNEL);
+			return (GetType() <= MAX_TYPE) && (GetId() <= MAX_ID) && (GetSize() <= MAX_PACKET_SIZE_FIELD) && (GetFlags() <= MAX_FLAGS) && (GetChannel() <= MAX_CHANNEL);
 		}
 
 		uint32	GetActualSize() const
 		{
-			const auto ch = U2E(eChannelType, GetChannel());
-			return IsFragmented() ? FULL_SIZE : HasSequence(ch) ? HALF_SIZE : BASE_SIZE;
+			return CalcHeaderSize(U2E(eChannelType, GetChannel()), GetFlags());
 		}
 
 		static constexpr uint32 BASE_SIZE = 3;
 		static constexpr uint32 HALF_SIZE = 5;
 		static constexpr uint32 FULL_SIZE = 7;
+		static constexpr uint32 MAX_WIRE_SIZE = 9;
+
+		static uint32 CalcHeaderSize(eChannelType channel, uint8 flags)
+		{
+			if (!HasSequence(channel))
+				return BASE_SIZE;
+
+			uint32 size = HALF_SIZE; // fixed + packetSeq
+			if (HasOrderedSequence(channel))
+				size += sizeof(uint16);
+			if (HasFlag(flags, PacketFlags::FRAGMENTED))
+				size += sizeof(uint16);
+
+			return size;
+		}
 
 
 	private:
-		uint64		data = 0;
+		static constexpr uint16 PackFragInfo(uint8 index, uint8 total)
+		{
+			return static_cast<uint16>(index) | (static_cast<uint16>(total) << 8);
+		}
 
-		static constexpr uint64 GROUP_MASK		 = 0x0000000000000002ULL;  // bit [1] (type의 상위 비트)
-		static constexpr uint64 TYPE_MASK		 = 0x0000000000000003ULL;  // bits [0-1]   (2비트)
-		static constexpr uint64 ID_MASK			 = 0x000000000000007CULL;  // bits [2-6]   (5비트)
-		static constexpr uint64 SIZE_MASK		 = 0x000000000003FF80ULL;  // bits [7-17]  (11비트)
-		static constexpr uint64 FLAGS_MASK		 = 0x00000000003C0000ULL;  // bits [18-21] (4비트)
-		static constexpr uint64 CHANNEL_MASK	 = 0x0000000000C00000ULL;  // bits [22-23] (2비트)
-		static constexpr uint64 SEQUENCE_MASK	 = 0x000000FFFF000000ULL;  // bits [24-39] (16비트)
-		static constexpr uint64 FRAG_INDEX_MASK  = 0x0000FF0000000000ULL;  // bits [40-47] (8비트)
-		static constexpr uint64 FRAG_TOTAL_MASK  = 0x00FF000000000000ULL;
+		uint32 GetFixedBits() const
+		{
+			return static_cast<uint32>(fixed[0])
+				| (static_cast<uint32>(fixed[1]) << 8)
+				| (static_cast<uint32>(fixed[2]) << 16);
+		}
+
+		void SetFixedBits(uint32 bits)
+		{
+			fixed[0] = static_cast<BYTE>(bits & 0xFFu);
+			fixed[1] = static_cast<BYTE>((bits >> 8) & 0xFFu);
+			fixed[2] = static_cast<BYTE>((bits >> 16) & 0xFFu);
+		}
+
+		BYTE		fixed[BASE_SIZE] = {};
+		uint16		packetSeq = 0;
+		uint16		orderedSeq = 0;
+		uint16		fragInfo = 0;
+
+		static constexpr uint32 GROUP_MASK		 = 0x00000002u;  // bit [1] (type의 상위 비트)
+		static constexpr uint32 TYPE_MASK		 = 0x00000003u;  // bits [0-1]   (2비트)
+		static constexpr uint32 ID_MASK			 = 0x0000007Cu;  // bits [2-6]   (5비트)
+		static constexpr uint32 SIZE_MASK		 = 0x0003FF80u;  // bits [7-17]  (11비트)
+		static constexpr uint32 FLAGS_MASK		 = 0x003C0000u;  // bits [18-21] (4비트)
+		static constexpr uint32 CHANNEL_MASK	 = 0x00C00000u;  // bits [22-23] (2비트)
 
 		static constexpr uint32 GROUP_SHIFT		 = 1;   // type의 상위 비트
 		static constexpr uint32 TYPE_SHIFT		 = 0;
@@ -130,25 +173,24 @@ namespace jam::net
 		static constexpr uint32 SIZE_SHIFT		 = 7;
 		static constexpr uint32 FLAGS_SHIFT		 = 18;
 		static constexpr uint32 CHANNEL_SHIFT	 = 22;
-		static constexpr uint32 SEQUENCE_SHIFT	 = 24;
-		static constexpr uint32 FRAG_INDEX_SHIFT = 40;
-		static constexpr uint32 FRAG_TOTAL_SHIFT = 48;
 
-		static constexpr uint8  MAX_TYPE		 = 0x03;   // 2비트
-		static constexpr uint8	MAX_GROUP		 = 0x01;
-		static constexpr uint8  MAX_ID			 = 0x1F;   // 5비트
-		static constexpr uint16 MAX_SIZE		 = 0x7FF;  // 11비트
-		static constexpr uint8  MAX_FLAGS		 = 0x0F;   // 4비트
-		static constexpr uint8  MAX_CHANNEL		 = 0x03;   // 2비트
+		static constexpr uint8  MAX_TYPE				= 0x03;   // 2비트
+		static constexpr uint8	MAX_GROUP				= 0x01;
+		static constexpr uint8  MAX_ID					= 0x1F;   // 5비트
+		static constexpr uint16 MAX_PACKET_SIZE_FIELD	= 0x7FF;  // 11비트
+		static constexpr uint8  MAX_FLAGS				= 0x0F;   // 4비트
+		static constexpr uint8  MAX_CHANNEL				= 0x03;   // 2비트
 	};
-#pragma pack(pop)
+	#pragma pack(pop)
+
+	static_assert(sizeof(PacketHeader) == PacketHeader::MAX_WIRE_SIZE, "PacketHeader wire layout must remain packed to 9 bytes");
 
 	// 개별 ACK 패킷 크기 (BaseHeader + ACK_DATA)
 	constexpr uint16 ACK_PACKET_SIZE  = PacketHeader::BASE_SIZE + sizeof(ACK_DATA);
 	constexpr uint16 NACK_PACKET_SIZE = PacketHeader::BASE_SIZE + sizeof(NACK_DATA);
 
-	// 최대 페이로드 크기(보수): 최대 헤더(Full) + Piggyback ACK 데이터 공간을 고려
-	constexpr uint16 MAX_PAYLOAD_SIZE = JAMNET_MTU - PacketHeader::FULL_SIZE - sizeof(ACK_DATA);
+	// 최대 페이로드 크기(보수): 최대 헤더 + Piggyback ACK 데이터 공간을 고려
+	constexpr uint16 MAX_PAYLOAD_SIZE = JAMNET_MTU - PacketHeader::MAX_WIRE_SIZE - sizeof(ACK_DATA);
 
 
 
@@ -216,6 +258,8 @@ namespace jam::net
 		uint8           FragmentIndex()  const { return header->GetFragmentIndex(); }
 		uint8           TotalFragments() const { return header->GetTotalFragments(); }
 
+		uint16 OrderedSequence() const { return header->GetOrderedSequence(); }
+
 		PacketHeader*	Header()	  const { return header; }
 		uint32			HeaderSize()  const { return headerSize; }
 		BYTE*			Payload()	  const { return payload; }
@@ -239,7 +283,7 @@ namespace jam::net
 	{
 	public:
 		// Common
-		static std::shared_ptr<SendBuffer>		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static std::shared_ptr<SendBuffer>		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 
 		// System 
 		static std::shared_ptr<SendBuffer>		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
@@ -260,7 +304,7 @@ namespace jam::net
 
 
 	private:
-		static std::shared_ptr<SendBuffer>		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 channel, const void* payload, uint32 payloadSize, uint16 seq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static std::shared_ptr<SendBuffer>		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 channel, const void* payload, uint32 payloadSize, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 	};
 }
 

@@ -2,6 +2,7 @@
 #include "jamnet/sync/replication/ServerPhysicsSystem.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
+#include "jamnet/sync/networld/ServerNetWorld.h"
 
 namespace jam::net
 {
@@ -155,6 +156,7 @@ namespace jam::net
 		// 파이버가 Resume 된 후 (또는 동기 실행 시) 결과를 가져옵니다.
 		m_physics->EndSimulate();
 		CommitPendingActorOps();
+		HandleProjectileLifecycleEvents();
 	}
 
 	void ServerPhysicsSystem::SyncActiveTransforms() const
@@ -273,6 +275,41 @@ namespace jam::net
 			{
 				m_world.erase<PhysicsSpawnedTag>(op.e);
 			}
+		}
+	}
+
+	void ServerPhysicsSystem::HandleProjectileLifecycleEvents() const
+	{
+		if (!m_physics)
+			return;
+
+		auto* nwPtr = m_world.ctx().find<ServerNetWorld*>();
+		if (!nwPtr || !*nwPtr)
+			return;
+
+		ServerNetWorld* netWorld = *nwPtr;
+		std::unordered_set<uint32> pending;
+
+		for (const px::PhysicsEvent& evt : m_physics->ConsumePhysicsEvents())
+		{
+			if (evt.type != px::ePhysicsEventType::ProjectileHit
+				&& evt.type != px::ePhysicsEventType::ProjectileLifetimeExpired)
+			{
+				continue;
+			}
+
+			const entt::entity e = static_cast<entt::entity>(evt.sourceId);
+			if (e == entt::null || !m_world.valid(e))
+				continue;
+
+			const auto* netId = m_world.try_get<NetId>(e);
+			if (!netId || !netId->IsValid())
+				continue;
+
+			if (!pending.insert(netId->Raw()).second)
+				continue;
+
+			netWorld->DespawnActorImmediate(*netId, 0);
 		}
 	}
 }

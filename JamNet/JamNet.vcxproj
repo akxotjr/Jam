@@ -211,6 +211,7 @@
     <ClInclude Include="include\jamnet\core\net\JamNetNetwork.h" />
     <ClInclude Include="include\jamnet\core\net\JamNetRuntime.h" />
     <ClInclude Include="include\jamnet\core\net\NetAddress.h" />
+    <ClInclude Include="include\jamnet\core\net\NetworkProfile.h" />
     <ClInclude Include="include\jamnet\core\net\PacketBuilder.h" />
     <ClInclude Include="include\jamnet\core\net\PacketStructure.h" />
     <ClInclude Include="include\jamnet\core\net\RecvBuffer.h" />
@@ -303,6 +304,7 @@
     <ClCompile Include="src\core\net\IocpEvent.cpp" />
     <ClCompile Include="src\core\net\JamNetRuntime.cpp" />
     <ClCompile Include="src\core\net\NetAddress.cpp" />
+    <ClCompile Include="src\core\net\NetworkProfile.cpp" />
     <ClCompile Include="src\core\net\PacketBuilder.cpp" />
     <ClCompile Include="src\core\net\RecvBuffer.cpp" />
     <ClCompile Include="src\core\net\RPC.cpp" />

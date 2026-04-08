@@ -78,6 +78,11 @@ namespace jam::net
 		m_physics = std::move(physics);
 	}
 
+	bool ServerNetWorld::DespawnActorImmediate(NetId netId, uint64 userId)
+	{
+		return DespawnActorImpl(netId, userId);
+	}
+
 
 
 	void ServerNetWorld::Enter(uint64 userId)
@@ -369,7 +374,13 @@ namespace jam::net
 		{
 			if (userId != 0 && ownership->userId != userId)
 				return false;
+		}
 
+		if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
+			repl->OnActorDestroyed(targetEntity);
+
+		if (m_world.all_of<PhysicsSpawnedTag>(targetEntity))
+		{
 			if (auto* phys = m_world.ctx().find<ServerPhysicsSystem>())
 			{
 				phys->DespawnActor(targetEntity);

@@ -51,6 +51,18 @@ struct fbKinematicState
 	kine_type	: ubyte;
 }
 
+enum fbRemovalReason : ubyte
+{
+	AoiLeft = 0,
+	Destroyed = 1
+}
+
+table fbRemovedActor
+{
+	net_id				: uint;
+	reason				: fbRemovalReason = AoiLeft;
+}
+
 
 // --- Snapshot --- 
 
@@ -93,6 +105,7 @@ table fbSnapshot
 {
 	header				: fbSnapshotHeader;
 	entities			: [fbActorEntity];
+	removed				: [fbRemovedActor];
 }
 
 root_type fbSnapshot;

@@ -444,6 +444,9 @@ namespace jam::px
         TriggerFound,
         TriggerLost,
 
+        ProjectileHit,
+        ProjectileLifetimeExpired,
+
         //(optional)
         //AdvancePose, 
     };

@@ -2,6 +2,7 @@
 #include <bitset>
 
 #include "jamnet/core/net/RecvBuffer.h"
+#include "jamnet/core/net/NetworkProfile.h"
 
 
 namespace jam::net
@@ -49,9 +50,9 @@ namespace jam::net
 	{
 		Session*					session				= nullptr;
 									
-		uint64						connectedTime_ns	= 0;
-		uint64						lastRecvTime_ns		= 0;
-		uint64						lastSendTime_ns		= 0;
+		uint64						connectedTime_ns	= 0_ns;
+		uint64						lastRecvTime_ns		= 0_ns;
+		uint64						lastSendTime_ns		= 0_ns;
 
 		enum State : uint8
 		{
@@ -64,7 +65,7 @@ namespace jam::net
 
 		static constexpr uint64		kTimeout_ns			= 30_s;
 
-		static SessionInfo			FromSession(Session* sess, uint64 now_ns);
+		static SessionInfo			FromSession(Session* session, uint64 now_ns);
 	};
 
 
@@ -74,54 +75,52 @@ namespace jam::net
 
 	struct SessionAuth
 	{
-		uint64	principalId = 0;
-		bool	authenticated = false;
+		uint64	principalId		= 0;
+		bool	authenticated	= false;
 	};
 
 	// ============================================================
-	// Channel State Components - 실제 필요한 것만
+	// Channel State Components
 	// ============================================================
 
 	/// 시퀀스 상태 - 4개 채널 모두 사용
 	struct SequenceState
 	{
-		std::array<uint16, 4> sendSeq{};			// 다음 보낼 seq (채널별)
-		std::array<uint16, 4> latestRecvSeq{};	// 최신 받은 seq (채널별)
-		std::array<uint16, 4> expectedSeq{};		// 예상 수신 seq (채널별)
+		// global packet sequence (ACK/Retransmit 대상)
+		uint16 nextPacketSeq			= 0;
+		uint16 latestPacketRecvSeq		= 0;
 
-		uint16 GetNextSendSeq(eChannelType ch)
+		// channel-specific
+		uint16 latestSequencedRecvSeq	= 0;	// UNRELIABLE_SEQUENCED 전용
+		uint16 nextOrdredSeq			= 0;    // RELIABLE_ORDERED 전용 송신
+		uint16 expectedOrderedSeq		= 0;	// RELIABLE_ORDERED 전용 수신 expected packet-seq base
+
+		uint16 AllocPacketSeq(uint16 count = 1)
 		{
-			return sendSeq[E2U(ch)]++;
-		}
-
-		uint16 AllocSequence(eChannelType ch, uint16 count)
-		{
-			JAM_ASSERT(count < 0x8000);
-
-			const uint32 idx = E2U(ch);
-			const uint16 base = sendSeq[idx];
-			sendSeq[idx] = static_cast<uint16>(sendSeq[idx] + count);
+			JAM_ASSERT(count < 0x8000)
+				
+			const uint16 base = nextPacketSeq;
+			nextPacketSeq = static_cast<uint16>(nextPacketSeq + count);
 			return base;
 		}
 
-		bool IsNewer(eChannelType ch, uint16 seq) const
+		uint16 AllocOrderedSeq(uint16 count = 1)
 		{
-			return SeqGreater(seq, latestRecvSeq[E2U(ch)]);
+			JAM_ASSERT(count < 0x8000)
+
+			const uint16 base = nextOrdredSeq;
+			nextOrdredSeq = static_cast<uint16>(nextOrdredSeq + count);
+			return base;
 		}
 
-		bool IsExpected(eChannelType ch, uint16 seq) const
+		bool IsNewerSequenced(uint16 seq) const
 		{
-			return seq == expectedSeq[E2U(ch)];
+			return SeqGreater(seq, latestSequencedRecvSeq);
 		}
 
-		void UpdateLatest(eChannelType ch, uint16 seq)
+		void UpdateSequencedLatest(uint16 seq)
 		{
-			latestRecvSeq[E2U(ch)] = seq;
-		}
-
-		void UpdateExpected(eChannelType ch, uint16 seq)
-		{
-			expectedSeq[E2U(ch)] = seq;
+			latestSequencedRecvSeq = seq;
 		}
 	};
 
@@ -130,17 +129,18 @@ namespace jam::net
 	{
 		struct RecvPacket
 		{
-			uint16					seq = 0;
-			uint64					recvTime_ns = 0;
-			std::shared_ptr<RecvBuffer>  buf;
+			uint16							orderedSeq	= 0;
+			uint16							span		= 1;
+			uint64							recvTime_ns = 0_ns;
+			std::shared_ptr<RecvBuffer>		buf;
 		};
 
 		std::map<uint16, RecvPacket>		pendings;
 
 		static constexpr uint32		kMaxRecvBufferSize = 256;
 
-		bool						StoreRecvPacket(uint16 seq, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns);
-		std::vector<RecvPacket>		PopOrderedPackets(uint16& expectedSeq);
+		bool						StoreRecvPacket(uint16 orderedSeq, uint16 span, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns);
+		std::vector<RecvPacket>		PopOrderedPackets(OUT uint16& expectedSeq);
 	};
 
 	/// 신뢰성 상태 - RELIABLE_ORDERED, RELIABLE_UNORDERED 2개만 사용
@@ -148,56 +148,51 @@ namespace jam::net
 	{
 		struct PendingPacket
 		{
-			uint16							seq = 0;
-			uint64							sendTime_ns = 0;
-			uint64							lastRetransmitTime_ns = 0;
-			uint8							retryCount = 0;
+			uint16							seq						= 0;
+			eChannelType                    channel					= eChannelType::UNRELIABLE_UNORDERED;
+			uint64							sendTime_ns				= 0;
+			uint64							lastRetransmitTime_ns	= 0;
+			uint8							retryCount				= 0;
+			bool							hasInitialSend			= false;
+			bool							hasRetransmitted		= false;
+			bool							countedGiveup			= false;
 			std::shared_ptr<SendBuffer>		buf;
 		};
 
-		// 채널별 데이터 (RELIABLE_ORDERED=2, RELIABLE_UNORDERED=3)
-		struct ChannelData
-		{
-			// 송신 추적
-			std::map<uint16, PendingPacket>		pendings;
-			uint32								inflightSize = 0;
+		// reliable 송신 추적 (global seq 기준)
+		std::map<uint16, PendingPacket>     reliablePendings;
+		uint32                              inflightSize			= 0;
 
-			// 수신 추적 (ACK)
-			uint16								latestAckSeq = 0;
-			uint16								lastAckedSeq = 0;
-			std::bitset<ACK_TRACK_SIZE>			ackTrack;
+		// 전역 ACK 수신 상태 (peer 전체)
+		uint16                              latestRecvSeq			= 0;		// 가장 최신으로 관측한 수신 seq
+		uint16                              lastAckedSeq			= 0;		// 내가 상대에게 반영한 최신 ack
+		std::bitset<ACK_TRACK_SIZE>         ackTrack;							// latestRecvSeq 기준 과거 수신 상태
 
-			// 지연 ACK
-			bool								hasPendingAck = false;
-			uint16								pendingAckSeq = 0;
-			uint32								pendingAckBitfield = 0;
-			uint64								firstPendingAckTime_ns = 0;
+		bool                                ackDirty				= false;
+		uint16                              pendingAckSeq			= 0;
+		uint32                              pendingAckBitfield		= 0;
+		uint64                              firstPendingAckTime_ns	= 0;
 
-			// NACK
-			std::unordered_set<uint16>			sentNackSeqs;
-			uint64								lastNackTime_ns = 0;
-		};
+		// ordered gap 탐지 / NACK 보조
+		std::unordered_set<uint16>          sentNackSeqs;
+		uint64                              lastNackTime_ns			= 0;
 
-		// RELIABLE_ORDERED와 RELIABLE_UNORDERED만 저장
-		ChannelData						reliableOrdered;	// index 0
-		ChannelData						reliableUnordered;	// index 1
-
-		ChannelData& GetChannelData(eChannelType ch)
-		{
-			return (ch == eChannelType::RELIABLE_ORDERED) ? reliableOrdered : reliableUnordered;
-		}
-
-		const ChannelData& GetChannel(eChannelType ch) const
-		{
-			return (ch == eChannelType::RELIABLE_ORDERED) ? reliableOrdered : reliableUnordered;
-		}
 
 		bool							StoreSendPacket(eChannelType ch, const std::shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns);
-		std::vector<uint16>				GetRetransmitNeeded(eChannelType ch, uint64 now_ns) const;
-		void							ProcessAck(eChannelType ch, uint16 ackSeq, uint32 ackBitfield);
-		bool							ShouldSendAck(eChannelType ch, uint64 now_ns) const;
-		uint32							BuildAckWindow(eChannelType ch) const;
-		uint32							BuildNackWindow(eChannelType ch, uint16 expectedSeq) const;
+		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns) const;
+		
+		PendingPacket*					TryGetPending(uint16 seq);
+		const PendingPacket*			TryGetPending(uint16 seq) const;
+		void							ErasePendingPacket(uint16 seq);
+
+		void							MarkReceived(uint16 seq, uint64 now_ns);
+		void							BuildPendingAck();
+		void							ProcessAck(uint16 ackSeq, uint32 ackBitfield);
+		bool							ShouldSendAck(uint64 now_ns) const;
+		void							ClearPendingAck();
+
+		uint32							BuildAckWindow() const;
+		uint32							BuildNackWindow(uint16 expectedSeq) const;
 	};
 
 	// ============================================================
@@ -208,18 +203,18 @@ namespace jam::net
 	{
 		struct Reassembly
 		{
-			uint16							fragmentId;
-			uint8							totalFragments;
-			uint8							receivedCount = 0;
+			uint16							fragmentId		= 0;
+			uint8							totalFragments	= 0;
+			uint8							receivedCount	= 0;
 
 			std::bitset<256>				receivedMask;
 			std::vector<std::vector<BYTE>>	fragments;
 
-			uint64							startTime_ns;
-			uint64							lastRecvTime_ns;
+			uint64							startTime_ns	= 0_ns;
+			uint64							lastRecvTime_ns = 0_ns;
 
-			PacketHeader					originalHeader{};
-			bool							headerSaved = false;
+			PacketHeader					originalHeader  = {};
+			bool							headerSaved		= false;
 
 			Reassembly(uint16 id, uint8 total, uint64 now_ns)
 				: fragmentId(id), totalFragments(total), startTime_ns(now_ns), lastRecvTime_ns(now_ns)
@@ -233,10 +228,11 @@ namespace jam::net
 		};
 
 		std::unordered_map<uint16, Reassembly>	reassemblies;
+		uint64									timeoutDrops = 0;
 
-		static constexpr uint16				kMaxFragmentSize = JAMNET_MTU;
-		static constexpr uint16				kMaxFragmentPayloadSize = kMaxFragmentSize - PacketHeader::FULL_SIZE - sizeof(ACK_DATA);
-		static constexpr uint8				kMaxFragments = UINT8_MAX;
+		static constexpr uint16					kMaxFragmentSize		= JAMNET_MTU;
+		static constexpr uint16					kMaxFragmentPayloadSize = kMaxFragmentSize - PacketHeader::MAX_WIRE_SIZE - sizeof(ACK_DATA);
+		static constexpr uint8					kMaxFragments			= UINT8_MAX;
 
 		bool								AddFragment(uint16 fragmentId, uint8 totalFragments, uint8 index, const BYTE* data, uint32 size, uint64 now_ns);
 		std::optional<std::vector<BYTE>>	PopCompleted(uint16 fragmentId);
@@ -251,8 +247,8 @@ namespace jam::net
 	{
 		struct AwaitState
 		{
-			std::function<void(const BYTE*, size_t)>	onPayload;
-			std::function<void(bool)>					onDone;
+			std::function<void(const BYTE*, size_t)>	onPayload	= nullptr;
+			std::function<void(bool)>					onDone		= nullptr;
 			uint64										deadline_ns = 0_ns;
 			bool										hasDeadline = false;
 		};
@@ -266,68 +262,6 @@ namespace jam::net
 		std::vector<uint32>							GetTimedOutRequests(uint64 now_ns) const;
 	};
 
-	// ============================================================
-	// Network Statistics
-	// ============================================================
-
-	struct NetworkCounter
-	{
-		uint64					totalRecvBytes	 = 0;
-		uint64					totalRecvPackets = 0;
-		uint64					totalSendBytes	 = 0;
-		uint64					totalSendPackets = 0;
-
-		void					OnRecv(uint32 bytes);
-		void					OnSend(uint32 bytes);
-		float					GetRecvThroughput(uint64 interval_ns) const;
-		float					GetSendThroughput(uint64 interval_ns) const;
-	};
-
-	struct CompNetworkStats
-	{
-		float					rtt_ms				   = 0.0f;
-		float					rttMin_ms			   = FLT_MAX;
-		float					rttMax_ms			   = 0.0f;
-		float					rttAvg_ms			   = 0.0f;
-
-		std::array<float, 32>	rttSamples			   = {};
-		uint8					rttSampleIndex		   = 0;
-		uint8					rttSampleCount		   = 0;
-
-		float					jitter_ms			   = 0.0f;
-		float					packetLoss			   = 0.0f;
-		uint32					lostPackets			   = 0;
-		uint32					totalExpected		   = 0;
-		float					estimatedBandwidth_bps = 0.0f;
-
-		struct ChannelStats
-		{
-			uint64 recvBytes	= 0;
-			uint64 sendBytes	= 0;
-			uint32 recvPackets	= 0;
-			uint32 sendPackets	= 0;
-		};
-
-		std::array<ChannelStats, 4>	channelStats;
-
-		void					AddRttSample(float newRtt_ms);
-		void					UpdateJitter();
-		void					UpdatePacketLoss(uint32 lost, uint32 expected);
-		void					UpdateBandwidth(uint64 bytes, uint64 interval_ns);
-		void					OnChannelRecv(eChannelType ch, uint32 bytes);
-		void					OnChannelSend(eChannelType ch, uint32 bytes);
-	};
-
-	struct NetworkStatsView
-	{
-		float rtt_ms				= 0.0f;
-		float jitter_ms				= 0.0f;
-		float packetLoss			= 0.0f;
-		float recvThroughput_kbps	= 0.0f;
-		float sendThroughput_kbps	= 0.0f;
-
-		static NetworkStatsView FromEntity(entt::registry& R, entt::entity e);
-	};
 
 	// ============================================================
 	// Time Synchronization
@@ -402,7 +336,7 @@ namespace jam::net
 		State						state				 = DISCONNECTED;
 		uint64						lastHandshakeTime_ns = 0;
 		uint8						retryCount			 = 0;
-		uint64						timeWaitStart_ns	 = 0;
+		uint64						timeWaitStart_ns	 = 0_ns;
 
 		static constexpr uint64		kHandshakeTimeout_ns = 2_s;
 		static constexpr uint64		kHandshakeMSL_ns	 = 12_s;

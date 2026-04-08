@@ -8,6 +8,7 @@
 #include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/executor/ExecutorMetrics.h"
 #include "jamnet/core/executor/ShardDomain.h"
+#include <condition_variable>
 
 namespace jam
 {
@@ -15,9 +16,9 @@ namespace jam
 
 	struct ShardSystemGroup
 	{
-		ShardDomain											tag{};
-		uint64												tickPeriod_ns = 0;      // 이 그룹의 Tick 주기
-		uint64												lastTick_ns = 0;
+		ShardDomain											tag			  = {};
+		uint64												tickPeriod_ns = 0_ns;      // 이 그룹의 Tick 주기
+		uint64												lastTick_ns   = 0_ns;
 
 		// 시스템 함수들
 		using SystemFn = std::function<void(ShardLocal&, uint64 now_ns, uint64 dt_ns)>;
@@ -105,8 +106,6 @@ namespace jam
 
 		void							AttachSlot(ShardSlot* slot) { m_shardSlot = slot; }
 
-
-		/// 샤드 전용 작업 등록 (우선순위 지정 가능)
 		void							Submit(Job j) override;
 		void							SubmitAfter(Job j, uint64 delay_ns);
 
@@ -127,8 +126,8 @@ namespace jam
 		struct PeriodicHandle { uint32 id = 0; };
 		struct PeriodicOptions
 		{
-			uint64      period_ns		= 0;
-			uint64      initialDelay_ns = 0;
+			uint64      period_ns		= 0_ns;
+			uint64      initialDelay_ns = 0_ns;
 			int32       maxCatchUp		= 0;
 			const char* name			= "Shard.Periodic";
 		};
@@ -150,10 +149,14 @@ namespace jam
 
 		void							PinCoreSlot(const CoreSlot& slot);
 		uint16							GetNumaNode() const { return m_config.numaNode; }
-		ShardExecutorMetricsSnapshot	GetMetricsSnapshot() const;
+		ShardExecutorMetrics			Profile() const;
 		void							ResetMetrics();
 
 	private:
+		void							ResetMetricsUnsafe();
+		bool							IsShardThread() const;
+		void							WaitUntilLoopExited() const;
+
 		void							Loop();
 		void							Tick(uint64 now_ns, uint64 dt_ns);
 
@@ -204,8 +207,8 @@ namespace jam
 		struct PeriodicState
 		{
 			std::atomic<bool>   cancelled		= false;
-			uint64				period_ns		= 0;
-			uint64				initialDelay_ns = 0;
+			uint64				period_ns		= 0_ns;
+			uint64				initialDelay_ns = 0_ns;
 			int32				maxCatchUp		= 0;
 			bool				fixedRate		= true;
 		};
@@ -213,27 +216,10 @@ namespace jam
 		std::atomic<uint32>											m_periodicId{ 1 };
 		std::unordered_map<uint32, std::weak_ptr<PeriodicState>>	m_periodics;
 
-		std::atomic<uint64>                                  m_metricLoopCount{ 0 };
-		std::atomic<uint64>                                  m_metricDidWorkLoopCount{ 0 };
-		std::atomic<uint64>                                  m_metricIdleLoopCount{ 0 };
-		std::atomic<uint64>                                  m_metricIdleSleepCost_ns{ 0 };
-
-		std::atomic<uint64>                                  m_metricIngressBatchCount{ 0 };
-		std::atomic<uint64>                                  m_metricIngressJobCount{ 0 };
-	
-		std::atomic<uint64>                                  m_metricProcessJobsCallCount{ 0 };
-		std::atomic<uint64>                                  m_metricProcessJobsExecCount{ 0 };
-		
-		std::atomic<uint64>                                  m_metricMailboxProcessCount{ 0 };
-		std::atomic<uint64>                                  m_metricMailboxJobMoveCount{ 0 };
-	
-		std::atomic<uint64>                                  m_metricSchedulerPollCount{ 0 };
-		std::atomic<uint64>                                  m_metricSchedulerEmptyPollCount{ 0 };
-		std::atomic<uint64>                                  m_metricSchedulerPollCost_ns{ 0 };
-		std::atomic<uint64>                                  m_metricSchedulerReadyRunCount{ 0 };
-	
-		std::atomic<uint64>                                  m_metricTickCount{ 0 };
-		std::atomic<uint64>                                  m_metricTickCatchUpCount{ 0 };
+		mutable std::mutex											m_metricSyncMutex;
+		mutable std::condition_variable								m_metricSyncCv;
+		mutable bool												m_loopExited = true;
+		ShardExecutorMetrics										m_metrics = {};
 	};
 
 

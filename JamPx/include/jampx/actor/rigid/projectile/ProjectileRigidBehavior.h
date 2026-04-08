@@ -27,13 +27,16 @@ namespace jam::px
 		void							SetTargetResolver(ProjectileTargetResolver resolver);
 
 		const ProjectileHitResult&		GetLastHitResult() const { return m_lastHitResult; }
-		bool							IsTerminated()     const { return m_lastHitResult.IsTerminal(); }
+		bool							ConsumeMainHitEvent(OUT ProjectileHitResult& result);
+		bool							ConsumeMainLifetimeEvent(OUT ProjectileHitResult& result);
 
 	private:
 		std::unique_ptr<ProjectileComponent>	m_mainProjectile	= nullptr;
 		std::unique_ptr<ProjectileComponent>	m_replayProjectile	= nullptr;
 
 		ProjectileHitResult                     m_lastHitResult		= {};	// from main-projectile
+		bool									m_mainHitEventConsumed = false;
+		bool									m_mainLifetimeConsumed = false;
 
 		float									m_lastDtMain		= 0.f;
 		float									m_lastDtReplay		= 0.f;

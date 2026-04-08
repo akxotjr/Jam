@@ -6,8 +6,7 @@
 namespace jam
 {
 	FiberScheduler::FiberScheduler(WinFiberBackend& backend)
-		: m_ownerThreadId(std::this_thread::get_id()), 
-		m_backend(backend),
+		: m_backend(backend),
 		m_resumeCtok(m_resumeInbox),
 		m_spawnCtok(m_spawnInbox),
 		m_cancelKeyCtok(m_cancelKeyInbox),
@@ -17,7 +16,11 @@ namespace jam
 
 	void FiberScheduler::AttachToCurrentThread()
 	{
-		JAM_ASSERT(m_ownerThreadId != std::this_thread::get_id())
+		const std::thread::id currentThreadId = std::this_thread::get_id();
+		if (m_ownerThreadId == std::thread::id{})
+			m_ownerThreadId = currentThreadId;
+
+		JAM_ASSERT(m_ownerThreadId == currentThreadId)
 
 		m_main = m_backend.ConvertThreadToMainFiber();
 		EnsureFlsKey();
@@ -28,9 +31,11 @@ namespace jam
 
 	void FiberScheduler::DetachFromThread()
 	{
+		JAM_ASSERT(m_ownerThreadId == std::this_thread::get_id())
 		SetFlsCtx(nullptr);
 		m_backend.RevertMainFiber(m_main);
 		m_main = nullptr;
+		m_ownerThreadId = std::thread::id{};
 	}
 
 	uint32 FiberScheduler::SpawnFiber(FiberFn fn, const FiberDesc& desc)
@@ -168,32 +173,32 @@ namespace jam
 		while (m_resumeInbox.try_dequeue(m_resumeCtok, r))
 		{
 			Resume(r.key);
-			++m_profile.inboxResumeCount;
+			++m_metrics.inboxResumeCount;
 		}
 		SpawnMsg s;
 		while (m_spawnInbox.try_dequeue(m_spawnCtok, s))
 		{
 			SpawnFiber(std::move(s.fn), s.desc);
-           ++m_profile.inboxSpawnCount;
+           ++m_metrics.inboxSpawnCount;
 		}
 		CancelKeyMsg ck;
 		while (m_cancelKeyInbox.try_dequeue(m_cancelKeyCtok, ck))
 		{
 			CancelByKey(ck.key, ck.code);
-			++m_profile.inboxCancelByKeyCount;
+			++m_metrics.inboxCancelByKeyCount;
 		}
 		CancelIdMsg ci;
 		while (m_cancelIdInbox.try_dequeue(m_cancelIdCtok, ci))
 		{
 			CancelById(ci.id, ci.code);
-			++m_profile.inboxCancelByIdCount;
+			++m_metrics.inboxCancelByIdCount;
 		}
 	}
 
 	void FiberScheduler::Poll(int32 budget, uint64 now_ns)
 	{
 		const uint64 pollStart_ns = NOW_NS();
-		++m_profile.pollCount;
+		++m_metrics.pollCount;
 
 		// 0) 인박스 먼저 처리
 		DrainInbox();
@@ -203,7 +208,7 @@ namespace jam
 
 		// 2) ready 실행 (budget 만큼)
 		int32 steps = 0;
-        m_profile.lastPollReadyRunCount = 0;
+        m_metrics.lastPollReadyRunCount = 0;
 		while (steps < budget && !m_readyPQ.empty()) 
 		{
 			const uint32 id = m_readyPQ.top().id;
@@ -232,9 +237,9 @@ namespace jam
 			EndRun(f);
 			m_currentId = 0;
 			++steps;
-            ++m_profile.readyRunCount;
-            ++m_profile.lastPollReadyRunCount;
-			++m_profile.stepCount;
+            ++m_metrics.readyRunCount;
+            ++m_metrics.lastPollReadyRunCount;
+			++m_metrics.stepCount;
 
 			if (f->state == eFiberState::Terminated) 
 			{
@@ -251,11 +256,11 @@ namespace jam
 		// 3) 인박스 한 번 더 비우기(레이턴시↓)
 		DrainInbox();
 		const uint64 pollEnd_ns = NOW_NS();
-		m_profile.lastPollCost_ns = pollEnd_ns - pollStart_ns;
-        m_profile.pollCostAcc_ns += m_profile.lastPollCost_ns;
+		m_metrics.lastPollCost_ns = pollEnd_ns - pollStart_ns;
+        m_metrics.pollCostAcc_ns += m_metrics.lastPollCost_ns;
 
 		if (steps == 0)
-			++m_profile.emptyPollCount;
+			++m_metrics.emptyPollCount;
 	}
 
 	uint32 FiberScheduler::Current() const
@@ -344,7 +349,7 @@ namespace jam
 	void FiberScheduler::StartRun(Fiber* f)
 	{
 		++f->switches;
-		++m_profile.switchCount;
+		++m_metrics.switchCount;
 		f->lastRunStart_ns = NOW_NS();
 	}
 
@@ -409,7 +414,7 @@ namespace jam
 				if (wake != f->wakeup_ns)
 					continue;
 				f->wakeup_ns = 0;
-                ++m_profile.wakeupTimerCount;
+                ++m_metrics.wakeupTimerCount;
 				MakeReady(id);
 			}
 			else if (f->state == eFiberState::WatingExternal)
@@ -426,7 +431,7 @@ namespace jam
 					if (f->cancel) 
 						f->cancel->RequestCancel(eCancelCode::Timeout);
 
-                    ++m_profile.wakeupTimeoutCount;
+                    ++m_metrics.wakeupTimeoutCount;
 					MakeReady(id);
 				}
 			}

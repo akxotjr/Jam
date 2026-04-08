@@ -15,21 +15,21 @@ namespace jam::net
 
 	enum class ePacketGroup : uint8
 	{
-		CTRL = 0,	// SYSTEM, ACK
-		NORMAL = 1	// RPC, CUSTOM
+		CTRL	= 0,	// SYSTEM, ACK
+		NORMAL	= 1	// RPC, CUSTOM
 	};
 
 	enum class eSystemPacketId : uint8
 	{
-		CONNECT_SYN = 1,
-		CONNECT_SYNACK = 2,
-		CONNECT_ACK = 3,
-		DISCONNECT_FIN = 4,
-		DISCONNECT_FINACK = 5,
-		DISCONNECT_ACK = 6,
+		CONNECT_SYN			= 1,
+		CONNECT_SYNACK		= 2,
+		CONNECT_ACK			= 3,
+		DISCONNECT_FIN		= 4,
+		DISCONNECT_FINACK	= 5,
+		DISCONNECT_ACK		= 6,
 
-		PING = 10,
-		PONG = 11,
+		PING				= 10,
+		PONG				= 11,
 
 		SERVER_INFO = 20,
 		CLIENT_INFO = 21,
@@ -37,20 +37,19 @@ namespace jam::net
 
 	enum class eAckPacketId : uint8
 	{
-		ACK = 1,
-		NACK = 2
+		ACK					= 1,
+		NACK				= 2
 	};
-
 
 
 	enum class eChannelType : uint8
 	{
-		TCP_DEFAULT = 0,
+		TCP_DEFAULT				= 0,
 
-		UNRELIABLE_UNORDERED = 0,
-		RELIABLE_ORDERED = 1,
-		UNRELIABLE_SEQUENCED = 2,
-		RELIABLE_UNORDERED = 3
+		UNRELIABLE_UNORDERED	= 0,
+		RELIABLE_ORDERED		= 1,
+		UNRELIABLE_SEQUENCED	= 2,
+		RELIABLE_UNORDERED		= 3
 	};
 
 	constexpr bool IsTcp(eChannelType channel)
@@ -58,9 +57,14 @@ namespace jam::net
 		return channel == eChannelType::TCP_DEFAULT;
 	}
 
-	constexpr bool HasReliable(eChannelType channel)
+	constexpr bool IsReliableChannel(eChannelType channel)
 	{
 		return channel == eChannelType::RELIABLE_ORDERED || channel == eChannelType::RELIABLE_UNORDERED;
+	}
+
+	constexpr bool IsOrderedChannel(eChannelType channel)
+	{
+		return channel == eChannelType::RELIABLE_ORDERED;
 	}
 
 	constexpr bool HasSequence(eChannelType channel)
@@ -68,6 +72,11 @@ namespace jam::net
 		if (channel == eChannelType::TCP_DEFAULT || channel == eChannelType::UNRELIABLE_UNORDERED)
 			return false;
 		return true;
+	}
+
+	constexpr bool HasOrderedSequence(eChannelType channel)
+	{
+		return channel == eChannelType::RELIABLE_ORDERED;
 	}
 
 	namespace PacketFlags
@@ -109,7 +118,8 @@ namespace jam::net
 #pragma pack(push, 1)
 	struct PING_DATA
 	{
-		uint64		t1_client_send_ns		= 0;		
+		uint64		t1Wire_ns		= 0;
+		uint64		t1App_ns		= 0;		
 		uint64		prev_t3_server_send_ns	= 0;	
 		uint64		prev_t4_client_recv_ns	= 0;	
 	};
@@ -118,9 +128,13 @@ namespace jam::net
 #pragma pack(push, 1)
 	struct PONG_DATA
 	{
-		uint64		t1_client_send_ns		= 0;			
-		uint64		t2_server_recv_ns		= 0;						
-		uint64		t3_server_send_ns		= 0;						
+		uint64		t1Wire_ns		= 0;
+		uint64		t2Wire_ns		= 0;
+		uint64		t3Wire_ns		= 0;
+
+		uint64		t1App_ns		= 0;			
+		uint64		t2App_ns		= 0;						
+		uint64		t3App_ns		= 0;						
 	};
 #pragma pack(pop)
 

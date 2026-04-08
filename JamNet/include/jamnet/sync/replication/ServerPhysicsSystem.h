@@ -21,6 +21,7 @@ namespace jam::net
 
         void                    SyncActiveTransforms() const;
         void                    SyncTransforms() const;
+        void                    HandleProjectileLifecycleEvents() const;
 
         void					CommitPendingActorOps();
 

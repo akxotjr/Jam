@@ -3,8 +3,4 @@
   <ItemGroup>
     <ClCompile Include="ExecutorBenchmark.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="..\executor_metrics1.csv" />
-    <None Include="..\burst_timeseries.csv" />
-  </ItemGroup>
 </Project>

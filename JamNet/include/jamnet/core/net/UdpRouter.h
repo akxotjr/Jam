@@ -24,7 +24,7 @@ namespace jam::net
 		void					RegisterRecv();
 
 		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddress);
-		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, RecvBuffer& buf);
+		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, RecvBuffer& buf, uint64 ingressRecvTime_ns);
 
 		void					HandleError(int32 errorCode);
 

@@ -8,10 +8,10 @@ namespace jam::net
 	//	SessionInfo
 	// ============================================================
 
-	SessionInfo SessionInfo::FromSession(Session* sess, uint64 now_ns)
+	SessionInfo SessionInfo::FromSession(Session* session, uint64 now_ns)
 	{
 		SessionInfo comp;
-		comp.session			= sess;
+		comp.session			= session;
 		comp.connectedTime_ns	= now_ns;
 		comp.lastRecvTime_ns	= now_ns;
 		comp.lastSendTime_ns	= now_ns;
@@ -21,19 +21,17 @@ namespace jam::net
 	}
 
 
-
-
 	// ============================================================
 	//	FragmentState
 	// ============================================================
 
 	bool FragmentState::Reassembly::AddFragment(uint8 index, const BYTE* data, uint32 size, uint64 now_ns)
 	{
-		if (index >= totalFragments)
-			return false;  // invalid fragment
+		if (index >= totalFragments)  // invalid fragment
+			return false;  
 
-		if (receivedMask.test(index))
-			return false;  // already received
+		if (receivedMask.test(index)) // already received
+			return false; 
 
 		fragments[index].assign(data, data + size);
 		receivedMask.set(index);
@@ -90,6 +88,7 @@ namespace jam::net
 		{
 			if (now_ns - it->second.lastRecvTime_ns > REASSEMBLY_TIMEOUT_NS)
 			{
+				timeoutDrops++;
 				it = reassemblies.erase(it);
 			}
 			else
@@ -98,136 +97,28 @@ namespace jam::net
 			}
 		}
 	}
-
-
-
-	// ============================================================
-	//	NetworkCounter
-	// ============================================================
-
-	void NetworkCounter::OnRecv(uint32 bytes)
-	{
-		totalRecvBytes += bytes;
-		totalRecvPackets++;
-	}
-
-	void NetworkCounter::OnSend(uint32 bytes)
-	{
-		totalSendBytes += bytes;
-		totalSendPackets++;
-	}
-
-	float NetworkCounter::GetRecvThroughput(uint64 interval_ns) const
-	{
-		if (interval_ns == 0) return 0.0f;
-		return (static_cast<float>(totalRecvBytes) * 1e9f) / static_cast<float>(interval_ns);
-	}
-
-	float NetworkCounter::GetSendThroughput(uint64 interval_ns) const
-	{
-		if (interval_ns == 0) return 0.0f;
-		return (static_cast<float>(totalSendBytes) * 1e9f) / static_cast<float>(interval_ns);
-	}
-
-	
-
-	// ============================================================
-	//  NetStat
-	// ============================================================
-
-	void CompNetworkStats::AddRttSample(float newRtt_ms)
-	{
-		// 샘플 저장
-		rttSamples[rttSampleIndex] = newRtt_ms;
-		rttSampleIndex = (rttSampleIndex + 1) % 32;
-		if (rttSampleCount < 32)
-			rttSampleCount++;
-
-		// 현재 RTT
-		rtt_ms = newRtt_ms;
-
-		// Min/Max
-		rttMin_ms = std::min(rttMin_ms, newRtt_ms);
-		rttMax_ms = std::max(rttMax_ms, newRtt_ms);
-
-		// 평균 (최근 샘플들)
-		float sum = 0.0f;
-		for (uint8 i = 0; i < rttSampleCount; ++i)
-		{
-			sum += rttSamples[i];
-		}
-		rttAvg_ms = sum / static_cast<float>(rttSampleCount);
-
-		// Jitter (RTT 변동성)
-		UpdateJitter();
-	}
-
-	void CompNetworkStats::UpdateJitter()
-	{
-		if (rttSampleCount < 2)
-		{
-			jitter_ms = 0.0f;
-			return;
-		}
-
-		float variance = 0.0f;
-		for (uint8 i = 0; i < rttSampleCount; ++i)
-		{
-			float diff = rttSamples[i] - rttAvg_ms;
-			variance += diff * diff;
-		}
-		variance /= static_cast<float>(rttSampleCount);
-
-		jitter_ms = sqrtf(variance);
-	}
-
-	void CompNetworkStats::UpdatePacketLoss(const uint32 lost, const uint32 expected)
-	{
-		lostPackets   += lost;
-		totalExpected += expected;
-
-		if (totalExpected > 0)
-		{
-			packetLoss = static_cast<float>(lostPackets) / static_cast<float>(totalExpected);
-		}
-	}
-
-	void CompNetworkStats::UpdateBandwidth(const uint64 bytes, const uint64 interval_ns)
-	{
-		if (interval_ns == 0)
-			return;
-
-		// bytes/sec -> bits/sec
-		estimatedBandwidth_bps = (static_cast<float>(bytes)* 8.0f * 1e9f) / static_cast<float>(interval_ns);
-	}
-
-	void CompNetworkStats::OnChannelRecv(eChannelType ch, uint32 bytes)
-	{
-		channelStats[E2U(ch)].recvBytes += bytes;
-		channelStats[E2U(ch)].recvPackets++;
-	}
-
-	void CompNetworkStats::OnChannelSend(eChannelType ch, uint32 bytes)
-	{
-		channelStats[E2U(ch)].sendBytes += bytes;
-		channelStats[E2U(ch)].sendPackets++;
-	}
-
-
 	// ============================================================
 	//  OrderState
 	// ============================================================
 
-	bool OrderState::StoreRecvPacket(uint16 seq, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns)
+	bool OrderState::StoreRecvPacket(uint16 orderedSeq, uint16 span, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns)
 	{
 		if (pendings.size() >= kMaxRecvBufferSize)
 			return false;
 
-		pendings[seq] = RecvPacket{ seq, now_ns, buf };
+		if (pendings.contains(orderedSeq))
+			return false;
+
+		pendings.emplace(orderedSeq, RecvPacket{
+			.orderedSeq  = orderedSeq,
+			.span		 = span,
+			.recvTime_ns = now_ns,
+			.buf		 = buf
+		});
 		return true;
 	}
 
-	std::vector<OrderState::RecvPacket> OrderState::PopOrderedPackets(uint16& expectedSeq)
+	std::vector<OrderState::RecvPacket> OrderState::PopOrderedPackets(OUT uint16& expectedSeq)
 	{
 		std::vector<RecvPacket> out;
 		while (true)
@@ -237,8 +128,9 @@ namespace jam::net
 				break;
 
 			out.push_back(it->second);
+			const uint16 span = std::max<uint16>(1, it->second.span);
 			pendings.erase(it);
-			expectedSeq = static_cast<uint16>(expectedSeq + 1);
+			expectedSeq = static_cast<uint16>(expectedSeq + span);
 		}
 		return out;
 	}
@@ -250,108 +142,198 @@ namespace jam::net
 
 	bool ReliabilityState::StoreSendPacket(eChannelType ch, const std::shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns)
 	{
-		auto& chData = GetChannelData(ch);
-		if (chData.pendings.contains(seq))
+		if (!IsReliableChannel(ch))
 			return false;
 
-		chData.pendings[seq] = PendingPacket{ seq, now_ns, now_ns, 0 , buf };
-		if (buf)
-			chData.inflightSize += buf->WriteSize();
+		if (reliablePendings.contains(seq))
+			return false;
+
+		reliablePendings.emplace(seq, PendingPacket{
+				.seq				   = seq,
+				.channel			   = ch,
+				.sendTime_ns		   = now_ns,
+				.lastRetransmitTime_ns = now_ns,
+				.retryCount			   = 0,
+				.buf				   = buf
+			});
+
+		if (buf) inflightSize += buf->WriteSize();
+
 		return true;
 	}
 
-	std::vector<uint16> ReliabilityState::GetRetransmitNeeded(eChannelType ch, uint64 now_ns) const
+	std::vector<uint16> ReliabilityState::GetRetransmitNeeded(uint64 now_ns) const
 	{
 		std::vector<uint16> out;
-		const auto& chData = GetChannel(ch);
-		for (const auto& [seq, pkt] : chData.pendings)
+		for (const auto& [seq, pkt] : reliablePendings)
 		{
+			if (!pkt.hasInitialSend)
+				continue;
+
 			if (pkt.retryCount >= MAX_RETRY)
 				continue;
+
 			if (now_ns - pkt.lastRetransmitTime_ns >= RETRANSMIT_TIMEOUT_NS)
 				out.push_back(seq);
 		}
 		return out;
 	}
 
-	void ReliabilityState::ProcessAck(const eChannelType ch, const uint16 ackSeq, const uint32 ackBitfield)
+	ReliabilityState::PendingPacket* ReliabilityState::TryGetPending(uint16 seq)
 	{
-		auto& chData = GetChannelData(ch);
-		auto ackOne = [&](uint16 seq)
+		const auto it = reliablePendings.find(seq);
+		if (it == reliablePendings.end())
+			return nullptr;
+
+		return &it->second;
+	}
+
+	const ReliabilityState::PendingPacket* ReliabilityState::TryGetPending(uint16 seq) const
+	{
+		const auto it = reliablePendings.find(seq);
+		if (it == reliablePendings.end())
+			return nullptr;
+
+		return &it->second;
+	}
+
+	void ReliabilityState::ErasePendingPacket(uint16 seq)
+	{
+		const auto it = reliablePendings.find(seq);
+		if (it == reliablePendings.end())
+			return;
+
+		if (it->second.buf)
 		{
-			const auto it = chData.pendings.find(seq);
-			if (it == chData.pendings.end())
-				return;
-			if (it->second.buf)
-				chData.inflightSize -= it->second.buf->WriteSize();
-			chData.pendings.erase(it);
-		};
+			const uint32 size = it->second.buf->WriteSize();
+			inflightSize = (inflightSize >= size) ? (inflightSize - size) : 0;
+		}
+
+		reliablePendings.erase(it);
+	}
+
+	void ReliabilityState::MarkReceived(uint16 seq, uint64 now_ns)
+	{
+		if (ackTrack.none() && latestRecvSeq == 0)
+		{
+			latestRecvSeq = seq;
+			ackTrack.reset();
+			ackTrack.set(0);
+		}
+		else if (SeqGreater(seq, latestRecvSeq))
+		{
+			const uint16 advance = SeqDistance(seq, latestRecvSeq);
+
+			if (advance >= ACK_TRACK_SIZE)
+				ackTrack.reset();
+			else
+				ackTrack <<= advance;
+
+			latestRecvSeq = seq;
+			ackTrack.set(0);
+		}
+		else
+		{
+			const uint16 dist = SeqDistance(latestRecvSeq, seq);
+			if (dist < ACK_TRACK_SIZE)
+				ackTrack.set(dist);
+		}
+
+		if (!ackDirty)
+		{
+			ackDirty = true;
+			firstPendingAckTime_ns = now_ns;
+		}
+
+		BuildPendingAck();
+	}
+
+	void ReliabilityState::BuildPendingAck()
+	{
+		if (!ackDirty)
+			return;
+
+		pendingAckSeq	   = latestRecvSeq;
+		pendingAckBitfield = BuildAckWindow();
+	}
+
+	void ReliabilityState::ProcessAck(uint16 ackSeq, uint32 ackBitfield)
+	{
+		auto ackOne = [&](uint16 seq)
+			{
+				auto it = reliablePendings.find(seq);
+				if (it == reliablePendings.end())
+					return;
+
+				if (it->second.buf)
+				{
+					const uint32 size = it->second.buf->WriteSize();
+					inflightSize = (inflightSize >= size) ? (inflightSize - size) : 0;
+				}
+
+				reliablePendings.erase(it);
+			};
 
 		ackOne(ackSeq);
+
 		for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
 		{
 			if (ackBitfield & (1u << (i - 1)))
-			{
-				uint16 seq = static_cast<uint16>(ackSeq - i);
-				ackOne(seq);
-			}
+				ackOne(static_cast<uint16>(ackSeq - i));
 		}
 
-		if (SeqGreater(ackSeq, chData.lastAckedSeq))
-			chData.lastAckedSeq = ackSeq;
+		if (SeqGreater(ackSeq, lastAckedSeq))
+			lastAckedSeq = ackSeq;
 	}
 
-	bool ReliabilityState::ShouldSendAck(eChannelType ch, uint64 now_ns) const
+	bool ReliabilityState::ShouldSendAck(uint64 now_ns) const
 	{
-		const auto& chData = GetChannel(ch);
-		if (!chData.hasPendingAck)
-			return false;
-		return (now_ns - chData.firstPendingAckTime_ns) >= DELAY_PIGGYBACK_ACK_TIMEOUT_NS;
+		if (!ackDirty) return false;
+		return (now_ns - firstPendingAckTime_ns) >= DELAY_PIGGYBACK_ACK_TIMEOUT_NS;
 	}
 
-	uint32 ReliabilityState::BuildAckWindow(eChannelType ch) const
+	void ReliabilityState::ClearPendingAck()
 	{
-		const auto& chData = GetChannel(ch);
+		ackDirty				= false;
+		pendingAckSeq			= 0;
+		pendingAckBitfield		= 0;
+		firstPendingAckTime_ns	= 0;
+	}
+
+	uint32 ReliabilityState::BuildAckWindow() const
+	{
 		uint32 bitfield = 0;
-
-		const uint16 base = chData.pendingAckSeq;
+		const uint16 base = pendingAckSeq;
 
 		for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
 		{
-			// base보다 i만큼 과거
 			const uint16 seq = static_cast<uint16>(base - i);
-
-			// base - seq == i (mod 2^16)
 			const uint16 dist = SeqDistance(base, seq);
 
-			// ackTrack은 base 기준 과거 ACK_TRACK_SIZE개만 유효
 			if (dist == 0 || dist > ACK_TRACK_SIZE)
 				continue;
 
-			const uint32 idx = static_cast<uint32>(dist - 1);
-			if (chData.ackTrack.test(idx))
+			if (ackTrack.test(dist))
 				bitfield |= (1u << (i - 1));
 		}
-
 		return bitfield;
 	}
 
-	uint32 ReliabilityState::BuildNackWindow(eChannelType ch, uint16 expectedSeq) const
+	uint32 ReliabilityState::BuildNackWindow(uint16 expectedSeq) const
 	{
-		const auto& chData = GetChannel(ch);
 		uint32 bitfield = 0;
 
 		// NACK 윈도우는 expectedSeq 이후(미수신 추정) 구간을 훑는 로직인데,
 		// ackTrack의 기준(base=pendingAckSeq)에 대해 "해당 seq가 관측된 적 있는가"로 판정하려면
 		// seq가 base 기준 과거에 있어야만 의미가 있음.
-		const uint16 base = chData.pendingAckSeq;
+		const uint16 base = pendingAckSeq;
 
 		for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
 		{
 			const uint16 seq = static_cast<uint16>(expectedSeq + i);
 
 			// 최신 ACK보다 미래면 중단
-			if (SeqGreater(seq, chData.latestAckSeq))
+			if (SeqGreater(seq, latestRecvSeq))
 				break;
 
 			// base 기준으로 seq가 과거로 ACK_TRACK_SIZE 안에 들어오는지 확인
@@ -362,8 +344,7 @@ namespace jam::net
 				continue;
 			}
 
-			const uint32 idx = static_cast<uint32>(dist - 1);
-			if (!chData.ackTrack.test(idx))
+			if (!ackTrack.test(dist))
 				bitfield |= (1u << (i - 1));
 		}
 
@@ -419,7 +400,7 @@ namespace jam::net
 		if (winCount < WIN)
 			winCount++;
 
-		if (rtt <= kPingIntervalStable_ns)
+		if (!bIsStabilized && winCount >= kStabilizationThreshold)
 		{
 			bIsStabilized = true;
 			currentPingInterval_ns = kPingIntervalStable_ns;
@@ -524,30 +505,5 @@ namespace jam::net
 		bytesQueued		= 0;
 		flushRequested	= false;
 	}
-
-
-
-	// ============================================================
-	//  NetworkStatsView
-	// ============================================================
-
-	NetworkStatsView NetworkStatsView::FromEntity(entt::registry& R, entt::entity e)
-	{
-		NetworkStatsView view{};
-		if (auto* stats = R.try_get<CompNetworkStats>(e))
-		{
-			view.rtt_ms		= stats->rtt_ms;
-			view.jitter_ms	= stats->jitter_ms;
-			view.packetLoss = stats->packetLoss;
-		}
-		if (auto* counter = R.try_get<NetworkCounter>(e))
-		{
-			constexpr uint64 interval = 1'000'000'000ull;
-			view.recvThroughput_kbps = counter->GetRecvThroughput(interval) / 1000.0f;
-			view.sendThroughput_kbps = counter->GetSendThroughput(interval) / 1000.0f;
-		}
-		return view;
-	}
-
 
 } // namespace jam::net

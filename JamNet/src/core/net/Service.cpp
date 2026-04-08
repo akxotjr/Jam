@@ -1,12 +1,12 @@
 #include "pch.h"
 #include "jamnet/core/net/Service.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/net/SessionSystems.h"
 
 namespace jam::net
 {
 	Service::Service(const ServiceConfig& config) : m_config(config)
 	{
-		m_iocpCore = std::make_unique<IocpCore>();
 	}
 
 	Service::~Service()
@@ -27,8 +27,7 @@ namespace jam::net
 
 	void Service::CloseService()
 	{
-		GlobalExecutor::Instance().CancelPerioidc(m_periodicHandle);
-
+		m_running.store(false, std::memory_order_relaxed);
 
 		std::vector<std::shared_ptr<TcpSession>> tcp;
 		std::vector<std::shared_ptr<UdpSession>> udp;
@@ -52,14 +51,14 @@ namespace jam::net
 
 		if (m_listener) m_listener->CloseSocket();
 		if (m_udpRouter) m_udpRouter->CloseSocket();
-
-		m_running.store(false, std::memory_order_relaxed);
+		m_iocpCore.reset();
 	}
 
 
 	std::shared_ptr<Session> Service::CreateSession(eProtocolType protocol)
 	{
 		std::shared_ptr<Session> session = nullptr;
+		IocpCore* iocpCore = GetIocpCore();
 
 		switch (protocol)
 		{
@@ -67,7 +66,7 @@ namespace jam::net
 			if (!m_tcpSessionFactory) return nullptr;
 			session = m_tcpSessionFactory();
 			if (!session) return nullptr;
-			if (m_iocpCore->Register(session) == false) return nullptr;
+			if (!iocpCore || iocpCore->Register(session) == false) return nullptr;
 			session->SetRemoteNetAddress(GetRemoteTcpNetAddress());
 			break;
 
@@ -88,7 +87,6 @@ namespace jam::net
 
 		return session;
 	}
-
 	void Service::RegisterTcpSession(const std::shared_ptr<TcpSession>& session)
 	{
 		WRITE_LOCK
@@ -180,7 +178,7 @@ namespace jam::net
 		return nullptr;
 	}
 
-	void Service::ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer)
+	void Service::ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer, uint64 ingressRecvTime_ns)
 	{
 		std::shared_ptr<UdpSession> session;
 
@@ -201,37 +199,7 @@ namespace jam::net
 			m_handshakingUdpSessions[from] = session;
 		}
 
-		session->ProcessRecv(numOfBytes, recvBuffer);
-	}
-
-
-	void Service::PumpIocpBatch(uint32 maxBatch)
-	{
-		if (!m_iocpCore) return;
-
-		for (uint32 i = 0; i < maxBatch; ++i)
-		{
-			if (!m_iocpCore->Dispatch(0))
-				break;
-		}
-	}
-
-	void Service::ScheduleIocpPump(uint64 interval_ns, uint32 batch)
-	{
-		m_periodicHandle = GlobalExecutor::Instance().ScheduleFixedRate(
-			Job([this, batch]()
-				{
-					if (!m_running.load(std::memory_order_relaxed))
-						return;
-					PumpIocpBatch(batch);
-				}),
-			GlobalExecutor::PeriodicOptions{
-				.period_ns = interval_ns,
-				.initialDelay_ns = 0,
-				.maxCatchUp = 2,
-				.name = "Svc.IOCP.Pump"
-			}
-		);
+		session->ProcessRecv(numOfBytes, recvBuffer, ingressRecvTime_ns);
 	}
 
 
@@ -245,13 +213,17 @@ namespace jam::net
 		if (!HasUdpFactory())
 			return false;
 
+		m_iocpCore = GlobalExecutor::Instance().AcquireIocpCore();
+		if (!m_iocpCore)
+			return false;
 		m_running.store(true, std::memory_order_relaxed);
-
-		ScheduleIocpPump(200'000_ns, 256); 
 
 		m_udpRouter = std::make_shared<UdpRouter>();
 		if (m_udpRouter->Start(this) == false)
+		{
+			CloseService();
 			return false;
+		}
 
 		return true;
 	}
@@ -268,9 +240,10 @@ namespace jam::net
 		if (!CanStart())
 			return false;
 
+		m_iocpCore = GlobalExecutor::Instance().AcquireIocpCore();
+		if (!m_iocpCore)
+			return false;
 		m_running.store(true, std::memory_order_relaxed);
-
-		ScheduleIocpPump(200'000_ns, 256);
 
 		bool startedAny = false;
 
@@ -278,7 +251,10 @@ namespace jam::net
 		{
 			m_listener = std::make_shared<TcpListener>();
 			if (m_listener->StartAccept(this) == false)
+			{
+				CloseService();
 				return false;
+			}
 			startedAny = true;
 		}
 
@@ -286,12 +262,18 @@ namespace jam::net
 		{
 			m_udpRouter = std::make_shared<UdpRouter>();
 			if (m_udpRouter->Start(this) == false)
+			{
+				CloseService();
 				return false;
+			}
 			startedAny = true;
 		}
 
 		if (!startedAny)
+		{
+			CloseService();
 			return false;
+		}
 
 		return true;
 	}

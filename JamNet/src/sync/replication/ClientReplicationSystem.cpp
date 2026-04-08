@@ -60,6 +60,12 @@ namespace jam::net
 			if (auto* est = m_world.ctx().find<EstimatedServerTick>())
 				est->Update(serverTick, pending.recvNs, NOW_NS());
 
+			for (const auto& removedPtr : snapshot.removed)
+			{
+				if (!removedPtr) continue;
+				ProcessRemovedActor(*removedPtr);
+			}
+
 			for (const auto& entPtr : snapshot.entities)
 			{
 				if (!entPtr) continue;
@@ -81,6 +87,34 @@ namespace jam::net
 		});
 	}
 
+	void ClientReplicationSystem::ProcessRemovedActor(const fb::fbRemovedActorT& removed)
+	{
+		const NetId netId = NetId::MakeRaw(removed.net_id);
+		if (!netId.IsValid())
+			return;
+
+		auto* ctx = m_world.ctx().find<ClientNetWorld*>();
+		if (!ctx || !*ctx)
+			return;
+
+		ClientNetWorld* netWorld = *ctx;
+
+		if (removed.reason == fb::fbRemovalReason_Destroyed)
+		{
+			netWorld->DestroyReplicatedActor(netId);
+			m_replicas.erase(netId);
+
+			if (m_localNetId == netId)
+			{
+				m_localNetId  = NetId::Invalid();
+				m_localEntity = entt::null;
+			}
+			return;
+		}
+
+		netWorld->SetReplicatedActorDormant(netId);
+	}
+
 	void ClientReplicationSystem::ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick)
 	{
 		const NetId  nid		 = NetId::MakeRaw(ent.net_id);
@@ -94,6 +128,9 @@ namespace jam::net
 
 		const entt::entity resolved = ResolveEntityForSnapshot(nid, ent.meta.get());
 		if (resolved == entt::null || !m_world.valid(resolved))
+			return;
+
+		if (m_world.all_of<PredictedDespawnTag>(resolved))
 			return;
 
 		Replica& replica = GetOrCreateReplica(nid);
@@ -147,6 +184,12 @@ namespace jam::net
 						return; // defer spawn
 				}
 			}
+		}
+
+		if (m_world.all_of<OutOfAoiTag>(resolved))
+		{
+			if (auto* ctx = m_world.ctx().find<ClientNetWorld*>(); ctx && *ctx)
+				(*ctx)->ReactivateReplicatedActor(nid, replica.isLocal);
 		}
 
 		if (auto* phys = m_world.ctx().find<ClientPhysicsSystem>())
@@ -453,7 +496,7 @@ namespace jam::net
 		auto* phys = m_world.ctx().find<ClientPhysicsSystem>();
 		if (!phys) return;
 
-		auto view = m_world.view<NetId, NetActorBodyType, RigidAuthorityState, TargetInfo>(entt::exclude<PhysicsSpawnedTag>);
+		auto view = m_world.view<NetId, NetActorBodyType, RigidAuthorityState, TargetInfo>(entt::exclude<PhysicsSpawnedTag, PredictedDespawnTag>);
 
 		for (auto e : view)
 		{

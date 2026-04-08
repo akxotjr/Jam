@@ -20,7 +20,7 @@ int main()
 		.autoTune = true,
 		.layoutCfg = {
 			.mode = jam::Balance,
-			.reserved_threads = 1,
+			.reservedThreads = 1,
 			.profile = jam::CoreProfileServer,
 		}
 	};

@@ -586,6 +586,22 @@ namespace jam::px
 		ObjectId	hitId = INVALID_OBJ_ID;
 	};
 
+	enum class ePhysicsEventType : uint8
+	{
+		None						= 0,
+		ProjectileHit				= 1,
+		ProjectileLifetimeExpired	= 2,
+	};
+
+	struct PhysicsEvent
+	{
+		ePhysicsEventType	type		= ePhysicsEventType::None;
+		ObjectId			sourceId	= INVALID_OBJ_ID;
+		ObjectId			targetId	= INVALID_OBJ_ID;
+		Vec3				hitPosition	= Vec3::Zero();
+		Vec3				hitNormal	= Vec3::Zero();
+	};
+
 
 
 

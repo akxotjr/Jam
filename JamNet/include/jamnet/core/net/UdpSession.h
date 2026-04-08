@@ -29,7 +29,7 @@ namespace jam::net
 		void							Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override {}
 
 	public:
-		void							ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer);
+		void							ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer, uint64 ingressRecvTime_ns);
 		void							RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs);
 
 		void							HandleError(int32 errorCode);

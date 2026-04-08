@@ -7,12 +7,13 @@ namespace jam::net
 	IocpCore::IocpCore()
 	{
 		m_iocpHandle = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
-		JAM_ASSERT(m_iocpHandle != INVALID_HANDLE_VALUE)
+		JAM_ASSERT(m_iocpHandle != nullptr)
 	}
 
 	IocpCore::~IocpCore()
 	{
-		::CloseHandle(m_iocpHandle);
+		if (m_iocpHandle)
+			::CloseHandle(m_iocpHandle);
 	}
 
 	bool IocpCore::Register(const std::shared_ptr<IocpObject>& obj)
@@ -58,5 +59,11 @@ namespace jam::net
 		}
 
 		return true;
+	}
+
+	void IocpCore::Wake(uint32 count)
+	{
+		for (uint32 i = 0; i < count; ++i)
+			::PostQueuedCompletionStatus(m_iocpHandle, 0, 0, nullptr);
 	}
 }

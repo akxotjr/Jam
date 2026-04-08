@@ -60,6 +60,7 @@ namespace jam::net
         entt::entity                        GetLocalEntity() const { return m_localEntity; }
 
     private:
+        void                                ProcessRemovedActor(const fb::fbRemovedActorT& removed);
         void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick);
         entt::entity                        ResolveEntityForSnapshot(NetId netId, const fb::fbActorMetaT* meta);
         

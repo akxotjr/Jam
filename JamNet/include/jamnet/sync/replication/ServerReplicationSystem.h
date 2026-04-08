@@ -6,6 +6,8 @@
 
 namespace jam::net
 {
+    class ServerNetWorld;
+
     class ServerReplicationSystem
     {
     public:
@@ -19,6 +21,7 @@ namespace jam::net
 
         void                                        OnEnter(uint64 userId);
         void                                        OnLeave(uint64 userId);
+        void                                        OnActorDestroyed(entt::entity e);
 
     private:
 
@@ -56,10 +59,23 @@ namespace jam::net
 	        }
         };
 
+        struct PendingRemoval
+        {
+            fb::fbRemovalReason  reason       = fb::fbRemovalReason_AoiLeft;
+            uint8                resendBudget = 0;
+        };
+
         flatbuffers::Offset<fb::fbActorMeta>            BuildActorMeta(entt::entity e, uint64 userId);
 
         flatbuffers::Offset<fb::fbActorEntity>          BuildFullActorEntity(entt::entity e, uint64 userId, bool includeMeta);
         flatbuffers::Offset<fb::fbActorEntity>          BuildDeltaActorEntity(entt::entity e, uint64 userId);
+
+        void                                            QueueRemovalForUser(uint64 userId, NetId netId, fb::fbRemovalReason reason);
+        void                                            CancelRemovalForUser(uint64 userId, NetId netId);
+        void                                            EmitPendingRemovalSnapshots(ServerNetWorld& nw, uint64 userId, uint32 tick, uint32 ack);
+        void                                            CommitPendingRemovalBatch(uint64 userId, const std::vector<NetId>& sentIds);
+        void                                            InvalidateUserCaches(uint64 userId, NetId netId, fb::fbRemovalReason reason);
+        void                                            InvalidateAllUserCaches(NetId netId);
 
         void                                            EnsureMetaResendBudget(entt::entity e, const MetaSentKey& key);
     	bool                                            ShouldIncludeMeta(entt::entity e, const MetaSentKey& key);
@@ -82,6 +98,7 @@ namespace jam::net
 
         std::unordered_set<MetaSentKey, MetaSentKeyHash>         m_metaSent;
         std::unordered_map<MetaSentKey, uint8, MetaSentKeyHash>  m_metaResendBudget;
+        std::unordered_map<uint64, std::unordered_map<NetId, PendingRemoval>>   m_pendingRemovalsPerUser;
 
         std::unordered_map<uint64, int32>                        m_forceFullMetaPerUsers;
 

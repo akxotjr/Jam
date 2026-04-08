@@ -35,6 +35,7 @@ namespace jam::net
                 PushAuthorityStates();
                 LivePredict();
                 PullProxyStates();
+                HandleProjectileLifecycleEvents();
             };
 
         auto& shard = SHARD_LOCAL_CHECKED();
@@ -409,6 +410,38 @@ namespace jam::net
             {
                 m_world.erase<PhysicsSpawnedTag>(op.e);
             }
+        }
+    }
+
+    void ClientPhysicsSystem::HandleProjectileLifecycleEvents()
+    {
+        if (!m_physics)
+            return;
+
+        auto* nwPtr = m_world.ctx().find<ClientNetWorld*>();
+        if (!nwPtr || !*nwPtr)
+            return;
+
+        ClientNetWorld* netWorld = *nwPtr;
+
+        for (const px::PhysicsEvent& evt : m_physics->ConsumePhysicsEvents())
+        {
+            if (evt.type != px::ePhysicsEventType::ProjectileLifetimeExpired)
+                continue;
+
+            const entt::entity e = static_cast<entt::entity>(evt.sourceId);
+            if (e == entt::null || !m_world.valid(e))
+                continue;
+
+            const auto* owner = m_world.try_get<OwnershipTag>(e);
+            const auto* netId = m_world.try_get<NetId>(e);
+            if (!owner || !netId || !netId->IsValid())
+                continue;
+
+            if (owner->userId == 0 || owner->userId != m_userId)
+                continue;
+
+            netWorld->PredictReplicatedActorDespawn(*netId);
         }
     }
 }

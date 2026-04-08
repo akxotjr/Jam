@@ -153,6 +153,7 @@
     </ProjectReference>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BotInstance.cpp" />
     <ClCompile Include="ClientInstance.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="pch.cpp">
@@ -161,11 +162,14 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Renderer.cpp" />
+    <ClCompile Include="UserInstance.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BotInstance.h" />
     <ClInclude Include="ClientInstance.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Renderer.h" />
+    <ClInclude Include="UserInstance.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Contents\test_asset.json" />

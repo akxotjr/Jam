@@ -72,6 +72,7 @@ public:
 
     GLFWwindow* GetWindow(uint32 index = 0) const;
     int32       GetWindowCount() const { return static_cast<int32>(m_windowCount); }
+    bool        ScreenPointToWorldRay(uint32 index, double mouseX, double mouseY, OUT glm::vec3& outOrigin, OUT glm::vec3& outDir) const;
 
     // 카메라 / 투영 설정 (현재 컨텍스트 기준)
     void        SetCameraPos(const glm::vec3& eye);

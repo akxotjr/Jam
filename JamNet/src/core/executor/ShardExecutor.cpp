@@ -7,10 +7,25 @@
 
 namespace jam
 {
+	namespace
+	{
+		struct ShardMetricsSnapshotRequest
+		{
+			ShardExecutorMetrics snapshot{};
+			bool done = false;
+		};
+
+		struct ShardMetricsResetRequest
+		{
+			bool done = false;
+		};
+	}
+
 	ShardExecutor::ShardExecutor(const ShardExecutorConfig& config)
 			: m_config(config)
 	{
 		m_scheduler	= std::make_unique<FiberScheduler>(m_backend);
+		m_metrics.shardIndex = m_config.index;
 	}
 
 	ShardExecutor::~ShardExecutor()
@@ -24,10 +39,24 @@ namespace jam
 		if (m_running.exchange(true))
 			return;
 
+		{
+			std::scoped_lock guard(m_metricSyncMutex);
+			m_loopExited = false;
+		}
+
 		m_local.scheduler = m_scheduler.get();
 
 		m_thread = std::thread([this]()
 			{
+				auto markLoopExited = [this]()
+					{
+						{
+							std::scoped_lock guard(m_metricSyncMutex);
+							m_loopExited = true;
+						}
+						m_metricSyncCv.notify_all();
+					};
+
 				std::string threadName = std::format("ShardExecutor#{}", m_config.index);
 				ThreadRegistry::InitExecutorThread(threadName, this);
 
@@ -41,6 +70,7 @@ namespace jam
 				catch (const std::exception& ex) 
 				{
 					std::cerr << "[ShardExecutor] Bind failed: " << ex.what() << "\n";
+					markLoopExited();
 					return;
 				}
 
@@ -49,6 +79,7 @@ namespace jam
 				m_scheduler->DetachFromThread();
 
 				ShardTLS::Unbind();
+				markLoopExited();
 			});
 	}
 
@@ -341,7 +372,7 @@ namespace jam
 
 		while (m_running.load())
 		{
-			m_metricLoopCount.fetch_add(1, std::memory_order_relaxed);
+			++m_metrics.loopCount;
 			bool didWork = false;
 
 			DrainReadyMailboxes(64, m_config.batchBudget);
@@ -352,15 +383,15 @@ namespace jam
 			m_scheduler->Poll(m_config.batchBudget, pollStart_ns);
 
 			const uint64 pollCost_ns = NOW_NS() - pollStart_ns;
-			m_metricSchedulerPollCount.fetch_add(1, std::memory_order_relaxed);
-			m_metricSchedulerPollCost_ns.fetch_add(pollCost_ns, std::memory_order_relaxed);
+			++m_metrics.schedulerPollCount;
+			m_metrics.schedulerPollCost_ns += pollCost_ns;
 
-			const auto& schedulerProfile = m_scheduler->Profile();
-			if (schedulerProfile.lastPollCost_ns != 0 && schedulerProfile.lastPollReadyRunCount == 0)
-				m_metricSchedulerEmptyPollCount.fetch_add(1, std::memory_order_relaxed);
-			m_metricSchedulerReadyRunCount.store(schedulerProfile.readyRunCount, std::memory_order_relaxed);
+			const auto& fiberMetrics = m_scheduler->Profile();
+			if (fiberMetrics.lastPollCost_ns != 0 && fiberMetrics.lastPollReadyRunCount == 0)
+				++m_metrics.schedulerEmptyPollCount;
+			m_metrics.schedulerReadyRunCount = fiberMetrics.readyRunCount;
 
-			if (schedulerProfile.lastPollReadyRunCount > 0)
+			if (fiberMetrics.lastPollReadyRunCount > 0)
 				didWork = true;
 
 			const uint64 now_ns		= NOW_NS();
@@ -377,9 +408,9 @@ namespace jam
 					++catches;
 				}
 
-				m_metricTickCount.fetch_add(static_cast<uint64>(catches), std::memory_order_relaxed);
+				m_metrics.tickCount += static_cast<uint64>(catches);
 				if (catches > 1)
-					m_metricTickCatchUpCount.fetch_add(static_cast<uint64>(catches - 1), std::memory_order_relaxed);
+					m_metrics.tickCatchUpCount += static_cast<uint64>(catches - 1);
 
 				if (now_ns >= m_lastTick_ns + tickPeriod)
 					m_lastTick_ns = now_ns;
@@ -389,14 +420,14 @@ namespace jam
 
 			if (!didWork)
            {
-				m_metricIdleLoopCount.fetch_add(1, std::memory_order_relaxed);
+				++m_metrics.idleLoopCount;
 				const uint64 idleStart_ns = NOW_NS();
 				std::this_thread::sleep_for(std::chrono::milliseconds(m_config.idleSleepMs));
-				m_metricIdleSleepCost_ns.fetch_add(NOW_NS() - idleStart_ns, std::memory_order_relaxed);
+				m_metrics.idleSleepCost_ns += NOW_NS() - idleStart_ns;
 			}
 			else
 			{
-				m_metricDidWorkLoopCount.fetch_add(1, std::memory_order_relaxed);
+				++m_metrics.didWorkLoopCount;
 			}
 		}
 	}
@@ -447,8 +478,8 @@ namespace jam
 		if (n == 0)
 			return false;
 
-		m_metricIngressBatchCount.fetch_add(1, std::memory_order_relaxed);
-		m_metricIngressJobCount.fetch_add(static_cast<uint64>(n), std::memory_order_relaxed);
+		++m_metrics.ingressBatchCount;
+		m_metrics.ingressJobCount += static_cast<uint64>(n);
 
 		for (size_t i = 0; i < n; ++i)
 		{
@@ -460,7 +491,7 @@ namespace jam
 
 	bool ShardExecutor::ProcessJobsOnce()
 	{
-       m_metricProcessJobsCallCount.fetch_add(1, std::memory_order_relaxed);
+		++m_metrics.processJobsCallCount;
 		bool didWork = false;
 		uint64 execCount = 0;
 
@@ -480,10 +511,10 @@ namespace jam
 
 			j.Execute();
 			didWork = true;
-           ++execCount;
+            ++execCount;
 		}
 
-		m_metricProcessJobsExecCount.fetch_add(execCount, std::memory_order_relaxed);
+		m_metrics.processJobsExecCount += execCount;
 
 		return didWork;
 	}
@@ -498,7 +529,7 @@ namespace jam
 		const uint64 n = mb->TryDequeueBulk(std::span<Job>(batch.data(), batch.size()));
 		if (n != 0)
 		{
-          m_metricMailboxJobMoveCount.fetch_add(n, std::memory_order_relaxed);
+			m_metrics.mailboxJobMoveCount += n;
 			for (uint64 i = 0; i < n; ++i)
 			{
 				PushLocal(std::move(batch[static_cast<size_t>(i)]));
@@ -525,66 +556,101 @@ namespace jam
 			if (!mb)
 				continue;
 
-           m_metricMailboxProcessCount.fetch_add(1, std::memory_order_relaxed);
+			++m_metrics.mailboxProcessCount;
 			ProcessMailbox(mb, budgetPerMailbox);
 		}
 	}
 
-	ShardExecutorMetricsSnapshot ShardExecutor::GetMetricsSnapshot() const
+	bool ShardExecutor::IsShardThread() const
 	{
-		ShardExecutorMetricsSnapshot s{};
-		s.shardIndex = m_config.index;
+		return m_thread.joinable() && m_thread.get_id() == std::this_thread::get_id();
+	}
 
-		s.loopCount = m_metricLoopCount.load(std::memory_order_relaxed);
-		s.didWorkLoopCount = m_metricDidWorkLoopCount.load(std::memory_order_relaxed);
-		s.idleLoopCount = m_metricIdleLoopCount.load(std::memory_order_relaxed);
-		s.idleSleepCost_ns = m_metricIdleSleepCost_ns.load(std::memory_order_relaxed);
+	void ShardExecutor::WaitUntilLoopExited() const
+	{
+		std::unique_lock<std::mutex> lock(m_metricSyncMutex);
+		m_metricSyncCv.wait(lock, [this]() { return m_loopExited; });
+	}
 
-		s.ingressBatchCount = m_metricIngressBatchCount.load(std::memory_order_relaxed);
-		s.ingressJobCount = m_metricIngressJobCount.load(std::memory_order_relaxed);
+	void ShardExecutor::ResetMetricsUnsafe()
+	{
+		m_metrics = {};
+		m_metrics.shardIndex = m_config.index;
 
-		s.processJobsCallCount = m_metricProcessJobsCallCount.load(std::memory_order_relaxed);
-		s.processJobsExecCount = m_metricProcessJobsExecCount.load(std::memory_order_relaxed);
+		if (m_scheduler)
+			m_scheduler->ResetProfile();
+	}
 
-		s.mailboxProcessCount = m_metricMailboxProcessCount.load(std::memory_order_relaxed);
-		s.mailboxJobMoveCount = m_metricMailboxJobMoveCount.load(std::memory_order_relaxed);
+	ShardExecutorMetrics ShardExecutor::Profile() const
+	{
+		if (IsShardThread())
+			return m_metrics;
 
-		s.schedulerPollCount = m_metricSchedulerPollCount.load(std::memory_order_relaxed);
-		s.schedulerEmptyPollCount = m_metricSchedulerEmptyPollCount.load(std::memory_order_relaxed);
-		s.schedulerPollCost_ns = m_metricSchedulerPollCost_ns.load(std::memory_order_relaxed);
-		s.schedulerReadyRunCount = m_metricSchedulerReadyRunCount.load(std::memory_order_relaxed);
+		if (!m_running.load(std::memory_order_acquire))
+		{
+			if (m_thread.joinable())
+				WaitUntilLoopExited();
+			return m_metrics;
+		}
 
-		s.tickCount = m_metricTickCount.load(std::memory_order_relaxed);
-		s.tickCatchUpCount = m_metricTickCatchUpCount.load(std::memory_order_relaxed);
+		auto request = std::make_shared<ShardMetricsSnapshotRequest>();
+		const_cast<ShardExecutor*>(this)->Submit(Job([this, request]()
+			{
+				const auto snapshot = m_metrics;
+				{
+					std::scoped_lock guard(m_metricSyncMutex);
+					request->snapshot = snapshot;
+					request->done = true;
+				}
+				m_metricSyncCv.notify_all();
+			}, eJobPriority::Control));
 
-		return s;
+		std::unique_lock<std::mutex> lock(m_metricSyncMutex);
+		m_metricSyncCv.wait(lock, [this, &request]()
+			{
+				return request->done || m_loopExited;
+			});
+
+		if (request->done)
+			return request->snapshot;
+
+		return m_metrics;
 	}
 
 	void ShardExecutor::ResetMetrics()
 	{
-		m_metricLoopCount.store(0, std::memory_order_relaxed);
-		m_metricDidWorkLoopCount.store(0, std::memory_order_relaxed);
-		m_metricIdleLoopCount.store(0, std::memory_order_relaxed);
-		m_metricIdleSleepCost_ns.store(0, std::memory_order_relaxed);
+		if (IsShardThread())
+		{
+			ResetMetricsUnsafe();
+			return;
+		}
 
-		m_metricIngressBatchCount.store(0, std::memory_order_relaxed);
-		m_metricIngressJobCount.store(0, std::memory_order_relaxed);
+		if (!m_running.load(std::memory_order_acquire))
+		{
+			if (m_thread.joinable())
+				WaitUntilLoopExited();
+			ResetMetricsUnsafe();
+			return;
+		}
 
-		m_metricProcessJobsCallCount.store(0, std::memory_order_relaxed);
-		m_metricProcessJobsExecCount.store(0, std::memory_order_relaxed);
+		auto request = std::make_shared<ShardMetricsResetRequest>();
+		Submit(Job([this, request]()
+			{
+				ResetMetricsUnsafe();
+				{
+					std::scoped_lock guard(m_metricSyncMutex);
+					request->done = true;
+				}
+				m_metricSyncCv.notify_all();
+			}, eJobPriority::Control));
 
-		m_metricMailboxProcessCount.store(0, std::memory_order_relaxed);
-		m_metricMailboxJobMoveCount.store(0, std::memory_order_relaxed);
+		std::unique_lock<std::mutex> lock(m_metricSyncMutex);
+		m_metricSyncCv.wait(lock, [this, &request]()
+			{
+				return request->done || m_loopExited;
+			});
 
-		m_metricSchedulerPollCount.store(0, std::memory_order_relaxed);
-		m_metricSchedulerEmptyPollCount.store(0, std::memory_order_relaxed);
-		m_metricSchedulerPollCost_ns.store(0, std::memory_order_relaxed);
-		m_metricSchedulerReadyRunCount.store(0, std::memory_order_relaxed);
-
-		m_metricTickCount.store(0, std::memory_order_relaxed);
-		m_metricTickCatchUpCount.store(0, std::memory_order_relaxed);
-
-		if (m_scheduler)
-			m_scheduler->ResetProfile();
+		if (!request->done)
+			ResetMetricsUnsafe();
 	}
 }

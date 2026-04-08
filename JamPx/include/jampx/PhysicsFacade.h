@@ -79,7 +79,7 @@ namespace jam::px
 		bool								RaycastLOS(const Vec3& from, const Vec3& to) const override;
 		HitscanResult						Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const override;
 
-		std::vector<SimEvent>				ConsumeSimEvents();
+		std::vector<PhysicsEvent>			ConsumePhysicsEvents() override;
 		std::vector<ObjectId>				PopActiveList() override;
 
 	private:

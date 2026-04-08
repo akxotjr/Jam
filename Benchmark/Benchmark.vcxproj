@@ -135,10 +135,6 @@
   <ItemGroup>
     <ClCompile Include="ExecutorBenchmark.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="..\burst_timeseries.csv" />
-    <None Include="..\executor_metrics1.csv" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "ExecutorMetrics.h"
 #include "jamnet/core/executor/FiberCommon.h"
 #include "jamnet/core/executor/WinFiberBackend.h"
 
@@ -45,11 +46,11 @@ namespace jam
 
 		void                    DrainInbox();
 		void                    Poll(int32 budget, uint64 now_ns);
-        void                    ResetProfile() { m_profile = {}; }
+        void                    ResetProfile() { m_metrics = {}; }
 
 		uint32                  Current() const;
 
-        const ProfileSample&    Profile() const { return m_profile; }
+        const FiberMetrics&     Profile() const { return m_metrics; }
 
 
 	private:
@@ -191,7 +192,7 @@ namespace jam
         moodycamel::ConsumerToken                                           m_cancelKeyCtok;
         moodycamel::ConsumerToken                                           m_cancelIdCtok;
 
-        ProfileSample                                                       m_profile   = {};
+        FiberMetrics                                                        m_metrics   = {};
 
         // 기본 스택 크기
         static constexpr size_t kDefReserve = 512 * 1024;

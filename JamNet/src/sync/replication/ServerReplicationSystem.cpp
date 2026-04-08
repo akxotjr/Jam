@@ -15,6 +15,14 @@
 
 namespace jam::net
 {
+	namespace
+	{
+		constexpr uint8 kAoiLeftRemovalBudget   = 5;
+		constexpr uint8 kDestroyedRemovalBudget = 8;
+		constexpr uint8 kMetaResendBudget       = 5;
+		constexpr size_t kRemovedBatch          = 96;
+		constexpr size_t kRemovedPayloadBytes   = 20;
+	}
 
 	ServerReplicationSystem::ServerReplicationSystem(entt::registry& world)
 		: m_world(world)
@@ -36,6 +44,7 @@ namespace jam::net
 
 		m_metaSent.clear();
 		m_metaResendBudget.clear();
+		m_pendingRemovalsPerUser.clear();
 
 		m_fullCacheTick = 0;
 		m_cachedRigidFull.clear();
@@ -91,9 +100,17 @@ namespace jam::net
 				{
 					enteredSet.reserve(st->entered.size());
 					for (const NetId id : st->entered)
+					{
 						enteredSet.insert(id.Raw());
+						CancelRemovalForUser(user, id);
+					}
+
+					for (const NetId id : st->left)
+						QueueRemovalForUser(user, id, fb::fbRemovalReason_AoiLeft);
 				}
 			}
+
+			EmitPendingRemovalSnapshots(*nw, user, tick, ack);
 
 			std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)> buckets;
 			auto view = m_world.view<NetId, NetActorBodyType>();
@@ -281,7 +298,7 @@ namespace jam::net
 
 				const auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack);
 				const auto vec    = m_fbb->CreateVector(offs);
-				const auto snap   = fb::CreatefbSnapshot(*m_fbb, header, vec);
+				const auto snap   = fb::CreatefbSnapshot(*m_fbb, header, vec, 0);
 				m_fbb->Finish(snap, fb::fbSnapshotIdentifier());
 
 				auto buf = PacketBuilder::CreateCustomPacket(
@@ -344,9 +361,32 @@ namespace jam::net
 		m_kineBaselineStatesPerUser.erase(userId);
 
 		m_forceFullMetaPerUsers.erase(userId);
+		m_pendingRemovalsPerUser.erase(userId);
 
 		std::erase_if(m_metaResendBudget, [userId](const auto& kv) { return kv.first.userId == userId; });
 		std::erase_if(m_metaSent, [userId](const auto& k) { return k.userId == userId; });
+	}
+
+	void ServerReplicationSystem::OnActorDestroyed(entt::entity e)
+	{
+		if (!m_world.valid(e) || !m_world.all_of<NetId>(e))
+			return;
+
+		const NetId netId = m_world.get<NetId>(e);
+		if (!netId.IsValid())
+			return;
+
+		InvalidateAllUserCaches(netId);
+
+		std::vector<uint64> users;
+		if (auto* nw = m_world.ctx().get<ServerNetWorld*>(); nw)
+			nw->GetMembers(users);
+
+		for (const uint64 userId : users)
+			QueueRemovalForUser(userId, netId, fb::fbRemovalReason_Destroyed);
+
+		m_cachedRigidFull.erase(netId);
+		m_cachedCharacterFull.erase(netId);
 	}
 
 
@@ -623,6 +663,232 @@ namespace jam::net
 		return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, 0, nullptr, &rigidDelta);
 	}
 
+	void ServerReplicationSystem::QueueRemovalForUser(uint64 userId, NetId netId, fb::fbRemovalReason reason)
+	{
+		if (userId == 0 || !netId.IsValid())
+			return;
+
+		auto& removal = m_pendingRemovalsPerUser[userId][netId];
+		const bool upgradeToDestroyed = (reason == fb::fbRemovalReason_Destroyed) || (removal.reason == fb::fbRemovalReason_Destroyed);
+
+		removal.reason		 = upgradeToDestroyed ? fb::fbRemovalReason_Destroyed : reason;
+		removal.resendBudget = std::max<uint8>(removal.resendBudget, upgradeToDestroyed ? kDestroyedRemovalBudget : kAoiLeftRemovalBudget);
+
+		InvalidateUserCaches(userId, netId, removal.reason);
+	}
+
+	void ServerReplicationSystem::CancelRemovalForUser(uint64 userId, NetId netId)
+	{
+		auto userIt = m_pendingRemovalsPerUser.find(userId);
+		if (userIt == m_pendingRemovalsPerUser.end())
+			return;
+
+		auto remIt = userIt->second.find(netId);
+		if (remIt == userIt->second.end())
+			return;
+
+		if (remIt->second.reason != fb::fbRemovalReason_Destroyed)
+		{
+			userIt->second.erase(remIt);
+			if (userIt->second.empty())
+				m_pendingRemovalsPerUser.erase(userIt);
+		}
+	}
+
+	void ServerReplicationSystem::EmitPendingRemovalSnapshots(ServerNetWorld& nw, uint64 userId, uint32 tick, uint32 ack)
+	{
+		auto userIt = m_pendingRemovalsPerUser.find(userId);
+		if (userIt == m_pendingRemovalsPerUser.end() || userIt->second.empty())
+			return;
+
+		std::vector<std::pair<NetId, PendingRemoval>> pending;
+		pending.reserve(userIt->second.size());
+		for (const auto& [netId, removal] : userIt->second)
+			pending.emplace_back(netId, removal);
+
+		constexpr size_t kSnapshotPayloadBudget = JAMNET_MTU - PacketHeader::HALF_SIZE - 24;
+
+		size_t cursor = 0;
+		while (cursor < pending.size())
+		{
+			m_fbb->Clear();
+
+			std::vector<flatbuffers::Offset<fb::fbRemovedActor>> removedOffs;
+			std::vector<NetId> sentIds;
+			removedOffs.reserve(kRemovedBatch);
+			sentIds.reserve(kRemovedBatch);
+
+			size_t usedPayloadBudget = 0;
+			for (; cursor < pending.size(); ++cursor)
+			{
+				if (removedOffs.size() >= kRemovedBatch)
+					break;
+
+				if ((usedPayloadBudget + kRemovedPayloadBytes) > kSnapshotPayloadBudget)
+					break;
+
+				const auto& [netId, removal] = pending[cursor];
+				removedOffs.push_back(
+					fb::CreatefbRemovedActor(*m_fbb, netId.Raw(), removal.reason));
+				sentIds.push_back(netId);
+				usedPayloadBudget += kRemovedPayloadBytes;
+			}
+
+			if (removedOffs.empty())
+				break;
+
+			const auto header     = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack);
+			const auto removedVec = m_fbb->CreateVector(removedOffs);
+			const auto snap       = fb::CreatefbSnapshot(*m_fbb, header, 0, removedVec);
+			m_fbb->Finish(snap, fb::fbSnapshotIdentifier());
+
+			auto buf = PacketBuilder::CreateCustomPacket(
+				CustomPacketId::SNAPSHOT,
+				PacketFlags::NONE,
+				eChannelType::UNRELIABLE_SEQUENCED,
+				m_fbb->GetBufferPointer(),
+				m_fbb->GetSize());
+
+			if (!buf)
+				continue;
+
+			TransportInfo info{};
+			info.method = eTransportMethod::Single;
+			info.userId = userId;
+			nw.Send(info, buf);
+
+			CommitPendingRemovalBatch(userId, sentIds);
+		}
+	}
+
+	void ServerReplicationSystem::CommitPendingRemovalBatch(uint64 userId, const std::vector<NetId>& sentIds)
+	{
+		auto userIt = m_pendingRemovalsPerUser.find(userId);
+		if (userIt == m_pendingRemovalsPerUser.end())
+			return;
+
+		for (const NetId netId : sentIds)
+		{
+			auto remIt = userIt->second.find(netId);
+			if (remIt == userIt->second.end())
+				continue;
+
+			if (remIt->second.resendBudget > 0)
+				--remIt->second.resendBudget;
+
+			if (remIt->second.resendBudget == 0)
+				userIt->second.erase(remIt);
+		}
+
+		if (userIt->second.empty())
+			m_pendingRemovalsPerUser.erase(userIt);
+	}
+
+	void ServerReplicationSystem::InvalidateUserCaches(uint64 userId, NetId netId, fb::fbRemovalReason reason)
+	{
+		if (auto it = m_entityBaselinePerUser.find(userId); it != m_entityBaselinePerUser.end())
+		{
+			it->second.erase(netId);
+			if (it->second.empty())
+				m_entityBaselinePerUser.erase(it);
+		}
+
+		if (auto it = m_rigidBaselineStatesPerUser.find(userId); it != m_rigidBaselineStatesPerUser.end())
+		{
+			it->second.erase(netId);
+			if (it->second.empty())
+				m_rigidBaselineStatesPerUser.erase(it);
+		}
+
+		if (auto it = m_characterBaselineStatesPerUser.find(userId); it != m_characterBaselineStatesPerUser.end())
+		{
+			it->second.erase(netId);
+			if (it->second.empty())
+				m_characterBaselineStatesPerUser.erase(it);
+		}
+
+		if (auto it = m_kineBaselineStatesPerUser.find(userId); it != m_kineBaselineStatesPerUser.end())
+		{
+			it->second.erase(netId);
+			if (it->second.empty())
+				m_kineBaselineStatesPerUser.erase(it);
+		}
+
+		if (auto it = m_cachedRigidDeltaPerUser.find(userId); it != m_cachedRigidDeltaPerUser.end())
+		{
+			it->second.erase(netId);
+			if (it->second.empty())
+				m_cachedRigidDeltaPerUser.erase(it);
+		}
+
+		if (auto it = m_cachedCharacterDeltaPerUser.find(userId); it != m_cachedCharacterDeltaPerUser.end())
+		{
+			it->second.erase(netId);
+			if (it->second.empty())
+				m_cachedCharacterDeltaPerUser.erase(it);
+		}
+
+		const MetaSentKey key{ .userId = userId, .netId = netId.Raw() };
+		if (reason == fb::fbRemovalReason_Destroyed)
+		{
+			m_metaSent.erase(key);
+			m_metaResendBudget.erase(key);
+		}
+		else
+		{
+			m_metaResendBudget[key] = std::max<uint8>(m_metaResendBudget[key], kMetaResendBudget);
+		}
+	}
+
+	void ServerReplicationSystem::InvalidateAllUserCaches(NetId netId)
+	{
+		for (auto it = m_entityBaselinePerUser.begin(); it != m_entityBaselinePerUser.end();)
+		{
+			it->second.erase(netId);
+			if (it->second.empty()) it = m_entityBaselinePerUser.erase(it);
+			else ++it;
+		}
+
+		for (auto it = m_rigidBaselineStatesPerUser.begin(); it != m_rigidBaselineStatesPerUser.end();)
+		{
+			it->second.erase(netId);
+			if (it->second.empty()) it = m_rigidBaselineStatesPerUser.erase(it);
+			else ++it;
+		}
+
+		for (auto it = m_characterBaselineStatesPerUser.begin(); it != m_characterBaselineStatesPerUser.end();)
+		{
+			it->second.erase(netId);
+			if (it->second.empty()) it = m_characterBaselineStatesPerUser.erase(it);
+			else ++it;
+		}
+
+		for (auto it = m_kineBaselineStatesPerUser.begin(); it != m_kineBaselineStatesPerUser.end();)
+		{
+			it->second.erase(netId);
+			if (it->second.empty()) it = m_kineBaselineStatesPerUser.erase(it);
+			else ++it;
+		}
+
+		for (auto it = m_cachedRigidDeltaPerUser.begin(); it != m_cachedRigidDeltaPerUser.end();)
+		{
+			it->second.erase(netId);
+			if (it->second.empty()) it = m_cachedRigidDeltaPerUser.erase(it);
+			else ++it;
+		}
+
+		for (auto it = m_cachedCharacterDeltaPerUser.begin(); it != m_cachedCharacterDeltaPerUser.end();)
+		{
+			it->second.erase(netId);
+			if (it->second.empty()) it = m_cachedCharacterDeltaPerUser.erase(it);
+			else ++it;
+		}
+
+		const uint32 raw = netId.Raw();
+		std::erase_if(m_metaSent, [raw](const MetaSentKey& key) { return key.netId == raw; });
+		std::erase_if(m_metaResendBudget, [raw](const auto& kv) { return kv.first.netId == raw; });
+	}
+
 	void ServerReplicationSystem::EnsureMetaResendBudget(entt::entity e, const MetaSentKey& key)
 	{
 		if (!m_world.all_of<NewlyCreatedTag>(e))
@@ -631,8 +897,7 @@ namespace jam::net
 		if (m_metaResendBudget.contains(key))
 			return;
 
-		constexpr uint8 kDefaultBudget = 5;
-		m_metaResendBudget.emplace(key, kDefaultBudget);
+		m_metaResendBudget.emplace(key, kMetaResendBudget);
 	}
 
 	bool ServerReplicationSystem::ShouldIncludeMeta(entt::entity e, const MetaSentKey& key)
@@ -672,11 +937,7 @@ namespace jam::net
 		{
 			const uint64 owner = m_world.get<OwnershipTag>(e).userId;
 			if (owner != 0 && owner == key.userId)
-			{
-				auto temp = m_world.get<NetSpawnRequestId>(e).requestId;
 				m_world.remove<NetSpawnRequestId>(e);
-				JAMNET_LOG_DEBUG("[OnMetaSent] userId= {}, remove NetSpawnRequestId= {}", owner, temp);
-			}
 		}
 
 		const NetId netId = m_world.get<NetId>(e);

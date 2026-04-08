@@ -13,6 +13,8 @@
     <ClCompile Include="Renderer.cpp">
       <Filter>Main</Filter>
     </ClCompile>
+    <ClCompile Include="BotInstance.cpp" />
+    <ClCompile Include="UserInstance.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Header">
@@ -35,6 +37,8 @@
     <ClInclude Include="Renderer.h">
       <Filter>Main</Filter>
     </ClInclude>
+    <ClInclude Include="BotInstance.h" />
+    <ClInclude Include="UserInstance.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Contents\test_asset.json">

@@ -38,6 +38,7 @@ namespace jam::net
 
         void                                Simulate();
         void                                Resimulate();
+        void                                HandleProjectileLifecycleEvents();
 
         void                                CommitPendingActorOps() const;
 

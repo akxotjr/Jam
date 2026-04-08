@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "jamnet/core/net/SessionSystems.h"
 #include "jamnet/core/executor/ShardTLS.h"
+#include <limits>
 
 
 namespace jam::net
@@ -33,10 +34,7 @@ namespace jam::net
             }
 
             if (info.session)
-            {
-                auto* udp = static_cast<UdpSession*>(info.session);
-                udp->OnLinkEstablished();
-            }
+                info.session->OnLinkEstablished();
         }
 
         void NotifyTerminated(entt::registry& R, const entt::entity e)
@@ -47,104 +45,266 @@ namespace jam::net
             info.state = SessionInfo::DISCONNECTED;
 
             if (info.session)
+                info.session->OnLinkTerminated();
+        }
+
+        uint32 ClampPendingReliableCount(const ReliabilityState& reliability)
+        {
+            return static_cast<uint32>(std::min<size_t>(reliability.reliablePendings.size(), std::numeric_limits<uint32>::max()));
+        }
+
+        void SyncPendingReliableMetrics(const ReliabilityState& reliability, profile::RudpMetrics* metrics)
+        {
+            if (!metrics)
+                return;
+
+            metrics->pendingReliableNow  = ClampPendingReliableCount(reliability);
+            metrics->pendingReliablePeak = std::max(metrics->pendingReliablePeak, metrics->pendingReliableNow);
+        }
+
+        void MarkRetransmitScheduled(profile::RudpMetrics* metrics, ReliabilityState::PendingPacket& pkt, const uint64 now_ns, const bool timeoutTriggered)
+        {
+            pkt.lastRetransmitTime_ns = now_ns;
+            pkt.retryCount++;
+
+            if (!metrics)
+                return;
+
+            if (timeoutTriggered)
+                metrics->rtxTimeoutPackets++;
+
+            metrics->maxRtxPerPacket = std::max(metrics->maxRtxPerPacket, static_cast<uint32>(pkt.retryCount));
+        }
+
+        void MarkRetransmitGiveup(profile::RudpMetrics* metrics, ReliabilityState::PendingPacket& pkt)
+        {
+            if (pkt.countedGiveup)
+                return;
+
+            pkt.countedGiveup = true;
+
+            if (metrics && (pkt.retryCount > 0 || pkt.hasRetransmitted))
+                metrics->rtxGiveupPackets++;
+        }
+
+        void ProcessAck(entt::registry& R, const entt::entity e, const uint16 latestSeq, const uint32 wnd, const uint64 now_ns)
+        {
+            auto* reliability = R.try_get<ReliabilityState>(e);
+            if (!reliability) return;
+
+            struct AckedMeta
             {
-                auto* udp = static_cast<UdpSession*>(info.session);
-                udp->OnLinkTerminated();
+                uint64 sendTime_ns = 0;
+                uint64 lastRetransmitTime_ns = 0;
+                bool   hasRetransmitted = false;
+                uint32 size        = 0;
+            };
+
+            std::array<AckedMeta, ACK_WINDOW_SIZE + 1> acked{};
+            uint32 ackedCount = 0;
+
+            auto capture = [&](uint16 seq)
+                {
+                    const auto* pkt = reliability->TryGetPending(seq);
+                    if (!pkt || ackedCount >= acked.size())
+                        return;
+
+                    acked[ackedCount++] = AckedMeta{
+                        .sendTime_ns           = pkt->sendTime_ns,
+                        .lastRetransmitTime_ns = pkt->lastRetransmitTime_ns,
+                        .hasRetransmitted      = pkt->hasRetransmitted,
+                        .size                  = pkt->buf ? pkt->buf->WriteSize() : 0
+                    };
+                };
+
+            capture(latestSeq);
+            for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
+            {
+                if (wnd & (1u << (i - 1)))
+                    capture(static_cast<uint16>(latestSeq - i));
+            }
+
+            reliability->ProcessAck(latestSeq, wnd);
+
+            uint32 ackedBytes = 0;
+            if (auto* metrics = R.try_get<profile::RudpMetrics>(e))
+            {
+	            for (uint32 i = 0; i < ackedCount; ++i)
+	            {
+                    if (acked[i].sendTime_ns != 0 && now_ns >= acked[i].sendTime_ns)
+                        metrics->AddDeliveryLatency(now_ns - acked[i].sendTime_ns);
+
+                    metrics->reliableAckedPackets++;
+                    metrics->reliableAckedBytes += acked[i].size;
+
+                    if (acked[i].hasRetransmitted)
+                    {
+                        metrics->rtxAckedPackets++;
+                        if (acked[i].lastRetransmitTime_ns != 0 && now_ns >= acked[i].lastRetransmitTime_ns)
+                            metrics->AddRecoveryLatency(now_ns - acked[i].lastRetransmitTime_ns);
+                    }
+                    else
+                    {
+                        metrics->firstSendAckedPackets++;
+                    }
+
+                    ackedBytes += acked[i].size;
+	            }
+
+                SyncPendingReliableMetrics(*reliability, metrics);
+            }
+            else
+            {
+                for (uint32 i = 0; i < ackedCount; ++i)
+                    ackedBytes += acked[i].size;
+            }
+
+            if (ackedBytes > 0)
+            {
+                if (auto* congestion = R.try_get<CongestionState>(e))
+                    congestion->OnAck(ackedBytes);
             }
         }
 
-        void ProcessAckForChannel(entt::registry& R, const entt::entity e, const eChannelType ch, const uint16 latestSeq, const uint32 wnd)
-        {
-            auto* reliability = R.try_get<ReliabilityState>(e);
-            if (!reliability)
-                return;
-
-            reliability->ProcessAck(ch, latestSeq, wnd);
-
-            if (auto* congestion = R.try_get<CongestionState>(e))
-                congestion->OnAck(JAMNET_MTU);
-        }
-
-        void ProcessNackForChannel(entt::registry& R, const entt::entity e, const eChannelType ch, const uint16 missingSeq, const uint32 wnd)
+        void ProcessNackForChannel(entt::registry& R, const entt::entity e, const uint16 missingSeq, const uint32 wnd, const uint64 now_ns)
         {
             auto* reliability = R.try_get<ReliabilityState>(e);
             auto* txQueue     = R.try_get<TransmissionWaitingQueue>(e);
             if (!reliability || !txQueue)
                 return;
 
-            auto& chData = reliability->GetChannelData(ch);
+            auto* metrics = R.try_get<profile::RudpMetrics>(e);
 
-            auto triggerRTX = [&](uint16 seq)
+            auto trigger = [&](uint16 seq)
                 {
-                    auto it = chData.pendings.find(seq);
-                    if (it == chData.pendings.end())
+                    auto* pkt = reliability->TryGetPending(seq);
+                    if (!pkt || !pkt->buf)
                         return;
 
-                    txQueue->Enqueue(it->second.buf, TransmissionWaitingQueue::RETRANSMIT);
-                    it->second.lastRetransmitTime_ns = NOW_NS();
-                    it->second.retryCount++;
+                    if (pkt->retryCount >= MAX_RETRY)
+                    {
+                        JAMNET_LOG_ERROR("[Retransmit] Packet seq={} exceeded max retry", seq);
+                        MarkRetransmitGiveup(metrics, *pkt);
+                        
+                        // disconnect?
+                     	
+                     	return;
+                    }
+
+                    txQueue->Enqueue(pkt->buf, TxPriority::RETRANSMIT);
+                    MarkRetransmitScheduled(metrics, *pkt, now_ns, false);
 
                     if (auto* congestion = R.try_get<CongestionState>(e))
                         congestion->OnLoss();
                 };
 
-            triggerRTX(missingSeq);
+            trigger(missingSeq);
             for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
             {
                 if (wnd & (1u << (i - 1)))
-                    triggerRTX(static_cast<uint16>(missingSeq + i));
+                    trigger(static_cast<uint16>(missingSeq + i));
+            }
+        }
+
+        void DispatchApplicationPacket(RecvContext& ctx)
+        {
+            auto& R = ctx.L.registry;
+            auto& sessInfo = R.get<SessionInfo>(ctx.e);
+
+            switch (ctx.view.Type())
+            {
+            case ePacketType::RPC:
+                if (auto* metrics = R.try_get<profile::RudpMetrics>(ctx.e))
+                    metrics->appDeliveredPayloadBytes += ctx.view.PayloadSize();
+
+                RPC::HandleIncomingPacket(R, ctx.e, ctx.view, ctx.buf);
+                return;
+
+            case ePacketType::CUSTOM:
+                if (auto* metrics = R.try_get<profile::RudpMetrics>(ctx.e))
+                    metrics->appDeliveredPayloadBytes += ctx.view.PayloadSize();
+
+                if (sessInfo.session)
+                    sessInfo.session->HandleCustomPacket(ctx.view);
+                return;
+
+            default:
+                return;
+            }
+        }
+
+        void DrainOrderedPackets(ShardLocal& L, const entt::entity e)
+        {
+            auto& R = L.registry;
+
+            auto* seqState   = R.try_get<SequenceState>(e);
+            auto* orderState = R.try_get<OrderState>(e);
+            if (!seqState || !orderState)
+                return;
+
+            while (true)
+            {
+                auto buffered = orderState->PopOrderedPackets(seqState->expectedOrderedSeq);
+                if (buffered.empty())
+                    break;
+
+                for (auto& pkt : buffered)
+                {
+                    if (!pkt.buf)
+                        continue;
+
+                    PacketView view = PacketView::Parse(pkt.buf->ReadPos(), pkt.buf->DataSize());
+                    if (!view.IsValid())
+                    {
+                        JAMNET_LOG_WARN("[Ordering] Buffered packet became invalid");
+                        continue;
+                    }
+
+                    RecvContext bufferedCtx{
+                        .L              = L,
+                        .e              = e,
+                        .view           = view,
+                        .buf            = pkt.buf,
+                        .now_ns         = NOW_NS(),
+                        .ingressTime_ns = pkt.recvTime_ns,
+                        .orderedSpan    = pkt.span
+                    };
+
+                    DispatchApplicationPacket(bufferedCtx);
+                }
             }
         }
 
 
-
-        /// Piggyback ACK 시도 (성공 시 true)
-        bool TryPiggybackAck(ShardLocal& L, const entt::entity e, TransmissionWaitingQueue::PendingPacket& pkt)
+        bool TryPiggybackAck(ShardLocal& L, const entt::entity e, TxPendingPacket& pkt)
         {
             auto& R = L.registry;
-
-            // RELIABLE_* 채널만 ACK 가능
             auto* reliability = R.try_get<ReliabilityState>(e);
-            if (!reliability) return false;
-
-            // RELIABLE_ORDERED 채널의 pending ACK 확인
-            auto& roData = reliability->GetChannelData(eChannelType::RELIABLE_ORDERED);
-            if (!roData.hasPendingAck) return false;
-
-            // NORMAL 패킷만 piggyback 대상
-            if (pkt.priority != TransmissionWaitingQueue::NORMAL) return false;
+            if (!reliability || !reliability->ackDirty || pkt.priority != TxPriority::NORMAL) 
+                return false;
 
             auto pktView = PacketView::Parse(pkt.buf->Buffer(), pkt.size);
-            if (!pktView.IsValid()) return false;
+            if (!pktView.IsValid())
+                return false;
 
             const uint32 curTotalSize = pktView.TotalSize();
             const uint32 allocSize    = pkt.buf->AllocSize();
 
-            // 남은 공간 확인: 현재 크기 + ACK_DATA
             if (allocSize < curTotalSize + sizeof(ACK_DATA))
                 return false;
 
-            // ACK_DATA를 페이로드 뒤에 추가
             auto* ack = reinterpret_cast<ACK_DATA*>(pkt.buf->Buffer() + curTotalSize);
-            ack->latestSeq  = roData.pendingAckSeq;
-            ack->wnd        = roData.pendingAckBitfield;
+            ack->latestSeq  = reliability->pendingAckSeq;
+            ack->wnd        = reliability->pendingAckBitfield;
 
-            // 총 길이 갱신
             const uint16 newTotalSize = static_cast<uint16>(curTotalSize + sizeof(ACK_DATA));
             pktView.Header()->SetSize(newTotalSize);
             pktView.Header()->SetFlags(pktView.Header()->GetFlags() | static_cast<uint8>(PacketFlags::PIGGYBACK_ACK));
 
-            // 버퍼 총 WriteSize 갱신
             pkt.buf->SetWriteSize(newTotalSize);
             pkt.size = newTotalSize;
 
-            // pending ACK 리셋
-            roData.hasPendingAck          = false;
-            roData.pendingAckSeq          = 0;
-            roData.pendingAckBitfield     = 0;
-            roData.firstPendingAckTime_ns = 0;
-
-            //JAMNET_LOG_TRACE("[Piggyback] ACK attached to packet: seq={}", ack->latestSeq);
+            reliability->ClearPendingAck();
             return true;
         }
 
@@ -153,11 +313,7 @@ namespace jam::net
         {
             auto& R = ctx.L.registry;
 
-            if (!ctx.view.IsReliable()) return false;
-            if (!HasFlag(ctx.view.Flags(), PacketFlags::PIGGYBACK_ACK)) return false;
-
-            const auto ch = ctx.view.Channel();
-            if (ch != eChannelType::RELIABLE_ORDERED && ch != eChannelType::RELIABLE_UNORDERED)
+            if (!HasFlag(ctx.view.Flags(), PacketFlags::PIGGYBACK_ACK))
                 return false;
 
             const uint32 payloadSize = ctx.view.PayloadSize();
@@ -167,8 +323,13 @@ namespace jam::net
             const BYTE* tail = ctx.view.Payload() + (payloadSize - sizeof(ACK_DATA));
             const auto* ack  = reinterpret_cast<const ACK_DATA*>(tail);
 
-            ProcessAckForChannel(R, ctx.e, ch, ack->latestSeq, ack->wnd);
-            return true;
+            ProcessAck(R, ctx.e, ack->latestSeq, ack->wnd, ctx.now_ns);
+
+            ctx.view.Header()->SetFlags(ClearFlag(ctx.view.Header()->GetFlags(), PacketFlags::PIGGYBACK_ACK));
+            ctx.view.Header()->SetSize(static_cast<uint16>(ctx.view.TotalSize() - sizeof(ACK_DATA)));
+            ctx.view = PacketView::Parse(ctx.buf->ReadPos(), ctx.buf->DataSize());
+
+            return ctx.view.IsValid();
         }
 
 
@@ -218,10 +379,10 @@ namespace jam::net
         uint64 now_ns = NOW_NS();
 
         // common component
-        if (!R.all_of<SessionInfo>(e))              R.emplace<SessionInfo>(e, SessionInfo::FromSession(session, now_ns));
-        if (!R.all_of<NetworkCounter>(e))           R.emplace<NetworkCounter>(e);
-        if (!R.all_of<TransmissionWaitingQueue>(e)) R.emplace<TransmissionWaitingQueue>(e);
-        if (!R.all_of<RpcState>(e))                 R.emplace<RpcState>(e);
+        if (!R.all_of<SessionInfo>(e))                    R.emplace<SessionInfo>(e, SessionInfo::FromSession(session, now_ns));
+        if (!R.all_of<profile::SessionTotalTraffic>(e))   R.emplace<profile::SessionTotalTraffic>(e);
+        if (!R.all_of<TransmissionWaitingQueue>(e))       R.emplace<TransmissionWaitingQueue>(e);
+        if (!R.all_of<RpcState>(e))                       R.emplace<RpcState>(e);
 
 
         // UDP-only component
@@ -243,10 +404,13 @@ namespace jam::net
             if (!R.all_of<ReliabilityState>(e)) R.emplace<ReliabilityState>(e);
             if (!R.all_of<CongestionState>(e))  R.emplace<CongestionState>(e);
             if (!R.all_of<FragmentState>(e))    R.emplace<FragmentState>(e);
+
+            if (!R.all_of<profile::RudpMetrics>(e))      R.emplace<profile::RudpMetrics>(e);
         }
 
 #ifdef _DEBUG
-        if (!R.all_of<CompNetworkStats>(e))     R.emplace<CompNetworkStats>(e);
+        if (!R.all_of<profile::LinkQualityState>(e))     R.emplace<profile::LinkQualityState>(e);
+        if (!R.all_of<profile::TrafficSampleState>(e))   R.emplace<profile::TrafficSampleState>(e);
 #endif
 
         JAMNET_LOG_DEBUG("[SessionSystems] [Thread #{}] Session entity {} initialized, protocol = {}", tl_ThreadId, static_cast<uint32>(e), session->IsUdp() ? "udp" : "tcp");
@@ -268,12 +432,12 @@ namespace jam::net
 
         if (ch == eChannelType::UNRELIABLE_SEQUENCED)
         {
-            if (!sequence->IsNewer(ch, seq))
+            if (!sequence->IsNewerSequenced(seq))
             {
-                ctx.bShouldDrop = true;
+                ctx.shouldDrop = true;
                 return false;
             }
-            sequence->UpdateLatest(ch, seq);
+            sequence->UpdateSequencedLatest(seq);
         }
 
         return true;
@@ -287,76 +451,72 @@ namespace jam::net
         if (ch != eChannelType::RELIABLE_ORDERED)
             return true;
 
-        auto* sequence = R.try_get<SequenceState>(ctx.e);
-        auto* order    = R.try_get<OrderState>(ctx.e);
-        if (!sequence || !order)
+        auto* seqState   = R.try_get<SequenceState>(ctx.e);
+        auto* orderState = R.try_get<OrderState>(ctx.e);
+        if (!seqState || !orderState)
             return false;
 
-        const uint16 seq         = ctx.view.Sequence();
-        const uint16 expectedSeq = sequence->expectedSeq[E2U(ch)];
+        const uint16 orderedSeq  = ctx.view.OrderedSequence();
+        const uint16 orderedSpan = std::max<uint16>(1, ctx.orderedSpan);
+        const uint16 expectedSeq = seqState->expectedOrderedSeq;
 
-        if (seq == expectedSeq)
+        if (orderedSeq == expectedSeq)
         {
-            sequence->UpdateExpected(ch, expectedSeq + 1);
-
-            uint16 scanExpected = sequence->expectedSeq[E2U(ch)];
-            auto buffered = order->PopOrderedPackets(scanExpected);
-            
-        	if (!buffered.empty())
-            {
-                JAMNET_LOG_TRACE("[Ordering] Delivered {} buffered packets", buffered.size());
-
-                for (auto& p : buffered)
-                {
-                    if (p.buf)
-                        ProcessReceivedPacket(ctx.e, p.buf);
-                }
-            }
-
-            return true;                                                                                                
+            seqState->expectedOrderedSeq = static_cast<uint16>(expectedSeq + orderedSpan);
+            ctx.flushOrderedPending = true;
+            return true;
         }
 
-        if (SeqGreater(seq, expectedSeq))
+        if (SeqGreater(orderedSeq, expectedSeq))
         {
-            if (order->pendings.size() >= OrderState::kMaxRecvBufferSize)
+            if (auto* metrics = R.try_get<profile::RudpMetrics>(ctx.e))
+                metrics->outOfOrderPackets++;
+
+            if (orderState->pendings.size() >= OrderState::kMaxRecvBufferSize)
             {
                 JAMNET_LOG_WARN("[Ordering] Recv buffer overflow");
-                ctx.bShouldDrop = true;
+                ctx.shouldDrop = true;
                 return false;
             }
 
-            order->StoreRecvPacket(seq, ctx.buf, ctx.now_ns);
-            ctx.bNeedsReordering = true;
+            if (!orderState->StoreRecvPacket(orderedSeq, orderedSpan, ctx.buf, ctx.now_ns))
+            {
+                ctx.shouldDrop = true;
+                if (auto* metrics = R.try_get<profile::RudpMetrics>(ctx.e))
+                    metrics->duplicatePackets++;
+                return false;
+            }
+            ctx.needsReordering = true;
 
             // NACK 전송
             if (auto* reliability = R.try_get<ReliabilityState>(ctx.e))
             {
-                auto& chData = reliability->GetChannelData(ch);
                 const uint64 now = ctx.now_ns;
 
-                if (now - chData.lastNackTime_ns >= NACK_THROTTLE_INTERVAL_NS 
-                    && !chData.sentNackSeqs.contains(expectedSeq) 
-                    && SeqGreater(seq, static_cast<uint16>(expectedSeq + 1)))
+                if (now - reliability->lastNackTime_ns >= NACK_THROTTLE_INTERVAL_NS 
+                    && !reliability->sentNackSeqs.contains(expectedSeq) 
+                    && SeqGreater(orderedSeq, expectedSeq))
                 {
-                    const uint32 nackWnd = reliability->BuildNackWindow(ch, expectedSeq);
-                    const auto   nackBuf = PacketBuilder::CreateNackPacket(NACK_DATA{
-                    	.missingSeq = expectedSeq,
-	                    .wnd        = nackWnd       });
+                    const uint32 nackWnd = reliability->BuildNackWindow(expectedSeq);
+                    const auto   nackBuf = PacketBuilder::CreateNackPacket(NACK_DATA(expectedSeq, nackWnd));
 
                     if (auto* txQueue = R.try_get<TransmissionWaitingQueue>(ctx.e))
                     {
-                        txQueue->Enqueue(nackBuf, TransmissionWaitingQueue::CONTROL);
+                        txQueue->Enqueue(nackBuf, TxPriority::CONTROL);
                     }
 
-                    chData.lastNackTime_ns = now;
-                    chData.sentNackSeqs.insert(expectedSeq);
+                    reliability->lastNackTime_ns = now;
+                    reliability->sentNackSeqs.insert(expectedSeq);
                 }
             }
 
             return false;
         }
 
-        ctx.bShouldDrop = true;
+        ctx.shouldDrop = true;
+        if (auto* metrics = R.try_get<profile::RudpMetrics>(ctx.e))
+            metrics->duplicatePackets++;
+
         return false;
     }
 
@@ -365,56 +525,40 @@ namespace jam::net
         auto& R = ctx.L.registry;
         const eChannelType ch = ctx.view.Channel();
 
-        if (ch != eChannelType::RELIABLE_ORDERED && ch != eChannelType::RELIABLE_UNORDERED)
+        if (!IsReliableChannel(ch))
             return true;
 
-        auto* sequence    = R.try_get<SequenceState>(ctx.e);
         auto* reliability = R.try_get<ReliabilityState>(ctx.e);
-        if (!sequence || !reliability)
+        if (!reliability)
             return false;
 
-        const uint16 seq = ctx.view.Sequence();
-        auto& chData = reliability->GetChannelData(ch);
+        const uint16 packetSeq = ctx.view.Sequence();
 
-        if (!SeqGreater(seq, chData.latestAckSeq - ACK_TRACK_SIZE))
+        if (!SeqGreater(packetSeq, reliability->latestRecvSeq - ACK_TRACK_SIZE))
             return false;
 
-        if (chData.ackTrack.test(seq % ACK_TRACK_SIZE))
+        if (!(reliability->ackTrack.none() && reliability->latestRecvSeq == 0))
         {
-            ctx.bShouldDrop = true;
-            return false;
-        }
-
-        chData.ackTrack.set(seq % ACK_TRACK_SIZE);
-        if (SeqGreater(seq, chData.latestAckSeq))
-            chData.latestAckSeq = seq;
-
-        const uint16 expectedSeq = sequence->expectedSeq[E2U(ch)];
-        if (seq == expectedSeq)
-        {
-            sequence->UpdateExpected(ch, expectedSeq + 1);
-
-            uint16 nextExpected = sequence->expectedSeq[E2U(ch)];
-            while (chData.ackTrack.test(nextExpected % ACK_TRACK_SIZE))
+            if (!SeqGreater(packetSeq, reliability->latestRecvSeq))
             {
-                sequence->UpdateExpected(ch, ++nextExpected);
+                const uint16 dist = SeqDistance(reliability->latestRecvSeq, packetSeq);
+                if (dist >= ACK_TRACK_SIZE)
+                {
+                    ctx.shouldDrop = true;
+                    return false;
+                }
+
+                if (reliability->ackTrack.test(dist))
+                {
+                    ctx.shouldDrop = true;
+                    if (auto* metrics = R.try_get<profile::RudpMetrics>(ctx.e))
+                        metrics->duplicatePackets++;
+                    return false;
+                }
             }
         }
 
-        const uint64 now = ctx.now_ns;
-        if (!chData.hasPendingAck)
-        {
-            chData.hasPendingAck          = true;
-            chData.pendingAckSeq          = seq;
-            chData.firstPendingAckTime_ns = now;
-        }
-        else if (SeqGreater(seq, chData.pendingAckSeq))
-        {
-            chData.pendingAckSeq = seq;
-        }
-
-        chData.pendingAckBitfield = reliability->BuildAckWindow(ch);
-
+        reliability->MarkReceived(packetSeq, ctx.now_ns);
         return true;
     }
 
@@ -446,13 +590,32 @@ namespace jam::net
         auto reassembled = fragmentation->PopCompleted(fragmentId);
         if (!reassembled)
         {
-            ctx.bIsReassembling = true;
+            ctx.isReassembling = true;
             return false;
         }
 
         JAMNET_LOG_DEBUG("[Fragment] Reassembly complete: id={}, size={}", fragmentId, reassembled->size());
 
-        ctx.buf  = RecvBuffer::FromSpan(reassembled->data(), static_cast<uint32>(reassembled->size()));
+        if (auto* m = R.try_get<profile::RudpMetrics>(ctx.e))
+            m->fragReassemblyCompleted++;
+
+        if (ctx.view.Channel() == eChannelType::RELIABLE_ORDERED)
+            ctx.orderedSpan = std::max<uint16>(1, fragTotal);
+
+        const uint16 orderedBaseSeq = (ctx.view.Channel() == eChannelType::RELIABLE_ORDERED)
+            ? static_cast<uint16>(ctx.view.OrderedSequence() - fragIdx)
+            : 0;
+
+        auto rebuilt = PacketBuilder::CreatePacket(
+            ctx.view.Type(), ctx.view.Id(),
+            ClearFlag(ctx.view.Flags(), PacketFlags::FRAGMENTED),
+            ctx.view.Channel(),
+            reassembled->data(), static_cast<uint32>(reassembled->size()),
+            fragmentId,
+            orderedBaseSeq);
+
+        if (!rebuilt) return false;
+        ctx.buf  = RecvBuffer::FromSpan(rebuilt->Buffer(), rebuilt->WriteSize());
         ctx.view = PacketView::Parse(ctx.buf->ReadPos(), ctx.buf->DataSize());
 
         return ctx.view.IsValid();
@@ -576,14 +739,19 @@ namespace jam::net
 
             const auto* ping = reinterpret_cast<const PING_DATA*>(ctx.view.Payload());
 
-            timesync->lastT1ClientSend_ns = ping->t1_client_send_ns;
+            timesync->lastT1ClientSend_ns = ping->t1App_ns;
             timesync->lastT2ServerRecv_ns = now_ns;
-            timesync->lastSampleClient_ns = ping->t1_client_send_ns;
+            timesync->lastSampleClient_ns = ping->t1App_ns;
 
             PONG_DATA pong{};
-            pong.t1_client_send_ns = ping->t1_client_send_ns;
-            pong.t2_server_recv_ns = now_ns;
-            pong.t3_server_send_ns = NOW_NS();
+
+            pong.t1Wire_ns = ping->t1Wire_ns;
+            pong.t2Wire_ns = ctx.ingressTime_ns; // wire ingress
+            pong.t3Wire_ns = 0;                  // wire egress : fill in UdpRouter
+
+            pong.t1App_ns = ping->t1App_ns;
+            pong.t2App_ns = now_ns;
+            pong.t3App_ns = NOW_NS();
 
             if (auto* txQueue = R.try_get<TransmissionWaitingQueue>(ctx.e))
             {
@@ -598,18 +766,44 @@ namespace jam::net
                 return;
 
             const auto*  pong = reinterpret_cast<const PONG_DATA*>(ctx.view.Payload());
-            const uint64 t4   = now_ns;
+            const uint64 t4_app  = now_ns;
+            const uint64 t4_wire = ctx.ingressTime_ns;
 	    
-            timesync->lastPongRecv_ns     = t4;
-            timesync->lastT2ServerRecv_ns = pong->t2_server_recv_ns;
-            timesync->lastT3ServerSend_ns = pong->t3_server_send_ns;
-            timesync->lastT4ClientRecv_ns = t4;
+            timesync->lastPongRecv_ns     = t4_app;
+            timesync->lastT2ServerRecv_ns = pong->t2App_ns;
+            timesync->lastT3ServerSend_ns = pong->t3App_ns;
+            timesync->lastT4ClientRecv_ns = t4_app;
 
             timesync->ProcessPingPong(
-                pong->t1_client_send_ns, 
-                pong->t2_server_recv_ns, 
-                pong->t3_server_send_ns, 
-                t4);
+                pong->t1App_ns, 
+                pong->t2App_ns, 
+                pong->t3App_ns, 
+                t4_app);
+
+            if (auto* linkQuality = R.try_get<profile::LinkQualityState>(ctx.e))
+            {
+                // app RTT
+                if (t4_app >= pong->t1App_ns && pong->t3App_ns >= pong->t2App_ns)
+                {
+                    const uint64 appPath = t4_app - pong->t1App_ns;
+                    const uint64 appProc = pong->t3App_ns - pong->t2App_ns;
+                    if (appPath >= appProc)
+                        linkQuality->AddAppRttSample(static_cast<float>(appPath - appProc) / 1'000'000.0f);
+                }
+
+                // wire RTT
+                if (pong->t1Wire_ns != 0 
+                    && pong->t2Wire_ns != 0 
+                    && pong->t3Wire_ns != 0
+                    && t4_wire >= pong->t1Wire_ns 
+                    && pong->t3Wire_ns >= pong->t2Wire_ns)
+                {
+                    const uint64 wirePath = t4_wire - pong->t1Wire_ns;
+                    const uint64 wireProc = pong->t3Wire_ns - pong->t2Wire_ns;
+                    if (wirePath >= wireProc)
+                        linkQuality->AddWireRttSample(static_cast<float>(wirePath - wireProc) / 1'000'000.0f);
+                }
+            }
 
             break;
 	    }
@@ -624,7 +818,7 @@ namespace jam::net
         auto& R = ctx.L.registry;
 
         eChannelType ch = ctx.view.Channel();
-        if (ch != eChannelType::RELIABLE_ORDERED && ch != eChannelType::RELIABLE_UNORDERED)
+        if (ch != eChannelType::UNRELIABLE_SEQUENCED)
             return;
 
         switch (U2E(eAckPacketId, ctx.view.Id()))
@@ -635,7 +829,7 @@ namespace jam::net
                 return;
 
             const auto* ack = reinterpret_cast<const ACK_DATA*>(ctx.view.Payload());
-            ProcessAckForChannel(R, ctx.e, ch, ack->latestSeq, ack->wnd);
+            ProcessAck(R, ctx.e, ack->latestSeq, ack->wnd, ctx.now_ns);
             break;
         }
         case eAckPacketId::NACK:
@@ -644,7 +838,7 @@ namespace jam::net
                 return;
 
             const auto* nack = reinterpret_cast<const NACK_DATA*>(ctx.view.Payload());
-            ProcessNackForChannel(R, ctx.e, ch, nack->missingSeq, nack->wnd);
+            ProcessNackForChannel(R, ctx.e, nack->missingSeq, nack->wnd, ctx.now_ns);
             break;
         }
         default:
@@ -660,6 +854,15 @@ namespace jam::net
         auto& sessInfo = R.get<SessionInfo>(ctx.e);
         sessInfo.lastRecvTime_ns = ctx.now_ns;
 
+        if (auto* traffic = R.try_get<profile::SessionTotalTraffic>(ctx.e))
+            traffic->OnRecv(ctx.view.Channel(), ctx.view.TotalSize());
+
+        if (auto* m = R.try_get<profile::RudpMetrics>(ctx.e))
+        {
+            m->rxPackets++;
+            m->rxBytes += ctx.view.TotalSize();
+        }
+
         switch (ctx.view.Type())
         {
         case ePacketType::SYSTEM:
@@ -674,24 +877,16 @@ namespace jam::net
         }
 
         if (!IncomingSequencingProcess(ctx))    return;
-        if (!IncomingOrderingProcess(ctx))      return;
         if (!IncomingReliabilityProcess(ctx))   return;
         if (!IncomingFragmentationProcess(ctx)) return;
         if (!IncomingNetstatProcess(ctx))       return;
+        if (!TryConsumeTailAck(ctx) && HasFlag(ctx.view.Flags(), PacketFlags::PIGGYBACK_ACK)) return;
+        if (!IncomingOrderingProcess(ctx))      return;
 
-        TryConsumeTailAck(ctx);
+        DispatchApplicationPacket(ctx);
 
-        switch (ctx.view.Type())
-        {
-        case ePacketType::RPC:
-            RPC::HandleIncomingPacket(R, ctx.e, ctx.view, ctx.buf);
-            return;
-        case ePacketType::CUSTOM:
-            sessInfo.session->HandleCustomPacket(ctx.view);
-            return;
-
-        default: break;
-        }
+        if (ctx.flushOrderedPending)
+            DrainOrderedPackets(ctx.L, ctx.e);
     }
 
     // ============================================================
@@ -709,14 +904,25 @@ namespace jam::net
         if (!seqState) return false;
 
         const uint32 fullPayloadSize = ctx.view.PayloadSize();
-        const uint16 fragTotal       = static_cast<uint8>((fullPayloadSize + FragmentState::kMaxFragmentPayloadSize - 1) / FragmentState::kMaxFragmentPayloadSize);
+        const uint16 fragTotal       = static_cast<uint16>((fullPayloadSize + FragmentState::kMaxFragmentPayloadSize - 1) / FragmentState::kMaxFragmentPayloadSize);
         if (fragTotal > FragmentState::kMaxFragments)
             return false;
 
-        const BYTE*  basePayload = ctx.view.Payload();
-        const uint16 baseSeq     = seqState->AllocSequence(ch, fragTotal);
+        const BYTE*  basePayload    = ctx.view.Payload();
+        const uint16 basePacketSeq  = seqState->AllocPacketSeq(fragTotal);
 
-        auto& txQueue = ctx.L.registry.get<TransmissionWaitingQueue>(ctx.e);
+        bool isOrdered = IsOrderedChannel(ch);
+        const uint16 baseOrderedSeq = isOrdered ? seqState->AllocOrderedSeq(fragTotal) : 0;
+
+        auto& txQueue     = ctx.L.registry.get<TransmissionWaitingQueue>(ctx.e);
+        auto* reliability = ctx.L.registry.try_get<ReliabilityState>(ctx.e);
+        auto* metrics     = ctx.L.registry.try_get<profile::RudpMetrics>(ctx.e);
+
+        if (IsReliableChannel(ch) && !reliability)
+            return false;
+
+        if (metrics)
+            metrics->fragOriginalPayloadBytes += fullPayloadSize;
 		
         for (auto i = 0; i < fragTotal; ++i)
         {
@@ -729,10 +935,24 @@ namespace jam::net
                 ctx.view.Channel(),
                 basePayload + offset,
                 chunk,
-                static_cast<uint16>(baseSeq + i),
+                static_cast<uint16>(basePacketSeq + i),
+                isOrdered ? static_cast<uint16>(baseOrderedSeq + i) : 0,
                 static_cast<uint8>(i),
                 static_cast<uint8>(fragTotal)
             );
+
+            if (!frag) continue;
+
+            if (IsReliableChannel(ch))
+            {
+                if (!reliability->StoreSendPacket(ch, frag, static_cast<uint16>(basePacketSeq + i), ctx.now_ns))
+                    return false;
+
+                SyncPendingReliableMetrics(*reliability, metrics);
+            }
+
+            if (metrics)
+				metrics->fragWireBytes += frag->WriteSize();
 
             txQueue.Enqueue(frag, TxPriority::NORMAL);
         }
@@ -746,6 +966,7 @@ namespace jam::net
     {
         auto* txQueue = ctx.L.registry.try_get<TransmissionWaitingQueue>(ctx.e);
         if (!txQueue) return false;
+        auto* metrics = ctx.L.registry.try_get<profile::RudpMetrics>(ctx.e);
 
         const auto ch = ctx.view.Channel();
         if (ch == eChannelType::UNRELIABLE_UNORDERED || ch == eChannelType::TCP_DEFAULT)
@@ -756,10 +977,26 @@ namespace jam::net
 
         if (auto* seqState = ctx.L.registry.try_get<SequenceState>(ctx.e))
         {
-	        uint16 seq = seqState->AllocSequence(ch, 1);
+	        const uint16 packetSeq = seqState->AllocPacketSeq(1);
+            ctx.view.Header()->SetSequence(packetSeq);
 
-            auto* pktHeader = ctx.view.Header();
-            pktHeader->SetSequence(seq);
+            if (IsReliableChannel(ch))
+            {
+                auto* reliability = ctx.L.registry.try_get<ReliabilityState>(ctx.e);
+                if (!reliability)
+                    return false;
+
+                if (IsOrderedChannel(ch))
+                {
+                    const uint16 orderdSeq = seqState->AllocOrderedSeq(1);
+                    ctx.view.Header()->SetOrderedSequence(orderdSeq);
+                }
+
+                if (!reliability->StoreSendPacket(ch, ctx.buf, packetSeq, ctx.now_ns))
+                    return false;
+
+                SyncPendingReliableMetrics(*reliability, metrics);
+            }
         }
 
         txQueue->Enqueue(ctx.buf, ctx.priority);
@@ -867,7 +1104,9 @@ namespace jam::net
                 continue;
 
             PING_DATA ping{};
-            ping.t1_client_send_ns        = now_ns;
+            ping.t1Wire_ns                = 0;          // wire send time : fill in UdpRouter
+        	ping.t1App_ns                 = now_ns;
+
             ping.prev_t3_server_send_ns   = timeSync.lastT3ServerSend_ns;
             ping.prev_t4_client_recv_ns   = timeSync.lastT4ClientRecv_ns;
 
@@ -913,7 +1152,7 @@ namespace jam::net
             auto& txQueue = view.get<TransmissionWaitingQueue>(entity);
             auto& info = view.get<SessionInfo>(entity);
 
-            if (/*info.state == SessionInfo::DISCONNECTED ||*/ !info.session)
+            if (!info.session)
                 continue;
             if (txQueue.queue.empty())
                 continue;
@@ -921,42 +1160,15 @@ namespace jam::net
                 continue;
 
             const bool isUdp = info.session->IsUdp();
-            CongestionState* congestion = isUdp ? R.try_get<CongestionState>(entity) : nullptr;
+            auto* congestion = R.try_get<CongestionState>(entity);
+            auto* reliabilityState = isUdp ? R.try_get<ReliabilityState>(entity) : nullptr;
 
-            // ===== Piggyback ACK 로직 =====
-
-            // 지연 ACK 타임아웃 확인 - standalone ACK_ONLY 패킷 삽입
-            if (info.session->IsUdp() && R.all_of<ReliabilityState>(entity))
+            if (isUdp && R.all_of<ReliabilityState>(entity))
             {
                 auto& reliability = R.get<ReliabilityState>(entity);
-                auto& roData = reliability.GetChannelData(eChannelType::RELIABLE_ORDERED);
 
-                if (roData.hasPendingAck)
-                {
-                    if ((now_ns - roData.firstPendingAckTime_ns) >= DELAY_PIGGYBACK_ACK_TIMEOUT_NS)
-                    {
-                        auto ackBuf = PacketBuilder::CreateAckPacket(ACK_DATA{
-                        	.latestSeq  = roData.pendingAckSeq,
-	                        .wnd        = roData.pendingAckBitfield });
-
-                        txQueue.Enqueue(ackBuf, TxPriority::ACK_ONLY);
-                    }
-                }
-            }
-
-            // 우선순위 정렬
-            std::ranges::stable_sort(txQueue.queue,[](const TxPendingPacket& a, const TxPendingPacket& b) {
-                    return GetPriority(a.priority) < GetPriority(b.priority);
-                });
-
-            // Piggyback 1회 시도 (뒤에서부터 검색)
-            bool piggybackOK = false;
-            if (info.session->IsUdp() && R.all_of<ReliabilityState>(entity))
-            {
-                auto& reliability = R.get<ReliabilityState>(entity);
-                auto& roData = reliability.GetChannelData(eChannelType::RELIABLE_ORDERED);
-
-                if (roData.hasPendingAck)
+                bool piggybackOK = false;
+                if (reliability.ackDirty)
                 {
                     for (int32 i = static_cast<int32>(txQueue.queue.size()) - 1; i >= 0; --i)
                     {
@@ -967,54 +1179,112 @@ namespace jam::net
                         }
                     }
                 }
+
+                if (!piggybackOK && reliability.ShouldSendAck(now_ns))
+                {
+                    auto ackBuf = PacketBuilder::CreateAckPacket(ACK_DATA(reliability.pendingAckSeq, reliability.pendingAckBitfield));
+                    txQueue.Enqueue(ackBuf, TxPriority::ACK_ONLY);
+                    reliability.ClearPendingAck();
+                }
             }
 
-            // Piggyback 성공 시 ACK_ONLY 패킷 제거
-            if (piggybackOK)
-            {
-                std::erase_if(txQueue.queue, [](const TxPendingPacket& p) { return p.priority == TransmissionWaitingQueue::ACK_ONLY; });
-            }
-
-            // ===== 전송 배치 생성 =====
+            std::ranges::stable_sort(txQueue.queue, [](const TxPendingPacket& a, const TxPendingPacket& b) {
+                    return GetPriority(a.priority) < GetPriority(b.priority);
+                });
 
             std::vector<std::shared_ptr<SendBuffer>> batch;
             batch.reserve(txQueue.queue.size());
 
-            NetworkCounter*   counter = R.try_get<NetworkCounter>(entity);
-            CompNetworkStats* stats   = R.try_get<CompNetworkStats>(entity);
+            std::vector<TxPendingPacket> remain;
+            remain.reserve(txQueue.queue.size());
 
-            for (auto& pkt : txQueue.queue)
+            auto* traffic = R.try_get<profile::SessionTotalTraffic>(entity);
+
+            for (size_t i = 0; i < txQueue.queue.size(); ++i)
             {
+                auto& pkt = txQueue.queue[i];
+
                 PacketView v = PacketView::Parse(pkt.buf->Buffer(), pkt.size);
-                if (!v.IsValid())
+                if (!v.IsValid()) continue;
+
+                ReliabilityState::PendingPacket* pending = nullptr;
+                if (isUdp && reliabilityState && v.IsReliable())
                 {
-                    JAMNET_LOG_WARN_LOC("Invalid packet skipped during flush");
-                    continue;
+                    pending = reliabilityState->TryGetPending(v.Sequence());
+                    if (pkt.priority == TxPriority::RETRANSMIT && !pending)
+                        continue;
                 }
 
-                const bool bypassCongestion = (pkt.priority <= TransmissionWaitingQueue::ACK_ONLY);
+                const bool bypassCongestion = (pkt.priority <= TxPriority::ACK_ONLY);
 
-                if (!bypassCongestion && isUdp && congestion && v.IsReliable())
+                if (!bypassCongestion && isUdp && congestion && v.IsReliable() && !congestion->CanSend(pkt.size))
                 {
-                    if (!congestion->CanSend(pkt.size))
-                        break;
+                    remain.insert(remain.end(), txQueue.queue.begin() + static_cast<std::ptrdiff_t>(i), txQueue.queue.end());
+                    break;
                 }
 
                 batch.push_back(pkt.buf);
 
-                if (counter) counter->OnSend(pkt.size);
-                if (stats)   stats->OnChannelSend(v.Channel(), pkt.size);
+                if (traffic) traffic->OnSend(v.Channel(), pkt.size);
+
+                if (auto* m = R.try_get<profile::RudpMetrics>(entity))
+                {
+                    m->txPackets++;
+                    m->txBytes += pkt.size;
+
+                    if (v.IsReliable() && pkt.priority != TxPriority::RETRANSMIT)
+                    {
+                        m->reliableOriginalPackets++;
+                        m->reliableOriginalBytes += pkt.size;
+                    }
+
+                    if (pkt.priority == TxPriority::RETRANSMIT)
+                    {
+                        m->rtxPackets++;
+                        m->rtxBytes += pkt.size;
+
+                        if (pending && !pending->hasRetransmitted)
+                            m->rtxOriginalPackets++;
+                    }
+
+                    if (v.Type() == ePacketType::ACK && pkt.priority == TxPriority::ACK_ONLY)
+                        m->ackStandalonePackets++;
+
+                    if (HasFlag(v.Flags(), PacketFlags::PIGGYBACK_ACK))
+                        m->ackPiggybackedPackets++;
+                }
+
+                if (pending)
+                {
+                    if (pkt.priority == TxPriority::RETRANSMIT)
+                    {
+                        pending->hasRetransmitted    = true;
+                        pending->lastRetransmitTime_ns = now_ns;
+                    }
+                    else if (!pending->hasInitialSend)
+                    {
+                        pending->hasInitialSend      = true;
+                        pending->sendTime_ns         = now_ns;
+                        pending->lastRetransmitTime_ns = now_ns;
+                    }
+                }
+
                 if (!bypassCongestion && isUdp && congestion && v.IsReliable())
                     congestion->OnSend(pkt.size);
             }
-            
-            if (batch.empty()) continue;
 
-        	Session* session = info.session;
+            txQueue.queue       = std::move(remain);
+            txQueue.bytesQueued = 0;
+            for (const auto& p : txQueue.queue) txQueue.bytesQueued += p.size;
+            txQueue.flushRequested = !txQueue.queue.empty();
+
+            if (batch.empty())
+                continue;
+
+            Session* session = info.session;
             GlobalExecutor::Instance().Submit(Job([session, batch = std::move(batch)]() mutable
                 {
-                    if (!session)
-                        return;
+                    if (!session) return;
 
                     if (session->IsUdp())
                     {
@@ -1031,11 +1301,8 @@ namespace jam::net
                     }
                 }));
 
-
-            txQueue.Clear();
             txQueue.lastFlushTime_ns = now_ns;
-
-            info.lastSendTime_ns = now_ns;
+            info.lastSendTime_ns     = now_ns;
         }
     }
 
@@ -1047,66 +1314,32 @@ namespace jam::net
         for (auto entity : view)
         {
             auto& reliability = view.get<ReliabilityState>(entity);
-            auto& txQueue = view.get<TransmissionWaitingQueue>(entity);
-            auto& info = view.get<SessionInfo>(entity);
+            auto& txQueue     = view.get<TransmissionWaitingQueue>(entity);
+            auto& info        = view.get<SessionInfo>(entity);
+            auto* metrics     = R.try_get<profile::RudpMetrics>(entity);
 
             if (info.state != SessionInfo::CONNECTED)
                 continue;
 
-            // RELIABLE_ORDERED 재전송
+            auto retransmitList = reliability.GetRetransmitNeeded(now_ns);
+            for (uint16 seq : retransmitList)
             {
-                auto retransmitList = reliability.GetRetransmitNeeded(eChannelType::RELIABLE_ORDERED, now_ns);
+                auto* pkt = reliability.TryGetPending(seq);
+                if (!pkt || !pkt->buf)
+                    continue;
 
-                for (uint16 seq : retransmitList)
+                if (pkt->retryCount >= MAX_RETRY)
                 {
-                    auto& chData = reliability.GetChannelData(eChannelType::RELIABLE_ORDERED);
-                    auto it = chData.pendings.find(seq);
-                    if (it == chData.pendings.end())
-                        continue;
-
-                    auto& pkt = it->second;
-
-                    if (pkt.retryCount >= MAX_RETRY)
-                    {
-                        JAMNET_LOG_ERROR("[Retransmit] Packet seq={} exceeded max retry", seq);
-                        info.state = SessionInfo::DISCONNECTING;
-                        break;
-                    }
-
-                    txQueue.Enqueue(pkt.buf, TransmissionWaitingQueue::RETRANSMIT);
-                    pkt.lastRetransmitTime_ns = now_ns;
-                    pkt.retryCount++;
-
-                    JAMNET_LOG_DEBUG("[Retransmit] RELIABLE_ORDERED seq={}, retry={}", seq, pkt.retryCount);
+                    JAMNET_LOG_ERROR("[Retransmit] Packet seq={} exceeded max retry", seq);
+                    MarkRetransmitGiveup(metrics, *pkt);
+                    info.state = SessionInfo::DISCONNECTING;
+                    break;
                 }
-            }
 
-            // RELIABLE_UNORDERED 재전송
-            {
-                auto retransmitList = reliability.GetRetransmitNeeded(eChannelType::RELIABLE_UNORDERED, now_ns);
+                txQueue.Enqueue(pkt->buf, TransmissionWaitingQueue::RETRANSMIT);
+                MarkRetransmitScheduled(metrics, *pkt, now_ns, true);
 
-                for (uint16 seq : retransmitList)
-                {
-                    auto& chData = reliability.GetChannelData(eChannelType::RELIABLE_UNORDERED);
-                    auto it = chData.pendings.find(seq);
-                    if (it == chData.pendings.end())
-                        continue;
-
-                    auto& pkt = it->second;
-
-                    if (pkt.retryCount >= MAX_RETRY)
-                    {
-                        JAMNET_LOG_ERROR_LOC("[Retransmit] Packet seq={} exceeded max retry", seq);
-                        info.state = SessionInfo::DISCONNECTING;
-                        break;
-                    }
-
-                    txQueue.Enqueue(pkt.buf, TransmissionWaitingQueue::RETRANSMIT);
-                    pkt.lastRetransmitTime_ns = now_ns;
-                    pkt.retryCount++;
-
-                    JAMNET_LOG_DEBUG("[Retransmit] RELIABLE_UNORDERED seq={}, retry={}", seq, pkt.retryCount);
-                }
+                JAMNET_LOG_DEBUG("[Retransmit] ch={} seq={}, retry={}", E2U(pkt->channel), seq, pkt->retryCount);
             }
         }
     }
@@ -1120,6 +1353,9 @@ namespace jam::net
         {
             auto& fragState = view.get<FragmentState>(entity);
             fragState.CleanupTimeouts(now_ns);
+
+            if (auto* metrics = R.try_get<profile::RudpMetrics>(entity))
+                metrics->fragReassemblyTimeoutDrops = fragState.timeoutDrops;
         }
     }
 
@@ -1144,6 +1380,12 @@ namespace jam::net
                 {
                     handshake.state = HandshakeState::DISCONNECTED;
                     info.state      = SessionInfo::DISCONNECTED;
+                    handshake.lastHandshakeTime_ns = 0;
+
+                    L.defers.emplace_back([entity](entt::registry& rr)
+                        {
+                            NotifyTerminated(rr, entity);
+                        });
 
                     JAMNET_LOG_INFO("[Handshake] TIME_WAIT finished, session {} closed", static_cast<uint32>(entity));
                 }
@@ -1161,7 +1403,13 @@ namespace jam::net
             if (handshake.retryCount >= HandshakeState::kMaxRetry)
             {
                 handshake.state = HandshakeState::TIME_OUT;
-                info.state      = SessionInfo::DISCONNECTING;
+                info.state      = SessionInfo::DISCONNECTED;
+                handshake.lastHandshakeTime_ns = 0;
+
+                L.defers.emplace_back([entity](entt::registry& rr)
+                    {
+                        NotifyTerminated(rr, entity);
+                    });
 
                 JAMNET_LOG_ERROR("[Handshake] Timeout, session entity= {} failed", static_cast<uint32>(entity));
                 continue;
@@ -1212,16 +1460,21 @@ namespace jam::net
 
     void SystemNetworkStats(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
     {
+        (void)now_ns;
+
         auto& R = L.registry;
-        auto view = R.view<NetworkCounter, CompNetworkStats>();
+        auto view = R.view<profile::SessionTotalTraffic, profile::TrafficSampleState>();
+
+        const uint64 interval_ns = (dt_ns > 0) ? dt_ns : 1_s;
 
         for (auto entity : view)
         {
-            auto& counter = view.get<NetworkCounter>(entity);
-            auto& stats   = view.get<CompNetworkStats>(entity);
+            auto& traffic = view.get<profile::SessionTotalTraffic>(entity);
+            auto& trafficSample = view.get<profile::TrafficSampleState>(entity);
+            auto* linkQuality = R.try_get<profile::LinkQualityState>(entity);
+            auto* metrics = R.try_get<profile::RudpMetrics>(entity);
 
-            static constexpr uint64 UPDATE_INTERVAL_NS = 1_s;
-            stats.UpdateBandwidth(counter.totalSendBytes + counter.totalRecvBytes, UPDATE_INTERVAL_NS);
+            profile::AccumulateSystemNetworkStats(trafficSample, traffic, linkQuality, metrics, interval_ns);
         }
     }
 
@@ -1353,7 +1606,7 @@ namespace jam::net
         PipelineOutgoingPacket(ctx);
     }
 
-    void ProcessReceivedPacket(entt::entity e, const std::shared_ptr<RecvBuffer>& buf)
+    void ProcessReceivedPacket(entt::entity e, const std::shared_ptr<RecvBuffer>& buf, uint64 ingressRecvTime_ns)
     {
         auto& L = SHARD_LOCAL_CHECKED();
         auto& R = L.registry;
@@ -1377,12 +1630,16 @@ namespace jam::net
             return;
         }
 
+        const uint64 now_ns = NOW_NS();
+        if (ingressRecvTime_ns == 0) ingressRecvTime_ns = now_ns;
+
         RecvContext ctx{
-            .L      = L,
-            .e      = e,
-            .view   = view,
-            .buf    = buf,
-            .now_ns = NOW_NS()
+            .L              = L,
+            .e              = e,
+            .view           = view,
+            .buf            = buf,
+            .now_ns         = now_ns,
+            .ingressTime_ns = ingressRecvTime_ns
         };
 
         PipelineIncomingPacket(ctx);

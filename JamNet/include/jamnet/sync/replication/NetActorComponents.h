@@ -150,6 +150,12 @@ namespace jam::net
 	/// @brief Tag of remote actor. Remote actors are the remaining actors excluding a local actor.
 	struct RemoteActorTag {};
 
+	/// @brief Actor exists locally but is currently hidden because it left this client's AOI.
+	struct OutOfAoiTag {};
+
+	/// @brief Actor is locally hidden after predicted expiry and waits for authoritative destroy.
+	struct PredictedDespawnTag {};
+
 
 
 	/**-----------------------------------------------------------

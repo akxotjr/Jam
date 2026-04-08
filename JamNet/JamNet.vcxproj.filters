@@ -355,6 +355,7 @@
       <Filter>core\executor</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\executor\ExecutorMetrics.h" />
+    <ClInclude Include="include\jamnet\core\net\NetworkProfile.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -549,6 +550,7 @@
     <ClCompile Include="src\sync\replication\CorrectionReplayRunner.cpp">
       <Filter>sync\replication\client system</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\net\NetworkProfile.cpp" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="include\jamnet\sync\schema\fbs\actor_control.fbs">

@@ -28,15 +28,18 @@ namespace jam::net
     /// - 이벤트 객체 생성 대신 이 구조체를 재사용하여 메모리 압력 감소
     struct RecvContext
     {
-        ShardLocal&                 L;          // ECS WORLD + Scheduler
-        entt::entity                e;          // 대상 세션 엔티티
-        PacketView                  view;       // 패킷 분석 결과
-        std::shared_ptr<RecvBuffer> buf;        // 원본 버퍼 (수명 관리)
-        uint64                      now_ns;     // 현재 타임스탬프
+        ShardLocal&                 L;              // ECS WORLD + Scheduler
+        entt::entity                e;              // 대상 세션 엔티티
+        PacketView                  view;           // 패킷 분석 결과
+        std::shared_ptr<RecvBuffer> buf;            // 원본 버퍼 (수명 관리)
+        uint64                      now_ns;         // 현재 타임스탬프
+        uint64                      ingressTime_ns; // IOCP ingress 시각(가능한 wire 근접)
 
-        bool                        bShouldDrop      = false;
-        bool                        bIsReassembling  = false;
-        bool                        bNeedsReordering = false;
+        bool                        shouldDrop          = false;
+        bool                        isReassembling      = false;
+        bool                        needsReordering     = false;
+        bool                        flushOrderedPending = false;
+        uint16                      orderedSpan         = 1;
     };
 
     // Pipeline Stage Functions
@@ -111,7 +114,7 @@ namespace jam::net
     /// 핸드셰이크 타임아웃 시스템
     void SystemHandshakeTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
 
-    /// 통계 업데이트 시스템
+    /// 통계 누적 시스템
     void SystemNetworkStats(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
 
 
@@ -125,7 +128,7 @@ namespace jam::net
     void SendPacketToSession(entt::entity e, const std::shared_ptr<SendBuffer>& buf);
 
     /// 세션 수신 처리
-    void ProcessReceivedPacket(entt::entity e, const std::shared_ptr<RecvBuffer>& buf);
+    void ProcessReceivedPacket(entt::entity e, const std::shared_ptr<RecvBuffer>& buf, uint64 ingressRecvTime_ns = 0_ns);
 
 
     // ============================================================

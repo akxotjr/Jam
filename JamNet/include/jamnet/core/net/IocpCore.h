@@ -21,6 +21,7 @@ namespace jam::net
 
 		bool			Register(const std::shared_ptr<IocpObject>& obj);
 		bool			Dispatch(uint32 timeoutMs = INFINITE);
+		void			Wake(uint32 count = 1);
 
 	private:
 		HANDLE			m_iocpHandle;

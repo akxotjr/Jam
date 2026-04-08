@@ -537,20 +537,49 @@ namespace jam::px
 		return result;
 	}
 
-	std::vector<SimEvent> PhysicsFacade::ConsumeSimEvents()
+	std::vector<PhysicsEvent> PhysicsFacade::ConsumePhysicsEvents()
 	{
 		if (!m_world) return {};
 
-		auto events = m_world->ConsumeSimEvents();
+		auto simEvents = m_world->ConsumeSimEvents();
 
 		// ANALYTIC 투사체 히트 등 수동 push 이벤트 병합
 		if (!m_pendingSimEvents.empty())
 		{
-			events.insert(events.end(), m_pendingSimEvents.begin(), m_pendingSimEvents.end());
+			simEvents.insert(simEvents.end(), m_pendingSimEvents.begin(), m_pendingSimEvents.end());
 			m_pendingSimEvents.clear();
 		}
 
-		return events;
+		std::vector<PhysicsEvent> out;
+		out.reserve(simEvents.size());
+
+		for (const SimEvent& e : simEvents)
+		{
+			PhysicsEvent evt{};
+
+			if (e.type == eSimEventType::ProjectileHit)
+			{
+				evt.type = ePhysicsEventType::ProjectileHit;
+				evt.sourceId = e.contact0;
+				evt.targetId = e.contact1;
+
+				if (e.contactPointCount > 0)
+				{
+					evt.hitPosition = ToPx(e.contactPoints[0].position);
+					evt.hitNormal = ToPx(e.contactPoints[0].normal);
+				}
+
+				out.push_back(evt);
+			}
+			else if (e.type == eSimEventType::ProjectileLifetimeExpired)
+			{
+				evt.type = ePhysicsEventType::ProjectileLifetimeExpired;
+				evt.sourceId = e.contact0;
+				out.push_back(evt);
+			}
+		}
+
+		return out;
 	}
 
 	std::vector<ObjectId> PhysicsFacade::PopActiveList()
@@ -725,9 +754,6 @@ namespace jam::px
 	{
 		if (m_projectileMap.empty()) return;
 
-		std::vector<ObjectId> toRemove;
-		toRemove.reserve(m_projectileMap.size());
-
 		for (auto& [id, body] : m_projectileMap)
 		{
 			if (slot == ePxSceneSlot::Main)
@@ -737,11 +763,11 @@ namespace jam::px
 				auto* proj = dynamic_cast<ProjectileRigidBehavior*>(body.GetBehavior());
 				if (!proj) continue;
 
-				const ProjectileHitResult& r = proj->GetLastHitResult();
-				if (r.hit)
+				ProjectileHitResult r{};
+				if (proj->ConsumeMainHitEvent(r))
 				{
 					SimEvent e{};
-					e.type = eSimEventType::ContactFound;
+					e.type = eSimEventType::ProjectileHit;
 					e.contact0					= id;
 					e.contact1					= r.hitId;
 					e.contactPointCount			= 1;
@@ -750,17 +776,19 @@ namespace jam::px
 					m_pendingSimEvents.push_back(e);
 				}
 
-				if (proj->IsTerminated())
-					toRemove.push_back(id);
+				if (proj->ConsumeMainLifetimeEvent(r))
+				{
+					SimEvent e{};
+					e.type = eSimEventType::ProjectileLifetimeExpired;
+					e.contact0 = id;
+					m_pendingSimEvents.push_back(e);
+				}
 			}
 			else if (slot == ePxSceneSlot::Replay)
 			{
 				body.TickOnReplay(dt);
 			}
 		}
-
-		for (ObjectId id : toRemove)
-			Despawn(id);
 	}
 
 	void PhysicsFacade::SyncKinematics(ePxSceneSlot slot)

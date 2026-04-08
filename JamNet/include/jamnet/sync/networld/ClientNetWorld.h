@@ -8,6 +8,7 @@
 #include "jamnet/sync/schema/gen/actor_control_generated.h"
 
 #include <jampx/IPhysicsFacade.h>
+#include <functional>
 
 
 
@@ -38,11 +39,16 @@ namespace jam::net
 		void								DespawnActor(NetId netId);
 
 		void								PushInput(uint32 inputFlags, float facingYaw, float facingPitch);
+		void								RequestHitscan(const px::Vec3& from, const px::Vec3& dir, float maxRange, std::function<void(const px::HitscanResult&)> onDone);
 
 
 		void								RequestDespawnActor(NetId netId);
 		void								RequestPossessActor(NetId netId);
 		void								RequestUnpossessActor(NetId netId);
+		void								SetReplicatedActorDormant(NetId netId);
+		void								PredictReplicatedActorDespawn(NetId netId);
+		void								ReactivateReplicatedActor(NetId netId, bool isLocal);
+		void								DestroyReplicatedActor(NetId netId);
 
 		entt::entity						EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller);
 		entt::entity						TryConfirmPendingSpawn(NetId netId, uint32 spawnReqId);
@@ -55,6 +61,9 @@ namespace jam::net
 
 		void								SpawnActorImpl(SpawnParams params);
 		void								DespawnActorImpl(NetId netId);
+		void								SetActorDormantImpl(NetId netId);
+		void								PublishActorSpawned(entt::entity e, uint32 spawnReqId, bool isLocal);
+		void								PublishActorDespawned(entt::entity e);
 
 		void								RequestSpawnActor(const SpawnParams& params);
 

@@ -4,13 +4,16 @@ namespace jam
 {
     struct CoreLayout
     {
+        static constexpr int32 kFixedFiberWorkers = 1;
+
         int32  shards  = 1;
+        int32  iocp    = 1;
+        int32  fiber   = kFixedFiberWorkers;
         int32  offload = 1;
-        int32  spare   = 0;
 
         bool IsValid() const
         {
-            return shards <= 0 || offload <= 0;
+            return shards >= 1 && iocp >= 1 && fiber == kFixedFiberWorkers && offload >= 1;
         }
     };
 
@@ -30,33 +33,29 @@ namespace jam
     struct AutoCoreLayoutConfig
     {
         eAutoCoreLayoutMode     mode             = Balance;
-        bool                    is_smt           = true;           // 하이퍼스레딩(논리>물리) 여부
-        uint32                  logical_cores    = std::thread::hardware_concurrency();      
-        uint32                  physical_cores   = 0;
-        uint32                  numa_nodes       = 1;      
-        uint32                  reserved_threads = 1;
+        bool                    isSmt            = true;           // 하이퍼스레딩(논리>물리) 여부
+        uint32                  logicalCores     = std::thread::hardware_concurrency();      
+        uint32                  physicalCores    = 0;
+        uint32                  numaNodes        = 1;      
+        uint32                  reservedThreads  = 0;
         eCoreUsageProfile       profile          = CoreProfileServer;
-        float                   usage_scale      = 0.f;
+        float                   usageScale       = 0.f;
     };
 
     inline CoreLayout AutoLayout(const AutoCoreLayoutConfig& cfg)
     {
-        auto ceil_div = [](uint32 a, uint32 b) { return (a + b - 1) / b; };
+        auto ceilDiv = [](uint32 a, uint32 b) -> uint32 { return (a + b - 1) / b; };
 
-        const uint32 logical = cfg.logical_cores ? cfg.logical_cores : 1;
-        uint32 phys = cfg.physical_cores;
+        const uint32 logical = cfg.logicalCores ? cfg.logicalCores : 1;
+        uint32 phys = cfg.physicalCores;
         if (phys == 0)
-            phys = cfg.is_smt ? std::max<uint32>(1u, logical / 2u) : logical;
+            phys = cfg.isSmt ? std::max<uint32>(1u, logical / 2u) : logical;
 
         // reserved 만큼은 executor 쓰레드로 쓰지 않음.
-        const uint32 reserved  = std::min<uint32>(phys, cfg.reserved_threads);
+        const uint32 reserved  = std::min<uint32>(phys, cfg.reservedThreads);
         const uint32 rawBudget = std::max<uint32>(1u, phys - reserved);
 
-
-        // 서버: 남은 코어(rawBudget)를 전부 budget으로 사용
-        // 클라: rawBudget 의 절반 정도만 사용해서 여유 남김
-
-        float usageScale = cfg.usage_scale;
+        float usageScale = cfg.usageScale;
         if (usageScale == 0.f)
         {
             usageScale = cfg.profile == CoreProfileServer ? 1.0f : 0.5f;
@@ -65,76 +64,85 @@ namespace jam
         uint32 budget = rawBudget;
         if (cfg.profile == CoreProfileClient)
         {
-            // 최소 1개는 보장
-            budget = std::max<uint32>(1u, rawBudget * usageScale);
+            const float scaled = std::max(1.0f, static_cast<float>(rawBudget) * usageScale);
+            budget = static_cast<uint32>(scaled);
         }
 
+        // GlobalExecutor roles: shard + iocp + fiber + offload
+        constexpr uint32 kMinRuntimeThreads = 4u;
+        budget = std::max<uint32>(budget, kMinRuntimeThreads);
+
         CoreLayout layout{};
+        layout.iocp  = 1;
+        layout.fiber = CoreLayout::kFixedFiberWorkers;
 
         switch (cfg.mode)
         {
-        case IO_Heavy: // 대략 25%를 IO로, 하한 2개
+        case IO_Heavy:
         {
-            layout.offload = std::clamp<uint32>(ceil_div(budget, 4), 2, (budget > 1) ? budget - 1 : 1);
-            layout.spare   = (budget >= 6) ? 1 : 0;
+            layout.offload = static_cast<int32>(std::clamp<uint32>(ceilDiv(budget, 4), 1u, (budget > 3u) ? (budget - 3u) : 1u));
             break;
         }
 
-        case CPU_Heavy: // IO 최소, spare 은 0 
+        case CPU_Heavy:
         {
             layout.offload = 1;
-            layout.spare   = 0;
             break;
         }
 
-        case Balance: // 대략 12.5% 를 IO, spare 1개 (코어 여유가 있을때)
+        case Balance:
         default:
         {
-            layout.offload = std::clamp<uint32>(ceil_div(budget, 8), 1, (budget > 1) ? budget - 1 : 1);
-            layout.spare   = (budget >= 8) ? 1 : 0;
+            layout.offload = static_cast<int32>(std::clamp<uint32>(ceilDiv(budget, 8), 1u, (budget > 3u) ? (budget - 3u) : 1u));
             break;
         }
         }
 
-        // 샤드 = budget - overhead (최소 1 보장)
-        const uint32 overhead = layout.offload + layout.spare;
-        layout.shards = (budget > overhead) ? (budget - overhead) : 1u;
+        const uint32 overhead = static_cast<uint32>(layout.iocp + layout.fiber + layout.offload);
+        layout.shards = static_cast<int32>((budget > overhead) ? (budget - overhead) : 1u);
 
-        // 논리 코어 전체 중 reserved 개수는 이미 메인/렌더 등이 사용 중이라고 가정.
-        auto total = [&]() { return layout.shards + layout.offload + layout.spare; };
-        const uint32 logicalCap = (logical > reserved) ? (logical - reserved) : 1u;
-        if (total() > logicalCap)
+        auto total = [&]() -> uint32
         {
-            uint32 extra = total() - logicalCap;
-            auto trim = [&](int32& x)
+            return static_cast<uint32>(layout.shards + layout.iocp + layout.fiber + layout.offload);
+        };
+
+        const uint32 logicalCap = (logical > reserved) ? (logical - reserved) : 1u;
+        const uint32 effectiveCap = std::max<uint32>(logicalCap, kMinRuntimeThreads);
+        if (total() > effectiveCap)
+        {
+            uint32 extra = total() - effectiveCap;
+            auto trim = [&](int32& value, int32 minValue)
                 {
-                    int32 cut = std::min<int32>(x, extra);
-                    x     -= cut;
+                    if (extra == 0 || value <= minValue)
+                        return;
+
+                    const uint32 removable = static_cast<uint32>(value - minValue);
+                    const uint32 cut = std::min<uint32>(removable, extra);
+                    value -= static_cast<int32>(cut);
                     extra -= cut;
                 };
 
-            trim(layout.spare);
-            if (extra) trim(layout.offload);
-            if (extra && layout.shards > 1) trim(layout.shards);
+            trim(layout.offload, 1);
+            trim(layout.shards, 1);
             if (layout.shards == 0) layout.shards = 1;
         }
 
-        const uint32 nodes = cfg.numa_nodes ? cfg.numa_nodes : 1u;
-        if (nodes > 1 && layout.shards >= nodes)
+        const uint32 nodes = cfg.numaNodes ? cfg.numaNodes : 1u;
+        if (nodes > 1 && static_cast<uint32>(layout.shards) >= nodes)
         {
-            uint32 rem = layout.shards % nodes;
+            uint32 rem = static_cast<uint32>(layout.shards) % nodes;
             if (rem != 0)
             {
-                uint32 canGrow = (total() < logicalCap) ? (logicalCap - total()) : 0u;
+                uint32 canGrow = (total() < effectiveCap) ? (effectiveCap - total()) : 0u;
                 uint32 add = nodes - rem;
                 if (add <= canGrow)
                 {
-                    layout.shards += add;      
+                    layout.shards += static_cast<int32>(add);
                 }
                 else
                 {
-                    layout.shards -= rem;    
-                    if (layout.shards == 0) layout.shards = nodes; 
+                    layout.shards -= static_cast<int32>(rem);
+                    if (layout.shards == 0) layout.shards = static_cast<int32>(nodes);
                 }
             }
         }
