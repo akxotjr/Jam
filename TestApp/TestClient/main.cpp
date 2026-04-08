@@ -506,7 +506,7 @@ int main()
     JamNetRuntime runtime(runtimeConfig);
 
     PHYSICS_CORE_INIT();
-    PHYSICS_PREFAB_REGISTRY.Init("C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_asset.json");
+    PHYSICS_PREFAB_REGISTRY.Init("C://Users//matae//GameWorkSpace//Jam//TestApp//Contents//test_asset.json");
 
 
     TestConfig testConfig{};

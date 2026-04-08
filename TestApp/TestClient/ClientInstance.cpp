@@ -57,7 +57,7 @@ bool ClientInstance::Connect(const string& serverIp, uint16 tcpPort, uint16 udpP
 	config.serverTcpAddress = net::NetAddress(serverIp, tcpPort);
 	config.serverUdpAddress = net::NetAddress(serverIp, udpPort);
 	config.physicsFactory = [] { return std::make_unique<jam::px::PhysicsFacade>(); };
-	config.levelPath = "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
+	config.levelPath = "C://Users//matae//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
 
 	m_networkManager = std::make_unique<net::ClientNetworkManager>(config, m_userId);
 

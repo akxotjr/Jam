@@ -244,6 +244,7 @@ void Renderer::Init(uint32 numWindows /*=1*/)
     InitBox();
     InitPlane();
     InitRay();
+    InitGridPlaneBox();
     // Sphere / Capsule은 lazy init (Draw할 때 InitSphere / InitCapsule 호출)
 
 
@@ -364,6 +365,11 @@ void Renderer::Shutdown()
                 glDeleteVertexArrays(1, &m_crossVAO[i]);
                 m_crossVAO[i] = 0;
             }
+            if (m_gridPlaneBoxVAO[i])
+            {
+                glDeleteVertexArrays(1, &m_gridPlaneBoxVAO[i]);
+                m_gridPlaneBoxVAO[i] = 0;
+            }
         }
 
         // 공유 버퍼 삭제
@@ -425,6 +431,13 @@ void Renderer::Shutdown()
             glDeleteBuffers(1, &m_crossVBO);
             m_crossVBO = 0;
             m_crosshairInitialized = false;
+        }
+
+        if (m_gridPlaneBoxInitialized)
+        {
+            glDeleteBuffers(1, &m_gridPlaneBoxVBO);
+            m_gridPlaneBoxVBO = 0;
+            m_gridPlaneBoxInitialized = false;
         }
 
         if (m_shaderProgram)
@@ -722,6 +735,90 @@ void Renderer::DrawRay(const glm::vec3& start, const glm::vec3& end, const glm::
     glLineWidth(2.0f);
     glBindVertexArray(vao);
     glDrawArrays(GL_LINES, 0, 2);
+    glBindVertexArray(0);
+}
+
+void Renderer::DrawGridPlaneBox(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& scale, const glm::vec4& boxColor, const glm::vec4& gridColor, float gridCellSize)
+{
+    if (!m_gridPlaneBoxInitialized || m_currentWindowIndex < 0)
+        return;
+
+    if (gridCellSize <= 0.0f)
+        return;
+
+    // 1) 먼저 얇은 박스 본체를 그림
+    DrawBox(position, rotation, scale, boxColor);
+
+    EnsureGridPlaneBoxVAO();
+    GLuint vao = m_gridPlaneBoxVAO[m_currentWindowIndex];
+    if (!vao) return;
+
+    const float halfX = scale.x * 0.5f;
+    const float halfZ = scale.z * 0.5f;
+
+    // 윗면 바로 위에 살짝 띄워서 z-fighting 방지
+    const float topY = scale.y * 0.5f + 0.002f;
+
+    std::vector<float> lineVertices;
+    lineVertices.reserve(4096);
+
+    constexpr glm::vec3 normal(0.0f, 1.0f, 0.0f);
+
+    auto PushVertex = [&](float x, float y, float z)
+        {
+            lineVertices.push_back(x);
+            lineVertices.push_back(y);
+            lineVertices.push_back(z);
+            lineVertices.push_back(normal.x);
+            lineVertices.push_back(normal.y);
+            lineVertices.push_back(normal.z);
+        };
+
+    // local space 기준 top face 위에 grid 생성
+    for (float z = -halfZ; z <= halfZ + 0.0001f; z += gridCellSize)
+    {
+        PushVertex(-halfX, topY, z);
+        PushVertex(halfX, topY, z);
+    }
+
+    for (float x = -halfX; x <= halfX + 0.0001f; x += gridCellSize)
+    {
+        PushVertex(x, topY, -halfZ);
+        PushVertex(x, topY, halfZ);
+    }
+
+    if (lineVertices.empty())
+        return;
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_gridPlaneBoxVBO);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, lineVertices.size() * sizeof(float), lineVertices.data());
+
+    glUseProgram(m_shaderProgram);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    model = glm::rotate(model, rotation.x, glm::vec3(1, 0, 0));
+    model = glm::rotate(model, rotation.y, glm::vec3(0, 1, 0));
+    model = glm::rotate(model, rotation.z, glm::vec3(0, 0, 1));
+
+    glm::mat4 mvp = m_proj * m_view * model;
+
+    glUniformMatrix4fv(m_shaderLocMVP, 1, GL_FALSE, glm::value_ptr(mvp));
+    glUniformMatrix4fv(m_shaderLocModel, 1, GL_FALSE, glm::value_ptr(model));
+    glUniform4f(m_shaderLocColor, gridColor.r, gridColor.g, gridColor.b, gridColor.a);
+
+    glm::vec3 lightDir = glm::normalize(glm::vec3(0.5f, -1.0f, 0.3f));
+    glm::vec3 lightColor(1.0f, 0.95f, 0.8f);
+    glm::vec3 ambientColor(0.35f, 0.4f, 0.5f);
+
+    glUniform3fv(m_shaderLocLightDir, 1, glm::value_ptr(lightDir));
+    glUniform3fv(m_shaderLocLightColor, 1, glm::value_ptr(lightColor));
+    glUniform3fv(m_shaderLocAmbientColor, 1, glm::value_ptr(ambientColor));
+    glUniform3fv(m_shaderLocViewPos, 1, glm::value_ptr(m_cameraEye));
+
+    glLineWidth(1.0f);
+    glBindVertexArray(vao);
+    glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(lineVertices.size() / 6));
     glBindVertexArray(0);
 }
 
@@ -1269,6 +1366,20 @@ void Renderer::InitRay()
     m_rayInitialized = true;
 }
 
+void Renderer::InitGridPlaneBox()
+{
+    if (m_gridPlaneBoxInitialized)
+        return;
+
+    constexpr GLsizeiptr maxFloatCount = 8192 * 6;
+
+    glGenBuffers(1, &m_gridPlaneBoxVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_gridPlaneBoxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * maxFloatCount, nullptr, GL_DYNAMIC_DRAW);
+
+    m_gridPlaneBoxInitialized = true;
+}
+
 // ======================
 // 윈도우별 VAO 생성
 // ======================
@@ -1402,7 +1513,7 @@ void Renderer::EnsureRayVAO()
     glBindVertexArray(0);
 }
 
-void Renderer::EnsureMeshVAO(GpuMesh& m)
+void Renderer::EnsureMeshVAO(GpuMesh& m) const
 {
     if (m_currentWindowIndex < 0) return;
     uint32 idx = static_cast<uint32>(m_currentWindowIndex);
@@ -1421,6 +1532,29 @@ void Renderer::EnsureMeshVAO(GpuMesh& m)
 
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+
+    glBindVertexArray(0);
+}
+
+void Renderer::EnsureGridPlaneBoxVAO()
+{
+    if (!m_gridPlaneBoxInitialized || m_currentWindowIndex < 0) return;
+    uint32 idx = static_cast<uint32>(m_currentWindowIndex);
+    if (idx >= m_windowCount) return;
+    if (m_gridPlaneBoxVAO[idx] != 0) return;
+
+    glGenVertexArrays(1, &m_gridPlaneBoxVAO[idx]);
+    glBindVertexArray(m_gridPlaneBoxVAO[idx]);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_gridPlaneBoxVBO);
+
+    // Position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // Normal
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
 }

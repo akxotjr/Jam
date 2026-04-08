@@ -67,19 +67,19 @@ private:
 	void                                HandleRenderSamples(const net::RenderSamplesEvent& evt);
 
 private:
-	uint32                              m_instanceId = 0;
-	uint64                              m_userId = 0;
-	uint32                              m_windowIndex = 0;
+	uint32									m_instanceId	= 0;
+	uint64									m_userId		= 0;
+	uint32									m_windowIndex	= 0;
 
-	unique_ptr<net::ClientNetworkManager> m_networkManager = nullptr;
+	unique_ptr<net::ClientNetworkManager>	m_networkManager = nullptr;
 
-	uint32                              m_nextSpawnReqId = 1;
-	unordered_set<uint32>               m_pendingPlayerSpawnReqIds;
+	uint32									m_nextSpawnReqId = 1;
+	unordered_set<uint32>					m_pendingPlayerSpawnReqIds;
 
-	GlobalEventBus::Subscription        m_subLevelSpawned;
-	GlobalEventBus::Subscription        m_subActorSpawned;
-	GlobalEventBus::Subscription        m_subActorDespawned;
-	GlobalEventBus::Subscription        m_subRenderSamples;
+	GlobalEventBus::Subscription			m_subLevelSpawned;
+	GlobalEventBus::Subscription			m_subActorSpawned;
+	GlobalEventBus::Subscription			m_subActorDespawned;
+	GlobalEventBus::Subscription			m_subRenderSamples;
 
-	px::ObjectId                        m_localObjectId = px::INVALID_OBJ_ID;
+	px::ObjectId							m_localObjectId = px::INVALID_OBJ_ID;
 };

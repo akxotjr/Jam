@@ -354,19 +354,21 @@ void UserInstance::CreateRenderingLevelData(const net::RenderLevelSpawnedEvent& 
 			if (!def || !def->IsRigid()) continue;
 
 			const auto& rigidBody = std::get<px::RigidBodyDef>(def->body);
-			const auto& shapeDef = PHYSICS_PREFAB_REGISTRY.GetShapeDef(rigidBody.shapes[0]);
+			const auto& shapeDef  = PHYSICS_PREFAB_REGISTRY.GetShapeDef(rigidBody.shapes[0]);
 
 			if (shapeDef.IsMeshGeometry()) continue;
 
-			data.ensured = true;
-			data.pendingSpawnReqId = 0;
-			data.isLocal = false;
-			data.shape = shapeDef.type;
-			data.boxHalfExtents = px::ToPx(shapeDef.halfExtents);
-			data.capsuleRadius = shapeDef.radius;
-			data.capsuleHalfHeight = shapeDef.halfHeight;
-			data.sphereRadius = shapeDef.radius;
-			data.color = ResolveColor(def->actorType, def->bodyType, def->motionType);
+			data.ensured			= true;
+			data.pendingSpawnReqId	= 0;
+			data.isLocal			= false;
+			data.shape				= shapeDef.type;
+			data.boxHalfExtents	    = px::ToPx(shapeDef.halfExtents);
+			data.capsuleRadius		= shapeDef.radius;
+			data.capsuleHalfHeight	= shapeDef.halfHeight;
+			data.sphereRadius		= shapeDef.radius;
+			data.color				= ResolveColor(def->actorType, def->bodyType, def->motionType);
+
+			data.isFloor			= def->name == "Floor";
 		}
 	}
 }
@@ -387,11 +389,11 @@ ActorRenderingData* UserInstance::EnsureRenderingActorData(const net::RenderActo
 			const auto& rigidBody = std::get<px::RigidBodyDef>(def->body);
 			const auto& shapeDef = PHYSICS_PREFAB_REGISTRY.GetShapeDef(rigidBody.shapes[0]);
 
-			data.shape = shapeDef.type;
-			data.boxHalfExtents = px::ToPx(shapeDef.halfExtents);
-			data.capsuleRadius = shapeDef.radius;
-			data.capsuleHalfHeight = shapeDef.halfHeight;
-			data.sphereRadius = shapeDef.radius;
+			data.shape				= shapeDef.type;
+			data.boxHalfExtents		= px::ToPx(shapeDef.halfExtents);
+			data.capsuleRadius		= shapeDef.radius;
+			data.capsuleHalfHeight	= shapeDef.halfHeight;
+			data.sphereRadius		= shapeDef.radius;
 
 			data.color = ResolveColor(def->actorType, def->bodyType, def->motionType);
 		}
@@ -400,9 +402,9 @@ ActorRenderingData* UserInstance::EnsureRenderingActorData(const net::RenderActo
 			const auto& charBody = std::get<px::CharacterBodyDef>(def->body);
 			const auto& cct = PHYSICS_PREFAB_REGISTRY.GetCCTBodyDef(charBody.cct);
 
-			data.shape = px::eShapeType::Capsule;
-			data.capsuleHalfHeight = cct.height * 0.5f;
-			data.capsuleRadius = cct.radius;
+			data.shape				= px::eShapeType::Capsule;
+			data.capsuleHalfHeight	= cct.height * 0.5f;
+			data.capsuleRadius		= cct.radius;
 
 			data.color = ResolveColor(def->actorType, def->bodyType, def->motionType, charBody.controllerType);
 		}
@@ -428,8 +430,7 @@ void UserInstance::BuildRenderFrames()
 
 		if (data.isLocal)
 		{
-			GetSmoothedLocalTransform(data, interpPos, interpRot,
-				data.cachedRenderPos, data.cachedRenderRot);
+			GetSmoothedLocalTransform(data, interpPos, interpRot, data.cachedRenderPos, data.cachedRenderRot);
 		}
 		else
 		{
@@ -460,13 +461,13 @@ void UserInstance::UpdateCamera()
 		offset.y = m_topDownHeight;
 		offset.z = -m_topDownBackOffset * cosf(m_yaw);
 
-		m_cameraPos = actorPos + offset;
+		m_cameraPos    = actorPos + offset;
 		m_cameraTarget = actorPos + glm::vec3(0.0f, 0.5f, 0.0f);
 		return;
 	}
 
-	m_cameraPos = glm::vec3(0, 24, -12);
-	m_cameraTarget = glm::vec3(0, 0, 0);
+	m_cameraPos		= glm::vec3(0, 24, -12);
+	m_cameraTarget	= glm::vec3(0, 0, 0);
 }
 
 void UserInstance::RenderActors()
@@ -484,7 +485,11 @@ void UserInstance::RenderActors()
 		case px::eShapeType::Box:
 		{
 			glm::vec3 scale = glm::vec3(data.boxHalfExtents.x * 2.f, data.boxHalfExtents.y * 2.f, data.boxHalfExtents.z * 2.f);
-			Renderer::Instance().DrawBox(position, rotation, scale, data.color);
+			
+			if (data.isFloor)
+				Renderer::Instance().DrawGridPlaneBox(position, rotation, scale, data.color, glm::vec4(1.f, 0.f, 0.f, 1.f), 5);
+			else
+				Renderer::Instance().DrawBox(position, rotation, scale, data.color);
 			break;
 		}
 

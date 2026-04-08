@@ -15,29 +15,31 @@ struct ActorSnapshot
 
 struct ActorRenderingData
 {
-	glm::vec4               color = {};
-	px::eShapeType          shape = {};
-	px::Vec3                boxHalfExtents = { 0.5f, 0.5f, 0.5f };
-	float                   sphereRadius = 0.5f;
-	float                   capsuleRadius = 0.5f;
-	float                   capsuleHalfHeight = 0.5f;
+	glm::vec4               color				= {};
+	px::eShapeType          shape				= {};
+	px::Vec3                boxHalfExtents		= { 0.5f, 0.5f, 0.5f };
+	float                   sphereRadius		= 0.5f;
+	float                   capsuleRadius		= 0.5f;
+	float                   capsuleHalfHeight	= 0.5f;
 	string                  meshPath;
 
-	bool                    ensured = false;
-	uint32                  pendingSpawnReqId = 0;
+	bool					isFloor				= false;
 
-	px::ObjectId            oid = px::INVALID_OBJ_ID;
-	bool                    isLocal = false;
+	bool                    ensured				= false;
+	uint32                  pendingSpawnReqId	= 0;
+
+	px::ObjectId            oid					= px::INVALID_OBJ_ID;
+	bool                    isLocal				= false;
 	deque<ActorSnapshot>    snapshots;
 
-	px::Vec3                smoothedPos = px::Vec3::Zero();
-	px::Quat                smoothedRot = px::Quat::Identity();
-	bool                    hasSmoothed = false;
-	uint32                  lastSmoothedFrame = 0;
+	px::Vec3                smoothedPos			= px::Vec3::Zero();
+	px::Quat                smoothedRot			= px::Quat::Identity();
+	bool                    hasSmoothed			= false;
+	uint32                  lastSmoothedFrame	= 0;
 
-	px::Vec3                cachedRenderPos = px::Vec3::Zero();
-	px::Quat                cachedRenderRot = px::Quat::Identity();
-	bool                    renderFrameCached = false;
+	px::Vec3                cachedRenderPos		= px::Vec3::Zero();
+	px::Quat                cachedRenderRot		= px::Quat::Identity();
+	bool                    renderFrameCached	= false;
 };
 
 class UserInstance : public ClientInstance
@@ -79,30 +81,30 @@ private:
 	void                    GetSmoothedLocalTransform(ActorRenderingData& data, const px::Vec3& targetPos, const px::Quat& targetRot, OUT px::Vec3& outPos, OUT px::Quat& outRot);
 
 private:
-	glm::vec3                                   m_cameraPos = glm::vec3(0, 10, 20);
-	glm::vec3                                   m_cameraTarget = glm::vec3(0, 0, 0);
+	glm::vec3                                   m_cameraPos		= glm::vec3(0, 10, 20);
+	glm::vec3                                   m_cameraTarget	= glm::vec3(0, 0, 0);
 
 	static constexpr uint32                     MAX_SNAPSHOT_BUFFER = 10;
 	static constexpr uint32                     INTERPOLATION_DELAY = 4;
 
 	unordered_map<px::ObjectId, ActorRenderingData> m_actorRenderData;
-	uint32                                      m_currentRenderTick = 0;
-	uint32                                      m_latestServerTick = 0;
-	float                                       m_tickAccumulator = 0.0f;
+	uint32											m_currentRenderTick = 0;
+	uint32											m_latestServerTick = 0;
+	float											m_tickAccumulator = 0.0f;
 
-	bool                                        m_mouseInitialized = false;
-	bool                                        m_prevRightMouseDown = false;
-
-	bool                                        m_hasMoveTarget = false;
-	px::Vec3                                    m_moveTarget = px::Vec3::Zero();
-	float                                       m_clickMoveStopRadius = 0.8f;
-	float                                       m_clickMoveRange = 10000.0f;
-
-	float                                       m_topDownHeight = 24.0f;
-	float                                       m_topDownBackOffset = 12.0f;
-
-	float                                       m_lastActorY = 0.0f;
-	float                                       m_actorYStabilizeEps = 0.01f;
-
-	unordered_map<uint32, ActorRenderingData>   m_pendingSpawnToRenderData;
+	bool											m_mouseInitialized = false;
+	bool											m_prevRightMouseDown = false;
+													
+	bool											m_hasMoveTarget = false;
+	px::Vec3										m_moveTarget = px::Vec3::Zero();
+	float											m_clickMoveStopRadius = 0.8f;
+	float											m_clickMoveRange = 10000.0f;
+													
+	float											m_topDownHeight = 24.0f;
+	float											m_topDownBackOffset = 12.0f;
+													
+	float											m_lastActorY = 0.0f;
+	float											m_actorYStabilizeEps = 0.01f;
+													
+	unordered_map<uint32, ActorRenderingData>		m_pendingSpawnToRenderData;
 };
