@@ -23,13 +23,13 @@ public:
 	void								SpawnActor();
 	void								SpawnPlayer();
 	void								SpawnPlayerDrone();
-	void								SpawnBullet();
+	void								SpawnBullet(const px::Vec3& muzzlePos, const px::Vec3& shootDir);
 
 	void								DespawnActor();
 	void								PossessActor();
 	void								UnpossessActor();
 
-	void								ControlCharacter(uint32 inputFlags, float pitch, float yaw);
+	void								ControlCharacter(uint32 inputFlags, float pitch, float yaw, uint32 commandEpoch = 0);
 
 	void                                SetWindowIndex(uint32 index) { m_windowIndex = index; }
 
@@ -51,6 +51,7 @@ protected:
 	virtual void                        OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt) {}
 	virtual void                        OnActorSpawned(const net::RenderActorSpawnedEvent& evt) {}
 	virtual void                        OnActorDespawned(const net::RenderActorDespawnedEvent& evt) {}
+	virtual void                        OnClickMoveResolved(const net::ClickMoveResolvedEvent& evt) {}
 	virtual void                        OnRenderSamples(const net::RenderSamplesEvent& evt) {}
 
 	uint32                              GetWindowIndex() const { return m_windowIndex; }
@@ -64,6 +65,7 @@ private:
 	void                                HandleLevelSpawned(const net::RenderLevelSpawnedEvent& evt);
 	void                                HandleActorSpawned(const net::RenderActorSpawnedEvent& evt);
 	void                                HandleActorDespawned(const net::RenderActorDespawnedEvent& evt);
+	void                                HandleClickMoveResolved(const net::ClickMoveResolvedEvent& evt);
 	void                                HandleRenderSamples(const net::RenderSamplesEvent& evt);
 
 private:
@@ -79,6 +81,7 @@ private:
 	GlobalEventBus::Subscription			m_subLevelSpawned;
 	GlobalEventBus::Subscription			m_subActorSpawned;
 	GlobalEventBus::Subscription			m_subActorDespawned;
+	GlobalEventBus::Subscription			m_subClickMoveResolved;
 	GlobalEventBus::Subscription			m_subRenderSamples;
 
 	px::ObjectId							m_localObjectId = px::INVALID_OBJ_ID;

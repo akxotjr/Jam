@@ -186,6 +186,10 @@ private:
     // 카메라 / 투영 (전역 – 현재는 모든 윈도우에서 공유, 필요하면 per-window로 확장)
     glm::mat4               m_view = glm::mat4(1.0f);
     glm::mat4               m_proj = glm::mat4(1.0f);
+    glm::mat4               m_viewByWindow[MAX_WINDOWS] = {};
+    glm::mat4               m_projByWindow[MAX_WINDOWS] = {};
+    bool                    m_hasViewByWindow[MAX_WINDOWS] = { false, };
+    bool                    m_hasProjByWindow[MAX_WINDOWS] = { false, };
 
     glm::vec3               m_cameraUp = { 0, 1, 0 };
     glm::vec4               m_cameraOffset = { -0.2f, 0.4f, -1.5f , 1.0f };

@@ -18,6 +18,16 @@ namespace jam::net
 		if (ctx.local == entt::null || !world.valid(ctx.local))
 			return;
 
+		px::ActorContext localCtx{};
+		localCtx.oid   = MakeObjectId(ctx.local);
+		localCtx.state = world.get<CharAuthorityState>(ctx.local).state;
+
+		std::vector<px::ActorContext> one;
+		one.reserve(1);
+		one.push_back(localCtx);
+
+		m_physics->PushReplayStates(one);
+
 		auto view = world.view<ReplayRelevantTag, NetActorBodyType>();
 		for (auto e : view)
 		{
@@ -70,13 +80,22 @@ namespace jam::net
 
 	void CorrectionReplayRunner::Commit(entt::registry& world, const ReplayContext& ctx)
 	{
-		auto& replayBuf  = world.ctx().get<ReplayPredictedBuffer>();
-		auto& predHist   = world.ctx().get<PredictedHistoryBuffer>();
-		auto& live		 = world.ctx().get<LivePredictedState>();
-		auto& correction = world.ctx().get<CorrectionState>();
-		auto& delta		 = world.ctx().get<RenderCorrectionDelta>();
+		auto& replayBuf   = world.ctx().get<ReplayPredictedBuffer>();
+		auto& predHist    = world.ctx().get<PredictedHistoryBuffer>();
+		auto& replayStats = world.ctx().get<ReplayStats>();
+		auto& live		  = world.ctx().get<LivePredictedState>();
+		auto& correction  = world.ctx().get<CorrectionState>();
+		auto& delta		  = world.ctx().get<RenderCorrectionDelta>();
 
 		const px::CharacterState preLive = live;
+
+		if (replayStats.truncated)
+		{
+			correction = live;
+			delta = {};
+			replayBuf.Clear();
+			return;
+		}
 
 		predHist.PruneFrom(ctx.inputAck + 1);
 
@@ -91,12 +110,25 @@ namespace jam::net
 		}
 		else
 		{
-			correction = live;  // replay 샘플이 없으면 correction을 기존 live로 유지
+			//correction = live;  // replay 샘플이 없으면 correction을 기존 live로 유지
+
+			// replay 샘플이 없으면(local ack==current 등) authoritative를 기준으로 correction 구성
+			if (ctx.local != entt::null && world.valid(ctx.local) && world.all_of<CharAuthorityState>(ctx.local))
+				correction = world.get<CharAuthorityState>(ctx.local).state;
+			else
+				correction = live;
 		}
 
-		delta.pos   = correction.pos - preLive.pos;
-		delta.yaw   = correction.facingYaw - preLive.facingYaw;
-		delta.pitch = correction.facingPitch - preLive.facingPitch;
+		if (replayStats.meaningfulInputCount == 0)
+		{
+			delta = {};
+		}
+		else
+		{
+			delta.pos   = correction.pos - preLive.pos;
+			delta.yaw   = correction.facingYaw - preLive.facingYaw;
+			delta.pitch = correction.facingPitch - preLive.facingPitch;
+		}
 
 		live = correction; // logical state overwrite
 

@@ -234,13 +234,17 @@
     <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\ClientSession.h" />
     <ClInclude Include="include\jamnet\runtime\ClientTransportAdapter.h" />
-    <ClInclude Include="include\jamnet\runtime\matchmaking\DefaultMatchmaker.h" />
-    <ClInclude Include="include\jamnet\runtime\matchmaking\IMatchmaker.h" />
+    <ClInclude Include="include\jamnet\runtime\world\DefaultWorldAssignmentPolicy.h" />
+    <ClInclude Include="include\jamnet\runtime\world\IWorldAssignmentPolicy.h" />
+    <ClInclude Include="include\jamnet\runtime\world\DefaultWorldAssignmentService.h" />
+    <ClInclude Include="include\jamnet\runtime\world\WorldDirectory.h" />
+    <ClInclude Include="include\jamnet\runtime\world\IWorldAssignmentService.h" />
     <ClInclude Include="include\jamnet\runtime\schema\gen\binding_handshake_generated.h" />
-    <ClInclude Include="include\jamnet\runtime\schema\gen\matchmaking_generated.h" />
+    <ClInclude Include="include\jamnet\runtime\schema\gen\world_assignment_generated.h" />
     <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\ServerSession.h" />
     <ClInclude Include="include\jamnet\runtime\ServerTransportAdapter.h" />
+    <ClInclude Include="include\jamnet\runtime\world\WorldAssignmentTypes.h" />
     <ClInclude Include="include\jamnet\sync\networld\ClientNetWorld.h" />
     <ClInclude Include="include\jamnet\sync\networld\NetWorld.h" />
     <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h" />
@@ -324,10 +328,12 @@
     <ClCompile Include="src\runtime\ClientNetworkManager.cpp" />
     <ClCompile Include="src\runtime\ClientSession.cpp" />
     <ClCompile Include="src\runtime\ClientTransportAdapter.cpp" />
-    <ClCompile Include="src\runtime\matchmaking\DefaultMatchmaker.cpp" />
     <ClCompile Include="src\runtime\ServerNetworkManager.cpp" />
     <ClCompile Include="src\runtime\ServerSession.cpp" />
     <ClCompile Include="src\runtime\ServerTransportAdapter.cpp" />
+    <ClCompile Include="src\runtime\world\DefaultWorldAssignmentPolicy.cpp" />
+    <ClCompile Include="src\runtime\world\DefaultWorldAssignmentService.cpp" />
+    <ClCompile Include="src\runtime\world\WorldDirectory.cpp" />
     <ClCompile Include="src\sync\networld\ClientNetWorld.cpp" />
     <ClCompile Include="src\sync\networld\NetWorld.cpp" />
     <ClCompile Include="src\sync\networld\ServerNetWorld.cpp" />
@@ -593,7 +599,7 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\schema\fbs\matchmaking.fbs">
+    <CustomBuild Include="include\jamnet\runtime\schema\fbs\world_assignment.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 

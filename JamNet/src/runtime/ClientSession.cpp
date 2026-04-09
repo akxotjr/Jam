@@ -109,14 +109,14 @@ namespace jam::net
 		RPCCallAsyncMember<fb::fbUdpBindReqT, fb::fbUdpBindResT>(self, std::move(req), opt, this, &ClientUdpSession::OnUdpBindResponse);
     }
 
-    void ClientUdpSession::RequestGroupId()
+    void ClientUdpSession::RequestWorldAssignment()
     {
-        fb::fbRequestGroupIdReqT req{};
+        fb::fbRequestWorldAssignmentReqT req{};
         
         RPCCallOptions opt{ eChannelType::RELIABLE_ORDERED, 3_s };
 
         auto self = static_pointer_cast<ClientUdpSession>(shared_from_this());
-        RPCCallAsyncMember<fb::fbRequestGroupIdReqT, fb::fbRequestGroupIdResT>(self, std::move(req), opt, this, &ClientUdpSession::OnRequestGroupIdRes);
+        RPCCallAsyncMember<fb::fbRequestWorldAssignmentReqT, fb::fbRequestWorldAssignmentResT>(self, std::move(req), opt, this, &ClientUdpSession::OnRequestWorldAssignmentRes);
     }
 
     void ClientUdpSession::OnUdpBindResponse(std::optional<fb::fbUdpBindResT> res)
@@ -141,16 +141,16 @@ namespace jam::net
     }
 
 
-    void ClientUdpSession::OnRequestGroupIdRes(std::optional<fb::fbRequestGroupIdResT> res)
+    void ClientUdpSession::OnRequestWorldAssignmentRes(std::optional<fb::fbRequestWorldAssignmentResT> res)
     {
         if (!res.has_value())
         {
-            JAMNET_LOG_ERROR("Request GroupID RPC: timeout or connection lost");
+            JAMNET_LOG_ERROR("Request world assignment RPC: timeout or connection lost");
             return;
         }
 
-        m_groupId = res->group_id;
+        m_worldId = res->world_id;
 
-        if (m_manager) m_manager->NotifyMatchmakingSuccess(m_groupId);
+        if (m_manager) m_manager->NotifyWorldAssignmentSuccess(m_worldId);
     }
 }

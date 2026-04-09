@@ -50,6 +50,7 @@ namespace jam::net
 
 			const uint64 serverTick = hdr->server_tick;
 			const uint32 inputAck   = hdr->input_ack;
+			const uint32 inputEpoch = hdr->input_epoch;
 			
 			if (serverTick < m_lastServerTick)
 				continue;
@@ -69,7 +70,7 @@ namespace jam::net
 			for (const auto& entPtr : snapshot.entities)
 			{
 				if (!entPtr) continue;
-				ProcessEntity(*entPtr, serverTick);
+				ProcessEntity(*entPtr, serverTick, inputEpoch);
 			}
 
 			ResolveDeferredTargetBindingsAndSpawn();
@@ -115,7 +116,7 @@ namespace jam::net
 		netWorld->SetReplicatedActorDormant(netId);
 	}
 
-	void ClientReplicationSystem::ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick)
+	void ClientReplicationSystem::ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch)
 	{
 		const NetId  nid		 = NetId::MakeRaw(ent.net_id);
 		const uint32 baselineRev = ent.baseline_rev;
@@ -145,11 +146,11 @@ namespace jam::net
 
 		if (hasCharFull)
 		{
-			ApplyCharacterFullSnapshot(serverTick, nid, ent.character_full.get(), baselineRev, replica.isLocal);
+			ApplyCharacterFullSnapshot(serverTick, nid, ent.character_full.get(), baselineRev, replica.isLocal, inputEpoch);
 		}
 		else if (hasCharDelta)
 		{
-			ApplyCharacterDeltaSnapshot(serverTick, nid, ent.character_delta.get(), baselineRev, replica.isLocal);
+			ApplyCharacterDeltaSnapshot(serverTick, nid, ent.character_delta.get(), baselineRev, replica.isLocal, inputEpoch);
 		}
 		else if (hasKine)
 		{
@@ -334,7 +335,7 @@ namespace jam::net
 		rs.kineState = kine;
 	}
 
-	void ClientReplicationSystem::ApplyCharacterFullSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterFull160* ch, uint32 baselineRev, bool isLocal)
+	void ClientReplicationSystem::ApplyCharacterFullSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterFull160* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch)
 	{
 		px::CharacterState unpacked{};
 		if (!UnpackCharacterFull160(ch->data0(), ch->data1(), ch->data2(), unpacked))
@@ -360,7 +361,7 @@ namespace jam::net
 			cs = unpacked;
 
 			auto& signal = m_world.ctx().get<ReconcileSignal>();
-			if (serverTick > signal.serverTick || m_lastInputAck >= signal.inputAck)
+			if (m_lastInputAck > signal.inputAck && inputEpoch >= GetCurrentLocalCommandEpoch())
 			{
 				signal.serverTick = serverTick;
 				signal.inputAck   = m_lastInputAck;
@@ -377,7 +378,7 @@ namespace jam::net
 		cs = unpacked;
 	}
 
-	void ClientReplicationSystem::ApplyCharacterDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterDelta128* ch, uint32 baselineRev, bool isLocal)
+	void ClientReplicationSystem::ApplyCharacterDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterDelta128* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch)
 	{
 		Replica& replica = GetOrCreateReplica(netId);
 		replica.lastSeenTick = serverTick;
@@ -411,8 +412,10 @@ namespace jam::net
 			auto& [cs] = m_world.get<CharAuthorityState>(replica.e);
 			cs = unpacked;
 
+			//JAMNET_LOG_DEBUG("[ClientReplicationSystem] ObjectId= {}, pos({}, {}, {})", MakeObjectId(replica.e), cs.pos.x, cs.pos.y, cs.pos.z);
+
 			auto& signal = m_world.ctx().get<ReconcileSignal>();
-			if (serverTick > signal.serverTick || m_lastInputAck >= signal.inputAck)
+			if (m_lastInputAck > signal.inputAck && inputEpoch >= GetCurrentLocalCommandEpoch())
 			{
 				signal.serverTick = serverTick;
 				signal.inputAck   = m_lastInputAck;
@@ -544,5 +547,13 @@ namespace jam::net
 
 		outObjId = MakeObjectId(targetEntity);
 		return true;
+	}
+
+	uint32 ClientReplicationSystem::GetCurrentLocalCommandEpoch() const
+	{
+		if (auto* nwPtr = m_world.ctx().find<ClientNetWorld*>(); nwPtr && *nwPtr)
+			return (*nwPtr)->GetLatestLocalCommandEpoch();
+
+		return 0;
 	}
 }

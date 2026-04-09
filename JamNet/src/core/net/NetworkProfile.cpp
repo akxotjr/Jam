@@ -349,9 +349,11 @@ namespace jam::net::profile
 	NetworkStatsView NetworkStatsView::FromEntity(entt::registry& R, entt::entity e)
 	{
 		NetworkStatsView view{};
+		bool hasLinkQuality = false;
 
 		if (const auto* linkQuality = R.try_get<LinkQualityState>(e))
 		{
+			hasLinkQuality  = true;
 			view.rtt_ms		= linkQuality->appRttAvg_ms;
 			view.jitter_ms  = linkQuality->appJitter_ms;
 			view.packetLoss = linkQuality->GetPacketLoss();
@@ -362,6 +364,26 @@ namespace jam::net::profile
 			view.recvThroughput_kbps = trafficSample->GetRecvThroughputKbps();
 			view.sendThroughput_kbps = trafficSample->GetSendThroughputKbps();
 			view.bandwidthMbps		 = trafficSample->GetBandwidthMbps();
+		}
+
+		const auto* metrics = R.try_get<RudpMetrics>(e);
+		if (metrics)
+		{
+			const auto snapshot = CaptureRudpMetricsSnapshot(*metrics);
+			const auto kpi = BuildRudpKpiView(snapshot, GetConnectionDurationNs(R, e));
+
+			// Fallback to cumulative throughput when the latest short sample reports zero.
+			if (view.recvThroughput_kbps <= 0.0f)
+				view.recvThroughput_kbps = (kpi.rxBytesPerSec * 8.0f) / 1000.0f;
+
+			if (view.sendThroughput_kbps <= 0.0f)
+				view.sendThroughput_kbps = (kpi.txBytesPerSec * 8.0f) / 1000.0f;
+
+			if (view.bandwidthMbps <= 0.0f)
+				view.bandwidthMbps = ((kpi.rxBytesPerSec + kpi.txBytesPerSec) * 8.0f) / 1'000'000.0f;
+
+			if (!hasLinkQuality)
+				view.packetLoss = kpi.rtxHitPct / 100.0f;
 		}
 
 		return view;

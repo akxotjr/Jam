@@ -369,6 +369,7 @@ struct fbSnapshotHeaderT : public ::flatbuffers::NativeTable {
   typedef fbSnapshotHeader TableType;
   uint32_t server_tick = 0;
   uint32_t input_ack = 0;
+  uint32_t input_epoch = 0;
   bool global_keyframe = false;
 };
 
@@ -378,13 +379,17 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_SERVER_TICK = 4,
     VT_INPUT_ACK = 6,
-    VT_GLOBAL_KEYFRAME = 8
+    VT_INPUT_EPOCH = 8,
+    VT_GLOBAL_KEYFRAME = 10
   };
   uint32_t server_tick() const {
     return GetField<uint32_t>(VT_SERVER_TICK, 0);
   }
   uint32_t input_ack() const {
     return GetField<uint32_t>(VT_INPUT_ACK, 0);
+  }
+  uint32_t input_epoch() const {
+    return GetField<uint32_t>(VT_INPUT_EPOCH, 0);
   }
   bool global_keyframe() const {
     return GetField<uint8_t>(VT_GLOBAL_KEYFRAME, 0) != 0;
@@ -393,6 +398,7 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SERVER_TICK, 4) &&
            VerifyField<uint32_t>(verifier, VT_INPUT_ACK, 4) &&
+           VerifyField<uint32_t>(verifier, VT_INPUT_EPOCH, 4) &&
            VerifyField<uint8_t>(verifier, VT_GLOBAL_KEYFRAME, 1) &&
            verifier.EndTable();
   }
@@ -410,6 +416,9 @@ struct fbSnapshotHeaderBuilder {
   }
   void add_input_ack(uint32_t input_ack) {
     fbb_.AddElement<uint32_t>(fbSnapshotHeader::VT_INPUT_ACK, input_ack, 0);
+  }
+  void add_input_epoch(uint32_t input_epoch) {
+    fbb_.AddElement<uint32_t>(fbSnapshotHeader::VT_INPUT_EPOCH, input_epoch, 0);
   }
   void add_global_keyframe(bool global_keyframe) {
     fbb_.AddElement<uint8_t>(fbSnapshotHeader::VT_GLOBAL_KEYFRAME, static_cast<uint8_t>(global_keyframe), 0);
@@ -429,8 +438,10 @@ inline ::flatbuffers::Offset<fbSnapshotHeader> CreatefbSnapshotHeader(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint32_t server_tick = 0,
     uint32_t input_ack = 0,
+    uint32_t input_epoch = 0,
     bool global_keyframe = false) {
   fbSnapshotHeaderBuilder builder_(_fbb);
+  builder_.add_input_epoch(input_epoch);
   builder_.add_input_ack(input_ack);
   builder_.add_server_tick(server_tick);
   builder_.add_global_keyframe(global_keyframe);
@@ -806,6 +817,7 @@ inline void fbSnapshotHeader::UnPackTo(fbSnapshotHeaderT *_o, const ::flatbuffer
   (void)_resolver;
   { auto _e = server_tick(); _o->server_tick = _e; }
   { auto _e = input_ack(); _o->input_ack = _e; }
+  { auto _e = input_epoch(); _o->input_epoch = _e; }
   { auto _e = global_keyframe(); _o->global_keyframe = _e; }
 }
 
@@ -819,11 +831,13 @@ inline ::flatbuffers::Offset<fbSnapshotHeader> CreatefbSnapshotHeader(::flatbuff
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSnapshotHeaderT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _server_tick = _o->server_tick;
   auto _input_ack = _o->input_ack;
+  auto _input_epoch = _o->input_epoch;
   auto _global_keyframe = _o->global_keyframe;
   return jam::net::fb::CreatefbSnapshotHeader(
       _fbb,
       _server_tick,
       _input_ack,
+      _input_epoch,
       _global_keyframe);
 }
 

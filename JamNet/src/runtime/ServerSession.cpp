@@ -51,7 +51,7 @@ namespace jam::net
 		if (!m_manager)
 			return;
 
-		if (auto* world = m_manager->GetWorld(m_groupId))
+		if (auto* world = m_manager->GetWorld(m_worldId))
 		{
 			world->OnRecvPacket(view);
 		}
@@ -106,7 +106,7 @@ namespace jam::net
 		if (!m_manager)
 			return;
 
-		if (auto* world = m_manager->GetWorld(m_groupId))
+		if (auto* world = m_manager->GetWorld(m_worldId))
 		{
 			world->OnRecvPacket(view);
 		}
@@ -155,56 +155,42 @@ namespace jam::net
 		RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 	}
 
-	void ServerUdpSession::OnRequestGroupIdReq(entt::entity e, const fb::fbRequestGroupIdReqT& req, uint32 requestId)
+	void ServerUdpSession::OnRequestWorldAssignmentReq(entt::entity e, const fb::fbRequestWorldAssignmentReqT& req, uint32 requestId)
 	{
-		fb::fbRequestGroupIdResT res{};
+		(void)req;
+
+		fb::fbRequestWorldAssignmentResT res{};
 
 		if (!m_manager)
 		{
-			res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
-			res.group_id = 0;
+			res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+			res.world_id = INVALID_WORLD_ID;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
 		}
 
 		if (m_userId == 0)
 		{
-			res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
-			res.group_id = 0;
+			res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+			res.world_id = INVALID_WORLD_ID;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
 		}
 
-		auto* mm = m_manager->GetMatchmaker();
-		if (!mm)
+		const WorldAssignmentRequest assignmentReq
 		{
-			res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
-			res.group_id = 0;
-			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
-			return;
-		}
+			.principalId	 = m_userId,
+			.currentWorldId = m_worldId,
+			.currentWorld	 = m_manager->GetWorldKey(m_worldId)
+		};
 
-		const MatchmakeRequest mreq{ .principalId = m_userId };
-		const MatchmakeResult  mres = mm->RequestGroupId(mreq);
+		const WorldAssignmentResult assignment = m_manager->RequestWorldAssignment(assignmentReq);
 
-		res.status	 = static_cast<uint8>(mres.status);
-		res.group_id = (mres.status == eMatchmakeStatus::Assigned) ? mres.groupId : 0;
+		res.status	 = static_cast<uint8>(assignment.status);
+		res.world_id = assignment.IsAssigned() ? assignment.worldId : INVALID_WORLD_ID;
 
-		if (mres.status == eMatchmakeStatus::Assigned && mres.groupId != 0)
-		{
-			auto* world = m_manager->GetOrCreateWorld(mres.groupId);
-			if (!world)
-			{
-				res.status	 = static_cast<uint8>(eMatchmakeStatus::Failed);
-				res.group_id = 0;
-				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
-				return;
-			}
-
-			m_groupId = mres.groupId;
-			m_manager->JoinGroup(m_groupId, m_userId);
-			world->Enter(m_userId);
-		}
+		if (assignment.IsAssigned())
+			m_worldId = assignment.worldId;
 
 		RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 	}
@@ -213,14 +199,14 @@ namespace jam::net
 	{
 		fb::fbSpawnActorResT res{};
 
-		if (!m_manager || m_groupId == 0)
+		if (!m_manager || m_worldId == INVALID_WORLD_ID)
 		{
 			res.success = false;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
 		}
 
-		ServerNetWorld* nw = m_manager->GetWorld(m_groupId);
+		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
 		if (!nw)
 		{
 			res.success = false;
@@ -301,14 +287,14 @@ namespace jam::net
 	{
 		fb::fbDespawnActorResT res{};
 
-		if (!m_manager || m_groupId == 0)
+		if (!m_manager || m_worldId == INVALID_WORLD_ID)
 		{
 			res.success = false;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
 		}
 
-		ServerNetWorld* nw = m_manager->GetWorld(m_groupId);
+		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
 		if (!nw)
 		{
 			res.success = false;
@@ -332,14 +318,14 @@ namespace jam::net
 	{
 		fb::fbPossessActorResT res{};
 
-		if (!m_manager || m_groupId == 0)
+		if (!m_manager || m_worldId == INVALID_WORLD_ID)
 		{
 			res.success = false;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
 		}
 
-		ServerNetWorld* nw = m_manager->GetWorld(m_groupId);
+		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
 		if (!nw)
 		{
 			res.success = false;
@@ -364,14 +350,14 @@ namespace jam::net
 	{
 		fb::fbUnpossessActorResT res{};
 
-		if (!m_manager || m_groupId == 0)
+		if (!m_manager || m_worldId == INVALID_WORLD_ID)
 		{
 			res.success = false;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
 		}
 
-		ServerNetWorld* nw = m_manager->GetWorld(m_groupId);
+		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
 		if (!nw)
 		{
 			res.success = false;

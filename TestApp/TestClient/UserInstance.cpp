@@ -92,6 +92,7 @@ void UserInstance::Render()
 
 	RenderLevelMap();
 	RenderActors();
+	RenderClickMoveMarker();
 
 	renderer.PostRender(GetWindowIndex());
 }
@@ -184,6 +185,7 @@ void UserInstance::OnRenderSamples(const net::RenderSamplesEvent& evt)
 		ActorSnapshot snapshot;
 		snapshot.tick = evt.tick;
 		snapshot.character = actor.cs;
+		snapshot.characterRaw = actor.csRaw;
 		snapshot.rigid = actor.rs;
 
 		if (!data->snapshots.empty() && data->snapshots.back().tick == evt.tick)
@@ -214,8 +216,11 @@ void UserInstance::ProcessControlInput()
 		m_mouseInitialized = true;
 	}
 
-	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT))
-		SpawnBullet();
+	const bool leftMouseDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT));
+	const bool triggerShoot = leftMouseDown & !m_prevLeftMouseDown;
+	m_prevLeftMouseDown = leftMouseDown;
+
+	if (triggerShoot) HandleShoot(window);
 
 	HandleGroundPick(window);
 
@@ -232,19 +237,75 @@ void UserInstance::ProcessControlInput()
 	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)            inputFlags |= px::INPUT_RUN;
 	if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)   inputFlags |= px::INPUT_SPRINT;
 
-	const uint32 movementFlags = px::INPUT_FORWARD | px::INPUT_BACKWARD | px::INPUT_LEFT | px::INPUT_RIGHT;
+	constexpr uint32 movementFlags = px::INPUT_FORWARD | px::INPUT_BACKWARD | px::INPUT_LEFT | px::INPUT_RIGHT;
 	if ((inputFlags & movementFlags) != 0)
 	{
+		if (!m_prevMovementInputActive || m_hasMoveTarget || m_followMoveActive)
+			++m_controlEpoch;
+		m_prevMovementInputActive = true;
+
 		m_hasMoveTarget = false;
+		m_followMoveActive = false;
+		++m_clickPickSeq;
+		if (auto* netMgr = GetNetworkManager())
+		{
+			if (auto* world = netMgr->GetWorld())
+				world->SetLatestClickMoveSeq(m_clickPickSeq);
+		}
 		m_pitch = 0.0f;
-		ControlCharacter(inputFlags, m_pitch, m_yaw);
+		ControlCharacter(inputFlags, m_pitch, m_yaw, m_controlEpoch);
 		return;
 	}
 
+	m_prevMovementInputActive = false;
+
 	if (ApplyClickMoveControl())
 		return;
+	if (m_followMoveActive)
+		return;
 
-	ControlCharacter(inputFlags, 0.0f, m_yaw);
+	ControlCharacter(inputFlags, 0.0f, m_yaw, m_controlEpoch);
+}
+
+void UserInstance::HandleShoot(GLFWwindow* window)
+{
+	double mouseX = 0.0;
+	double mouseY = 0.0;
+
+	glfwGetCursorPos(window, &mouseX, &mouseY);
+
+	glm::vec3 rayOrigin{};
+	glm::vec3 rayDir{};
+
+	if (Renderer::Instance().ScreenPointToWorldRay(GetWindowIndex(), mouseX, mouseY, rayOrigin, rayDir))
+	{
+		px::Vec3 localPos{};
+		if (!TryGetLocalActorPosition(localPos))
+			localPos = px::Vec3(m_cameraTarget.x, m_cameraTarget.y, m_cameraTarget.z);
+
+		const px::Vec3 ro = px::Vec3(rayOrigin.x, rayOrigin.y, rayOrigin.z);
+		const px::Vec3 rd = px::Vec3(rayDir.x, rayDir.y, rayDir.z).GetNormalized();
+
+		static constexpr float k_muzzleHeight = 0.9f;
+		static constexpr float k_muzzleForwardOffset = 0.45f;
+
+		const px::Vec3 baseMuzzle = localPos + px::Vec3(0.0f, k_muzzleHeight, 0.0f);
+
+		px::Vec3 target = ro + rd * 50.0f;	// falllback
+		if (std::abs(rd.y) > 1e-5f)
+		{
+			const float t = (baseMuzzle.y - ro.y) / rd.y;
+			if (t > 0.0f)
+				target = ro + rd * t;
+		}
+
+		px::Vec3 shootDir = (target - baseMuzzle).GetNormalized();
+		if (shootDir.IsZero())
+			shootDir = px::Vec3(0.0f, 0.0f, 1.0f);
+
+		const px::Vec3 muzzlePos = baseMuzzle + shootDir * k_muzzleForwardOffset;
+		SpawnBullet(muzzlePos, shootDir);
+	}
 }
 
 void UserInstance::HandleGroundPick(GLFWwindow* window)
@@ -274,16 +335,23 @@ void UserInstance::HandleGroundPick(GLFWwindow* window)
 
 	const px::Vec3 from(rayOrigin.x, rayOrigin.y, rayOrigin.z);
 	const px::Vec3 dir(rayDir.x, rayDir.y, rayDir.z);
+	const uint64 pickSeq = ++m_clickPickSeq;
+	++m_controlEpoch;
+	m_prevMovementInputActive = false;
+	world->RequestClickMove(from, dir, m_clickMoveRange, pickSeq, m_controlEpoch, m_yaw);
+}
 
-	world->RequestHitscan(from, dir, m_clickMoveRange,
-		[this](const px::HitscanResult& hit)
-		{
-			if (!hit.hit)
-				return;
+void UserInstance::OnClickMoveResolved(const net::ClickMoveResolvedEvent& evt)
+{
+	if (evt.requestSeq != m_clickPickSeq)
+		return;
 
-			m_moveTarget = hit.position;
-			m_hasMoveTarget = true;
-		});
+	m_moveTarget = evt.targetPos;
+	m_hasMoveTarget = !evt.followTarget;
+	m_followMoveActive = evt.followTarget;
+	m_hasControlSample = false;
+	m_lastControlNs = 0;
+	m_estControlSpeed = 0.0f;
 }
 
 bool UserInstance::TryGetLocalActorPosition(OUT px::Vec3& outPos) const
@@ -294,6 +362,11 @@ bool UserInstance::TryGetLocalActorPosition(OUT px::Vec3& outPos) const
 			continue;
 
 		const auto& latest = data.snapshots.back();
+		if (latest.characterRaw.has_value())
+		{
+			outPos = latest.characterRaw->pos;
+			return true;
+		}
 		if (latest.character.has_value())
 		{
 			outPos = latest.character->pos;
@@ -316,27 +389,51 @@ bool UserInstance::ApplyClickMoveControl()
 
 	px::Vec3 localPos{};
 	if (!TryGetLocalActorPosition(localPos))
-		return false;
+		return true;
+
+	{
+		const uint64 nowNs = NOW_NS();
+		if (m_hasControlSample && nowNs > m_lastControlNs)
+		{
+			const float dt = std::clamp(static_cast<float>(nowNs - m_lastControlNs) * 1e-9f, 0.001f, 0.1f);
+			const px::Vec3 planarDelta = px::Vec3(localPos.x - m_lastControlPos.x, 0.0f, localPos.z - m_lastControlPos.z);
+			const float instSpeed = planarDelta.Magnitude() / dt;
+			m_estControlSpeed = (m_estControlSpeed <= 0.0f)
+				? instSpeed
+				: (m_estControlSpeed * 0.65f + instSpeed * 0.35f);
+		}
+
+		m_lastControlPos = localPos;
+		m_lastControlNs = nowNs;
+		m_hasControlSample = true;
+	}
 
 	px::Vec3 delta = m_moveTarget - localPos;
 	delta.y = 0.0f;
 	const float distSq = delta.x * delta.x + delta.z * delta.z;
+	const float dist = std::sqrt(distSq);
+	const float brakingRadius = m_clickMoveStopRadius + m_estControlSpeed * m_clickMoveStopLeadTime;
 
-	if (distSq <= (m_clickMoveStopRadius * m_clickMoveStopRadius))
+	if (dist <= brakingRadius)
 	{
 		m_hasMoveTarget = false;
-		ControlCharacter(px::INPUT_NONE, 0.0f, m_yaw);
+		m_followMoveActive = false;
+		if (auto* netMgr = GetNetworkManager())
+		{
+			if (auto* world = netMgr->GetWorld())
+			{
+				px::CharacterInput stop{};
+				stop.commandEpoch = m_controlEpoch;
+				stop.moveMode = px::eMoveInputMode::Keyboard;
+				stop.facingYaw = m_yaw;
+				world->PushInput(stop);
+			}
+		}
 		return true;
 	}
 
-	m_yaw = std::atan2(delta.x, delta.z);
-	m_pitch = 0.0f;
-
-	uint32 flags = px::INPUT_FORWARD;
-	if (distSq > 100.0f)
-		flags |= px::INPUT_RUN;
-
-	ControlCharacter(flags, m_pitch, m_yaw);
+	// mouse move mode input is already latched in ClientInputSystem;
+	// we only keep this local check to decide when to emit stop.
 	return true;
 }
 
@@ -415,7 +512,11 @@ ActorRenderingData* UserInstance::EnsureRenderingActorData(const net::RenderActo
 
 void UserInstance::BuildRenderFrames()
 {
-	const uint32 renderTick = (m_latestServerTick > INTERPOLATION_DELAY) ? (m_latestServerTick - INTERPOLATION_DELAY) : 0;
+	static constexpr float kTickInterval = 1.0f / 60.0f;
+	const float tickAlpha = std::clamp(m_tickAccumulator / kTickInterval, 0.0f, 1.0f);
+	const float renderTick = (m_latestServerTick > INTERPOLATION_DELAY)
+		? static_cast<float>(m_latestServerTick - INTERPOLATION_DELAY) + tickAlpha
+		: tickAlpha;
 
 	for (auto& data : m_actorRenderData | views::values)
 	{
@@ -456,10 +557,7 @@ void UserInstance::UpdateCamera()
 		else
 			m_lastActorY = actorPos.y;
 
-		glm::vec3 offset;
-		offset.x = -m_topDownBackOffset * sinf(m_yaw);
-		offset.y = m_topDownHeight;
-		offset.z = -m_topDownBackOffset * cosf(m_yaw);
+		const glm::vec3 offset(0.0f, m_topDownHeight, -m_topDownBackOffset);
 
 		m_cameraPos    = actorPos + offset;
 		m_cameraTarget = actorPos + glm::vec3(0.0f, 0.5f, 0.0f);
@@ -468,6 +566,29 @@ void UserInstance::UpdateCamera()
 
 	m_cameraPos		= glm::vec3(0, 24, -12);
 	m_cameraTarget	= glm::vec3(0, 0, 0);
+}
+
+void UserInstance::RenderClickMoveMarker()
+{
+	if (!m_hasMoveTarget)
+		return;
+
+	const glm::vec3 center(m_moveTarget.x, m_moveTarget.y + 0.05f, m_moveTarget.z);
+	const glm::vec4 color(1.0f, 0.9f, 0.1f, 1.0f);
+	const float markerHalf = 0.35f;
+
+	Renderer::Instance().DrawRay(
+		center + glm::vec3(-markerHalf, 0.0f, 0.0f),
+		center + glm::vec3( markerHalf, 0.0f, 0.0f),
+		color);
+	Renderer::Instance().DrawRay(
+		center + glm::vec3(0.0f, 0.0f, -markerHalf),
+		center + glm::vec3(0.0f, 0.0f,  markerHalf),
+		color);
+	Renderer::Instance().DrawRay(
+		center,
+		center + glm::vec3(0.0f, 0.35f, 0.0f),
+		color);
 }
 
 void UserInstance::RenderActors()
@@ -522,9 +643,21 @@ void UserInstance::RenderLevelMap()
 
 void UserInstance::GetSmoothedLocalTransform(ActorRenderingData& data, const px::Vec3& targetPos, const px::Quat& targetRot, OUT px::Vec3& outPos, OUT px::Quat& outRot)
 {
-	data.smoothedPos = targetPos;
-	data.smoothedRot = targetRot;
-	data.hasSmoothed = true;
+	if (!data.hasSmoothed)
+	{
+		data.smoothedPos = targetPos;
+		data.smoothedRot = targetRot;
+		data.hasSmoothed = true;
+	}
+	else
+	{
+		static constexpr float kPosAlpha = 0.30f;
+		static constexpr float kRotAlpha = 0.25f;
+
+		data.smoothedPos = data.smoothedPos + (targetPos - data.smoothedPos) * kPosAlpha;
+		data.smoothedRot = px::Quat::Lerp(data.smoothedRot, targetRot, kRotAlpha);
+	}
+
 	data.lastSmoothedFrame = m_currentRenderTick;
 
 	outPos = data.smoothedPos;
@@ -563,7 +696,7 @@ ActorRenderingData* UserInstance::GetRenderingActorData(px::ObjectId id)
 	return nullptr;
 }
 
-void UserInstance::InterpolateActorTransform(const ActorRenderingData& data, uint32 renderTick, OUT px::Vec3& pos, OUT px::Quat& rot) const
+void UserInstance::InterpolateActorTransform(const ActorRenderingData& data, float renderTick, OUT px::Vec3& pos, OUT px::Quat& rot) const
 {
 	if (data.snapshots.empty())
 	{
@@ -599,7 +732,7 @@ void UserInstance::InterpolateActorTransform(const ActorRenderingData& data, uin
 
 	for (const auto& snapshot : data.snapshots)
 	{
-		if (snapshot.tick <= renderTick)
+		if (static_cast<float>(snapshot.tick) <= renderTick)
 		{
 			prevSnapshot = &snapshot;
 		}
@@ -628,14 +761,16 @@ void UserInstance::InterpolateActorTransform(const ActorRenderingData& data, uin
 		return;
 	}
 
-	uint32 tickDelta = nextSnapshot->tick - prevSnapshot->tick;
-	if (tickDelta == 0)
+	const float prevTickF = static_cast<float>(prevSnapshot->tick);
+	const float nextTickF = static_cast<float>(nextSnapshot->tick);
+	const float tickDelta = nextTickF - prevTickF;
+	if (tickDelta <= 0.0f)
 	{
 		GetPosAndRot(prevSnapshot, pos, rot);
 		return;
 	}
 
-	float t = static_cast<float>(renderTick - prevSnapshot->tick) / static_cast<float>(tickDelta);
+	float t = (renderTick - prevTickF) / tickDelta;
 	t = std::clamp(t, 0.0f, 1.0f);
 	t = t * t * (3 - 2 * t);
 

@@ -26,8 +26,15 @@ struct fbGameInputT : public ::flatbuffers::NativeTable {
   uint64_t user_id = 0;
   uint32_t sequence = 0;
   uint32_t flags = 0;
+  uint32_t command_epoch = 0;
   float yaw = 0.0f;
   float pitch = 0.0f;
+  uint8_t move_mode = 0;
+  uint8_t mouse_move_kind = 0;
+  float target_x = 0.0f;
+  float target_y = 0.0f;
+  float target_z = 0.0f;
+  uint32_t target_net_id = 0;
 };
 
 struct fbGameInput FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -37,8 +44,15 @@ struct fbGameInput FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_USER_ID = 4,
     VT_SEQUENCE = 6,
     VT_FLAGS = 8,
-    VT_YAW = 10,
-    VT_PITCH = 12
+    VT_COMMAND_EPOCH = 10,
+    VT_YAW = 12,
+    VT_PITCH = 14,
+    VT_MOVE_MODE = 16,
+    VT_MOUSE_MOVE_KIND = 18,
+    VT_TARGET_X = 20,
+    VT_TARGET_Y = 22,
+    VT_TARGET_Z = 24,
+    VT_TARGET_NET_ID = 26
   };
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
@@ -49,19 +63,47 @@ struct fbGameInput FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t flags() const {
     return GetField<uint32_t>(VT_FLAGS, 0);
   }
+  uint32_t command_epoch() const {
+    return GetField<uint32_t>(VT_COMMAND_EPOCH, 0);
+  }
   float yaw() const {
     return GetField<float>(VT_YAW, 0.0f);
   }
   float pitch() const {
     return GetField<float>(VT_PITCH, 0.0f);
   }
+  uint8_t move_mode() const {
+    return GetField<uint8_t>(VT_MOVE_MODE, 0);
+  }
+  uint8_t mouse_move_kind() const {
+    return GetField<uint8_t>(VT_MOUSE_MOVE_KIND, 0);
+  }
+  float target_x() const {
+    return GetField<float>(VT_TARGET_X, 0.0f);
+  }
+  float target_y() const {
+    return GetField<float>(VT_TARGET_Y, 0.0f);
+  }
+  float target_z() const {
+    return GetField<float>(VT_TARGET_Z, 0.0f);
+  }
+  uint32_t target_net_id() const {
+    return GetField<uint32_t>(VT_TARGET_NET_ID, 0);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_SEQUENCE, 4) &&
            VerifyField<uint32_t>(verifier, VT_FLAGS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_COMMAND_EPOCH, 4) &&
            VerifyField<float>(verifier, VT_YAW, 4) &&
            VerifyField<float>(verifier, VT_PITCH, 4) &&
+           VerifyField<uint8_t>(verifier, VT_MOVE_MODE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_MOUSE_MOVE_KIND, 1) &&
+           VerifyField<float>(verifier, VT_TARGET_X, 4) &&
+           VerifyField<float>(verifier, VT_TARGET_Y, 4) &&
+           VerifyField<float>(verifier, VT_TARGET_Z, 4) &&
+           VerifyField<uint32_t>(verifier, VT_TARGET_NET_ID, 4) &&
            verifier.EndTable();
   }
   fbGameInputT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -82,11 +124,32 @@ struct fbGameInputBuilder {
   void add_flags(uint32_t flags) {
     fbb_.AddElement<uint32_t>(fbGameInput::VT_FLAGS, flags, 0);
   }
+  void add_command_epoch(uint32_t command_epoch) {
+    fbb_.AddElement<uint32_t>(fbGameInput::VT_COMMAND_EPOCH, command_epoch, 0);
+  }
   void add_yaw(float yaw) {
     fbb_.AddElement<float>(fbGameInput::VT_YAW, yaw, 0.0f);
   }
   void add_pitch(float pitch) {
     fbb_.AddElement<float>(fbGameInput::VT_PITCH, pitch, 0.0f);
+  }
+  void add_move_mode(uint8_t move_mode) {
+    fbb_.AddElement<uint8_t>(fbGameInput::VT_MOVE_MODE, move_mode, 0);
+  }
+  void add_mouse_move_kind(uint8_t mouse_move_kind) {
+    fbb_.AddElement<uint8_t>(fbGameInput::VT_MOUSE_MOVE_KIND, mouse_move_kind, 0);
+  }
+  void add_target_x(float target_x) {
+    fbb_.AddElement<float>(fbGameInput::VT_TARGET_X, target_x, 0.0f);
+  }
+  void add_target_y(float target_y) {
+    fbb_.AddElement<float>(fbGameInput::VT_TARGET_Y, target_y, 0.0f);
+  }
+  void add_target_z(float target_z) {
+    fbb_.AddElement<float>(fbGameInput::VT_TARGET_Z, target_z, 0.0f);
+  }
+  void add_target_net_id(uint32_t target_net_id) {
+    fbb_.AddElement<uint32_t>(fbGameInput::VT_TARGET_NET_ID, target_net_id, 0);
   }
   explicit fbGameInputBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -104,14 +167,28 @@ inline ::flatbuffers::Offset<fbGameInput> CreatefbGameInput(
     uint64_t user_id = 0,
     uint32_t sequence = 0,
     uint32_t flags = 0,
+    uint32_t command_epoch = 0,
     float yaw = 0.0f,
-    float pitch = 0.0f) {
+    float pitch = 0.0f,
+    uint8_t move_mode = 0,
+    uint8_t mouse_move_kind = 0,
+    float target_x = 0.0f,
+    float target_y = 0.0f,
+    float target_z = 0.0f,
+    uint32_t target_net_id = 0) {
   fbGameInputBuilder builder_(_fbb);
   builder_.add_user_id(user_id);
+  builder_.add_target_net_id(target_net_id);
+  builder_.add_target_z(target_z);
+  builder_.add_target_y(target_y);
+  builder_.add_target_x(target_x);
   builder_.add_pitch(pitch);
   builder_.add_yaw(yaw);
+  builder_.add_command_epoch(command_epoch);
   builder_.add_flags(flags);
   builder_.add_sequence(sequence);
+  builder_.add_mouse_move_kind(mouse_move_kind);
+  builder_.add_move_mode(move_mode);
   return builder_.Finish();
 }
 
@@ -129,8 +206,15 @@ inline void fbGameInput::UnPackTo(fbGameInputT *_o, const ::flatbuffers::resolve
   { auto _e = user_id(); _o->user_id = _e; }
   { auto _e = sequence(); _o->sequence = _e; }
   { auto _e = flags(); _o->flags = _e; }
+  { auto _e = command_epoch(); _o->command_epoch = _e; }
   { auto _e = yaw(); _o->yaw = _e; }
   { auto _e = pitch(); _o->pitch = _e; }
+  { auto _e = move_mode(); _o->move_mode = _e; }
+  { auto _e = mouse_move_kind(); _o->mouse_move_kind = _e; }
+  { auto _e = target_x(); _o->target_x = _e; }
+  { auto _e = target_y(); _o->target_y = _e; }
+  { auto _e = target_z(); _o->target_z = _e; }
+  { auto _e = target_net_id(); _o->target_net_id = _e; }
 }
 
 inline ::flatbuffers::Offset<fbGameInput> fbGameInput::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbGameInputT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -144,15 +228,29 @@ inline ::flatbuffers::Offset<fbGameInput> CreatefbGameInput(::flatbuffers::FlatB
   auto _user_id = _o->user_id;
   auto _sequence = _o->sequence;
   auto _flags = _o->flags;
+  auto _command_epoch = _o->command_epoch;
   auto _yaw = _o->yaw;
   auto _pitch = _o->pitch;
+  auto _move_mode = _o->move_mode;
+  auto _mouse_move_kind = _o->mouse_move_kind;
+  auto _target_x = _o->target_x;
+  auto _target_y = _o->target_y;
+  auto _target_z = _o->target_z;
+  auto _target_net_id = _o->target_net_id;
   return jam::net::fb::CreatefbGameInput(
       _fbb,
       _user_id,
       _sequence,
       _flags,
+      _command_epoch,
       _yaw,
-      _pitch);
+      _pitch,
+      _move_mode,
+      _mouse_move_kind,
+      _target_x,
+      _target_y,
+      _target_z,
+      _target_net_id);
 }
 
 inline const jam::net::fb::fbGameInput *GetfbGameInput(const void *buf) {

@@ -552,38 +552,55 @@ namespace jam::px
 	/// @brief 입력 비트 플래그 (32bit로 최대 32개 입력 지원)
 	enum eInputFlag : uint32_t
 	{
-		INPUT_NONE = 0,
-		INPUT_FORWARD = 1 << 0,
-		INPUT_BACKWARD = 1 << 1,
-		INPUT_LEFT = 1 << 2,
-		INPUT_RIGHT = 1 << 3,
-		INPUT_CROUCH = 1 << 4,
-		INPUT_PRONE = 1 << 5,
-		INPUT_RUN = 1 << 6,
-		INPUT_SPRINT = 1 << 7,
-		INPUT_JUMP = 1 << 8,
-		INPUT_DASH = 1 << 9,
+		INPUT_NONE		= 0,
+		INPUT_FORWARD	= 1 << 0,
+		INPUT_BACKWARD	= 1 << 1,
+		INPUT_LEFT		= 1 << 2,
+		INPUT_RIGHT		= 1 << 3,
+		INPUT_CROUCH	= 1 << 4,
+		INPUT_PRONE		= 1 << 5,
+		INPUT_RUN		= 1 << 6,
+		INPUT_SPRINT	= 1 << 7,
+		INPUT_JUMP		= 1 << 8,
+		INPUT_DASH		= 1 << 9,
 	};
 
 	inline bool HasInputFlag(uint32_t flags, eInputFlag f) noexcept { return (flags & static_cast<uint32_t>(f)) != 0; }
 	inline void SetInputFlag(uint32_t& flags, eInputFlag f) noexcept { flags |= static_cast<uint32_t>(f); }
 	inline void ClearInputFlag(uint32_t& flags, eInputFlag f) noexcept { flags &= ~static_cast<uint32_t>(f); }
 
+	enum class eMoveInputMode : uint8_t
+	{
+		Keyboard	= 0,
+		Mouse		= 1,
+	};
+
+	enum class eMouseMoveKind : uint8_t
+	{
+		ToPosition		= 0,
+		FollowTarget	= 1,
+	};
+
 	struct CharacterInput
 	{
-		uint32_t	inputFlags = 0;
-		float		facingYaw = 0.f;
-		float		facingPitch = 0.f;
+		uint32_t			inputFlags		= 0;
+		uint32_t			commandEpoch	= 0;
+		float				facingYaw		= 0.f;
+		float				facingPitch		= 0.f;
+		eMoveInputMode		moveMode		= eMoveInputMode::Keyboard;
+		eMouseMoveKind		mouseMoveKind	= eMouseMoveKind::ToPosition;
+		Vec3				targetPos		= Vec3::Zero();
+		uint32_t			targetNetId		= 0;
 	};
 
 
 
 	struct HitscanResult
 	{
-		bool		hit = false;
+		bool		hit		 = false;
 		Vec3		position = Vec3::Zero();
-		Vec3		normal = Vec3::Zero();
-		ObjectId	hitId = INVALID_OBJ_ID;
+		Vec3		normal	 = Vec3::Zero();
+		ObjectId	hitId	 = INVALID_OBJ_ID;
 	};
 
 	enum class ePhysicsEventType : uint8

@@ -35,6 +35,8 @@ namespace jam::net
         void                                Rewind(const ReplayContext& ctx);
         void                                Replay(const ReplayContext& ctx);
         void                                ApplyInput(const InputCmd& cmd);
+        px::CharacterInput                  ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState) const;
+        bool                                TryResolveTargetPos(uint32 targetNetIdRaw, OUT px::Vec3& outPos) const;
 
         void                                Simulate();
         void                                Resimulate();
@@ -52,8 +54,8 @@ namespace jam::net
                 Despawn,
             };
 
-            eType           type{};
-            entt::entity    e{ entt::null };
+            eType           type    = eType::Spawn;
+            entt::entity    e       = entt::null;
             bool            isLocal = false;
             bool            isRigid = false;
         };
@@ -68,6 +70,10 @@ namespace jam::net
 
         bool                                m_tickFiberRunning  = false;
         uint64                              m_awaitSeq          = 0;
+
+        uint32                              m_tickDebt          = 0;
+        uint32                              m_tickDebtCap       = 8; // 누적 가능한 최대 미처리 tick 수
+        uint32                              m_tickBurstBudget   = 4; // 한 fiber에서 처리할 최대 tick 수
 
         mutable std::vector<PendingActorOp> m_pendingActorOps;
     };

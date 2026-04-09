@@ -408,10 +408,8 @@ namespace jam::net
             if (!R.all_of<profile::RudpMetrics>(e))      R.emplace<profile::RudpMetrics>(e);
         }
 
-#ifdef _DEBUG
         if (!R.all_of<profile::LinkQualityState>(e))     R.emplace<profile::LinkQualityState>(e);
         if (!R.all_of<profile::TrafficSampleState>(e))   R.emplace<profile::TrafficSampleState>(e);
-#endif
 
         JAMNET_LOG_DEBUG("[SessionSystems] [Thread #{}] Session entity {} initialized, protocol = {}", tl_ThreadId, static_cast<uint32>(e), session->IsUdp() ? "udp" : "tcp");
     }

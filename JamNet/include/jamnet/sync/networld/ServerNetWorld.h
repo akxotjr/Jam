@@ -64,11 +64,11 @@ namespace jam::net
 
 	private:
 		std::atomic<uint32>						m_netIdGenerator{ 1 };
-		ITransportEndpoint*						m_transport;
-		std::unique_ptr<px::IPhysicsFacade>		m_physics = nullptr;
+		ITransportEndpoint*						m_transport			= nullptr;
+		std::unique_ptr<px::IPhysicsFacade>		m_physics			= nullptr;
 
 		std::string								m_levelPath;
-		px::LevelLayerInfo						m_levelLayerInfo = {};
+		px::LevelLayerInfo						m_levelLayerInfo	= {};
 
 		std::atomic<bool>						m_pendingInitialFullSnapshot{ false };
 

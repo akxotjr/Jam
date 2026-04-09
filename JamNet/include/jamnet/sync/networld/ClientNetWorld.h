@@ -8,6 +8,7 @@
 #include "jamnet/sync/schema/gen/actor_control_generated.h"
 
 #include <jampx/IPhysicsFacade.h>
+#include <atomic>
 #include <functional>
 
 
@@ -38,8 +39,13 @@ namespace jam::net
 		void								SpawnActor(SpawnParams params);
 		void								DespawnActor(NetId netId);
 
-		void								PushInput(uint32 inputFlags, float facingYaw, float facingPitch);
+		void								PushInput(uint32 inputFlags, float facingYaw, float facingPitch, uint32 commandEpoch = 0);
+		void								PushInput(const px::CharacterInput& input);
+		uint32								GetLatestLocalCommandEpoch() const { return m_latestLocalCommandEpoch.load(std::memory_order_acquire); }
+		void								SetLatestClickMoveSeq(uint64 requestSeq);
+		void								RequestClickMove(const px::Vec3& from, const px::Vec3& dir, float maxRange, uint64 requestSeq, uint32 commandEpoch, float facingYaw);
 		void								RequestHitscan(const px::Vec3& from, const px::Vec3& dir, float maxRange, std::function<void(const px::HitscanResult&)> onDone);
+		bool								TryGetNetIdFromObjectId(px::ObjectId objectId, OUT NetId& outNetId);
 
 
 		void								RequestDespawnActor(NetId netId);
@@ -84,6 +90,8 @@ namespace jam::net
 
 		uint64											m_userId = 0;
 		NetId											m_localNetId = NetId::Invalid();
+		std::atomic<uint64>								m_latestClickMoveSeq{ 0 };
+		std::atomic<uint32>								m_latestLocalCommandEpoch{ 0 };
 
 		std::unordered_map<NetId, entt::entity>			m_netIdToEntity;		// netId -> entity (for ensure by server)
 		std::unordered_map<uint32, entt::entity>		m_spawnReqIdToEntity;	// spawnReqId -> pending entities

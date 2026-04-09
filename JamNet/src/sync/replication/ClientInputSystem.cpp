@@ -20,17 +20,31 @@ namespace jam::net
 		if (!m_inputSample.TryRead(input))
 			input = {};
 
-		input.inputFlags = flags;
+		input.inputFlags	= flags;
+		input.moveMode		= px::eMoveInputMode::Keyboard;
+		input.mouseMoveKind = px::eMouseMoveKind::ToPosition;
+		input.targetPos		= px::Vec3::Zero();
+		input.targetNetId	= 0;
 		m_inputSample.Write(input);
 	}
 
-	void ClientInputSystem::SetInput(uint32 inputFlags, float facingYaw, float facingPitch)
+	void ClientInputSystem::SetInput(uint32 inputFlags, float facingYaw, float facingPitch, uint32 commandEpoch)
 	{
 		m_inputSample.Write(px::CharacterInput{
-			.inputFlags  = inputFlags,
-			.facingYaw	 = facingYaw,
-			.facingPitch = facingPitch
+			.inputFlags		= inputFlags,
+			.commandEpoch	= commandEpoch,
+			.facingYaw		= facingYaw,
+			.facingPitch	= facingPitch,
+			.moveMode		= px::eMoveInputMode::Keyboard,
+			.mouseMoveKind	= px::eMouseMoveKind::ToPosition,
+			.targetPos		= px::Vec3::Zero(),
+			.targetNetId	= 0
 		});
+	}
+
+	void ClientInputSystem::SetInput(const px::CharacterInput& input)
+	{
+		m_inputSample.Write(input);
 	}
 
 
@@ -69,7 +83,20 @@ namespace jam::net
 		m_fbb->Clear();
 
 		uint64 userId = netWorld->GetUserId();
-		auto gameInput = fb::CreatefbGameInput(*m_fbb, userId, cmd.seq, cmd.input.inputFlags, cmd.input.facingYaw, cmd.input.facingPitch);
+		auto gameInput = fb::CreatefbGameInput(
+			*m_fbb,
+			userId,
+			cmd.seq,
+			cmd.input.inputFlags,
+			cmd.input.commandEpoch,
+			cmd.input.facingYaw,
+			cmd.input.facingPitch,
+			static_cast<uint8>(cmd.input.moveMode),
+			static_cast<uint8>(cmd.input.mouseMoveKind),
+			cmd.input.targetPos.x,
+			cmd.input.targetPos.y,
+			cmd.input.targetPos.z,
+			cmd.input.targetNetId);
 		m_fbb->Finish(gameInput, fb::fbGameInputIdentifier());
 
 		if (auto buf = PacketBuilder::CreateCustomPacket(CustomPacketId::INPUT, PacketFlags::NONE, eChannelType::UNRELIABLE_SEQUENCED, m_fbb->GetBufferPointer(), m_fbb->GetSize())) 

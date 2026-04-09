@@ -22,6 +22,7 @@ namespace jam::net
 
 		void									EnqueueInput(uint64 userId, const InputCmd& cmd);
 		uint32									LastProcessedSeq(uint64 userId) const;
+		uint32									LastProcessedCommandEpoch(uint64 userId) const;
 
 	private:
 		void									DrainInputQueue();

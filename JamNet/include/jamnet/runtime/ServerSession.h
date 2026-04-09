@@ -1,6 +1,7 @@
 ﻿#pragma once
+#include "jamnet/runtime/world/WorldAssignmentTypes.h"
 #include "jamnet/runtime/schema/gen/binding_handshake_generated.h"
-#include "jamnet/runtime/schema/gen/matchmaking_generated.h"
+#include "jamnet/runtime/schema/gen/world_assignment_generated.h"
 #include "jamnet/sync/schema/gen/actor_control_generated.h"
 #include "jamnet/sync/schema/gen/actor_spawn_generated.h"
 
@@ -25,8 +26,8 @@ namespace jam::net
 
 	private:
 		ServerNetworkManager*	m_manager = nullptr;
-		uint64					m_userId = 0;
-		uint32					m_groupId = 0;
+		uint64					m_userId  = 0;
+		WorldId					m_worldId = INVALID_WORLD_ID;
 	};
 
 	class ServerUdpSession : public UdpSession
@@ -45,7 +46,7 @@ namespace jam::net
 
 		void					OnUdpBindRequest(entt::entity e, const fb::fbUdpBindReqT& req, uint32 requestId);
 
-		void					OnRequestGroupIdReq(entt::entity e, const fb::fbRequestGroupIdReqT& req, uint32 requestId);
+		void					OnRequestWorldAssignmentReq(entt::entity e, const fb::fbRequestWorldAssignmentReqT& req, uint32 requestId);
 
 		void					OnSpawnActorRequest(entt::entity e, const fb::fbSpawnActorReqT& req, uint32 requestId);
 		void					OnDespawnActorRequest(entt::entity e, const fb::fbDespawnActorReqT& req, uint32 requestId);
@@ -54,7 +55,7 @@ namespace jam::net
 
 	private:
 		ServerNetworkManager*	m_manager = nullptr;
-		uint64					m_userId = 0;
-		uint32					m_groupId = 0;
+		uint64					m_userId  = 0;
+		WorldId					m_worldId = INVALID_WORLD_ID;
 	};
 }

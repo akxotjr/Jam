@@ -55,16 +55,16 @@ namespace jam::net
 			return;
 
 		case eTransportMethod::Multicast:
-			if (info.groupId == 0) return;
-			nm->EnumerateGroupUsers(info.groupId, [&](uint64 uid)
+			if (info.worldId == 0) return;
+			nm->EnumerateWorldUsers(info.worldId, [&](uint64 uid)
 				{
 					nm->SendToUser(uid, CloneBuffer(buf), protocol);
 				});
 			return;
 
 		case eTransportMethod::FanOut:
-			if (info.groupId == 0) return;
-			nm->EnumerateGroupUsers(info.groupId, [&](uint64 uid)
+			if (info.worldId == 0) return;
+			nm->EnumerateWorldUsers(info.worldId, [&](uint64 uid)
 				{
 					if (info.payloadFactory)
 						nm->SendToUser(uid, info.payloadFactory(uid), protocol);
@@ -77,9 +77,9 @@ namespace jam::net
 		}
 	}
 
-	void ServerTransportAdapter::EnumerateGroupUsers(uint32 groupId, const std::function<void(uint64)>& fn)
+	void ServerTransportAdapter::EnumerateWorldUsers(uint32 worldId, const std::function<void(uint64)>& fn)
 	{
-		if (!fn || groupId == 0)
+		if (!fn || worldId == 0)
 			return;
 
 		ServerNetworkManager* nm = nullptr;
@@ -89,7 +89,7 @@ namespace jam::net
 		}
 		if (!nm) return;
 
-		nm->EnumerateGroupUsers(groupId, fn);
+		nm->EnumerateWorldUsers(worldId, fn);
 	}
 
 

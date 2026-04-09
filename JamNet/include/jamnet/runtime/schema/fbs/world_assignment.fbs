@@ -1,0 +1,15 @@
+namespace jam.net.fb;
+
+table fbRequestWorldAssignmentReq
+{
+	for_compile : int;
+	// todo: world key / queue / party / region 등 확장 필드 추가
+}
+
+table fbRequestWorldAssignmentRes
+{
+	status: ubyte = 2;		// ASSIGNED(0), WAITING(1), FAILED(2)
+	world_id: uint = 0;
+}
+
+root_type fbRequestWorldAssignmentReq;

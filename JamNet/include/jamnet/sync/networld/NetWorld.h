@@ -2,6 +2,7 @@
 
 #include <jampx/PhysicsTypes.h>
 
+#include "jamnet/runtime/world/WorldAssignmentTypes.h"
 #include "jamnet/sync/physics/ShardJobBridge.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 
@@ -21,7 +22,7 @@ namespace jam::net
 		uint64					owner = 0;		// owner userId
 		uint64					controller = 0;	// controller userId
 
-		px::ObjectId			targetObjectId = px::INVALID_OBJ_ID;	// for client-side
+		px::ObjectId			targetObjectId = px::INVALID_OBJ_ID;		// for client-side
 		NetId					targetNetId    = NetId::Invalid();			// for server-side
 	};
 
@@ -41,8 +42,8 @@ namespace jam::net
 
 		entt::registry&					GetRegistry() { return m_world; }
 
-		void							SetGroupId(uint32 groupId) { m_groupId = groupId; }
-		uint32							GetGroupId() const { return m_groupId; }
+		void							SetWorldId(WorldId worldId) { m_worldId = worldId; }
+		WorldId							GetWorldId() const { return m_worldId; }
 
 	private:
 		virtual void					TickOnShard() = 0;
@@ -58,7 +59,7 @@ namespace jam::net
 
 		bool								m_tickActive = false;
 
-		uint32								m_groupId = 0;
+		WorldId								m_worldId = INVALID_WORLD_ID;
 	};
 
 }

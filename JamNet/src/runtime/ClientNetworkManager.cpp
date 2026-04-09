@@ -61,9 +61,9 @@ namespace jam::net
 
 		m_tcpBound.store(false, std::memory_order_release);
 		m_udpBound.store(false, std::memory_order_release);
-		m_matchmakingInFlight.store(false, std::memory_order_release);
+		m_worldAssignmentInFlight.store(false, std::memory_order_release);
 		m_worldRunning.store(false, std::memory_order_release);
-		m_groupId.store(0, std::memory_order_release);
+		m_worldId.store(INVALID_WORLD_ID, std::memory_order_release);
 
 		if (m_world)
 			m_world->Stop();
@@ -104,7 +104,7 @@ namespace jam::net
 		if (m_world) m_world->SetUserId(userId);
 	}
 
-	void ClientNetworkManager::TryMatchmaking()
+	void ClientNetworkManager::TryWorldAssignment()
 	{
 		if (!m_running.load(std::memory_order_acquire))
 			return;
@@ -114,14 +114,14 @@ namespace jam::net
 
 		if (!m_udp) return;
 
-		if (m_groupId.load(std::memory_order_acquire) != 0)
+		if (m_worldId.load(std::memory_order_acquire) != INVALID_WORLD_ID)
 			return;
 
 		bool expected = false;
-		if (!m_matchmakingInFlight.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+		if (!m_worldAssignmentInFlight.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
 			return;
 
-		m_udp->RequestGroupId(); 
+		m_udp->RequestWorldAssignment();
 	}
 
 
@@ -227,16 +227,16 @@ namespace jam::net
 		m_world->Init();
 	}
 
-	void ClientNetworkManager::StartWorld(uint32 groupId)
+	void ClientNetworkManager::StartWorld(WorldId worldId)
 	{
-		if (!m_world || groupId == 0)
+		if (!m_world || worldId == INVALID_WORLD_ID)
 			return;
 
 		bool expected = false;
 		if (!m_worldRunning.compare_exchange_strong(expected, true, std::memory_order_acquire))
 			return;
 
-		m_world->SetGroupId(groupId);
+		m_world->SetWorldId(worldId);
 		m_world->Tick(SIMULATION_TICK_NS);
 	}
 
@@ -250,34 +250,33 @@ namespace jam::net
 	{
 		m_udpBound.store(true, std::memory_order_release);
 		UpdateSessionReadyState();
-		// TEMP: bind 완료 직후 자동 매치메이킹 트리거
+		// TEMP: bind 완료 직후 자동 월드 배정 트리거
 		// ui trigger 로 변경 필요
-		TryMatchmaking();
+		TryWorldAssignment();
 	}
 
-	void ClientNetworkManager::NotifyMatchmakingSuccess(uint32 groupId)
+	void ClientNetworkManager::NotifyWorldAssignmentSuccess(WorldId worldId)
 	{
-		if (groupId == 0)
+		if (worldId == INVALID_WORLD_ID)
 		{
-			m_matchmakingInFlight.store(false, std::memory_order_release);
+			m_worldAssignmentInFlight.store(false, std::memory_order_release);
 			return;
 		}
 
-		// 이미 값이 있으면 무시
-		uint32 expected = 0;
-		if (!m_groupId.compare_exchange_strong(expected, groupId, std::memory_order_acq_rel))
+		WorldId expected = INVALID_WORLD_ID;
+		if (!m_worldId.compare_exchange_strong(expected, worldId, std::memory_order_acq_rel))
 		{
-			m_matchmakingInFlight.store(false, std::memory_order_release);
+			m_worldAssignmentInFlight.store(false, std::memory_order_release);
 			return;
 		}
 
-		m_matchmakingInFlight.store(false, std::memory_order_release);
+		m_worldAssignmentInFlight.store(false, std::memory_order_release);
 
-		StartWorld(groupId);
+		StartWorld(worldId);
 
-		MatchmakingSucceededEvent evt{};
+		WorldAssignmentSucceededEvent evt{};
 		evt.userId	= m_userId;
-		evt.groupId = groupId;
+		evt.worldId = worldId;
 		GLOBAL_EVENTBUS_PUBLISH(evt);
 	}
 

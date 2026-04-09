@@ -7,10 +7,10 @@
 namespace jam::net
 {
 
-	struct MatchmakingSucceededEvent
+	struct WorldAssignmentSucceededEvent
 	{
 		uint64  userId = 0;
-		uint32  groupId = 0;
+		uint32  worldId = 0;
 	};
 
 	/// @brief 렌더링 계층으로 전달할 액터 생성 이벤트 (일회성, 불변)
@@ -37,6 +37,14 @@ namespace jam::net
 		uint32				objectId = 0;
 	};
 
+	struct ClickMoveResolvedEvent
+	{
+		uint64				userId			= 0;
+		uint64				requestSeq		= 0;
+		bool				followTarget	= false;
+		px::Vec3			targetPos		= px::Vec3::Zero();
+	};
+
 
 	struct RenderSamplesEvent
 	{
@@ -47,6 +55,7 @@ namespace jam::net
 
 			std::optional<px::RigidState>		rs{};
 			std::optional<px::CharacterState>	cs{};
+			std::optional<px::CharacterState>	csRaw{}; // local control용 raw predicted state
 		};
 
 		uint32						tick	  = 0;

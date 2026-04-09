@@ -130,7 +130,7 @@ namespace jam::net
 	{
 		TransportInfo info{};
 		info.method = eTransportMethod::Multicast;
-		info.groupId = GetGroupId();
+		info.worldId = GetWorldId();
 
 		if (m_transport)
 			m_transport->Send(info, buf);
@@ -140,7 +140,7 @@ namespace jam::net
 	{
 		TransportInfo info{};
 		info.method			= eTransportMethod::FanOut;
-		info.groupId		= GetGroupId();
+		info.worldId		= GetWorldId();
 		info.payloadFactory = std::move(factory);
 
 		if (m_transport)
@@ -157,7 +157,6 @@ namespace jam::net
 			ProcessGameInput(pkt);
 			break;
 		}
-
 		default: break;
 		}
 	}
@@ -463,8 +462,13 @@ namespace jam::net
 		InputCmd cmd{};
 		cmd.seq					= gameInput->sequence();
 		cmd.input.inputFlags	= gameInput->flags();
+		cmd.input.commandEpoch	= gameInput->command_epoch();
 		cmd.input.facingYaw		= gameInput->yaw();
 		cmd.input.facingPitch	= gameInput->pitch();
+		cmd.input.moveMode		= static_cast<px::eMoveInputMode>(gameInput->move_mode());
+		cmd.input.mouseMoveKind = static_cast<px::eMouseMoveKind>(gameInput->mouse_move_kind());
+		cmd.input.targetPos		= px::Vec3(gameInput->target_x(), gameInput->target_y(), gameInput->target_z());
+		cmd.input.targetNetId	= gameInput->target_net_id();
 
 		if (m_world.ctx().contains<ServerInputSystem>())
 		{

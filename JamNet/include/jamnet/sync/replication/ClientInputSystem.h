@@ -26,7 +26,9 @@ namespace jam::net
 		/// @brief flags만 갱신 (yaw/pitch는 유지)
 		void						SetInputFlags(uint32 flags);
 		/// @brief flags/yaw/pitch 갱신
-		void						SetInput(uint32 inputFlags, float facingYaw, float facingPitch);
+		void						SetInput(uint32 inputFlags, float facingYaw, float facingPitch, uint32 commandEpoch = 0);
+		/// @brief 전체 입력 갱신
+		void						SetInput(const px::CharacterInput& input);
 		/// @brief 서버 Ack 처리
 		void						OnServerAck(uint32 ackSeq);
 
@@ -36,11 +38,11 @@ namespace jam::net
 
 	private:
 		entt::registry&									m_world;
-		bool											m_bInitialized = false;
-		std::unique_ptr<flatbuffers::FlatBufferBuilder>	m_fbb;
+		bool											m_bInitialized   = false;
+		std::unique_ptr<flatbuffers::FlatBufferBuilder>	m_fbb			 = nullptr;
 
-		SeqLockBox<px::CharacterInput>					m_inputSample = {};
+		SeqLockBox<px::CharacterInput>					m_inputSample    = {};
 
-		static constexpr size_t							kMaxHistorySize = 512;
+		static constexpr size_t							k_maxHistorySize = 512;
 	};
 }

@@ -905,7 +905,9 @@ bool Renderer::ScreenPointToWorldRay(uint32 index, double mouseX, double mouseY,
     const glm::vec4 nearNdc(x, y, -1.0f, 1.0f);
     const glm::vec4 farNdc(x, y, 1.0f, 1.0f);
 
-    const glm::mat4 invViewProj = glm::inverse(m_proj * m_view);
+    const glm::mat4& view = m_hasViewByWindow[index] ? m_viewByWindow[index] : m_view;
+    const glm::mat4& proj = m_hasProjByWindow[index] ? m_projByWindow[index] : m_proj;
+    const glm::mat4 invViewProj = glm::inverse(proj * view);
 
     glm::vec4 nearWorld = invViewProj * nearNdc;
     glm::vec4 farWorld = invViewProj * farNdc;
@@ -929,6 +931,11 @@ void Renderer::SetCameraPos(const glm::vec3& eye)
 {
     m_cameraEye = eye;
     m_view = glm::lookAt(m_cameraEye, m_cameraTarget, m_cameraUp);
+    if (m_currentWindowIndex >= 0 && m_currentWindowIndex < static_cast<int32>(MAX_WINDOWS))
+    {
+        m_viewByWindow[m_currentWindowIndex] = m_view;
+        m_hasViewByWindow[m_currentWindowIndex] = true;
+    }
 }
 
 void Renderer::SetCameraLookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec3& up)
@@ -937,6 +944,11 @@ void Renderer::SetCameraLookAt(const glm::vec3& eye, const glm::vec3& target, co
     m_cameraTarget = target;
     m_cameraUp = up;
     m_view = glm::lookAt(m_cameraEye, m_cameraTarget, m_cameraUp);
+    if (m_currentWindowIndex >= 0 && m_currentWindowIndex < static_cast<int32>(MAX_WINDOWS))
+    {
+        m_viewByWindow[m_currentWindowIndex] = m_view;
+        m_hasViewByWindow[m_currentWindowIndex] = true;
+    }
 }
 
 void Renderer::SetPerspective(float fovDeg, float nearPlane, float farPlane)
@@ -952,6 +964,11 @@ void Renderer::SetPerspective(float fovDeg, float nearPlane, float farPlane)
     const float aspect = (fbw > 0 && fbh > 0) ? (static_cast<float>(fbw) / static_cast<float>(fbh)) : (4.0f / 3.0f);
 
     m_proj = glm::perspective(glm::radians(m_camFovDeg), aspect, m_camNear, m_camFar);
+    if (m_currentWindowIndex >= 0 && m_currentWindowIndex < static_cast<int32>(MAX_WINDOWS))
+    {
+        m_projByWindow[m_currentWindowIndex] = m_proj;
+        m_hasProjByWindow[m_currentWindowIndex] = true;
+    }
 }
 
 void Renderer::UpdateCamera(const glm::vec3& playerPos, float yaw, float pitch)

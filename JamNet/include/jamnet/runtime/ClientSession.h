@@ -1,6 +1,7 @@
 ﻿#pragma once
+#include "jamnet/runtime/world/WorldAssignmentTypes.h"
 #include "jamnet/runtime/schema/gen/binding_handshake_generated.h"
-#include "jamnet/runtime/schema/gen/matchmaking_generated.h"
+#include "jamnet/runtime/schema/gen/world_assignment_generated.h"
 
 namespace jam::net
 {
@@ -43,17 +44,17 @@ namespace jam::net
         void					SetUserId(uint64 userId) { m_userId = userId; }
         uint64					GetUserId() const { return m_userId; }
 
-        void                    RequestGroupId();
+        void                    RequestWorldAssignment();
 
     private:
         void                    RequestUdpBind();
 
         void                    OnUdpBindResponse(std::optional<fb::fbUdpBindResT> res);
-        void                    OnRequestGroupIdRes(std::optional<fb::fbRequestGroupIdResT> res);
+        void                    OnRequestWorldAssignmentRes(std::optional<fb::fbRequestWorldAssignmentResT> res);
 
     private:
         ClientNetworkManager*   m_manager = nullptr;
-        uint64                  m_userId = 0;
-        uint32                  m_groupId = 0;
+        uint64                  m_userId  = 0;
+        WorldId                 m_worldId = INVALID_WORLD_ID;
     };
 }

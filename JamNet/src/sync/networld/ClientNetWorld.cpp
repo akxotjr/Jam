@@ -76,8 +76,6 @@ namespace jam::net
 
         default: break;
         }
-
-        //JAMNET_LOG_DEBUG("Snapshot total size= {}, header size= {}, payload size= {}", view.TotalSize(), view.HeaderSize(), view.PayloadSize());
     }
 
     void ClientNetWorld::SpawnActor(SpawnParams params)
@@ -93,12 +91,99 @@ namespace jam::net
         RequestDespawnActor(netId);
     }
 
-    void ClientNetWorld::PushInput(uint32 inputFlags, float facingYaw, float facingPitch)
+    void ClientNetWorld::PushInput(uint32 inputFlags, float facingYaw, float facingPitch, uint32 commandEpoch)
     {
+        m_latestLocalCommandEpoch.store(commandEpoch, std::memory_order_release);
         if (auto* inputSys = m_world.ctx().find<ClientInputSystem>())
         {
-            inputSys->SetInput(inputFlags, facingYaw, facingPitch);
+            inputSys->SetInput(inputFlags, facingYaw, facingPitch, commandEpoch);
         }
+    }
+
+    void ClientNetWorld::PushInput(const px::CharacterInput& input)
+    {
+        m_latestLocalCommandEpoch.store(input.commandEpoch, std::memory_order_release);
+        if (auto* inputSys = m_world.ctx().find<ClientInputSystem>())
+            inputSys->SetInput(input);
+    }
+
+    void ClientNetWorld::SetLatestClickMoveSeq(uint64 requestSeq)
+    {
+        m_latestClickMoveSeq.store(requestSeq, std::memory_order_release);
+    }
+
+    void ClientNetWorld::RequestClickMove(const px::Vec3& from, const px::Vec3& dir, float maxRange, uint64 requestSeq, uint32 commandEpoch, float facingYaw)
+    {
+        SetLatestClickMoveSeq(requestSeq);
+
+        Post(Job([this, from, dir, maxRange, requestSeq, commandEpoch, facingYaw]()
+            {
+                if (requestSeq != m_latestClickMoveSeq.load(std::memory_order_acquire))
+                    return;
+
+                px::HitscanResult hit{};
+                if (m_physics)
+                    hit = m_physics->Hitscan(from, dir, maxRange, 0);
+
+                if (requestSeq != m_latestClickMoveSeq.load(std::memory_order_acquire))
+                    return;
+
+                if (!hit.hit)
+                    return;
+
+                px::CharacterInput clickInput{};
+                clickInput.moveMode     = px::eMoveInputMode::Mouse;
+                clickInput.commandEpoch = commandEpoch;
+                clickInput.facingYaw    = facingYaw;
+                clickInput.facingPitch  = 0.0f;
+
+                bool followTarget = false;
+
+                if (hit.hitId != px::INVALID_OBJ_ID)
+                {
+                    const entt::entity e = static_cast<entt::entity>(hit.hitId);
+                    if (e != entt::null && m_world.valid(e) && m_world.all_of<NetId>(e))
+                    {
+                        const NetId targetNetId = m_world.get<NetId>(e);
+                        if (targetNetId.IsRuntime())
+                        {
+                            clickInput.mouseMoveKind = px::eMouseMoveKind::FollowTarget;
+                            clickInput.targetNetId = targetNetId.Raw();
+                            followTarget = true;
+                        }
+                    }
+                }
+
+                if (!followTarget)
+                {
+                    clickInput.mouseMoveKind = px::eMouseMoveKind::ToPosition;
+                    clickInput.targetPos     = hit.position;
+                }
+
+                if (requestSeq != m_latestClickMoveSeq.load(std::memory_order_acquire))
+                    return;
+
+                PushInput(clickInput);
+
+                ClickMoveResolvedEvent event{};
+                event.userId        = m_userId;
+                event.requestSeq    = requestSeq;
+                event.followTarget  = followTarget;
+                event.targetPos     = hit.position;
+                GLOBAL_EVENTBUS_PUBLISH(event);
+            }));
+    }
+
+    bool ClientNetWorld::TryGetNetIdFromObjectId(px::ObjectId objectId, OUT NetId& outNetId)
+    {
+        const entt::entity e = static_cast<entt::entity>(objectId);
+        if (e == entt::null || !m_world.valid(e))
+            return false;
+        if (!m_world.all_of<NetId>(e))
+            return false;
+
+        outNetId = m_world.get<NetId>(e);
+        return outNetId.IsValid();
     }
 
     void ClientNetWorld::RequestHitscan(const px::Vec3& from, const px::Vec3& dir, float maxRange, std::function<void(const px::HitscanResult&)> onDone)

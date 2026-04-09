@@ -45,7 +45,7 @@ namespace jam::net
 			{
 				anchorServerTick = snapshotServerTick;
 				anchorRecvNs	 = snapshotRecvNs;
-				valid = true;
+				valid			 = true;
 			}
 
 			lastSnapshotTick   = snapshotServerTick;
@@ -217,6 +217,13 @@ namespace jam::net
 		}
 	};
 
+	struct ReplayStats
+	{
+		uint32 stepCount			= 0;
+		uint32 meaningfulInputCount = 0;
+		bool   truncated			= false;
+	};
+
 	struct RenderCorrectionDelta
 	{
 		px::Vec3 pos	= px::Vec3::Zero();
@@ -250,6 +257,7 @@ namespace jam::net
 		world.ctx().emplace<InputHistoryBuffer>();
 		world.ctx().emplace<PredictedHistoryBuffer>();
 		world.ctx().emplace<ReplayPredictedBuffer>();
+		world.ctx().emplace<ReplayStats>();
 		world.ctx().emplace<LivePredictedState>();
 		world.ctx().emplace<CorrectionState>();
 		world.ctx().emplace<RenderCorrectionDelta>();

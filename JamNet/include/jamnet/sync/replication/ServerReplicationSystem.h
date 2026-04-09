@@ -72,7 +72,7 @@ namespace jam::net
 
         void                                            QueueRemovalForUser(uint64 userId, NetId netId, fb::fbRemovalReason reason);
         void                                            CancelRemovalForUser(uint64 userId, NetId netId);
-        void                                            EmitPendingRemovalSnapshots(ServerNetWorld& nw, uint64 userId, uint32 tick, uint32 ack);
+        void                                            EmitPendingRemovalSnapshots(ServerNetWorld& nw, uint64 userId, uint32 tick, uint32 ack, uint32 inputEpoch);
         void                                            CommitPendingRemovalBatch(uint64 userId, const std::vector<NetId>& sentIds);
         void                                            InvalidateUserCaches(uint64 userId, NetId netId, fb::fbRemovalReason reason);
         void                                            InvalidateAllUserCaches(NetId netId);

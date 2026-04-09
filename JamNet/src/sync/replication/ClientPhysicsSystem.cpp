@@ -7,10 +7,66 @@
 
 #include <jampx/PhysicsTypes.h>
 #include <jampx/IPhysicsFacade.h>
+#include <cmath>
 
 
 namespace jam::net
 {
+	namespace
+	{
+		constexpr uint32 kDirectionalMask =
+			px::INPUT_FORWARD | px::INPUT_BACKWARD | px::INPUT_LEFT | px::INPUT_RIGHT | px::INPUT_RUN;
+
+		const px::CharacterState* ResolveCharacterState(const entt::registry& world, entt::entity e)
+		{
+			if (const auto* proxy = world.try_get<CharProxyState>(e))
+				return &proxy->state;
+			if (const auto* auth = world.try_get<CharAuthorityState>(e))
+				return &auth->state;
+			return nullptr;
+		}
+
+		bool ResolveActorTargetPos(const entt::registry& world, entt::entity e, OUT px::Vec3& outPos)
+		{
+			if (const auto* proxy = world.try_get<CharProxyState>(e))
+			{
+				outPos = proxy->state.pos;
+				return true;
+			}
+			if (const auto* auth = world.try_get<CharAuthorityState>(e))
+			{
+				outPos = auth->state.pos;
+				return true;
+			}
+			if (const auto* proxy = world.try_get<RigidProxyState>(e))
+			{
+				outPos = proxy->state.pose.p;
+				return true;
+			}
+			if (const auto* auth = world.try_get<RigidAuthorityState>(e))
+			{
+				outPos = auth->state.pose.p;
+				return true;
+			}
+			return false;
+		}
+
+		bool HasMeaningfulReplayInput(const px::CharacterInput& input)
+		{
+			if (input.inputFlags != px::INPUT_NONE)
+				return true;
+
+			if (input.moveMode == px::eMoveInputMode::Mouse)
+			{
+				if (input.mouseMoveKind == px::eMouseMoveKind::FollowTarget)
+					return input.targetNetId != 0;
+
+				return input.targetPos.MagnitudeSquared() > 0.0f;
+			}
+
+			return false;
+		}
+	}
 
 	ClientPhysicsSystem::ClientPhysicsSystem(entt::registry& world, px::IPhysicsFacade* physics)
 		: m_world(world), m_physics(physics)
@@ -38,16 +94,23 @@ namespace jam::net
                 HandleProjectileLifecycleEvents();
             };
 
+        if (m_tickDebt < m_tickDebtCap)
+            ++m_tickDebt;
+
         auto& shard = SHARD_LOCAL_CHECKED();
         auto* sched = shard.scheduler;
 
         if (!sched) // if no scheduler then sync-path
         {
-            runOneTick();
+            while (m_tickDebt > 0)
+            {
+                --m_tickDebt;
+                runOneTick();
+            }
             return;
         }
 
-        if (m_tickFiberRunning) // prevent dup-execution if prev fiber is still waiting/running
+        if (m_tickFiberRunning)
             return;
 
         m_tickFiberRunning = true;
@@ -57,7 +120,13 @@ namespace jam::net
             {
                 try
                 {
-                    runOneTick();
+                    uint32 burst = 0;
+                    while (m_tickDebt > 0 && burst < m_tickBurstBudget)
+                    {
+                        --m_tickDebt;
+                        runOneTick();
+                        ++burst;
+                    }
                 }
                 catch (...)
                 {
@@ -167,10 +236,16 @@ namespace jam::net
         if (!m_physics) return;
 
         const entt::entity local = GetLocalEntity(m_world);
+        if (local == entt::null || !m_world.valid(local))
+            return;
+
         const px::ObjectId oid   = MakeObjectId(local);
         const auto& currentInput = m_world.ctx().get<InputHistoryBuffer>().current;
 
-        m_physics->ApplyCharacterInput(oid, currentInput.input);
+        const auto* selfState = ResolveCharacterState(m_world, local);
+        const px::CharacterInput resolvedInput = ResolveInputForSimulation(currentInput.input, selfState);
+
+        m_physics->ApplyCharacterInput(oid, resolvedInput);
         Simulate();
 
         auto& live = m_world.ctx().get<LivePredictedState>();
@@ -188,18 +263,63 @@ namespace jam::net
         if (!signal.dirty) return;
         signal.dirty = false;
 
-        const uint32 currentTick = m_world.ctx().get<TickCounter>().tick;
+        //const uint32 currentTick = m_world.ctx().get<TickCounter>().tick;
         const uint32 inputAck    = signal.inputAck;
+        auto& inputHistory       = m_world.ctx().get<InputHistoryBuffer>();
+        auto& predictedHistory   = m_world.ctx().get<PredictedHistoryBuffer>();
 
-        const ReplayContext rc{ .tick = currentTick, .local = local, .inputAck = inputAck };
+        if (!m_world.all_of<CharAuthorityState>(local))
+        {
+            inputHistory.PruneAck(inputAck);
+            predictedHistory.PruneAck(inputAck);
+            return;
+        }
+
+        const auto& auth = m_world.get<CharAuthorityState>(local).state;
+        const auto& live = m_world.ctx().get<LivePredictedState>();
+
+        auto absAngleDelta = [](float a, float b)
+            {
+                float d = std::fmod(a - b, px::TWO_PI);
+                if (d > px::PI)  d -= px::TWO_PI;
+                if (d < -px::PI) d += px::TWO_PI;
+                return std::abs(d);
+            };
+
+        const float posErr   = (auth.pos - live.pos).Magnitude();
+        const float yawErr   = absAngleDelta(auth.facingYaw, live.facingYaw);
+        const float pitchErr = absAngleDelta(auth.facingPitch, live.facingPitch);
+
+        const bool withinThreshold =
+        	(posErr <= m_config.positionErrorThreshold)
+            &&  (yawErr <= m_config.rotationErrorThreshold)
+            &&  (pitchErr <= m_config.rotationErrorThreshold);
+
+        if (withinThreshold)
+        {
+            auto& correction = m_world.ctx().get<CorrectionState>();
+            auto& delta      = m_world.ctx().get<RenderCorrectionDelta>();
+
+            correction = live;
+            delta = {};
+
+            inputHistory.PruneAck(inputAck);
+            predictedHistory.PruneAck(inputAck);
+            return;
+        }
+
+        const ReplayContext rc{ 
+        	.tick     = static_cast<uint32>(signal.serverTick), 
+        	.local    = local, 
+        	.inputAck = inputAck };
 
         Rewind(rc);
         Replay(rc);
 
         m_replayRunner->Commit(m_world, rc);
 
-        m_world.ctx().get<InputHistoryBuffer>().PruneAck(inputAck);
-        m_world.ctx().get<PredictedHistoryBuffer>().PruneAck(inputAck);
+        inputHistory.PruneAck(inputAck);
+        predictedHistory.PruneAck(inputAck);
     }
 
 
@@ -306,31 +426,51 @@ namespace jam::net
         const px::ObjectId oid = MakeObjectId(local);
         auto& inputHistory = m_world.ctx().get<InputHistoryBuffer>();
         auto& replayBuf    = m_world.ctx().get<ReplayPredictedBuffer>();
+        auto& replayStats  = m_world.ctx().get<ReplayStats>();
 
         const uint32 currentSeq = inputHistory.current.seq;
-        if (currentSeq > ctx.tick)
-            return;
 
-        uint32 replayCount = 0;
+        replayStats = {};
+
+        uint32 replayCandidateCount = 0;
+        uint32 replayStepCount = 0;
+        uint32 replayMeaningfulInputCount = 0;
 
         inputHistory.ForEachReplayRange(ctx.inputAck, currentSeq,
-            [this, local, oid, &replayCount, &replayBuf](const InputCmd& cmd)
+            [this, local, oid, &replayCandidateCount, &replayStepCount, &replayMeaningfulInputCount, &replayBuf, &ctx](const InputCmd& cmd)
             {
-                if (replayCount >= m_config.maxReplayInputs)
+                ++replayCandidateCount;
+
+                if (replayStepCount >= m_config.maxReplayInputs)
                     return;
 
-                ReplayContext step{ .tick = cmd.seq, .local = local, .inputAck = 0 };
-                m_replayRunner->Run(m_world, step);
+                if (HasMeaningfulReplayInput(cmd.input))
+                    ++replayMeaningfulInputCount;
 
                 ApplyInput(cmd);
+
+                ReplayContext step{ .tick = cmd.seq, .local = local, .inputAck = ctx.inputAck };
+                m_replayRunner->Run(m_world, step);
                 Resimulate();
 
                 px::CharacterState cs{};
                 m_physics->PullCorrectionState(oid, cs);
                 replayBuf.Push(cmd.seq, cs);
 
-                ++replayCount;
+                ++replayStepCount;
             });
+
+        replayStats.stepCount            = replayStepCount;
+        replayStats.meaningfulInputCount = replayMeaningfulInputCount;
+        replayStats.truncated            = replayCandidateCount > replayStepCount;
+
+        JAMNET_LOG_DEBUG(
+            "[ClientPhysicsSystem] replay steps= {}, meaningfulInputs= {}, truncated= {}, inputAck= {}, currentSeq= {}",
+            replayStepCount,
+            replayMeaningfulInputCount,
+            replayStats.truncated,
+            ctx.inputAck,
+            currentSeq);
     }
 
 
@@ -341,8 +481,64 @@ namespace jam::net
             return;
 
         const px::ObjectId id = MakeObjectId(player);
+        const auto* selfState = ResolveCharacterState(m_world, player);
+        const px::CharacterInput resolvedInput = ResolveInputForSimulation(cmd.input, selfState);
+        m_physics->ApplyCharacterInput(id, resolvedInput);
+    }
 
-        m_physics->ApplyCharacterInput(id, cmd.input);
+    px::CharacterInput ClientPhysicsSystem::ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState) const
+    {
+        if (input.moveMode != px::eMoveInputMode::Mouse)
+            return input;
+
+        px::CharacterInput resolved = input;
+        const uint32 nonDirectional = input.inputFlags & ~kDirectionalMask;
+        resolved.inputFlags = nonDirectional;
+
+        if (!selfState)
+            return resolved;
+
+        px::Vec3 targetPos = input.targetPos;
+        if (input.mouseMoveKind == px::eMouseMoveKind::FollowTarget)
+        {
+            if (!TryResolveTargetPos(input.targetNetId, targetPos))
+            {
+                // stop policy: follow target disappeared/unresolvable
+                return resolved;
+            }
+        }
+
+        px::Vec3 toTarget = targetPos - selfState->pos;
+        toTarget.y = 0.0f;
+
+        const float distSq = toTarget.MagnitudeSquared();
+        constexpr float kStopRadius = 1.1f;
+        if (distSq <= (kStopRadius * kStopRadius))
+            return resolved;
+
+        resolved.facingYaw   = std::atan2(toTarget.x, toTarget.z);
+        resolved.facingPitch = 0.0f;
+        resolved.inputFlags  |= px::INPUT_FORWARD;
+        if (distSq > 100.0f)
+            resolved.inputFlags |= px::INPUT_RUN;
+        return resolved;
+    }
+
+    bool ClientPhysicsSystem::TryResolveTargetPos(uint32 targetNetIdRaw, OUT px::Vec3& outPos) const
+    {
+        if (targetNetIdRaw == 0)
+            return false;
+
+        const NetId targetNetId = NetId::MakeRaw(targetNetIdRaw);
+        auto view = m_world.view<NetId>();
+        for (const entt::entity e : view)
+        {
+            if (view.get<NetId>(e) != targetNetId)
+                continue;
+
+            return ResolveActorTargetPos(m_world, e, outPos);
+        }
+        return false;
     }
 
 

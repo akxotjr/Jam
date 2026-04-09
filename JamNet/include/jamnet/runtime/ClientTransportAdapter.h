@@ -17,7 +17,7 @@ namespace jam::net
 
 		void Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf) override;
 
-		void EnumerateGroupUsers(uint32 groupId, const std::function<void(uint64)>& fn) override {};
+		void EnumerateWorldUsers(uint32 worldId, const std::function<void(uint64)>& fn) override {};
 
 	protected:
 		void DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn) override;

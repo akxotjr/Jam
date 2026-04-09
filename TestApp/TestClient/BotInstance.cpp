@@ -11,11 +11,11 @@ BotInstance::BotInstance(uint32 instanceId, uint64 userId)
 
 void BotInstance::UpdateInput(float deltaTime)
 {
-	m_botElapsedSec += deltaTime;
-	m_botInputAccSec += deltaTime;
+	m_botElapsedSec   += deltaTime;
+	m_botInputAccSec  += deltaTime;
 	m_botActionAccSec += deltaTime;
 
-	const float inputHz = std::max(1.0f, m_cfg.inputHz);
+	const float inputHz		= std::max(1.0f, m_cfg.inputHz);
 	const float inputPeriod = 1.0f / inputHz;
 
 	while (m_botInputAccSec >= inputPeriod)
@@ -26,10 +26,10 @@ void BotInstance::UpdateInput(float deltaTime)
 		uint32 inputFlags = px::INPUT_NONE;
 		switch (m_botStep % 4)
 		{
-		case 0: inputFlags = px::INPUT_FORWARD; break;
-		case 1: inputFlags = px::INPUT_RIGHT; break;
-		case 2: inputFlags = px::INPUT_BACKWARD; break;
-		default: inputFlags = px::INPUT_LEFT; break;
+		case 0:  inputFlags = px::INPUT_FORWARD;	break;
+		case 1:  inputFlags = px::INPUT_RIGHT;		break;
+		case 2:  inputFlags = px::INPUT_BACKWARD;	break;
+		default: inputFlags = px::INPUT_LEFT;		break;
 		}
 
 		if ((m_botStep % 30) == 0)

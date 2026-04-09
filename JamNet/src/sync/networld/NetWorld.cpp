@@ -23,12 +23,12 @@ namespace jam::net
 		m_tickActive = true;
 
 		auto self = shared_from_this();
-		const uint32 groupId = m_groupId; // 캡처 시점에 고정
+		const WorldId worldId = m_worldId; // 캡처 시점에 고정
 
-		shard->Submit(Job([this, shard, dt_ns, self, groupId]
+		shard->Submit(Job([this, shard, dt_ns, self, worldId]
 			{
 				auto& L		= shard->Local();
-				auto& group = L.domainGroups[{ DOMAIN_NETWORK, groupId }]; // subType = groupId
+				auto& group = L.domainGroups[{ DOMAIN_NETWORK, worldId }]; // subType = worldId
 
 				group.tickPeriod_ns = dt_ns;
 				group.systems.emplace_back([self, this](ShardLocal&, uint64, uint64)

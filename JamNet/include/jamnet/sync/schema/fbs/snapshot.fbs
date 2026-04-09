@@ -70,6 +70,7 @@ table fbSnapshotHeader
 {
 	server_tick			: uint;
 	input_ack			: uint;
+	input_epoch			: uint;
 	global_keyframe		: bool = false;
 }
 

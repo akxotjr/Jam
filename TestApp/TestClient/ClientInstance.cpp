@@ -25,6 +25,12 @@ ClientInstance::ClientInstance(uint32 instanceId, uint64 userId)
 		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
 	);
 
+	m_subClickMoveResolved = GLOBAL_EVENTBUS_SUBSCRIBE(
+		jam::net::ClickMoveResolvedEvent,
+		[this](const jam::net::ClickMoveResolvedEvent& evt) { HandleClickMoveResolved(evt); },
+		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
+	);
+
 	m_subRenderSamples = GLOBAL_EVENTBUS_SUBSCRIBE(
 		jam::net::RenderSamplesEvent,
 		[this](const jam::net::RenderSamplesEvent& evt) { HandleRenderSamples(evt); },
@@ -39,6 +45,7 @@ ClientInstance::~ClientInstance()
 	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subLevelSpawned.type, m_subLevelSpawned.id);
 	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subActorSpawned.type, m_subActorSpawned.id);
 	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subActorDespawned.type, m_subActorDespawned.id);
+	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subClickMoveResolved.type, m_subClickMoveResolved.id);
 	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subRenderSamples.type, m_subRenderSamples.id);
 
 	Disconnect();
@@ -56,8 +63,8 @@ bool ClientInstance::Connect(const string& serverIp, uint16 tcpPort, uint16 udpP
 	net::ClientConfig config{};
 	config.serverTcpAddress = net::NetAddress(serverIp, tcpPort);
 	config.serverUdpAddress = net::NetAddress(serverIp, udpPort);
-	config.physicsFactory = [] { return std::make_unique<jam::px::PhysicsFacade>(); };
-	config.levelPath = "C://Users//matae//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
+	config.physicsFactory	= [] { return std::make_unique<jam::px::PhysicsFacade>(); };
+	config.levelPath		= "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
 
 	m_networkManager = std::make_unique<net::ClientNetworkManager>(config, m_userId);
 
@@ -120,7 +127,7 @@ void ClientInstance::SpawnPlayer()
 	charParams.controlled	  = true;
 
 	charParams.desc.prefab    = px::MakePrefabKey("Character");
-	charParams.desc.pose	  = { .p = { 15.0f * static_cast<float>(m_windowIndex), 10.f, 0.f } };
+	charParams.desc.pose	  = { .p = { 5.0f * static_cast<float>(m_windowIndex), 10.f, 0.f } };
 	charParams.desc.overrides = px::CharacterSpawnOverrides{};
 
 	m_pendingPlayerSpawnReqIds.insert(charParams.spawnId);
@@ -150,12 +157,22 @@ void ClientInstance::SpawnPlayerDrone()
 	world->SpawnActor(droneParams);
 }
 
-void ClientInstance::SpawnBullet()
+void ClientInstance::SpawnBullet(const px::Vec3& muzzlePos, const px::Vec3& shootDir)
 {
 	if (!m_networkManager) return;
 
 	auto* world = m_networkManager->GetWorld();
 	if (!world) return;
+
+	const px::Vec3 dir		= shootDir.GetNormalized();
+	const px::Vec3 finalDir = dir.IsZero() ? px::Vec3(0.0f, 0.0f, 1.0f) : dir;
+
+	static constexpr float k_bulletSpeed = 10.f;
+
+	const float yaw   = std::atan2(finalDir.x, finalDir.z);
+	const float horiz = std::sqrt(finalDir.x * finalDir.x + finalDir.z * finalDir.z);
+	const float pitch = std::atan2(finalDir.y, (horiz > 1e-6f) ? horiz : 1e-6f);
+
 
 	net::SpawnParams bulletParams{};
 	bulletParams.spawnId		= m_nextSpawnReqId++;
@@ -165,10 +182,13 @@ void ClientInstance::SpawnBullet()
 
 	bulletParams.desc.prefab	= px::MakePrefabKey("LinearProjectile");
 	bulletParams.desc.spawnSrc	= px::eSpawnSource::Runtime;
-	bulletParams.desc.pose		= { .p = { 0.0, 0.75, 0.5 } };
+	bulletParams.desc.pose		= {
+		.p = muzzlePos,
+		.q = px::Quat::FromYawPitch(yaw, pitch)
+	};
 	bulletParams.desc.overrides = px::RigidSpawnOverrides{
-		.mask = px::SpawnOverrideMask::LINEAR_VEL,
-		.linearVelocity = px::Vec3(0.0, 1.0, 10.0)
+		.mask			= px::SpawnOverrideMask::LINEAR_VEL,
+		.linearVelocity = finalDir * k_bulletSpeed
 	};
 
 	OnSpawnRequested(SpawnKind::Bullet, bulletParams.spawnId);
@@ -187,14 +207,14 @@ void ClientInstance::UnpossessActor()
 {
 }
 
-void ClientInstance::ControlCharacter(uint32 inputFlags, float pitch, float yaw)
+void ClientInstance::ControlCharacter(uint32 inputFlags, float pitch, float yaw, uint32 commandEpoch)
 {
 	if (!m_networkManager) return;
 
 	auto* world = m_networkManager->GetWorld();
 	if (!world) return;
 
-	world->PushInput(inputFlags, yaw, pitch);
+	world->PushInput(inputFlags, yaw, pitch, commandEpoch);
 }
 
 void ClientInstance::HandleLevelSpawned(const net::RenderLevelSpawnedEvent& evt)
@@ -213,7 +233,7 @@ void ClientInstance::HandleActorSpawned(const net::RenderActorSpawnedEvent& evt)
 	if (m_pendingPlayerSpawnReqIds.erase(evt.spawnReqId) > 0 && evt.isLocal)
 	{
 		m_localObjectId = evt.objectId;
-		SpawnPlayerDrone();
+		//SpawnPlayerDrone();
 	}
 
 	OnActorSpawned(evt);
@@ -228,6 +248,14 @@ void ClientInstance::HandleActorDespawned(const net::RenderActorDespawnedEvent& 
 		m_localObjectId = px::INVALID_OBJ_ID;
 
 	OnActorDespawned(evt);
+}
+
+void ClientInstance::HandleClickMoveResolved(const net::ClickMoveResolvedEvent& evt)
+{
+	if (evt.userId != m_userId)
+		return;
+
+	OnClickMoveResolved(evt);
 }
 
 void ClientInstance::HandleRenderSamples(const net::RenderSamplesEvent& evt)

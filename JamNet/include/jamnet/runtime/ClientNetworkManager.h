@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "jamnet/runtime/world/WorldAssignmentTypes.h"
 #include <jampx/IPhysicsFacade.h>
 
 namespace jam::net
@@ -11,13 +12,13 @@ namespace jam::net
 
     struct ClientConfig
     {
-        NetAddress  serverTcpAddress{ "127.0.0.1", 7777 };
-        NetAddress  serverUdpAddress{ "127.0.0.1", 8888 };
+        NetAddress      serverTcpAddress    = { "127.0.0.1", 7777 };
+        NetAddress      serverUdpAddress    = { "127.0.0.1", 8888 };
 
         using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
-        PhysicsFactory physicsFactory = nullptr;
+        PhysicsFactory  physicsFactory      = nullptr;
 
-        std::string levelPath;
+        std::string     levelPath;
     };
 
     class ClientNetworkManager
@@ -44,9 +45,9 @@ namespace jam::net
         void                                SetUserId(uint64 userId);
         uint64                              GetUserId() const { return m_userId; }
 
-        void                                TryMatchmaking();              // bind 완료 이후 호출 가능
+        void                                TryWorldAssignment();          // bind 완료 이후 호출 가능
         bool                                IsWorldRunning() const { return m_worldRunning.load(std::memory_order_acquire); }
-        uint32                              GetGroupId() const { return m_groupId.load(std::memory_order_relaxed); }
+        WorldId                             GetWorldId() const { return m_worldId.load(std::memory_order_relaxed); }
 
     protected:
         bool                                StartClientService();
@@ -56,35 +57,35 @@ namespace jam::net
         bool                                ConnectUdp();
 
         void                                InitializeWorldSkeleton() const;
-        void                                StartWorld(uint32 groupId);
+        void                                StartWorld(WorldId worldId);
 
         // bind 완료 통지 (sessions -> manager)
         void                                NotifyTcpBound();
         void                                NotifyUdpBound();
 
-        // groupId 결과 통지 (udp session -> manager)
-        void                                NotifyMatchmakingSuccess(uint32 groupId);
+        // worldId 결과 통지 (udp session -> manager)
+        void                                NotifyWorldAssignmentSuccess(WorldId worldId);
 
     private:
         void                                UpdateSessionReadyState();
 
     private:
-        ClientConfig                             m_config;
+        ClientConfig                             m_config                   = {};
 
-        std::shared_ptr<ClientService>           m_service;
-        std::shared_ptr<ClientTcpSession>        m_tcp;
-        std::shared_ptr<ClientUdpSession>        m_udp;
-        std::shared_ptr<ClientTransportAdapter>  m_transportAdapter;
-        std::shared_ptr<ClientNetWorld>          m_world;
+        std::shared_ptr<ClientService>           m_service                  = nullptr;
+        std::shared_ptr<ClientTcpSession>        m_tcp                      = nullptr;
+        std::shared_ptr<ClientUdpSession>        m_udp                      = nullptr;
+        std::shared_ptr<ClientTransportAdapter>  m_transportAdapter         = nullptr;
+        std::shared_ptr<ClientNetWorld>          m_world                    = nullptr;
 
-        uint64                                   m_userId{ 0 };
-        std::atomic_bool                         m_running{ false };
+        uint64                                   m_userId                   = 0;
+        std::atomic_bool                         m_running                  = false;
 
-        std::atomic_bool                        m_tcpBound{ false };
-        std::atomic_bool                        m_udpBound{ false };
-        std::atomic_bool                        m_worldRunning{ false };
-        std::atomic_bool                        m_matchmakingInFlight{ false };
-
-        std::atomic<uint32>                     m_groupId{ 0 };
+        std::atomic_bool                         m_tcpBound                 = false;
+        std::atomic_bool                         m_udpBound                 = false;
+        std::atomic_bool                         m_worldRunning             = false;
+        std::atomic_bool                         m_worldAssignmentInFlight  = false;
+                                                  
+        std::atomic<WorldId>                     m_worldId                  = INVALID_WORLD_ID;
     };
 }

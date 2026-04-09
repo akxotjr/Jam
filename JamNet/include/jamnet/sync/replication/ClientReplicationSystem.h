@@ -61,15 +61,15 @@ namespace jam::net
 
     private:
         void                                ProcessRemovedActor(const fb::fbRemovedActorT& removed);
-        void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick);
+        void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
         entt::entity                        ResolveEntityForSnapshot(NetId netId, const fb::fbActorMetaT* meta);
         
 		void                                ApplyRigidFullSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformFull* tf, uint32 baselineRev);
         void                                ApplyRigidDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformDelta* tf, uint32 baselineRev);
         void                                ApplyKinematicStateSnapshot(uint64 serverTick, NetId netId, const fb::fbKinematicState* ks, uint32 baselineRev);
 
-        void                                ApplyCharacterFullSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterFull160* ch, uint32 baselineRev, bool isLocal);
-        void                                ApplyCharacterDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterDelta128* ch, uint32 baselineRev, bool isLocal);
+        void                                ApplyCharacterFullSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterFull160* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch);
+        void                                ApplyCharacterDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterDelta128* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch);
 
 		Replica&                            GetOrCreateReplica(NetId netId, bool* created = nullptr);
         void                                PruneOldReplicas(uint64 serverTick, uint64 forgetAfterTicks = 300);
@@ -79,20 +79,21 @@ namespace jam::net
 
         void                                ResolveDeferredTargetBindingsAndSpawn();
         bool                                TryResolveTargetObjId(NetId targetNetId, OUT px::ObjectId& outObjId);
+        uint32                              GetCurrentLocalCommandEpoch() const;
 
     private:
         entt::registry&                     m_world;
 
-        uint64                              m_userId = 0;
+        uint64                              m_userId            = 0;
 
         std::unordered_map<NetId, Replica>  m_replicas;     // net id -> Replica
         std::deque<PendingSnapshot>         m_pendingSnapshots;
 
-        NetId                               m_localNetId     = NetId::Invalid();
-        entt::entity                        m_localEntity    = entt::null;
+        NetId                               m_localNetId        = NetId::Invalid();
+        entt::entity                        m_localEntity       = entt::null;
 
-		uint64                              m_lastServerTick = 0;
-        uint32                              m_lastInputAck   = 0;
+		uint64                              m_lastServerTick    = 0;
+        uint32                              m_lastInputAck      = 0;
 	};
 
 }

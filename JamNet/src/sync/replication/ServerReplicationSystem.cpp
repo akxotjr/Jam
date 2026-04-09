@@ -82,6 +82,7 @@ namespace jam::net
 		for (const uint64 user : users)
 		{
 			const uint32 ack = m_world.ctx().get<ServerInputSystem>().LastProcessedSeq(user);
+			const uint32 inputEpoch = m_world.ctx().get<ServerInputSystem>().LastProcessedCommandEpoch(user);
 
 			std::unordered_set<NetId> sentThisTick;
 			sentThisTick.reserve(256);
@@ -110,7 +111,7 @@ namespace jam::net
 				}
 			}
 
-			EmitPendingRemovalSnapshots(*nw, user, tick, ack);
+			EmitPendingRemovalSnapshots(*nw, user, tick, ack, inputEpoch);
 
 			std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)> buckets;
 			auto view = m_world.view<NetId, NetActorBodyType>();
@@ -296,7 +297,7 @@ namespace jam::net
 					continue;
 				}
 
-				const auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack);
+				const auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack, inputEpoch);
 				const auto vec    = m_fbb->CreateVector(offs);
 				const auto snap   = fb::CreatefbSnapshot(*m_fbb, header, vec, 0);
 				m_fbb->Finish(snap, fb::fbSnapshotIdentifier());
@@ -695,7 +696,7 @@ namespace jam::net
 		}
 	}
 
-	void ServerReplicationSystem::EmitPendingRemovalSnapshots(ServerNetWorld& nw, uint64 userId, uint32 tick, uint32 ack)
+	void ServerReplicationSystem::EmitPendingRemovalSnapshots(ServerNetWorld& nw, uint64 userId, uint32 tick, uint32 ack, uint32 inputEpoch)
 	{
 		auto userIt = m_pendingRemovalsPerUser.find(userId);
 		if (userIt == m_pendingRemovalsPerUser.end() || userIt->second.empty())
@@ -737,7 +738,7 @@ namespace jam::net
 			if (removedOffs.empty())
 				break;
 
-			const auto header     = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack);
+			const auto header     = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack, inputEpoch);
 			const auto removedVec = m_fbb->CreateVector(removedOffs);
 			const auto snap       = fb::CreatefbSnapshot(*m_fbb, header, 0, removedVec);
 			m_fbb->Finish(snap, fb::fbSnapshotIdentifier());

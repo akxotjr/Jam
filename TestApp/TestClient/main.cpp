@@ -450,7 +450,7 @@ static void Run(const TestConfig& config)
     for (auto& client : clients)
         client->SpawnPlayer();
 
-    constexpr double targetFPS  = 120.0;
+    constexpr double targetFPS  = 60.0;
     const     auto   targetSpan = std::chrono::nanoseconds((int64_t)std::llround(1e9 / targetFPS));
     constexpr auto   sleepGuard = std::chrono::microseconds(2000);
 
@@ -506,7 +506,7 @@ int main()
     JamNetRuntime runtime(runtimeConfig);
 
     PHYSICS_CORE_INIT();
-    PHYSICS_PREFAB_REGISTRY.Init("C://Users//matae//GameWorkSpace//Jam//TestApp//Contents//test_asset.json");
+    PHYSICS_PREFAB_REGISTRY.Init("C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_asset.json");
 
 
     TestConfig testConfig{};
