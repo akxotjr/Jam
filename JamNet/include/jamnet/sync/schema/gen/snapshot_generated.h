@@ -550,7 +550,6 @@ struct fbActorEntityT : public ::flatbuffers::NativeTable {
   typedef fbActorEntity TableType;
   uint32_t net_id = 0;
   uint32_t baseline_rev = 0;
-  std::unique_ptr<jam::net::fb::fbActorMetaT> meta{};
   std::unique_ptr<jam::net::fb::fbTransformFull> transform_full{};
   std::unique_ptr<jam::net::fb::fbTransformDelta> transform_delta{};
   std::unique_ptr<jam::net::fb::fbCharacterFull160> character_full{};
@@ -568,21 +567,17 @@ struct fbActorEntity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_NET_ID = 4,
     VT_BASELINE_REV = 6,
-    VT_META = 8,
-    VT_TRANSFORM_FULL = 10,
-    VT_TRANSFORM_DELTA = 12,
-    VT_CHARACTER_FULL = 14,
-    VT_CHARACTER_DELTA = 16,
-    VT_KINEMATIC_STATE = 18
+    VT_TRANSFORM_FULL = 8,
+    VT_TRANSFORM_DELTA = 10,
+    VT_CHARACTER_FULL = 12,
+    VT_CHARACTER_DELTA = 14,
+    VT_KINEMATIC_STATE = 16
   };
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
   uint32_t baseline_rev() const {
     return GetField<uint32_t>(VT_BASELINE_REV, 0);
-  }
-  const jam::net::fb::fbActorMeta *meta() const {
-    return GetPointer<const jam::net::fb::fbActorMeta *>(VT_META);
   }
   const jam::net::fb::fbTransformFull *transform_full() const {
     return GetStruct<const jam::net::fb::fbTransformFull *>(VT_TRANSFORM_FULL);
@@ -603,8 +598,6 @@ struct fbActorEntity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            VerifyField<uint32_t>(verifier, VT_BASELINE_REV, 4) &&
-           VerifyOffset(verifier, VT_META) &&
-           verifier.VerifyTable(meta()) &&
            VerifyField<jam::net::fb::fbTransformFull>(verifier, VT_TRANSFORM_FULL, 8) &&
            VerifyField<jam::net::fb::fbTransformDelta>(verifier, VT_TRANSFORM_DELTA, 8) &&
            VerifyField<jam::net::fb::fbCharacterFull160>(verifier, VT_CHARACTER_FULL, 8) &&
@@ -626,9 +619,6 @@ struct fbActorEntityBuilder {
   }
   void add_baseline_rev(uint32_t baseline_rev) {
     fbb_.AddElement<uint32_t>(fbActorEntity::VT_BASELINE_REV, baseline_rev, 0);
-  }
-  void add_meta(::flatbuffers::Offset<jam::net::fb::fbActorMeta> meta) {
-    fbb_.AddOffset(fbActorEntity::VT_META, meta);
   }
   void add_transform_full(const jam::net::fb::fbTransformFull *transform_full) {
     fbb_.AddStruct(fbActorEntity::VT_TRANSFORM_FULL, transform_full);
@@ -660,7 +650,6 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint32_t net_id = 0,
     uint32_t baseline_rev = 0,
-    ::flatbuffers::Offset<jam::net::fb::fbActorMeta> meta = 0,
     const jam::net::fb::fbTransformFull *transform_full = nullptr,
     const jam::net::fb::fbTransformDelta *transform_delta = nullptr,
     const jam::net::fb::fbCharacterFull160 *character_full = nullptr,
@@ -672,7 +661,6 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(
   builder_.add_character_full(character_full);
   builder_.add_transform_delta(transform_delta);
   builder_.add_transform_full(transform_full);
-  builder_.add_meta(meta);
   builder_.add_baseline_rev(baseline_rev);
   builder_.add_net_id(net_id);
   return builder_.Finish();
@@ -684,7 +672,6 @@ struct fbSnapshotT : public ::flatbuffers::NativeTable {
   typedef fbSnapshot TableType;
   std::unique_ptr<jam::net::fb::fbSnapshotHeaderT> header{};
   std::vector<std::unique_ptr<jam::net::fb::fbActorEntityT>> entities{};
-  std::vector<std::unique_ptr<jam::net::fb::fbRemovedActorT>> removed{};
   fbSnapshotT() = default;
   fbSnapshotT(const fbSnapshotT &o);
   fbSnapshotT(fbSnapshotT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -696,17 +683,13 @@ struct fbSnapshot FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbSnapshotBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_HEADER = 4,
-    VT_ENTITIES = 6,
-    VT_REMOVED = 8
+    VT_ENTITIES = 6
   };
   const jam::net::fb::fbSnapshotHeader *header() const {
     return GetPointer<const jam::net::fb::fbSnapshotHeader *>(VT_HEADER);
   }
   const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> *entities() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> *>(VT_ENTITIES);
-  }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbRemovedActor>> *removed() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbRemovedActor>> *>(VT_REMOVED);
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -715,9 +698,6 @@ struct fbSnapshot FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_ENTITIES) &&
            verifier.VerifyVector(entities()) &&
            verifier.VerifyVectorOfTables(entities()) &&
-           VerifyOffset(verifier, VT_REMOVED) &&
-           verifier.VerifyVector(removed()) &&
-           verifier.VerifyVectorOfTables(removed()) &&
            verifier.EndTable();
   }
   fbSnapshotT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -735,9 +715,6 @@ struct fbSnapshotBuilder {
   void add_entities(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>>> entities) {
     fbb_.AddOffset(fbSnapshot::VT_ENTITIES, entities);
   }
-  void add_removed(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbRemovedActor>>> removed) {
-    fbb_.AddOffset(fbSnapshot::VT_REMOVED, removed);
-  }
   explicit fbSnapshotBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -752,10 +729,8 @@ struct fbSnapshotBuilder {
 inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<jam::net::fb::fbSnapshotHeader> header = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>>> entities = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbRemovedActor>>> removed = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>>> entities = 0) {
   fbSnapshotBuilder builder_(_fbb);
-  builder_.add_removed(removed);
   builder_.add_entities(entities);
   builder_.add_header(header);
   return builder_.Finish();
@@ -764,15 +739,12 @@ inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(
 inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshotDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<jam::net::fb::fbSnapshotHeader> header = 0,
-    const std::vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> *entities = nullptr,
-    const std::vector<::flatbuffers::Offset<jam::net::fb::fbRemovedActor>> *removed = nullptr) {
+    const std::vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> *entities = nullptr) {
   auto entities__ = entities ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>>(*entities) : 0;
-  auto removed__ = removed ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbRemovedActor>>(*removed) : 0;
   return jam::net::fb::CreatefbSnapshot(
       _fbb,
       header,
-      entities__,
-      removed__);
+      entities__);
 }
 
 ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -882,7 +854,6 @@ inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatB
 inline fbActorEntityT::fbActorEntityT(const fbActorEntityT &o)
       : net_id(o.net_id),
         baseline_rev(o.baseline_rev),
-        meta((o.meta) ? new jam::net::fb::fbActorMetaT(*o.meta) : nullptr),
         transform_full((o.transform_full) ? new jam::net::fb::fbTransformFull(*o.transform_full) : nullptr),
         transform_delta((o.transform_delta) ? new jam::net::fb::fbTransformDelta(*o.transform_delta) : nullptr),
         character_full((o.character_full) ? new jam::net::fb::fbCharacterFull160(*o.character_full) : nullptr),
@@ -893,7 +864,6 @@ inline fbActorEntityT::fbActorEntityT(const fbActorEntityT &o)
 inline fbActorEntityT &fbActorEntityT::operator=(fbActorEntityT o) FLATBUFFERS_NOEXCEPT {
   std::swap(net_id, o.net_id);
   std::swap(baseline_rev, o.baseline_rev);
-  std::swap(meta, o.meta);
   std::swap(transform_full, o.transform_full);
   std::swap(transform_delta, o.transform_delta);
   std::swap(character_full, o.character_full);
@@ -913,7 +883,6 @@ inline void fbActorEntity::UnPackTo(fbActorEntityT *_o, const ::flatbuffers::res
   (void)_resolver;
   { auto _e = net_id(); _o->net_id = _e; }
   { auto _e = baseline_rev(); _o->baseline_rev = _e; }
-  { auto _e = meta(); if (_e) { if(_o->meta) { _e->UnPackTo(_o->meta.get(), _resolver); } else { _o->meta = std::unique_ptr<jam::net::fb::fbActorMetaT>(_e->UnPack(_resolver)); } } else if (_o->meta) { _o->meta.reset(); } }
   { auto _e = transform_full(); if (_e) _o->transform_full = std::unique_ptr<jam::net::fb::fbTransformFull>(new jam::net::fb::fbTransformFull(*_e)); }
   { auto _e = transform_delta(); if (_e) _o->transform_delta = std::unique_ptr<jam::net::fb::fbTransformDelta>(new jam::net::fb::fbTransformDelta(*_e)); }
   { auto _e = character_full(); if (_e) _o->character_full = std::unique_ptr<jam::net::fb::fbCharacterFull160>(new jam::net::fb::fbCharacterFull160(*_e)); }
@@ -931,7 +900,6 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(::flatbuffers::F
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbActorEntityT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _net_id = _o->net_id;
   auto _baseline_rev = _o->baseline_rev;
-  auto _meta = _o->meta ? CreatefbActorMeta(_fbb, _o->meta.get(), _rehasher) : 0;
   auto _transform_full = _o->transform_full ? _o->transform_full.get() : nullptr;
   auto _transform_delta = _o->transform_delta ? _o->transform_delta.get() : nullptr;
   auto _character_full = _o->character_full ? _o->character_full.get() : nullptr;
@@ -941,7 +909,6 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(::flatbuffers::F
       _fbb,
       _net_id,
       _baseline_rev,
-      _meta,
       _transform_full,
       _transform_delta,
       _character_full,
@@ -953,14 +920,11 @@ inline fbSnapshotT::fbSnapshotT(const fbSnapshotT &o)
       : header((o.header) ? new jam::net::fb::fbSnapshotHeaderT(*o.header) : nullptr) {
   entities.reserve(o.entities.size());
   for (const auto &entities_ : o.entities) { entities.emplace_back((entities_) ? new jam::net::fb::fbActorEntityT(*entities_) : nullptr); }
-  removed.reserve(o.removed.size());
-  for (const auto &removed_ : o.removed) { removed.emplace_back((removed_) ? new jam::net::fb::fbRemovedActorT(*removed_) : nullptr); }
 }
 
 inline fbSnapshotT &fbSnapshotT::operator=(fbSnapshotT o) FLATBUFFERS_NOEXCEPT {
   std::swap(header, o.header);
   std::swap(entities, o.entities);
-  std::swap(removed, o.removed);
   return *this;
 }
 
@@ -975,7 +939,6 @@ inline void fbSnapshot::UnPackTo(fbSnapshotT *_o, const ::flatbuffers::resolver_
   (void)_resolver;
   { auto _e = header(); if (_e) { if(_o->header) { _e->UnPackTo(_o->header.get(), _resolver); } else { _o->header = std::unique_ptr<jam::net::fb::fbSnapshotHeaderT>(_e->UnPack(_resolver)); } } else if (_o->header) { _o->header.reset(); } }
   { auto _e = entities(); if (_e) { _o->entities.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->entities[_i]) { _e->Get(_i)->UnPackTo(_o->entities[_i].get(), _resolver); } else { _o->entities[_i] = std::unique_ptr<jam::net::fb::fbActorEntityT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->entities.resize(0); } }
-  { auto _e = removed(); if (_e) { _o->removed.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->removed[_i]) { _e->Get(_i)->UnPackTo(_o->removed[_i].get(), _resolver); } else { _o->removed[_i] = std::unique_ptr<jam::net::fb::fbRemovedActorT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->removed.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<fbSnapshot> fbSnapshot::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -988,12 +951,10 @@ inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(::flatbuffers::FlatBuf
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSnapshotT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _header = _o->header ? CreatefbSnapshotHeader(_fbb, _o->header.get(), _rehasher) : 0;
   auto _entities = _o->entities.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> (_o->entities.size(), [](size_t i, _VectorArgs *__va) { return CreatefbActorEntity(*__va->__fbb, __va->__o->entities[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _removed = _o->removed.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbRemovedActor>> (_o->removed.size(), [](size_t i, _VectorArgs *__va) { return CreatefbRemovedActor(*__va->__fbb, __va->__o->removed[i].get(), __va->__rehasher); }, &_va ) : 0;
   return jam::net::fb::CreatefbSnapshot(
       _fbb,
       _header,
-      _entities,
-      _removed);
+      _entities);
 }
 
 inline const jam::net::fb::fbSnapshot *GetfbSnapshot(const void *buf) {

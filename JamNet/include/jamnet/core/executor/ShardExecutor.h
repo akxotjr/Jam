@@ -29,7 +29,7 @@ namespace jam
 		std::vector<BootstrapFn>							bootstraps;
 
 		// 이 그룹의 시스템들이 처리할 엔티티 타입
-		std::function<bool(entt::registry&, entt::entity)>	entityFilter;
+		std::function<bool(entt::registry&, entt::entity)>	entityFilter   = nullptr;
 	};
 
 
@@ -111,8 +111,9 @@ namespace jam
 
 
 		std::shared_ptr<Mailbox>		CreateMailbox();
+		bool							CloseMailbox(uint32 id, eMailboxCloseMode mode = eMailboxCloseMode::Drain, std::function<void()> onClosed = {});
 		void							RemoveMailbox(uint32 id);
-		void							NotifyReady(Mailbox* mb);
+		void							NotifyReady(uint32 mailboxId);
 
 		void							BeginDrain();
 
@@ -165,8 +166,9 @@ namespace jam
 		bool							DrainIngressOnce(int32 budget);
 
 		bool							ProcessJobsOnce();
-		void							ProcessMailbox(Mailbox* mb, int32 budget);
+		void							ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget);
 		void							DrainReadyMailboxes(int32 maxMailboxes, int32 budgetPerMailbox);
+		std::shared_ptr<Mailbox>		FindMailbox(uint32 id);
 
 	private:
 		ShardExecutorConfig								m_config{};
@@ -189,7 +191,7 @@ namespace jam
 		USE_LOCK
 		std::unordered_map<uint32, std::shared_ptr<Mailbox>>      m_mailboxes;
 		std::atomic<uint32>                             m_nextMailboxId{ 1 };
-		ConcurrentQueue<Mailbox*>						m_readyMailboxes;
+		ConcurrentQueue<uint32>							m_readyMailboxes;
 
 		std::unordered_map<RouteKey, RouteHome>         m_routeHome;    // RouteKey -> Mailbox
 

@@ -1,10 +1,10 @@
-﻿#pragma once
+#pragma once
 #include "jamnet/sync/replication/ReplicationTypes.h"
+#include "jamnet/sync/schema/gen/lifecycle_generated.h"
 #include "jamnet/sync/schema/gen/snapshot_generated.h"
 
 namespace jam::net
 {
-
     struct Replica
     {
         NetId           netId           = NetId::Invalid();
@@ -22,6 +22,10 @@ namespace jam::net
         bool            spawnEventFired = false;
     };
 
+    struct PendingLifecycleBatch
+    {
+        fb::fbLifecycleBatchT batch = {};
+    };
 
     struct PendingSnapshot
     {
@@ -29,16 +33,6 @@ namespace jam::net
         uint64          recvNs   = 0;
     };
 
-    /**
-     * @class ClientReplicationSystem
-     * 
-     * @brief Snapshot 처리, 엔티티 동기화
-     * @details 
-     *  - Snapshot 수신 및 파싱
-     *  - 원격 액터: NetTransform 직접 갱신 + 보간 버퍼 저장
-     *  - 로컬 액터: ServerState 버퍼링 (PhysicsSystem 에서 Reconcile용으로 사용)
-     *  - Ownership, Control 태그 관리
-     */
 	class ClientReplicationSystem
 	{
     public:
@@ -48,6 +42,7 @@ namespace jam::net
         void                                Clear();
         void                                Tick();
 
+        void                                EnqueueLifecycle(fb::fbLifecycleBatchT batch);
         void                                EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs);
 
         bool                                IsLocalActor(NetId netId) const { return netId == m_localNetId; }
@@ -60,9 +55,10 @@ namespace jam::net
         entt::entity                        GetLocalEntity() const { return m_localEntity; }
 
     private:
-        void                                ProcessRemovedActor(const fb::fbRemovedActorT& removed);
+        void                                ProcessLifecycleActor(const fb::fbLifecycleActorT& actor);
+        void                                ApplyActorMeta(NetId netId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica);
         void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
-        entt::entity                        ResolveEntityForSnapshot(NetId netId, const fb::fbActorMetaT* meta);
+        entt::entity                        ResolveEntityForSnapshot(NetId netId);
         
 		void                                ApplyRigidFullSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformFull* tf, uint32 baselineRev);
         void                                ApplyRigidDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformDelta* tf, uint32 baselineRev);
@@ -73,8 +69,6 @@ namespace jam::net
 
 		Replica&                            GetOrCreateReplica(NetId netId, bool* created = nullptr);
         void                                PruneOldReplicas(uint64 serverTick, uint64 forgetAfterTicks = 300);
-
-        // local = owner == myUserId && controller == myUserId, and only when meta exists.
         void                                UpdateUniqueLocalFromMeta(NetId netId, const fb::fbActorMetaT& meta, Replica& replica);
 
         void                                ResolveDeferredTargetBindingsAndSpawn();
@@ -86,7 +80,8 @@ namespace jam::net
 
         uint64                              m_userId            = 0;
 
-        std::unordered_map<NetId, Replica>  m_replicas;     // net id -> Replica
+        std::unordered_map<NetId, Replica>  m_replicas;
+        std::deque<PendingLifecycleBatch>   m_pendingLifecycle;
         std::deque<PendingSnapshot>         m_pendingSnapshots;
 
         NetId                               m_localNetId        = NetId::Invalid();
@@ -95,5 +90,4 @@ namespace jam::net
 		uint64                              m_lastServerTick    = 0;
         uint32                              m_lastInputAck      = 0;
 	};
-
 }

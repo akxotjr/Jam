@@ -44,14 +44,65 @@ namespace jam::net
 		m_tickActive = false;
 	}
 
+	bool NetWorld::BeginShutdown(eMailboxCloseMode mode, std::function<void()> onClosed)
+	{
+		m_tickActive = false;
+
+		auto shard = m_boundShard.lock();
+		auto mailbox = m_mailbox;
+		if (!shard || !mailbox)
+		{
+			m_bridge.reset();
+			m_mailbox.reset();
+			m_boundShard.reset();
+
+			if (onClosed)
+				onClosed();
+
+			return false;
+		}
+
+		m_shutdownRequested.store(true, std::memory_order_release);
+
+		auto self = shared_from_this();
+		const bool closeAccepted = shard->CloseMailbox(mailbox->GetId(), mode,
+			[self, onClosed = std::move(onClosed)]() mutable
+			{
+				self->FinalizeShutdownOnShard(std::move(onClosed));
+			});
+
+		if (!closeAccepted)
+			FinalizeShutdownOnShard(std::move(onClosed));
+
+		return closeAccepted;
+	}
+
 	void NetWorld::Submit(Job j) const
 	{
 		if (auto shard = m_boundShard.lock())
 			shard->Submit(std::move(j));
 	}
 
-	void NetWorld::Post(Job j) const
+	bool NetWorld::Post(Job j) const
 	{
-		if (m_mailbox) m_mailbox->Post(std::move(j));
+		return m_mailbox ? m_mailbox->Post(std::move(j)) : false;
+	}
+
+	void NetWorld::FinalizeShutdownOnShard(std::function<void()> onClosed)
+	{
+		m_tickActive = false;
+
+		if (auto shard = m_boundShard.lock())
+		{
+			auto& L = shard->Local();
+			L.domainGroups.erase({ DOMAIN_NETWORK, m_worldId });
+		}
+
+		m_bridge.reset();
+		m_mailbox.reset();
+		m_boundShard.reset();
+
+		if (onClosed)
+			onClosed();
 	}
 }

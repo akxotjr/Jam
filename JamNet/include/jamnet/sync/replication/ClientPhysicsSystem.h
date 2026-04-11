@@ -32,11 +32,11 @@ namespace jam::net
         void                                PushAuthorityStates();
         void                                PullProxyStates();
 
-        void                                Rewind(const ReplayContext& ctx);
-        void                                Replay(const ReplayContext& ctx);
-        void                                ApplyInput(const InputCmd& cmd);
-        px::CharacterInput                  ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState) const;
-        bool                                TryResolveTargetPos(uint32 targetNetIdRaw, OUT px::Vec3& outPos) const;
+		void                                Rewind(const ReplayContext& ctx);
+		void                                Replay(const ReplayContext& ctx);
+        void                                ApplyInput(const InputCmd& cmd, bool useReplayState = false);
+        px::CharacterInput                  ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState, bool useReplayState) const;
+        bool                                TryResolveTargetPos(uint32 targetNetIdRaw, OUT px::Vec3& outPos, bool useReplayState) const;
 
         void                                Simulate();
         void                                Resimulate();

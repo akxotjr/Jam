@@ -11,27 +11,41 @@ namespace jam::net
 	{
 	}
 
-	void ServerPhysicsSystem::Init() const
+	void ServerPhysicsSystem::Init()
 	{
+		m_tickDebt = 0;
+		m_tickFiberRunning = false;
 	}
 
 	void ServerPhysicsSystem::Tick()
 	{
 		if (!m_physics) return;
 
+		auto runOneTick = [this]()
+			{
+				ApplyInputs();
+				Simulate();
+				SyncActiveTransforms();
+			};
+
+		if (m_tickDebt < m_tickDebtCap)
+			++m_tickDebt;
+
 		auto& shard = SHARD_LOCAL_CHECKED();
 		auto* sched = shard.scheduler;
 
-		// 스케줄러가 없으면 기존 동기 경로 유지
 		if (!sched)
 		{
-			ApplyInputs();
-			Simulate();
+			while (m_tickDebt > 0)
+			{
+				--m_tickDebt;
+				runOneTick();
+			}
+
 			SyncTransforms();
 			return;
 		}
 
-		// 이전 물리 fiber가 아직 대기/실행 중이면 중복 실행 방지
 		if (m_tickFiberRunning)
 			return;
 
@@ -42,9 +56,15 @@ namespace jam::net
 			{
 				try
 				{
-					ApplyInputs();
-					Simulate();      
-					SyncActiveTransforms();
+					uint32 burst = 0;
+					while (m_tickDebt > 0 && burst < m_tickBurstBudget)
+					{
+						--m_tickDebt;
+						ApplyInputs();
+						Simulate();
+						SyncActiveTransforms();
+						++burst;
+					}
 				}
 				catch (...)
 				{
@@ -130,11 +150,16 @@ namespace jam::net
 	void ServerPhysicsSystem::ApplyInputs() const
 	{
 		auto view = m_world.view<ControlTag, px::CharacterInput>();
+		auto* inputSys = m_world.ctx().find<ServerInputSystem>();
 
 		for (auto e : view)
 		{
+			const auto& control = view.get<ControlTag>(e);
 			auto& input = view.get<px::CharacterInput>(e);
 			m_physics->ApplyCharacterInput(MakeObjectId(e), input);
+
+			if (inputSys && control.userId != 0)
+				inputSys->MarkInputApplied(control.userId);
 		}
 	}
 

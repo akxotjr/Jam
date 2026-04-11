@@ -125,6 +125,27 @@ namespace jam::net
 		if (req.currentWorldId == targetWorldId)
 			return result;
 
+		if (decision.action == eWorldAssignmentAction::Transfer)
+		{
+			const WorldTransferResult transfer = m_netManager->TransferWorld(req.currentWorldId, targetWorldId, req.principalId);
+			if (transfer.InDoubt())
+			{
+				result.status	= eWorldAssignmentStatus::Waiting;
+				result.action	= eWorldAssignmentAction::Transfer;
+				result.worldId	= INVALID_WORLD_ID;
+				return result;
+			}
+
+			if (!transfer.Succeeded())
+			{
+				result.status	= eWorldAssignmentStatus::Failed;
+				result.action	= eWorldAssignmentAction::Reject;
+				result.worldId	= INVALID_WORLD_ID;
+			}
+
+			return result;
+		}
+
 		if (decision.options.capacity != 0 &&
 			m_netManager->GetWorldMemberCount(targetWorldId) >= decision.options.capacity)
 		{
@@ -143,17 +164,14 @@ namespace jam::net
 			return result;
 		}
 
-		if (req.currentWorldId != INVALID_WORLD_ID && req.currentWorldId != targetWorldId)
-		{
-			if (auto* prevWorld = m_netManager->GetWorld(req.currentWorldId))
-				prevWorld->Leave(req.principalId);
-
-			m_netManager->LeaveWorld(req.currentWorldId, req.principalId);
-			m_netManager->TryDestroyWorldIfEmpty(req.currentWorldId);
-		}
-
 		m_netManager->JoinWorld(targetWorldId, req.principalId);
-		targetWorld->Enter(req.principalId);
+		if (!targetWorld->Enter(req.principalId))
+		{
+			m_netManager->LeaveWorld(targetWorldId, req.principalId);
+			result.status	= eWorldAssignmentStatus::Failed;
+			result.action	= eWorldAssignmentAction::Reject;
+			result.worldId	= INVALID_WORLD_ID;
+		}
 
 		return result;
 	}

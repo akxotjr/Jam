@@ -1,15 +1,29 @@
 namespace jam.net.fb;
 
+enum fbWorldRequestAction : ubyte
+{
+	AutoAssign  = 0,
+	Join		= 1,
+	Leave		= 2,
+	Transfer	= 3
+}
+
 table fbRequestWorldAssignmentReq
 {
-	for_compile : int;
-	// todo: world key / queue / party / region 등 확장 필드 추가
+	action						: fbWorldRequestAction = AutoAssign;
+	target_world_id				: uint	= 0;
+	target_world_kind			: ubyte = 0;
+	target_world_template_id	: uint  = 0;
+	target_world_instance_id	: ulong = 0;
 }
 
 table fbRequestWorldAssignmentRes
 {
-	status: ubyte = 2;		// ASSIGNED(0), WAITING(1), FAILED(2)
-	world_id: uint = 0;
+	status				: ubyte		= 2;		// ASSIGNED(0), WAITING(1), FAILED(2)
+	request_action		: ubyte		= 0;
+	assignment_action	: ubyte		= 0;
+	reason				: ubyte		= 0;
+	world_id			: uint		= 0;
 }
 
 root_type fbRequestWorldAssignmentReq;

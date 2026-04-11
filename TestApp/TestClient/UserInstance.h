@@ -117,7 +117,7 @@ private:
 	uint64											m_lastControlNs			= 0;
 	float											m_estControlSpeed		= 0.0f;
 													
-	float											m_topDownHeight			= 24.0f;
+	float											m_topDownHeight			= 50.0f;
 	float											m_topDownBackOffset		= 12.0f;
 													
 	float											m_lastActorY			= 0.0f;

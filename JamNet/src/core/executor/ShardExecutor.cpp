@@ -151,17 +151,27 @@ namespace jam
 		return mb;
 	}
 
+	bool ShardExecutor::CloseMailbox(uint32 id, eMailboxCloseMode mode, std::function<void()> onClosed)
+	{
+		auto mailbox = FindMailbox(id);
+		if (!mailbox)
+			return false;
+
+		return mailbox->Close(mode, std::move(onClosed));
+	}
+
 	void ShardExecutor::RemoveMailbox(uint32 id)
 	{
 		WRITE_LOCK
 		m_mailboxes.erase(id);
 	}
 
-	void ShardExecutor::NotifyReady(Mailbox* mb)
+	void ShardExecutor::NotifyReady(uint32 mailboxId)
 	{
-		if (!mb) return;
+		if (mailboxId == 0)
+			return;
 
-		m_readyMailboxes.enqueue(mb);
+		m_readyMailboxes.enqueue(mailboxId);
 	}
 
 	void ShardExecutor::PinCoreSlot(const CoreSlot& slot)
@@ -519,46 +529,84 @@ namespace jam
 		return didWork;
 	}
 
-	void ShardExecutor::ProcessMailbox(Mailbox* mb, int32 budget)
+	void ShardExecutor::ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget)
 	{
+		if (!mb) return;
+
 		thread_local std::vector<Job> batch;
 
 		batch.clear();
 		batch.resize(static_cast<size_t>(budget));
 
-		const uint64 n = mb->TryDequeueBulk(std::span<Job>(batch.data(), batch.size()));
-		if (n != 0)
+		if (mb->ShouldAbortPending())
 		{
-			m_metrics.mailboxJobMoveCount += n;
-			for (uint64 i = 0; i < n; ++i)
+			mb->DiscardPending();
+		}
+		else
+		{
+			const uint64 n = mb->TryDequeueBulk(std::span<Job>(batch.data(), batch.size()));
+			if (n != 0)
 			{
-				PushLocal(std::move(batch[static_cast<size_t>(i)]));
+				mb->OnDequeuedForExecution(n);
+				m_metrics.mailboxJobMoveCount += n;
+				for (uint64 i = 0; i < n; ++i)
+				{
+					Job original = std::move(batch[static_cast<size_t>(i)]);
+					const eJobPriority priority = original.Priority();
+					PushLocal(Job([mb, original = std::move(original)]() mutable
+						{
+							if (!mb->ShouldAbortPending())
+								original.Execute();
+
+							mb->OnJobExecuted();
+						}, priority));
+				}
 			}
 		}
 
 		mb->EndConsume();
 
+		if (mb->TryFinalizeClose())
+		{
+			RemoveMailbox(mb->GetId());
+			return;
+		}
+
 		if (!mb->IsEmpty() && mb->TryBeginConsume())
 		{
-			m_readyMailboxes.enqueue(mb);
+			m_readyMailboxes.enqueue(mb->GetId());
 		}
 	}
 
 
 	void ShardExecutor::DrainReadyMailboxes(int32 maxMailboxes, int32 budgetPerMailbox)
 	{
-		Mailbox* mb = nullptr;
+		uint32 mailboxId = 0;
 
 		for (int32 i = 0; i < maxMailboxes; ++i)
 		{
-			if (!m_readyMailboxes.try_dequeue(mb))
+			if (!m_readyMailboxes.try_dequeue(mailboxId))
 				break;
-			if (!mb)
+			if (mailboxId == 0)
+				continue;
+
+			auto mailbox = FindMailbox(mailboxId);
+			if (!mailbox)
 				continue;
 
 			++m_metrics.mailboxProcessCount;
-			ProcessMailbox(mb, budgetPerMailbox);
+			ProcessMailbox(mailbox, budgetPerMailbox);
 		}
+	}
+
+	std::shared_ptr<Mailbox> ShardExecutor::FindMailbox(uint32 id)
+	{
+		if (id == 0)
+			return nullptr;
+
+		READ_LOCK
+		auto it = m_mailboxes.find(id);
+		return (it != m_mailboxes.end()) ? it->second : nullptr;
 	}
 
 	bool ShardExecutor::IsShardThread() const

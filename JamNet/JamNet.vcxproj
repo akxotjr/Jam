@@ -268,6 +268,7 @@
     <ClInclude Include="include\jamnet\sync\schema\gen\actor_control_generated.h" />
     <ClInclude Include="include\jamnet\sync\schema\gen\actor_spawn_generated.h" />
     <ClInclude Include="include\jamnet\sync\schema\gen\input_generated.h" />
+    <ClInclude Include="include\jamnet\sync\schema\gen\lifecycle_generated.h" />
     <ClInclude Include="include\jamnet\sync\schema\gen\physics_type_generated.h" />
     <ClInclude Include="include\jamnet\sync\schema\gen\snapshot_generated.h" />
     <ClInclude Include="include\jamnet\sync\transport\CustomPacketHelper.h" />
@@ -627,6 +628,30 @@ endlocal
   <ItemGroup>
     <None Include="..\Jam\JamNet Benchmark.md" />
     <None Include="..\Jam\JamNet.md" />
+    <CustomBuild Include="include\jamnet\sync\schema\fbs\lifecycle.fbs">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal 
+set "OUT=$(ProjectDir)include\jamnet\sync\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)" 
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
+	echo [HINT] 또는 절대경로로 지정해보세요. 
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
+    </CustomBuild>
     <None Include="Snapshot Refactoring Guide.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

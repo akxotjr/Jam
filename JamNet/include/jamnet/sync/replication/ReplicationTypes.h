@@ -33,11 +33,10 @@ namespace jam::net
 
 	enum class eBucket : uint8
 	{
-		B0_MustSendFullMeta = 0,
-		B1_MustSendFull		= 1,
-		B2_HighDelta		= 2,
-		B3_NormalDelta		= 3,
-		B4_LowPriority		= 4,
+		B0_MustSendFull		= 0,
+		B1_HighDelta		= 1,
+		B2_NormalDelta		= 2,
+		B3_LowPriority		= 3,
 
 		Count
 	};
@@ -46,7 +45,6 @@ namespace jam::net
 	{
 		entt::entity	e			= entt::null;
 		NetId			netId		= NetId::Invalid();
-		bool			includeMeta	= false;
 		bool			useFull		= false;
 	};
 

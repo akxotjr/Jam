@@ -11,6 +11,9 @@ namespace jam
 
 	bool Mailbox::Post(Job j)
 	{
+		if (!IsAcceptingPosts())
+			return false;
+
 		bool expected = m_queue.enqueue(std::move(j));
 		if (expected)
 		{
@@ -23,6 +26,9 @@ namespace jam
 
 	bool Mailbox::Post(const ProducerToken& token, Job j)
 	{
+		if (!IsAcceptingPosts())
+			return false;
+
 		bool expected = m_queue.enqueue(token, std::move(j));
 		if (expected)
 		{
@@ -35,6 +41,9 @@ namespace jam
 
 	uint64 Mailbox::PostBulk(const ProducerToken& token, Job* j, uint64 count)
 	{
+		if (!IsAcceptingPosts())
+			return 0;
+
 		bool expected = m_queue.try_enqueue_bulk(token, j, count);
 		if (expected)
 		{
@@ -43,6 +52,50 @@ namespace jam
 				NotifyReadyIfFirst();
 		}
 		return expected;
+	}
+
+	bool Mailbox::Close(eMailboxCloseMode mode, std::function<void()> onClosed)
+	{
+		EnqueueCloseCallback(std::move(onClosed));
+
+		eMailboxState desired = (mode == eMailboxCloseMode::Abort)
+			? eMailboxState::ClosingAbort
+			: eMailboxState::ClosingDrain;
+
+		eMailboxState state = m_state.load(std::memory_order_acquire);
+		for (;;)
+		{
+			if (state == eMailboxState::Closed)
+			{
+				InvokeCloseCallbacks();
+				return false;
+			}
+
+			if (state == eMailboxState::ClosingAbort)
+				break;
+
+			if (state == desired)
+				break;
+
+			if (state == eMailboxState::ClosingDrain && desired == eMailboxState::ClosingAbort)
+			{
+				if (m_state.compare_exchange_weak(state, desired, std::memory_order_acq_rel, std::memory_order_acquire))
+					break;
+				continue;
+			}
+
+			if (state == eMailboxState::Open)
+			{
+				if (m_state.compare_exchange_weak(state, desired, std::memory_order_acq_rel, std::memory_order_acquire))
+					break;
+				continue;
+			}
+
+			break;
+		}
+
+		NotifyReadyIfFirst();
+		return true;
 	}
 
 	bool Mailbox::TryDequeue(OUT Job& j)
@@ -85,15 +138,107 @@ namespace jam
 		m_processing.store(false, std::memory_order_relaxed);
 	}
 
+	void Mailbox::OnDequeuedForExecution(uint64 count)
+	{
+		if (count == 0)
+			return;
+
+		m_inFlight.fetch_add(count, std::memory_order_relaxed);
+	}
+
+	void Mailbox::OnJobExecuted()
+	{
+		const uint64 prev = m_inFlight.fetch_sub(1, std::memory_order_relaxed);
+		if (prev != 1)
+			return;
+
+		const eMailboxState state = m_state.load(std::memory_order_acquire);
+		if (state == eMailboxState::Open || state == eMailboxState::Closed)
+			return;
+
+		if (!IsEmpty())
+			return;
+
+		if (!TryBeginConsume())
+			return;
+
+		if (auto owner = m_owner.lock())
+			owner->NotifyReady(m_id);
+		else
+			EndConsume();
+	}
+
+	uint64 Mailbox::DiscardPending()
+	{
+		uint64 discarded = 0;
+		Job ignored;
+		while (TryDequeue(ignored))
+			++discarded;
+		return discarded;
+	}
+
+	bool Mailbox::TryFinalizeClose()
+	{
+		const eMailboxState state = m_state.load(std::memory_order_acquire);
+		if (state == eMailboxState::Open || state == eMailboxState::Closed)
+			return state == eMailboxState::Closed;
+
+		if (IsProcessing())
+			return false;
+
+		if (state == eMailboxState::ClosingDrain && (!IsEmpty() || m_inFlight.load(std::memory_order_acquire) != 0))
+			return false;
+
+		if (state == eMailboxState::ClosingAbort && m_inFlight.load(std::memory_order_acquire) != 0)
+			return false;
+
+		eMailboxState expected = state;
+		if (!m_state.compare_exchange_strong(expected, eMailboxState::Closed, std::memory_order_acq_rel, std::memory_order_acquire))
+			return expected == eMailboxState::Closed;
+
+		InvokeCloseCallbacks();
+		return true;
+	}
+
+	bool Mailbox::IsClosing() const
+	{
+		const eMailboxState state = m_state.load(std::memory_order_acquire);
+		return state == eMailboxState::ClosingDrain || state == eMailboxState::ClosingAbort;
+	}
+
 	void Mailbox::NotifyReadyIfFirst()
 	{
 		if (!TryBeginConsume())
 			return;
 
 		if (auto owner = m_owner.lock())
-			owner->NotifyReady(this);
+			owner->NotifyReady(m_id);
 		else
 			EndConsume();
+	}
+
+	void Mailbox::EnqueueCloseCallback(std::function<void()> onClosed)
+	{
+		if (!onClosed)
+			return;
+
+		std::scoped_lock guard(m_closeMutex);
+		m_closeCallbacks.push_back(std::move(onClosed));
+	}
+
+	void Mailbox::InvokeCloseCallbacks()
+	{
+		std::vector<std::function<void()>> callbacks;
+		{
+			std::scoped_lock guard(m_closeMutex);
+			callbacks.swap(m_closeCallbacks);
+		}
+
+		for (auto& callback : callbacks)
+		{
+			if (callback)
+				callback();
+		}
 	}
 }
  

@@ -5,10 +5,39 @@
 #include "jamnet/sync/replication/NetActorComponents.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
 #include "jamnet/sync/replication/NetWorldContext.h"
-#include <cmath>
+
 
 namespace jam::net
 {
+	namespace
+	{
+		// Keep some visual prediction lead for responsiveness, but compress excess lead
+		// so click-move reconciliation does not visibly snap backward and forward.
+		px::Vec3 CompressVisualLead(const px::Vec3& authPos, const px::Vec3& sampledPos)
+		{
+			px::Vec3 horizontalLead = sampledPos - authPos;
+			horizontalLead.y = 0.0f;
+
+			const float leadDist = horizontalLead.Magnitude();
+			static constexpr float kLeadSoftCap      = 0.75f;
+			static constexpr float kLeadCompression  = 0.35f;
+			static constexpr float kLeadHardCap      = 1.25f;
+
+			if (leadDist <= kLeadSoftCap)
+				return sampledPos;
+
+			px::Vec3 compressedPos = sampledPos;
+			const px::Vec3 leadDir = horizontalLead.GetNormalized();
+
+			float compressedLead = kLeadSoftCap + ((leadDist - kLeadSoftCap) * kLeadCompression);
+			compressedLead = std::min(compressedLead, kLeadHardCap);
+
+			compressedPos.x = authPos.x + (leadDir.x * compressedLead);
+			compressedPos.z = authPos.z + (leadDir.z * compressedLead);
+			return compressedPos;
+		}
+	}
+
 	void ClientSamplingSystem::Init()
 	{
 	}
@@ -39,9 +68,15 @@ namespace jam::net
 			px::CharacterState sampled = live;
 
 			// correction commit 직후 visual jump 완화를 위해 렌더 보정 오프셋을 반영한다.
-			sampled.pos = sampled.pos - delta.pos;
-			sampled.facingYaw = sampled.facingYaw - delta.yaw;
+			sampled.pos			= sampled.pos - delta.pos;
+			sampled.facingYaw   = sampled.facingYaw - delta.yaw;
 			sampled.facingPitch = sampled.facingPitch - delta.pitch;
+
+			if (local != entt::null && m_world.valid(local) && m_world.all_of<CharAuthorityState>(local))
+			{
+				const auto& auth = m_world.get<CharAuthorityState>(local).state;
+				sampled.pos = CompressVisualLead(auth.pos, sampled.pos);
+			}
 
 			RenderSamplesEvent::ActorSample sample{
 				.objectId = MakeObjectId(local),

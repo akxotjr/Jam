@@ -21,8 +21,9 @@ namespace jam::net
 		void									Tick();
 
 		void									EnqueueInput(uint64 userId, const InputCmd& cmd);
-		uint32									LastProcessedSeq(uint64 userId) const;
-		uint32									LastProcessedCommandEpoch(uint64 userId) const;
+		void									MarkInputApplied(uint64 userId);
+		uint32									LastAppliedSeq(uint64 userId) const;
+		uint32									LastAppliedCommandEpoch(uint64 userId) const;
 
 	private:
 		void									DrainInputQueue();
@@ -35,6 +36,7 @@ namespace jam::net
 
 		// 유저별 최신 입력 (deque 제거)
 		std::unordered_map<uint64, InputCmd>	m_latestInputs;
+		std::unordered_map<uint64, InputCmd>	m_appliedInputs;
 	};
 }
 

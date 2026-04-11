@@ -1225,12 +1225,14 @@ namespace jam::net
 
                 if (traffic) traffic->OnSend(v.Channel(), pkt.size);
 
+                const bool countedReliableOriginal = (pending != nullptr && pkt.priority != TxPriority::RETRANSMIT);
+
                 if (auto* m = R.try_get<profile::RudpMetrics>(entity))
                 {
                     m->txPackets++;
                     m->txBytes += pkt.size;
 
-                    if (v.IsReliable() && pkt.priority != TxPriority::RETRANSMIT)
+                    if (countedReliableOriginal)
                     {
                         m->reliableOriginalPackets++;
                         m->reliableOriginalBytes += pkt.size;

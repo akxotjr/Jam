@@ -1,8 +1,10 @@
 ﻿#include "pch.h"
 #include "jamnet/runtime/ServerSession.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
+#include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/sync/networld/ServerNetWorld.h"
 #include "jamnet/sync/replication/ReplicationUtils.h"
+#include "jamnet/sync/transport/CustomPacketHelper.h"
 
 namespace jam::net
 {
@@ -21,6 +23,57 @@ namespace jam::net
 				return 0;
 
 			return auth->principalId;
+		}
+
+		static WorldKey BuildTargetWorldKey(const fb::fbRequestWorldAssignmentReqT& req)
+		{
+			return WorldKey
+			{
+				.kind		= static_cast<eWorldKind>(req.target_world_kind),
+				.templateId = req.target_world_template_id,
+				.instanceId = req.target_world_instance_id,
+			};
+		}
+
+		static fb::fbRequestWorldAssignmentResT BuildTransferAssignmentRes(
+			uint8 requestAction,
+			uint8 assignmentAction,
+			const WorldTransferResult& transfer)
+		{
+			fb::fbRequestWorldAssignmentResT res{};
+			res.request_action = requestAction;
+			res.assignment_action = assignmentAction;
+			res.reason = static_cast<uint8>(transfer.reason);
+
+			if (transfer.Succeeded())
+			{
+				res.status = static_cast<uint8>(eWorldAssignmentStatus::Assigned);
+				res.world_id = transfer.targetWorldId;
+			}
+			else
+			{
+				res.status = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+				res.world_id = INVALID_WORLD_ID;
+			}
+
+			return res;
+		}
+
+		static void SendWorldAssignmentNotification(ServerUdpSession& session, const fb::fbRequestWorldAssignmentResT& res)
+		{
+			flatbuffers::FlatBufferBuilder fbb(128);
+			const auto root = fb::CreatefbRequestWorldAssignmentRes(fbb, &res);
+			fbb.Finish(root);
+
+			auto buf = PacketBuilder::CreateCustomPacket(
+				CustomPacketId::WORLD_ASSIGNMENT,
+				PacketFlags::NONE,
+				eChannelType::RELIABLE_ORDERED,
+				fbb.GetBufferPointer(),
+				fbb.GetSize());
+
+			if (buf)
+				session.Send(buf);
 		}
 	}
 
@@ -53,7 +106,7 @@ namespace jam::net
 
 		if (auto* world = m_manager->GetWorld(m_worldId))
 		{
-			world->OnRecvPacket(view);
+			world->OnRecvPacket(m_userId, view);
 		}
 	}
 
@@ -63,6 +116,13 @@ namespace jam::net
 		fb::fbTcpBindResT res{};
 
 		if (req.user_id == 0)
+		{
+			res.success = false;
+			RPCSendResponse(e, res, requestId, eChannelType::TCP_DEFAULT);
+			return;
+		}
+
+		if (auto existing = m_manager->FindTcpSession(req.user_id); existing && existing.get() != this)
 		{
 			res.success = false;
 			RPCSendResponse(e, res, requestId, eChannelType::TCP_DEFAULT);
@@ -108,7 +168,7 @@ namespace jam::net
 
 		if (auto* world = m_manager->GetWorld(m_worldId))
 		{
-			world->OnRecvPacket(view);
+			world->OnRecvPacket(m_userId, view);
 		}
 	}
 
@@ -139,6 +199,23 @@ namespace jam::net
 			return;
 		}
 
+		auto tcp = m_manager->FindTcpSession(req.user_id);
+		if (!tcp || !tcp->IsConnected())
+		{
+			JAMNET_LOG_ERROR("UDP bind rejected for userId={} because TCP bind is missing", req.user_id);
+			res.success = false;
+			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+			return;
+		}
+
+		if (auto existing = m_manager->FindUdpSession(req.user_id); existing && existing.get() != this)
+		{
+			JAMNET_LOG_ERROR("UDP Session already exists for userId={}", req.user_id);
+			res.success = false;
+			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+			return;
+		}
+
 		m_userId = req.user_id;
 		m_manager->RegisterUdpSession(m_userId, static_pointer_cast<ServerUdpSession>(shared_from_this()));
 
@@ -157,9 +234,10 @@ namespace jam::net
 
 	void ServerUdpSession::OnRequestWorldAssignmentReq(entt::entity e, const fb::fbRequestWorldAssignmentReqT& req, uint32 requestId)
 	{
-		(void)req;
-
 		fb::fbRequestWorldAssignmentResT res{};
+		res.request_action    = static_cast<uint8>(req.action);
+		res.assignment_action = static_cast<uint8>(eWorldAssignmentAction::None);
+		res.reason            = static_cast<uint8>(eWorldTransferReason::None);
 
 		if (!m_manager)
 		{
@@ -177,6 +255,124 @@ namespace jam::net
 			return;
 		}
 
+		if (req.action == fb::fbWorldRequestAction_Leave)
+		{
+			if (m_worldId != INVALID_WORLD_ID)
+			{
+				if (auto* world = m_manager->GetWorld(m_worldId))
+					world->Leave(m_userId);
+
+				m_manager->LeaveWorld(m_worldId, m_userId);
+				m_worldId = INVALID_WORLD_ID;
+			}
+
+			res.status   = static_cast<uint8>(eWorldAssignmentStatus::Assigned);
+			res.world_id = INVALID_WORLD_ID;
+			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+			return;
+		}
+
+		const WorldKey requestedWorld = BuildTargetWorldKey(req);
+		WorldId targetWorldId = req.target_world_id;
+
+		if (req.action == fb::fbWorldRequestAction_Join || req.action == fb::fbWorldRequestAction_Transfer)
+		{
+			res.assignment_action = (req.action == fb::fbWorldRequestAction_Transfer)
+				? static_cast<uint8>(eWorldAssignmentAction::Transfer)
+				: static_cast<uint8>(eWorldAssignmentAction::Join);
+
+			if (targetWorldId == INVALID_WORLD_ID && requestedWorld.IsValid())
+				targetWorldId = m_manager->ResolveOrAllocateWorldId(requestedWorld, {});
+
+			if (targetWorldId == INVALID_WORLD_ID)
+			{
+				res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+				res.reason	 = static_cast<uint8>(eWorldTransferReason::InvalidArgument);
+				res.world_id = INVALID_WORLD_ID;
+				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+				return;
+			}
+
+			if (m_worldId == INVALID_WORLD_ID)
+			{
+				const WorldOptions targetOptions = m_manager->GetWorldOptions(targetWorldId);
+				if (targetOptions.capacity != 0 && m_manager->GetWorldMemberCount(targetWorldId) >= targetOptions.capacity)
+				{
+					res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+					res.reason	 = static_cast<uint8>(eWorldTransferReason::CapacityExceeded);
+					res.world_id = INVALID_WORLD_ID;
+					RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+					return;
+				}
+
+				ServerNetWorld* targetWorld = m_manager->GetOrCreateWorld(targetWorldId, targetOptions);
+				if (!targetWorld)
+				{
+					res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+					res.reason	 = static_cast<uint8>(eWorldTransferReason::TargetUnavailable);
+					res.world_id = INVALID_WORLD_ID;
+					RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+					return;
+				}
+
+				m_manager->JoinWorld(targetWorldId, m_userId);
+				if (!targetWorld->Enter(m_userId))
+				{
+					m_manager->LeaveWorld(targetWorldId, m_userId);
+					res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+					res.reason	 = static_cast<uint8>(eWorldTransferReason::MailboxClosed);
+					res.world_id = INVALID_WORLD_ID;
+					RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+					return;
+				}
+
+				m_worldId = targetWorldId;
+				res.status   = static_cast<uint8>(eWorldAssignmentStatus::Assigned);
+				res.world_id = m_worldId;
+				
+				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+				return;
+			}
+
+			auto self = static_pointer_cast<ServerUdpSession>(shared_from_this());
+			const uint8 requestAction = res.request_action;
+			const uint8 assignmentAction = res.assignment_action;
+
+			if (m_worldId == targetWorldId)
+			{
+				res.status = static_cast<uint8>(eWorldAssignmentStatus::Assigned);
+				res.reason = static_cast<uint8>(eWorldTransferReason::AlreadyInTarget);
+				res.world_id = m_worldId;
+				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+				return;
+			}
+
+			if (!m_manager->TransferWorldAsync(m_worldId, targetWorldId, m_userId,
+				[self, targetWorldId, requestAction, assignmentAction](WorldTransferResult transfer) mutable
+				{
+					self->Post(Job([self, targetWorldId, requestAction, assignmentAction, transfer]() mutable
+						{
+							if (transfer.Succeeded())
+								self->m_worldId = targetWorldId;
+
+							const auto asyncRes = BuildTransferAssignmentRes(requestAction, assignmentAction, transfer);
+							SendWorldAssignmentNotification(*self, asyncRes);
+						}));
+				}))
+			{
+				res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+				res.reason	 = static_cast<uint8>(eWorldTransferReason::ConflictingTransfer);
+				res.world_id = INVALID_WORLD_ID;
+				RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+				return;
+			}
+
+			res.status = static_cast<uint8>(eWorldAssignmentStatus::Waiting);
+			res.world_id = INVALID_WORLD_ID;
+			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+			return;
+		}
+
 		const WorldAssignmentRequest assignmentReq
 		{
 			.principalId	 = m_userId,
@@ -187,10 +383,34 @@ namespace jam::net
 		const WorldAssignmentResult assignment = m_manager->RequestWorldAssignment(assignmentReq);
 
 		res.status	 = static_cast<uint8>(assignment.status);
+		res.assignment_action = static_cast<uint8>(assignment.action);
 		res.world_id = assignment.IsAssigned() ? assignment.worldId : INVALID_WORLD_ID;
 
 		if (assignment.IsAssigned())
 			m_worldId = assignment.worldId;
+		else if (assignment.status == eWorldAssignmentStatus::Waiting)
+		{
+			auto self = static_pointer_cast<ServerUdpSession>(shared_from_this());
+			const uint8 requestAction = res.request_action;
+			const uint8 assignmentAction = res.assignment_action;
+			if (!m_manager->AttachTransferCallback(m_userId,
+				[self, requestAction, assignmentAction](WorldTransferResult transfer) mutable
+				{
+					self->Post(Job([self, requestAction, assignmentAction, transfer]() mutable
+						{
+							if (transfer.Succeeded())
+								self->m_worldId = transfer.targetWorldId;
+
+							const auto asyncRes = BuildTransferAssignmentRes(requestAction, assignmentAction, transfer);
+							SendWorldAssignmentNotification(*self, asyncRes);
+						}));
+				}))
+			{
+				res.status = static_cast<uint8>(eWorldAssignmentStatus::Failed);
+				res.assignment_action = static_cast<uint8>(eWorldAssignmentAction::Reject);
+				res.reason = static_cast<uint8>(eWorldTransferReason::ConflictingTransfer);
+			}
+		}
 
 		RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 	}
@@ -215,8 +435,26 @@ namespace jam::net
 		}
 
 		const px::PrefabKey key{ req.prefab_key };
-		if (!key.IsValid())
+		if (!key.IsValid() || !req.pos || !req.rot)
 		{
+			res.success = false;
+			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+			return;
+		}
+
+		const uint64 userId = GetCallerPrincipalId(e);
+		if (userId == 0)
+		{
+			res.success = false;
+			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
+			return;
+		}
+
+		if ((req.owner_user_id != 0 && req.owner_user_id != userId)
+			|| (req.controller_user_id != 0 && req.controller_user_id != userId))
+		{
+			JAMNET_LOG_ERROR("Spawn request rejected due to principal mismatch. principal={}, owner={}, controller={}",
+				userId, req.owner_user_id, req.controller_user_id);
 			res.success = false;
 			RPCSendResponse(e, res, requestId, eChannelType::RELIABLE_ORDERED);
 			return;
@@ -225,8 +463,8 @@ namespace jam::net
 		SpawnParams params{};
 
 		params.spawnId		= req.spawn_req_id;
-		params.owner		= req.owner_user_id;
-		params.controller	= req.controller_user_id;
+		params.owner		= (req.owner_user_id != 0 || req.controller_user_id != 0) ? userId : 0;
+		params.controller	= (req.controller_user_id != 0) ? userId : 0;
 		params.targetNetId  = NetId::MakeRaw(req.target_net_id);
 		params.desc.prefab	= key;
 		params.desc.pose    = { .p = { req.pos->x(), req.pos->y(), req.pos->z() }, .q = { req.rot->x(), req.rot->y(), req.rot->z(), req.rot->w() } };

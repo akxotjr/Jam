@@ -4,6 +4,7 @@
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 
+#include "jamnet/sync/schema/gen/lifecycle_generated.h"
 #include "jamnet/sync/schema/gen/actor_spawn_generated.h"
 #include "jamnet/sync/schema/gen/actor_control_generated.h"
 
@@ -63,6 +64,7 @@ namespace jam::net
 	private:
 		void								TickOnShard() override;
 		
+		void								ProcessLifecyclePacket(const PacketView& view);
 		void								ProcessSnapshot(const PacketView& view);
 
 		void								SpawnActorImpl(SpawnParams params);

@@ -62,6 +62,9 @@ protected:
 	float                               m_pitch = 0.0f;
 
 private:
+	void                                HandleSessionReady(const net::ClientSessionReadyEvent& evt);
+	void                                HandleWorldRequestResult(const net::WorldRequestResultEvent& evt);
+	void                                HandleWorldAssignmentSucceeded(const net::WorldAssignmentSucceededEvent& evt);
 	void                                HandleLevelSpawned(const net::RenderLevelSpawnedEvent& evt);
 	void                                HandleActorSpawned(const net::RenderActorSpawnedEvent& evt);
 	void                                HandleActorDespawned(const net::RenderActorDespawnedEvent& evt);
@@ -83,6 +86,10 @@ private:
 	GlobalEventBus::Subscription			m_subActorDespawned;
 	GlobalEventBus::Subscription			m_subClickMoveResolved;
 	GlobalEventBus::Subscription			m_subRenderSamples;
+	GlobalEventBus::Subscription			m_subSessionReady;
+	GlobalEventBus::Subscription			m_subWorldRequestResult;
+	GlobalEventBus::Subscription			m_subWorldAssignmentSucceeded;
 
 	px::ObjectId							m_localObjectId = px::INVALID_OBJ_ID;
+	net::WorldId							m_assignedWorldId = net::INVALID_WORLD_ID;
 };

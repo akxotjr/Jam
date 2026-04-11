@@ -199,6 +199,8 @@ namespace jam::net
 		GetService()->RegisterTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
 
 		auto self = static_pointer_cast<TcpSession>(shared_from_this());
+
+		self->OnLinkEstablished();
 		self->Post(Job(self, &TcpSession::OnConnected, eJobPriority::Control));
 
 		RegisterRecv();
@@ -209,6 +211,7 @@ namespace jam::net
 		m_disconnectEvent.m_owner = nullptr;
 
 		auto self = static_pointer_cast<TcpSession>(shared_from_this());
+		self->OnLinkTerminated();
 		self->Post(Job(self, &TcpSession::OnDisconnected, eJobPriority::Control));
 
 		GetService()->ReleaseTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));

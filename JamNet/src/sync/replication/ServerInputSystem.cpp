@@ -87,6 +87,7 @@ namespace jam::net
 	void ServerInputSystem::Init()
 	{
 		m_latestInputs.clear();
+		m_appliedInputs.clear();
 	}
 
 	void ServerInputSystem::Tick()
@@ -117,16 +118,30 @@ namespace jam::net
 		m_inputQueue.enqueue(data);
 	}
 
-	uint32 ServerInputSystem::LastProcessedSeq(uint64 userId) const
+	void ServerInputSystem::MarkInputApplied(uint64 userId)
 	{
-		if (auto it = m_latestInputs.find(userId); it != m_latestInputs.end())
+		if (userId == 0)
+			return;
+
+		auto latestIt = m_latestInputs.find(userId);
+		if (latestIt == m_latestInputs.end())
+			return;
+
+		auto& applied = m_appliedInputs[userId];
+		if (latestIt->second.seq > applied.seq)
+			applied = latestIt->second;
+	}
+
+	uint32 ServerInputSystem::LastAppliedSeq(uint64 userId) const
+	{
+		if (auto it = m_appliedInputs.find(userId); it != m_appliedInputs.end())
 			return it->second.seq;
 		return 0;
 	}
 
-	uint32 ServerInputSystem::LastProcessedCommandEpoch(uint64 userId) const
+	uint32 ServerInputSystem::LastAppliedCommandEpoch(uint64 userId) const
 	{
-		if (auto it = m_latestInputs.find(userId); it != m_latestInputs.end())
+		if (auto it = m_appliedInputs.find(userId); it != m_appliedInputs.end())
 			return it->second.input.commandEpoch;
 		return 0;
 	}

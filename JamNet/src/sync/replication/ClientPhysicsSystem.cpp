@@ -26,6 +26,15 @@ namespace jam::net
 			return nullptr;
 		}
 
+		const px::CharacterState* ResolveReplayCharacterState(const entt::registry& world, entt::entity e)
+		{
+			if (const auto* auth = world.try_get<CharAuthorityState>(e))
+				return &auth->state;
+			if (const auto* proxy = world.try_get<CharProxyState>(e))
+				return &proxy->state;
+			return nullptr;
+		}
+
 		bool ResolveActorTargetPos(const entt::registry& world, entt::entity e, OUT px::Vec3& outPos)
 		{
 			if (const auto* proxy = world.try_get<CharProxyState>(e))
@@ -46,6 +55,31 @@ namespace jam::net
 			if (const auto* auth = world.try_get<RigidAuthorityState>(e))
 			{
 				outPos = auth->state.pose.p;
+				return true;
+			}
+			return false;
+		}
+
+		bool ResolveReplayActorTargetPos(const entt::registry& world, entt::entity e, OUT px::Vec3& outPos)
+		{
+			if (const auto* auth = world.try_get<CharAuthorityState>(e))
+			{
+				outPos = auth->state.pos;
+				return true;
+			}
+			if (const auto* proxy = world.try_get<CharProxyState>(e))
+			{
+				outPos = proxy->state.pos;
+				return true;
+			}
+			if (const auto* auth = world.try_get<RigidAuthorityState>(e))
+			{
+				outPos = auth->state.pose.p;
+				return true;
+			}
+			if (const auto* proxy = world.try_get<RigidProxyState>(e))
+			{
+				outPos = proxy->state.pose.p;
 				return true;
 			}
 			return false;
@@ -243,7 +277,7 @@ namespace jam::net
         const auto& currentInput = m_world.ctx().get<InputHistoryBuffer>().current;
 
         const auto* selfState = ResolveCharacterState(m_world, local);
-        const px::CharacterInput resolvedInput = ResolveInputForSimulation(currentInput.input, selfState);
+        const px::CharacterInput resolvedInput = ResolveInputForSimulation(currentInput.input, selfState, false);
 
         m_physics->ApplyCharacterInput(oid, resolvedInput);
         Simulate();
@@ -263,7 +297,6 @@ namespace jam::net
         if (!signal.dirty) return;
         signal.dirty = false;
 
-        //const uint32 currentTick = m_world.ctx().get<TickCounter>().tick;
         const uint32 inputAck    = signal.inputAck;
         auto& inputHistory       = m_world.ctx().get<InputHistoryBuffer>();
         auto& predictedHistory   = m_world.ctx().get<PredictedHistoryBuffer>();
@@ -447,7 +480,7 @@ namespace jam::net
                 if (HasMeaningfulReplayInput(cmd.input))
                     ++replayMeaningfulInputCount;
 
-                ApplyInput(cmd);
+                ApplyInput(cmd, true);
 
                 ReplayContext step{ .tick = cmd.seq, .local = local, .inputAck = ctx.inputAck };
                 m_replayRunner->Run(m_world, step);
@@ -464,29 +497,31 @@ namespace jam::net
         replayStats.meaningfulInputCount = replayMeaningfulInputCount;
         replayStats.truncated            = replayCandidateCount > replayStepCount;
 
-        JAMNET_LOG_DEBUG(
-            "[ClientPhysicsSystem] replay steps= {}, meaningfulInputs= {}, truncated= {}, inputAck= {}, currentSeq= {}",
-            replayStepCount,
-            replayMeaningfulInputCount,
-            replayStats.truncated,
-            ctx.inputAck,
-            currentSeq);
+        //JAMNET_LOG_DEBUG(
+        //    "[ClientPhysicsSystem] replay steps= {}, meaningfulInputs= {}, truncated= {}, inputAck= {}, currentSeq= {}",
+        //    replayStepCount,
+        //    replayMeaningfulInputCount,
+        //    replayStats.truncated,
+        //    ctx.inputAck,
+        //    currentSeq);
     }
 
 
-    void ClientPhysicsSystem::ApplyInput(const InputCmd& cmd)
+    void ClientPhysicsSystem::ApplyInput(const InputCmd& cmd, bool useReplayState)
     {
         entt::entity player = GetLocalEntity(m_world);
         if (player == entt::null || !m_world.valid(player) || !m_physics)
             return;
 
         const px::ObjectId id = MakeObjectId(player);
-        const auto* selfState = ResolveCharacterState(m_world, player);
-        const px::CharacterInput resolvedInput = ResolveInputForSimulation(cmd.input, selfState);
+        const auto* selfState = useReplayState
+            ? ResolveReplayCharacterState(m_world, player)
+            : ResolveCharacterState(m_world, player);
+        const px::CharacterInput resolvedInput = ResolveInputForSimulation(cmd.input, selfState, useReplayState);
         m_physics->ApplyCharacterInput(id, resolvedInput);
     }
 
-    px::CharacterInput ClientPhysicsSystem::ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState) const
+    px::CharacterInput ClientPhysicsSystem::ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState, bool useReplayState) const
     {
         if (input.moveMode != px::eMoveInputMode::Mouse)
             return input;
@@ -501,7 +536,7 @@ namespace jam::net
         px::Vec3 targetPos = input.targetPos;
         if (input.mouseMoveKind == px::eMouseMoveKind::FollowTarget)
         {
-            if (!TryResolveTargetPos(input.targetNetId, targetPos))
+            if (!TryResolveTargetPos(input.targetNetId, targetPos, useReplayState))
             {
                 // stop policy: follow target disappeared/unresolvable
                 return resolved;
@@ -524,7 +559,7 @@ namespace jam::net
         return resolved;
     }
 
-    bool ClientPhysicsSystem::TryResolveTargetPos(uint32 targetNetIdRaw, OUT px::Vec3& outPos) const
+    bool ClientPhysicsSystem::TryResolveTargetPos(uint32 targetNetIdRaw, OUT px::Vec3& outPos, bool useReplayState) const
     {
         if (targetNetIdRaw == 0)
             return false;
@@ -536,7 +571,9 @@ namespace jam::net
             if (view.get<NetId>(e) != targetNetId)
                 continue;
 
-            return ResolveActorTargetPos(m_world, e, outPos);
+            return useReplayState
+                ? ResolveReplayActorTargetPos(m_world, e, outPos)
+                : ResolveActorTargetPos(m_world, e, outPos);
         }
         return false;
     }

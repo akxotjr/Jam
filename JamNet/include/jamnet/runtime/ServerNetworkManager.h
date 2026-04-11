@@ -69,6 +69,11 @@ namespace jam::net
 
 		void								JoinWorld(WorldId worldId, uint64 userId);
 		void								LeaveWorld(WorldId worldId, uint64 userId);
+		bool								TransferWorldAsync(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, std::function<void(WorldTransferResult)> onDone);
+		WorldTransferResult					TransferWorldAwait(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, uint64 timeout_ns = 0);
+		WorldTransferResult					TransferWorld(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId);
+		bool								AttachTransferCallback(uint64 userId, std::function<void(WorldTransferResult)> onDone);
+
 		uint32								GetWorldMemberCount(WorldId worldId);
 		WorldOptions						GetWorldOptions(WorldId worldId);
 
@@ -79,8 +84,17 @@ namespace jam::net
 		WorldOptions						GetWorldOptions(const WorldKey& key) { return GetWorldOptions(ResolveWorldId(key)); }
 
 	private:
-		bool								StartServerService();
-		void								StopServerService();
+		friend struct						WorldTransferAsyncState;
+		struct								WorldTransferRecord;
+
+		bool									StartServerService();
+		void									StopServerService();
+		std::shared_ptr<ServerNetWorld>			FindWorldShared(WorldId worldId);
+		bool									ReserveWorldTransferMembership(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, const WorldOptions& targetOptions);
+		void									RollbackWorldTransferMembership(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId);
+		std::shared_ptr<WorldTransferRecord>	BeginOrJoinTransfer(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, std::function<void(WorldTransferResult)> onDone, bool& shouldStart, WorldTransferResult& immediateResult);
+		void									UpdateTransferPhase(uint64 userId, uint8 phase);
+		void									CompleteTransfer(uint64 userId, const WorldTransferResult& result);
 
 	private:
 		USE_LOCK
@@ -95,10 +109,13 @@ namespace jam::net
 
 		std::atomic<bool>							m_running			= false;
 
-		std::unordered_map<WorldId, std::shared_ptr<ServerNetWorld>>	m_worlds;
-		std::unordered_map<WorldId, std::vector<uint64>>				m_worldMembers;
+		std::unordered_map<WorldId, std::shared_ptr<ServerNetWorld>>		m_worlds;
+		std::unordered_map<WorldId, std::vector<uint64>>					m_worldMembers;
+		std::atomic<uint64>													m_nextTransferAwaitKey{ 1 };
+		std::unordered_map<uint64, std::shared_ptr<WorldTransferRecord>>	m_transfers;
+		std::unordered_map<uint64, WorldTransferResult>						m_recentTransferResults;
 
-		std::unordered_map<uint64, std::shared_ptr<ServerTcpSession>>	m_tcpSessions;
-		std::unordered_map<uint64, std::shared_ptr<ServerUdpSession>>	m_udpSessions;
+		std::unordered_map<uint64, std::shared_ptr<ServerTcpSession>>		m_tcpSessions;
+		std::unordered_map<uint64, std::shared_ptr<ServerUdpSession>>		m_udpSessions;
 	};
 }

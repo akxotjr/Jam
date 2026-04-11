@@ -99,7 +99,7 @@ namespace jam::net::profile
 		uint64					rxPackets					= 0;
 		uint64					rxBytes						= 0;
 
-		// reliable originals only (exclude retransmits)
+		// reliable originals tracked by ReliabilityState (exclude retransmits and direct control sends)
 		uint64					reliableOriginalPackets		= 0;
 		uint64					reliableOriginalBytes		= 0;
 
@@ -162,6 +162,8 @@ namespace jam::net::profile
 
 	struct NetworkStatsView
 	{
+		float wireRtt_ms			= 0.0f;
+		float appRtt_ms				= 0.0f;
 		float rtt_ms				= 0.0f;
 		float jitter_ms				= 0.0f;
 		float packetLoss			= 0.0f;

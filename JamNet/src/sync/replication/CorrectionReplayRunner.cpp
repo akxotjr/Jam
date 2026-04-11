@@ -92,7 +92,7 @@ namespace jam::net
 		if (replayStats.truncated)
 		{
 			correction = live;
-			delta = {};
+			delta	   = {};
 			replayBuf.Clear();
 			return;
 		}
@@ -110,9 +110,6 @@ namespace jam::net
 		}
 		else
 		{
-			//correction = live;  // replay 샘플이 없으면 correction을 기존 live로 유지
-
-			// replay 샘플이 없으면(local ack==current 등) authoritative를 기준으로 correction 구성
 			if (ctx.local != entt::null && world.valid(ctx.local) && world.all_of<CharAuthorityState>(ctx.local))
 				correction = world.get<CharAuthorityState>(ctx.local).state;
 			else
@@ -128,6 +125,8 @@ namespace jam::net
 			delta.pos   = correction.pos - preLive.pos;
 			delta.yaw   = correction.facingYaw - preLive.facingYaw;
 			delta.pitch = correction.facingPitch - preLive.facingPitch;
+
+			JAMNET_LOG_DEBUG("[CorrectionReplayRunner] delta pos= ({}, {}, {})", delta.pos.x, delta.pos.y, delta.pos.z);
 		}
 
 		live = correction; // logical state overwrite

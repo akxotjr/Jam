@@ -49,7 +49,6 @@ namespace jam::net
 	void ServerAoiSystem::Init(const AoiConfig& cfg)
 	{
 		m_cfg = cfg;
-		m_physics = nullptr;
 
 		m_states.clear();
 		m_alwaysVisible.clear();

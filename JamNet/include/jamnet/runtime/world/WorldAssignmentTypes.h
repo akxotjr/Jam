@@ -31,6 +31,34 @@ namespace jam::net
 		Reject		= 4,
 	};
 
+	enum class eWorldRequestAction : uint8
+	{
+		AutoAssign	= 0,
+		Join		= 1,
+		Leave		= 2,
+		Transfer	= 3,
+	};
+
+	enum class eWorldTransferOutcome : uint8
+	{
+		Succeeded	= 0,
+		Failed		= 1,
+		InDoubt		= 2,
+	};
+
+	enum class eWorldTransferReason : uint8
+	{
+		None				= 0,
+		InvalidArgument		= 1,
+		AlreadyInTarget		= 2,
+		TargetUnavailable	= 3,
+		CapacityExceeded	= 4,
+		ConflictingTransfer	= 5,
+		Timeout				= 6,
+		MailboxClosed		= 7,
+		Shutdown			= 8,
+	};
+
 	struct WorldKey
 	{
 		eWorldKind	kind		= eWorldKind::Unknown;
@@ -106,4 +134,93 @@ namespace jam::net
 
 		bool IsAssigned() const { return status == eWorldAssignmentStatus::Assigned && worldId != INVALID_WORLD_ID; }
 	};
+
+	struct WorldTransferResult
+	{
+		eWorldTransferOutcome	outcome			= eWorldTransferOutcome::Failed;
+		eWorldTransferReason	reason			= eWorldTransferReason::None;
+		WorldId					sourceWorldId	= INVALID_WORLD_ID;
+		WorldId					targetWorldId	= INVALID_WORLD_ID;
+
+		bool Succeeded() const { return outcome == eWorldTransferOutcome::Succeeded; }
+		bool Failed() const { return outcome == eWorldTransferOutcome::Failed; }
+		bool InDoubt() const { return outcome == eWorldTransferOutcome::InDoubt; }
+	};
+
+	struct ClientBindState
+	{
+		bool	tcpBound	= false;
+		bool	udpBound	= false;
+		bool	ready		= false;
+	};
+
+	inline constexpr eWorldAssignmentStatus ToWorldAssignmentStatus(uint8 raw) noexcept
+	{
+		switch (raw)
+		{
+		case static_cast<uint8>(eWorldAssignmentStatus::Assigned):
+			return eWorldAssignmentStatus::Assigned;
+		case static_cast<uint8>(eWorldAssignmentStatus::Waiting):
+			return eWorldAssignmentStatus::Waiting;
+		default:
+			return eWorldAssignmentStatus::Failed;
+		}
+	}
+
+	inline constexpr eWorldRequestAction ToWorldRequestAction(uint8 raw) noexcept
+	{
+		switch (raw)
+		{
+		case static_cast<uint8>(eWorldRequestAction::Join):
+			return eWorldRequestAction::Join;
+		case static_cast<uint8>(eWorldRequestAction::Leave):
+			return eWorldRequestAction::Leave;
+		case static_cast<uint8>(eWorldRequestAction::Transfer):
+			return eWorldRequestAction::Transfer;
+		default:
+			return eWorldRequestAction::AutoAssign;
+		}
+	}
+
+	inline constexpr eWorldAssignmentAction ToWorldAssignmentAction(uint8 raw) noexcept
+	{
+		switch (raw)
+		{
+		case static_cast<uint8>(eWorldAssignmentAction::Join):
+			return eWorldAssignmentAction::Join;
+		case static_cast<uint8>(eWorldAssignmentAction::Provision):
+			return eWorldAssignmentAction::Provision;
+		case static_cast<uint8>(eWorldAssignmentAction::Transfer):
+			return eWorldAssignmentAction::Transfer;
+		case static_cast<uint8>(eWorldAssignmentAction::Reject):
+			return eWorldAssignmentAction::Reject;
+		default:
+			return eWorldAssignmentAction::None;
+		}
+	}
+
+	inline constexpr eWorldTransferReason ToWorldTransferReason(uint8 raw) noexcept
+	{
+		switch (raw)
+		{
+		case static_cast<uint8>(eWorldTransferReason::InvalidArgument):
+			return eWorldTransferReason::InvalidArgument;
+		case static_cast<uint8>(eWorldTransferReason::AlreadyInTarget):
+			return eWorldTransferReason::AlreadyInTarget;
+		case static_cast<uint8>(eWorldTransferReason::TargetUnavailable):
+			return eWorldTransferReason::TargetUnavailable;
+		case static_cast<uint8>(eWorldTransferReason::CapacityExceeded):
+			return eWorldTransferReason::CapacityExceeded;
+		case static_cast<uint8>(eWorldTransferReason::ConflictingTransfer):
+			return eWorldTransferReason::ConflictingTransfer;
+		case static_cast<uint8>(eWorldTransferReason::Timeout):
+			return eWorldTransferReason::Timeout;
+		case static_cast<uint8>(eWorldTransferReason::MailboxClosed):
+			return eWorldTransferReason::MailboxClosed;
+		case static_cast<uint8>(eWorldTransferReason::Shutdown):
+			return eWorldTransferReason::Shutdown;
+		default:
+			return eWorldTransferReason::None;
+		}
+	}
 }

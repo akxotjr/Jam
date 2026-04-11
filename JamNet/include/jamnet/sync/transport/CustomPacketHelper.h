@@ -25,9 +25,11 @@ namespace jam::net
         constexpr uint8 NOTIFICATION    = 1;   // 서버 푸시 알림 (애플리케이션에서 구현)
         constexpr uint8 SNAPSHOT        = 2;   // 게임 스냅샷 (JamNetSync 내부용)
         constexpr uint8 INPUT           = 3;   // 클라이언트 입력 (JamNetSync 내부용)
-        constexpr uint8 CONTROL         = 4;   // 예약/기타
+        constexpr uint8 LIFECYCLE       = 4;   // 생성/삭제/메타 복제
+        constexpr uint8 WORLD_ASSIGNMENT = 5;  // 월드 할당/전이 결과 푸시
+        constexpr uint8 CONTROL         = LIFECYCLE;   // 하위 호환 별칭
 
-        // 5-15: 향후 프레임워크 확장용 예약
+        // 6-15: 향후 프레임워크 확장용 예약
     }
 
     // ============================================================

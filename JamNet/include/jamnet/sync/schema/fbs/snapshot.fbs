@@ -91,8 +91,6 @@ table fbActorEntity
 	net_id				: uint;
 	baseline_rev		: uint;
 
-	meta				: fbActorMeta;
-
 	transform_full		: fbTransformFull;
 	transform_delta		: fbTransformDelta;
 
@@ -106,7 +104,6 @@ table fbSnapshot
 {
 	header				: fbSnapshotHeader;
 	entities			: [fbActorEntity];
-	removed				: [fbRemovedActor];
 }
 
 root_type fbSnapshot;

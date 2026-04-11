@@ -91,7 +91,8 @@ namespace
 		uint32 entity = 0;
 		std::string protocol;
 
-		float rtt_ms = 0.0f;
+		float wireRtt_ms = 0.0f;
+		float appRtt_ms = 0.0f;
 		float jitter_ms = 0.0f;
 		float packetLoss = 0.0f;
 		float recvThroughput_kbps = 0.0f;
@@ -107,6 +108,8 @@ namespace
 		float rtxHitPct = 0.0f;
 		float rtxRecoveryPct = 0.0f;
 		float avgRtxPerHitPacket = 0.0f;
+		float deliveryLatencyAvg_ms = 0.0f;
+		float recoveryLatencyAvg_ms = 0.0f;
 
 		float goodputPct = 0.0f;
 		float fragEfficiencyPct = 0.0f;
@@ -178,7 +181,8 @@ namespace
 					const auto netView = profile::NetworkStatsView::FromEntity(R, e);
 					const auto kpiView = profile::RudpKpiView::FromEntity(R, e);
 
-					row.rtt_ms = netView.rtt_ms;
+					row.wireRtt_ms = netView.wireRtt_ms;
+					row.appRtt_ms = netView.appRtt_ms;
 					row.jitter_ms = netView.jitter_ms;
 					row.packetLoss = netView.packetLoss;
 					row.recvThroughput_kbps = netView.recvThroughput_kbps;
@@ -194,6 +198,8 @@ namespace
 					row.rtxHitPct = kpiView.rtxHitPct;
 					row.rtxRecoveryPct = kpiView.rtxRecoveryPct;
 					row.avgRtxPerHitPacket = kpiView.avgRtxPerHitPacket;
+					row.deliveryLatencyAvg_ms = static_cast<float>(kpiView.deliveryLatency.avg_ns / 1'000'000.0);
+					row.recoveryLatencyAvg_ms = static_cast<float>(kpiView.recoveryLatency.avg_ns / 1'000'000.0);
 
 					row.goodputPct = kpiView.goodputPct;
 					row.fragEfficiencyPct = kpiView.fragEfficiencyPct;
@@ -261,9 +267,6 @@ namespace
 
 				if (auto row = CaptureSessionRow(nm->GetUdpSession(), client->GetInstanceId(), client->GetUserId(), "UDP"); row.has_value())
 					WriteRow(row.value());
-
-				if (auto row = CaptureSessionRow(nm->GetTcpSession(), client->GetInstanceId(), client->GetUserId(), "TCP"); row.has_value())
-					WriteRow(row.value());
 			}
 
 			m_csv.flush();
@@ -274,7 +277,8 @@ namespace
 			struct Agg
 			{
 				uint64 count = 0;
-				double sum_rtt = 0.0;
+				double sum_wireRtt = 0.0;
+				double sum_appRtt = 0.0;
 				double sum_jitter = 0.0;
 				double sum_loss = 0.0;
 				double sum_bw = 0.0;
@@ -282,6 +286,8 @@ namespace
 				double sum_rxpps = 0.0;
 				double sum_rtxHit = 0.0;
 				double sum_rtxRecovery = 0.0;
+				double sum_deliveryLatency = 0.0;
+				double sum_recoveryLatency = 0.0;
 				double sum_goodput = 0.0;
 				double max_pending = 0.0;
 				double max_rtxPerPacket = 0.0;
@@ -293,7 +299,8 @@ namespace
 				const std::string key = std::to_string(row.clientInstanceId) + "|" + std::to_string(row.userId) + "|" + row.protocol + "|" + std::to_string(row.sessionId);
 				auto& a = table[key];
 				a.count++;
-				a.sum_rtt += row.rtt_ms;
+				a.sum_wireRtt += row.wireRtt_ms;
+				a.sum_appRtt += row.appRtt_ms;
 				a.sum_jitter += row.jitter_ms;
 				a.sum_loss += row.packetLoss;
 				a.sum_bw += row.bandwidthMbps;
@@ -301,6 +308,8 @@ namespace
 				a.sum_rxpps += row.rxPacketsPerSec;
 				a.sum_rtxHit += row.rtxHitPct;
 				a.sum_rtxRecovery += row.rtxRecoveryPct;
+				a.sum_deliveryLatency += row.deliveryLatencyAvg_ms;
+				a.sum_recoveryLatency += row.recoveryLatencyAvg_ms;
 				a.sum_goodput += row.goodputPct;
 				a.max_pending = std::max(a.max_pending, static_cast<double>(row.pendingReliableNow));
 				a.max_rtxPerPacket = std::max(a.max_rtxPerPacket, static_cast<double>(row.maxRtxPerPacket));
@@ -310,14 +319,15 @@ namespace
 			if (!summary.is_open())
 				return;
 
-			summary << "key,samples,avg_rtt_ms,avg_jitter_ms,avg_packetLoss,avg_bandwidthMbps,avg_txPacketsPerSec,avg_rxPacketsPerSec,avg_rtxHitPct,avg_rtxRecoveryPct,avg_goodputPct,max_pendingReliableNow,max_maxRtxPerPacket\n";
+			summary << "key,samples,avg_wireRtt_ms,avg_appRtt_ms,avg_jitter_ms,avg_packetLoss,avg_bandwidthMbps,avg_txPacketsPerSec,avg_rxPacketsPerSec,avg_rtxHitPct,avg_rtxRecoveryPct,avg_deliveryLatency_ms,avg_recoveryLatency_ms,avg_goodputPct,max_pendingReliableNow,max_maxRtxPerPacket\n";
 			for (const auto& [key, a] : table)
 			{
 				const double n = (a.count == 0) ? 1.0 : static_cast<double>(a.count);
 				summary
 					<< key << ","
 					<< a.count << ","
-					<< (a.sum_rtt / n) << ","
+					<< (a.sum_wireRtt / n) << ","
+					<< (a.sum_appRtt / n) << ","
 					<< (a.sum_jitter / n) << ","
 					<< (a.sum_loss / n) << ","
 					<< (a.sum_bw / n) << ","
@@ -325,6 +335,8 @@ namespace
 					<< (a.sum_rxpps / n) << ","
 					<< (a.sum_rtxHit / n) << ","
 					<< (a.sum_rtxRecovery / n) << ","
+					<< (a.sum_deliveryLatency / n) << ","
+					<< (a.sum_recoveryLatency / n) << ","
 					<< (a.sum_goodput / n) << ","
 					<< a.max_pending << ","
 					<< a.max_rtxPerPacket << "\n";
@@ -335,9 +347,9 @@ namespace
 		void WriteHeader()
 		{
 			m_csv << "captureEpochMs,clientInstanceId,userId,sessionId,entity,protocol,"
-				<< "rtt_ms,jitter_ms,packetLoss,recvThroughput_kbps,sendThroughput_kbps,bandwidthMbps,"
+				<< "wireRtt_ms,appRtt_ms,jitter_ms,packetLoss,recvThroughput_kbps,sendThroughput_kbps,bandwidthMbps,"
 				<< "txPacketsPerSec,rxPacketsPerSec,txBytesPerSec,rxBytesPerSec,"
-				<< "firstSendSuccessPct,rtxHitPct,rtxRecoveryPct,avgRtxPerHitPacket,"
+				<< "firstSendSuccessPct,rtxHitPct,rtxRecoveryPct,avgRtxPerHitPacket,deliveryLatencyAvg_ms,recoveryLatencyAvg_ms,"
 				<< "goodputPct,fragEfficiencyPct,ackPiggybackHitPct,outOfOrderPct,duplicatePct,"
 				<< "pendingReliableNow,pendingReliablePeek,maxRtxPerPacket,rtxTimeoutPct,rtxGiveupPct\n";
 		}
@@ -353,7 +365,8 @@ namespace
 				<< row.sessionId << ","
 				<< row.entity << ","
 				<< row.protocol << ","
-				<< row.rtt_ms << ","
+				<< row.wireRtt_ms << ","
+				<< row.appRtt_ms << ","
 				<< row.jitter_ms << ","
 				<< row.packetLoss << ","
 				<< row.recvThroughput_kbps << ","
@@ -367,6 +380,8 @@ namespace
 				<< row.rtxHitPct << ","
 				<< row.rtxRecoveryPct << ","
 				<< row.avgRtxPerHitPacket << ","
+				<< row.deliveryLatencyAvg_ms << ","
+				<< row.recoveryLatencyAvg_ms << ","
 				<< row.goodputPct << ","
 				<< row.fragEfficiencyPct << ","
 				<< row.ackPiggybackHitPct << ","
@@ -403,7 +418,7 @@ static void Run(const TestConfig& config)
     std::vector<std::unique_ptr<ClientInstance>> clients;
 
     uint32 instanceId = 0;
-    uint64 userId = 1000;
+    uint64 userId     = 1000;
 
     // User 클라이언트 생성 및 연결 (렌더링 포함)
     for (uint32 i = 0; i < config.numUsers; ++i, ++instanceId, ++userId)
@@ -445,12 +460,7 @@ static void Run(const TestConfig& config)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    std::this_thread::sleep_for(1s);
-
-    for (auto& client : clients)
-        client->SpawnPlayer();
-
-    constexpr double targetFPS  = 60.0;
+    constexpr double targetFPS  = 144.0;
     const     auto   targetSpan = std::chrono::nanoseconds((int64_t)std::llround(1e9 / targetFPS));
     constexpr auto   sleepGuard = std::chrono::microseconds(2000);
 
@@ -458,16 +468,23 @@ static void Run(const TestConfig& config)
 
 	SessionCsvReporter reporter{};
 	auto nextDump = std::chrono::steady_clock::now() + 1s;
+	auto prevFrameStart = std::chrono::steady_clock::now();
 
     while (!renderer.ShouldClose())
     {
         const auto frameStart = std::chrono::steady_clock::now();
+        float frameDeltaSec = static_cast<float>(std::chrono::duration<double>(frameStart - prevFrameStart).count());
+        prevFrameStart = frameStart;
+        frameDeltaSec = std::clamp(frameDeltaSec, 0.0f, 0.25f);
+
+        if (frameDeltaSec <= 0.0f)
+            frameDeltaSec = static_cast<float>(1.0 / targetFPS);
 
         MAIN_EXEC.PumpOnce();
 
         for (auto& client : clients)
         {
-            client->Update(static_cast<float>(1.0 / targetFPS));
+            client->Update(frameDeltaSec);
         }
 
         for (auto& client : clients)

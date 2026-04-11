@@ -12,6 +12,7 @@
 #include "jamnet/sync/replication/ReplicationEvents.h"
 #include "jamnet/core/executor/MainExecutor.h"
 
+#include "jamnet/sync/schema/gen/lifecycle_generated.h"
 #include "jamnet/sync/schema/gen/snapshot_generated.h"
 
 namespace jam::net
@@ -68,6 +69,11 @@ namespace jam::net
     {
         switch (view.Id())
         {
+        case CustomPacketId::LIFECYCLE:
+        {
+            ProcessLifecyclePacket(view);
+            break;
+        }
         case CustomPacketId::SNAPSHOT:
         {
             ProcessSnapshot(view);
@@ -296,10 +302,16 @@ namespace jam::net
     void ClientNetWorld::ReactivateReplicatedActor(NetId netId, bool isLocal)
     {
         const auto e = GetEntity(netId);
-        if (e == entt::null || !m_world.valid(e) || !m_world.all_of<OutOfAoiTag>(e))
+        if (e == entt::null || !m_world.valid(e))
+            return;
+
+        const bool hiddenByAoi = m_world.all_of<OutOfAoiTag>(e);
+        const bool hiddenByPrediction = m_world.all_of<PredictedDespawnTag>(e);
+        if (!hiddenByAoi && !hiddenByPrediction)
             return;
 
         m_world.remove<OutOfAoiTag>(e);
+        m_world.remove<PredictedDespawnTag>(e);
         PublishActorSpawned(e, 0, isLocal);
     }
 
@@ -398,8 +410,8 @@ namespace jam::net
 
         m_netIdToEntity[netId] = e;
 
-        const uint64        owner      = m_world.get<OwnershipTag>(e).userId;
-        const uint64        controller = m_world.get<ControlTag>(e).userId;
+        const uint64 owner      = m_world.get<OwnershipTag>(e).userId;
+        const uint64 controller = m_world.get<ControlTag>(e).userId;
 
         bool isLocal = (owner == controller) && (controller == m_userId);
         if (isLocal) m_localNetId = netId;
@@ -427,7 +439,25 @@ namespace jam::net
         m_world.ctx().get<ClientReplaySystem>().Tick();
         m_world.ctx().get<ClientPhysicsSystem>().Tick();
         m_world.ctx().get<ClientSamplingSystem>().Tick();
-	}
+    }
+
+    void ClientNetWorld::ProcessLifecyclePacket(const PacketView& view)
+    {
+        flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
+        if (!fb::VerifyfbLifecycleBatchBuffer(verifier))
+            return;
+
+        auto fbBatch = fb::UnPackfbLifecycleBatch(view.Payload());
+        if (!fbBatch) return;
+
+        auto batch = std::make_shared<fb::fbLifecycleBatchT>(std::move(*fbBatch));
+
+        Post(Job([this, batch]()
+            {
+                if (auto* repl = m_world.ctx().find<ClientReplicationSystem>())
+                    repl->EnqueueLifecycle(std::move(*batch));
+            }));
+    }
 
     void ClientNetWorld::ProcessSnapshot(const PacketView& view)
     {
@@ -477,7 +507,7 @@ namespace jam::net
             return;
         }
 
-        TryConfirmPendingSpawn(nid, spawnReqId);
+        JAMNET_LOG_DEBUG("Spawn RPC accepted; waiting for lifecycle create. NetId= {}, SpawnReqId= {}", nid.Raw(), spawnReqId);
     }
 
     void ClientNetWorld::OnDespawnActorResponse(std::optional<fb::fbDespawnActorResT> res)
@@ -503,16 +533,7 @@ namespace jam::net
             return;
         }
 
-		auto view = m_world.view<NetId>();
-        for (auto e : view)
-        {
-            if (view.get<NetId>(e).Raw() == res->net_id)
-            {
-                m_world.emplace_or_replace<ControlTag>(e, ControlTag{ m_userId });
-                JAMNET_LOG_DEBUG("Now controlling actor NetID=%llu\n", res->net_id);
-                break;
-            }
-        }
+        JAMNET_LOG_DEBUG("Possess RPC accepted for NetID={}\n", res->net_id);
     }
 
     void ClientNetWorld::OnUnpossesActorResponse(std::optional<fb::fbUnpossessActorResT> res)
@@ -523,7 +544,7 @@ namespace jam::net
             return;
         }
 
-        JAMNET_LOG_DEBUG("Stopped controlling actor\n");
+        JAMNET_LOG_DEBUG("Unpossess RPC accepted\n");
     }
 
     void ClientNetWorld::PublishActorSpawned(entt::entity e, uint32 spawnReqId, bool isLocal)

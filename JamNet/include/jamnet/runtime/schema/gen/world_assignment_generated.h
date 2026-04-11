@@ -25,23 +25,83 @@ struct fbRequestWorldAssignmentRes;
 struct fbRequestWorldAssignmentResBuilder;
 struct fbRequestWorldAssignmentResT;
 
+enum fbWorldRequestAction : uint8_t {
+  fbWorldRequestAction_AutoAssign = 0,
+  fbWorldRequestAction_Join = 1,
+  fbWorldRequestAction_Leave = 2,
+  fbWorldRequestAction_Transfer = 3,
+  fbWorldRequestAction_MIN = fbWorldRequestAction_AutoAssign,
+  fbWorldRequestAction_MAX = fbWorldRequestAction_Transfer
+};
+
+inline const fbWorldRequestAction (&EnumValuesfbWorldRequestAction())[4] {
+  static const fbWorldRequestAction values[] = {
+    fbWorldRequestAction_AutoAssign,
+    fbWorldRequestAction_Join,
+    fbWorldRequestAction_Leave,
+    fbWorldRequestAction_Transfer
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesfbWorldRequestAction() {
+  static const char * const names[5] = {
+    "AutoAssign",
+    "Join",
+    "Leave",
+    "Transfer",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamefbWorldRequestAction(fbWorldRequestAction e) {
+  if (::flatbuffers::IsOutRange(e, fbWorldRequestAction_AutoAssign, fbWorldRequestAction_Transfer)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesfbWorldRequestAction()[index];
+}
+
 struct fbRequestWorldAssignmentReqT : public ::flatbuffers::NativeTable {
   typedef fbRequestWorldAssignmentReq TableType;
-  int32_t for_compile = 0;
+  jam::net::fb::fbWorldRequestAction action = jam::net::fb::fbWorldRequestAction_AutoAssign;
+  uint32_t target_world_id = 0;
+  uint8_t target_world_kind = 0;
+  uint32_t target_world_template_id = 0;
+  uint64_t target_world_instance_id = 0;
 };
 
 struct fbRequestWorldAssignmentReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbRequestWorldAssignmentReqT NativeTableType;
   typedef fbRequestWorldAssignmentReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_FOR_COMPILE = 4
+    VT_ACTION = 4,
+    VT_TARGET_WORLD_ID = 6,
+    VT_TARGET_WORLD_KIND = 8,
+    VT_TARGET_WORLD_TEMPLATE_ID = 10,
+    VT_TARGET_WORLD_INSTANCE_ID = 12
   };
-  int32_t for_compile() const {
-    return GetField<int32_t>(VT_FOR_COMPILE, 0);
+  jam::net::fb::fbWorldRequestAction action() const {
+    return static_cast<jam::net::fb::fbWorldRequestAction>(GetField<uint8_t>(VT_ACTION, 0));
+  }
+  uint32_t target_world_id() const {
+    return GetField<uint32_t>(VT_TARGET_WORLD_ID, 0);
+  }
+  uint8_t target_world_kind() const {
+    return GetField<uint8_t>(VT_TARGET_WORLD_KIND, 0);
+  }
+  uint32_t target_world_template_id() const {
+    return GetField<uint32_t>(VT_TARGET_WORLD_TEMPLATE_ID, 0);
+  }
+  uint64_t target_world_instance_id() const {
+    return GetField<uint64_t>(VT_TARGET_WORLD_INSTANCE_ID, 0);
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<int32_t>(verifier, VT_FOR_COMPILE, 4) &&
+           VerifyField<uint8_t>(verifier, VT_ACTION, 1) &&
+           VerifyField<uint32_t>(verifier, VT_TARGET_WORLD_ID, 4) &&
+           VerifyField<uint8_t>(verifier, VT_TARGET_WORLD_KIND, 1) &&
+           VerifyField<uint32_t>(verifier, VT_TARGET_WORLD_TEMPLATE_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_TARGET_WORLD_INSTANCE_ID, 8) &&
            verifier.EndTable();
   }
   fbRequestWorldAssignmentReqT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -53,8 +113,20 @@ struct fbRequestWorldAssignmentReqBuilder {
   typedef fbRequestWorldAssignmentReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_for_compile(int32_t for_compile) {
-    fbb_.AddElement<int32_t>(fbRequestWorldAssignmentReq::VT_FOR_COMPILE, for_compile, 0);
+  void add_action(jam::net::fb::fbWorldRequestAction action) {
+    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentReq::VT_ACTION, static_cast<uint8_t>(action), 0);
+  }
+  void add_target_world_id(uint32_t target_world_id) {
+    fbb_.AddElement<uint32_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_ID, target_world_id, 0);
+  }
+  void add_target_world_kind(uint8_t target_world_kind) {
+    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_KIND, target_world_kind, 0);
+  }
+  void add_target_world_template_id(uint32_t target_world_template_id) {
+    fbb_.AddElement<uint32_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_TEMPLATE_ID, target_world_template_id, 0);
+  }
+  void add_target_world_instance_id(uint64_t target_world_instance_id) {
+    fbb_.AddElement<uint64_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_INSTANCE_ID, target_world_instance_id, 0);
   }
   explicit fbRequestWorldAssignmentReqBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -69,9 +141,17 @@ struct fbRequestWorldAssignmentReqBuilder {
 
 inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAssignmentReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    int32_t for_compile = 0) {
+    jam::net::fb::fbWorldRequestAction action = jam::net::fb::fbWorldRequestAction_AutoAssign,
+    uint32_t target_world_id = 0,
+    uint8_t target_world_kind = 0,
+    uint32_t target_world_template_id = 0,
+    uint64_t target_world_instance_id = 0) {
   fbRequestWorldAssignmentReqBuilder builder_(_fbb);
-  builder_.add_for_compile(for_compile);
+  builder_.add_target_world_instance_id(target_world_instance_id);
+  builder_.add_target_world_template_id(target_world_template_id);
+  builder_.add_target_world_id(target_world_id);
+  builder_.add_target_world_kind(target_world_kind);
+  builder_.add_action(action);
   return builder_.Finish();
 }
 
@@ -80,6 +160,9 @@ inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAs
 struct fbRequestWorldAssignmentResT : public ::flatbuffers::NativeTable {
   typedef fbRequestWorldAssignmentRes TableType;
   uint8_t status = 2;
+  uint8_t request_action = 0;
+  uint8_t assignment_action = 0;
+  uint8_t reason = 0;
   uint32_t world_id = 0;
 };
 
@@ -88,10 +171,22 @@ struct fbRequestWorldAssignmentRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffe
   typedef fbRequestWorldAssignmentResBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_STATUS = 4,
-    VT_WORLD_ID = 6
+    VT_REQUEST_ACTION = 6,
+    VT_ASSIGNMENT_ACTION = 8,
+    VT_REASON = 10,
+    VT_WORLD_ID = 12
   };
   uint8_t status() const {
     return GetField<uint8_t>(VT_STATUS, 2);
+  }
+  uint8_t request_action() const {
+    return GetField<uint8_t>(VT_REQUEST_ACTION, 0);
+  }
+  uint8_t assignment_action() const {
+    return GetField<uint8_t>(VT_ASSIGNMENT_ACTION, 0);
+  }
+  uint8_t reason() const {
+    return GetField<uint8_t>(VT_REASON, 0);
   }
   uint32_t world_id() const {
     return GetField<uint32_t>(VT_WORLD_ID, 0);
@@ -99,6 +194,9 @@ struct fbRequestWorldAssignmentRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffe
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_STATUS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_REQUEST_ACTION, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ASSIGNMENT_ACTION, 1) &&
+           VerifyField<uint8_t>(verifier, VT_REASON, 1) &&
            VerifyField<uint32_t>(verifier, VT_WORLD_ID, 4) &&
            verifier.EndTable();
   }
@@ -113,6 +211,15 @@ struct fbRequestWorldAssignmentResBuilder {
   ::flatbuffers::uoffset_t start_;
   void add_status(uint8_t status) {
     fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_STATUS, status, 2);
+  }
+  void add_request_action(uint8_t request_action) {
+    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_REQUEST_ACTION, request_action, 0);
+  }
+  void add_assignment_action(uint8_t assignment_action) {
+    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_ASSIGNMENT_ACTION, assignment_action, 0);
+  }
+  void add_reason(uint8_t reason) {
+    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_REASON, reason, 0);
   }
   void add_world_id(uint32_t world_id) {
     fbb_.AddElement<uint32_t>(fbRequestWorldAssignmentRes::VT_WORLD_ID, world_id, 0);
@@ -131,9 +238,15 @@ struct fbRequestWorldAssignmentResBuilder {
 inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> CreatefbRequestWorldAssignmentRes(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint8_t status = 2,
+    uint8_t request_action = 0,
+    uint8_t assignment_action = 0,
+    uint8_t reason = 0,
     uint32_t world_id = 0) {
   fbRequestWorldAssignmentResBuilder builder_(_fbb);
   builder_.add_world_id(world_id);
+  builder_.add_reason(reason);
+  builder_.add_assignment_action(assignment_action);
+  builder_.add_request_action(request_action);
   builder_.add_status(status);
   return builder_.Finish();
 }
@@ -149,7 +262,11 @@ inline fbRequestWorldAssignmentReqT *fbRequestWorldAssignmentReq::UnPack(const :
 inline void fbRequestWorldAssignmentReq::UnPackTo(fbRequestWorldAssignmentReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = for_compile(); _o->for_compile = _e; }
+  { auto _e = action(); _o->action = _e; }
+  { auto _e = target_world_id(); _o->target_world_id = _e; }
+  { auto _e = target_world_kind(); _o->target_world_kind = _e; }
+  { auto _e = target_world_template_id(); _o->target_world_template_id = _e; }
+  { auto _e = target_world_instance_id(); _o->target_world_instance_id = _e; }
 }
 
 inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> fbRequestWorldAssignmentReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -160,10 +277,18 @@ inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAs
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRequestWorldAssignmentReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _for_compile = _o->for_compile;
+  auto _action = _o->action;
+  auto _target_world_id = _o->target_world_id;
+  auto _target_world_kind = _o->target_world_kind;
+  auto _target_world_template_id = _o->target_world_template_id;
+  auto _target_world_instance_id = _o->target_world_instance_id;
   return jam::net::fb::CreatefbRequestWorldAssignmentReq(
       _fbb,
-      _for_compile);
+      _action,
+      _target_world_id,
+      _target_world_kind,
+      _target_world_template_id,
+      _target_world_instance_id);
 }
 
 inline fbRequestWorldAssignmentResT *fbRequestWorldAssignmentRes::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -176,6 +301,9 @@ inline void fbRequestWorldAssignmentRes::UnPackTo(fbRequestWorldAssignmentResT *
   (void)_o;
   (void)_resolver;
   { auto _e = status(); _o->status = _e; }
+  { auto _e = request_action(); _o->request_action = _e; }
+  { auto _e = assignment_action(); _o->assignment_action = _e; }
+  { auto _e = reason(); _o->reason = _e; }
   { auto _e = world_id(); _o->world_id = _e; }
 }
 
@@ -188,10 +316,16 @@ inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> CreatefbRequestWorldAs
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRequestWorldAssignmentResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _status = _o->status;
+  auto _request_action = _o->request_action;
+  auto _assignment_action = _o->assignment_action;
+  auto _reason = _o->reason;
   auto _world_id = _o->world_id;
   return jam::net::fb::CreatefbRequestWorldAssignmentRes(
       _fbb,
       _status,
+      _request_action,
+      _assignment_action,
+      _reason,
       _world_id);
 }
 

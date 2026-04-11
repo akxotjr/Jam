@@ -1,0 +1,27 @@
+include "snapshot.fbs";
+
+namespace jam.net.fb;
+
+enum fbLifecycleOp : ubyte
+{
+	Create = 0,
+	Meta   = 1,
+	Remove = 2
+}
+
+table fbLifecycleActor
+{
+	op				: fbLifecycleOp = Create;
+	net_id			: uint;
+	meta			: fbActorMeta;
+	remove_reason	: fbRemovalReason = AoiLeft;
+}
+
+table fbLifecycleBatch
+{
+	server_tick		: uint;
+	actors			: [fbLifecycleActor];
+}
+
+root_type fbLifecycleBatch;
+file_identifier "LIFE";

@@ -354,7 +354,9 @@ namespace jam::net::profile
 		if (const auto* linkQuality = R.try_get<LinkQualityState>(e))
 		{
 			hasLinkQuality  = true;
-			view.rtt_ms		= linkQuality->appRttAvg_ms;
+			view.wireRtt_ms = linkQuality->wireRttAvg_ms;
+			view.appRtt_ms	= linkQuality->appRttAvg_ms;
+			view.rtt_ms		= view.appRtt_ms;
 			view.jitter_ms  = linkQuality->appJitter_ms;
 			view.packetLoss = linkQuality->GetPacketLoss();
 		}

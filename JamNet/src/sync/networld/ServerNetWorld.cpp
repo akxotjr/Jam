@@ -85,12 +85,12 @@ namespace jam::net
 
 
 
-	void ServerNetWorld::Enter(uint64 userId)
+	bool ServerNetWorld::Enter(uint64 userId, std::function<void()> onEntered)
 	{
 		if (userId == 0)
-			return;
+			return false;
 
-		Post(Job([this, userId]()
+		return Post(Job([this, userId, onEntered = std::move(onEntered)]() mutable
 			{
 				if (std::ranges::find(m_members, userId) == m_members.end())
 					m_members.push_back(userId);
@@ -100,15 +100,18 @@ namespace jam::net
 
 				if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 					repl->OnEnter(userId);
+
+				if (onEntered)
+					onEntered();
 			}));
 	}
 
-	void ServerNetWorld::Leave(uint64 userId)
+	bool ServerNetWorld::Leave(uint64 userId, std::function<void()> onLeft)
 	{
 		if (userId == 0)
-			return;
+			return false;
 
-		Post(Job([this, userId]()
+		return Post(Job([this, userId, onLeft = std::move(onLeft)]() mutable
 			{
 				std::erase(m_members, userId);
 
@@ -117,6 +120,9 @@ namespace jam::net
 
 				if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 					repl->OnLeave(userId);
+
+				if (onLeft)
+					onLeft();
 			}));
 	}
 
@@ -148,13 +154,13 @@ namespace jam::net
 	}
 
 
-	void ServerNetWorld::OnRecvPacket(const PacketView& pkt)
+	void ServerNetWorld::OnRecvPacket(uint64 callerUserId, const PacketView& pkt)
 	{
 		switch (pkt.Id())
 		{
 		case CustomPacketId::INPUT:
 		{
-			ProcessGameInput(pkt);
+			ProcessGameInput(callerUserId, pkt);
 			break;
 		}
 		default: break;
@@ -416,8 +422,29 @@ namespace jam::net
 		if (ownership.userId != userId)
 			return false;
 
+		auto* control = m_world.try_get<ControlTag>(target);
+		if (control && control->userId != 0 && control->userId != userId)
+			return false;
+
+		auto controlledView = m_world.view<ControlTag>();
+		for (const entt::entity e : controlledView)
+		{
+			auto& controlled = controlledView.get<ControlTag>(e);
+			if (e == target || controlled.userId != userId)
+				continue;
+
+			controlled.userId = 0;
+			m_world.remove<px::CharacterInput>(e);
+
+			if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
+				repl->MarkActorDirty(e, true);
+		}
+
 		m_world.emplace_or_replace<ControlTag>(target, ControlTag{ userId });
 		m_world.emplace_or_replace<px::CharacterInput>(target);
+
+		if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
+			repl->MarkActorDirty(target, true);
 
 		return true;
 	}
@@ -447,17 +474,29 @@ namespace jam::net
 
 		// 조종 해제
 		controllable.userId = 0;
+		m_world.remove<px::CharacterInput>(targetEntity);
+
+		if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
+			repl->MarkActorDirty(targetEntity, true);
 
 		return true;
 	}
 
-	void ServerNetWorld::ProcessGameInput(const PacketView& pkt)
+	void ServerNetWorld::ProcessGameInput(uint64 callerUserId, const PacketView& pkt)
 	{
 		flatbuffers::Verifier verfier(pkt.Payload(), pkt.PayloadSize());
 		if (!fb::VerifyfbGameInputBuffer(verfier)) return;
 
 		const auto* gameInput = fb::GetfbGameInput(pkt.Payload());
 		if (!gameInput) return;
+		if (callerUserId == 0)
+			return;
+
+		if (gameInput->user_id() != 0 && gameInput->user_id() != callerUserId)
+		{
+			JAMNET_LOG_WARN("Ignoring claimed input userId={} and using authenticated principal={}",
+				gameInput->user_id(), callerUserId);
+		}
 
 		InputCmd cmd{};
 		cmd.seq					= gameInput->sequence();
@@ -472,7 +511,7 @@ namespace jam::net
 
 		if (m_world.ctx().contains<ServerInputSystem>())
 		{
-			m_world.ctx().get<ServerInputSystem>().EnqueueInput(gameInput->user_id(), cmd);
+			m_world.ctx().get<ServerInputSystem>().EnqueueInput(callerUserId, cmd);
 		}
 	}
 }

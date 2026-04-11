@@ -9,7 +9,7 @@ namespace jam::net
     public:
         ServerPhysicsSystem(entt::registry& world, px::IPhysicsFacade* physics);
 
-        void                    Init() const;
+        void                    Init();
         void                    Tick();
 
         void                    SpawnActor(entt::entity e, const px::SpawnDesc& desc) const;
@@ -45,6 +45,9 @@ namespace jam::net
 
         uint64                              m_awaitSeq          = 0;
         bool                                m_tickFiberRunning  = false;
+        uint32                              m_tickDebt          = 0;
+        uint32                              m_tickDebtCap       = 8;
+        uint32                              m_tickBurstBudget   = 4;
 
         mutable std::vector<PendingActorOp> m_pendingActorOps;
 	};

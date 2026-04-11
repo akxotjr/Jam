@@ -11,6 +11,7 @@ namespace jam::net
 	{
 		m_bInitialized = true;
 		m_fbb.reset(new flatbuffers::FlatBufferBuilder(JAMNET_MTU));
+		ResetInput();
 	}
 
 
@@ -45,6 +46,11 @@ namespace jam::net
 	void ClientInputSystem::SetInput(const px::CharacterInput& input)
 	{
 		m_inputSample.Write(input);
+	}
+
+	void ClientInputSystem::ResetInput()
+	{
+		m_inputSample.Write(px::CharacterInput{});
 	}
 
 

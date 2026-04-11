@@ -31,6 +31,8 @@ namespace jam::net
 		void						SetInput(const px::CharacterInput& input);
 		/// @brief 서버 Ack 처리
 		void						OnServerAck(uint32 ackSeq);
+		/// @brief 현재 입력 샘플을 초기화
+		void						ResetInput();
 
 	private:
 		void						SendInput(ClientNetWorld* netWorld, const InputCmd& cmd);

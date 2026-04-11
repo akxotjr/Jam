@@ -6,6 +6,9 @@
 #include "jamnet/sync/physics/ShardJobBridge.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 
+#include <atomic>
+#include <functional>
+
 namespace jam::net
 {
 
@@ -36,9 +39,10 @@ namespace jam::net
 		virtual void					Init();
 		void							Tick(uint64 dt_ns);
 		void							Stop();
+		bool							BeginShutdown(eMailboxCloseMode mode = eMailboxCloseMode::Drain, std::function<void()> onClosed = {});
 
 		void							Submit(Job j) const;
-		void							Post(Job j) const;
+		bool							Post(Job j) const;
 
 		entt::registry&					GetRegistry() { return m_world; }
 
@@ -46,6 +50,7 @@ namespace jam::net
 		WorldId							GetWorldId() const { return m_worldId; }
 
 	private:
+		void							FinalizeShutdownOnShard(std::function<void()> onClosed);
 		virtual void					TickOnShard() = 0;
 
 	protected:
@@ -58,6 +63,7 @@ namespace jam::net
 		std::shared_ptr<Mailbox>			m_mailbox;
 
 		bool								m_tickActive = false;
+		std::atomic<bool>					m_shutdownRequested = false;
 
 		WorldId								m_worldId = INVALID_WORLD_ID;
 	};
