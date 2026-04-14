@@ -477,6 +477,15 @@ namespace jam::px
 		body.SetPlayerInput(input);
 	}
 
+	void PhysicsFacade::ApplyReplayCharacterInput(ObjectId id, const CharacterInput& input)
+	{
+		auto it = m_cctMap.find(id);
+		if (it == m_cctMap.end()) return;
+
+		CharacterBody& body = it->second;
+		body.SetReplayInput(input);
+	}
+
 	bool PhysicsFacade::RaycastLOS(const Vec3& from, const Vec3& to) const
 	{
 		if (!m_world) return true;
@@ -680,7 +689,7 @@ namespace jam::px
 			}
 		}
 
-		JAM_ASSERT(false, "Unknown body type in template: {}", tplDef->name);
+		JAM_ASSERT_MSG(false, "Unknown body type in template: {}", tplDef->name);
 		return false;
 	}
 

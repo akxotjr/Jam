@@ -2,8 +2,6 @@
 #include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ShardDirectory.h"
 #include "jamnet/core/executor/ShardExecutor.h"
-#include "jamnet/core/executor/ThreadRegistry.h"
-
 
 namespace jam
 {
@@ -18,12 +16,21 @@ namespace jam
 	void GlobalExecutor::Init(const GlobalExecutorConfig& config)
 	{
 		m_config = config;
+
 		m_config.layout = m_config.autoTune ? AutoLayout(m_config.layoutCfg) : m_config.layout;
-		JAM_ASSERT(m_config.layout.IsValid())
+		if (m_config.affinity.useProfileDefaults)
+			m_config.affinity = DefaultExecutorAffinityConfig(m_config.layoutCfg.profile);
+		JAM_ASSERT(m_config.layout.IsValid());
+
+		BuildAffinityPlan();
 
 		ShardDirectoryConfig dirCfg = {
-			.numShards	= m_config.layout.shards,
-			.shardCfg	= m_config.shardCfg
+			.numShards			= static_cast<uint32>(m_config.layout.shards),
+			.shardCfg			= m_config.shardCfg,
+			.routeSeed			= m_config.routeSeed,
+			.pinShardWorkers	= m_config.affinity.pinShardWorkers,
+			.affinitySlots		= m_affinitySlots,
+			.affinitySlotOffset = 0
 		};
 
 		m_directory = std::make_shared<ShardDirectory>(dirCfg);
@@ -34,16 +41,20 @@ namespace jam
 		for (int32 i = 0; i < m_config.layout.iocp; ++i)
 		{
 			auto domain = std::make_shared<IocpDomain>();
-			domain->id = static_cast<uint32>(i);
+			domain->id   = static_cast<uint32>(i);
 			domain->core = std::make_shared<net::IocpCore>();
+
 			m_iocpDomains.push_back(domain);
 		}
+
 		m_nextIocpDomain.store(0, std::memory_order_relaxed);
 		m_nextOffloadWorkerSlot.store(0, std::memory_order_relaxed);
+
 		m_offloadMetricSlotCount = (m_config.layout.offload > 0) ? static_cast<size_t>(m_config.layout.offload) : 0;
 		m_offloadMetricSlots.reset();
 		if (m_offloadMetricSlotCount != 0)
 			m_offloadMetricSlots = std::make_unique<MetricsSlot<OffloadWorkerMetrics>[]>(m_offloadMetricSlotCount);
+
 		m_fiberMetricSlot.value = {};
 		m_metricBaseline.Write(GlobalExecutorMetrics{});
 
@@ -62,7 +73,17 @@ namespace jam
 		if (m_running.exchange(true, std::memory_order_release))
 			return;
 
+		if (!m_scheduler)
+		{
+			m_backend   = WinFiberBackend();
+			m_scheduler = std::make_unique<FiberScheduler>(m_backend);
+		}
+
 		m_nextOffloadWorkerSlot.store(0, std::memory_order_relaxed);
+		m_fiberWakeEpoch.store(0, std::memory_order_relaxed);
+		if (m_config.affinity.pinMainThread)
+			PinCurrentThreadForRole("Main", 0, MainAffinitySlotIndex());
+
 		m_directory->Start();
 
 		std::vector<std::shared_ptr<IocpDomain>> domains;
@@ -96,6 +117,7 @@ namespace jam
 				if (auto st = wp.lock())
 					st->cancelled.store(true, std::memory_order_relaxed);
 		}
+		NotifyFiberWorkAvailable();
 
 		for (size_t i = 0; i < m_offloadWorkers.size(); ++i)
 			m_offload.enqueue(Job([] {}));
@@ -149,6 +171,17 @@ namespace jam
 		return domain ? domain->core : nullptr;
 	}
 
+	RouteAssignment GlobalExecutor::PlaceRoute(RouteKey key, const RoutePlacementOptions& opt) const
+	{
+		return m_directory ? m_directory->PlaceRoute(key, opt) : RouteAssignment{};
+	}
+
+	void GlobalExecutor::ReleaseRoute(const RouteAssignment& assignment) const
+	{
+		if (m_directory)
+			m_directory->ReleaseRoute(assignment);
+	}
+
 	void GlobalExecutor::Submit(Job j)
 	{
 		m_offload.enqueue(std::move(j));
@@ -172,6 +205,7 @@ namespace jam
 			},
 			FiberDesc{ .name = "GE.SubmitAfter" }
 		);
+		NotifyFiberWorkAvailable();
 	}
 
 	void GlobalExecutor::ConveyAll(Job j)
@@ -193,31 +227,51 @@ namespace jam
 
 	void GlobalExecutor::SpawnFiber(FiberFn fn, const FiberDesc& desc) const
 	{
-		if (m_scheduler) m_scheduler->PostSpawn(std::move(fn), desc);
+		if (m_scheduler)
+		{
+			m_scheduler->PostSpawn(std::move(fn), desc);
+			NotifyFiberWorkAvailable();
+		}
 	}
 
 	void GlobalExecutor::ResumeFiber(FiberAwaitKey key) const
 	{
-		if (m_scheduler) m_scheduler->PostResume(key);
+		if (m_scheduler)
+		{
+			m_scheduler->PostResume(key);
+			NotifyFiberWorkAvailable();
+		}
 	}
 
 	void GlobalExecutor::CancelFiberByKey(FiberAwaitKey key, eCancelCode code) const
 	{
-		if (m_scheduler) m_scheduler->PostCancelByKey(key, code);
+		if (m_scheduler)
+		{
+			m_scheduler->PostCancelByKey(key, code);
+			NotifyFiberWorkAvailable();
+		}
 	}
 
 	void GlobalExecutor::CancelFiberById(uint32 id, eCancelCode code) const
 	{
-		if (m_scheduler) m_scheduler->PostCancelById(id, code);
+		if (m_scheduler)
+		{
+			m_scheduler->PostCancelById(id, code);
+			NotifyFiberWorkAvailable();
+		}
 	}
 
-	GlobalExecutor::PeriodicHandle GlobalExecutor::ScheduleFixedRate(Job j, const PeriodicOptions& opt)
+	PeriodicHandle GlobalExecutor::ScheduleFixedRate(Job j, const PeriodicOptions& opt)
 	{
+		if (!m_scheduler || opt.period_ns == 0)
+			return {};
+
 		auto st = std::make_shared<PeriodicState>();
 		st->period_ns = opt.period_ns;
 		st->initialDelay_ns = opt.initialDelay_ns;
 		st->maxCatchUp = opt.maxCatchUp;
 		st->fixedRate = true;
+		st->awaitKey = m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
 
 		const uint32 id = m_periodicId.fetch_add(1, std::memory_order_relaxed);
 
@@ -236,7 +290,7 @@ namespace jam
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
-					m_scheduler->SleepUntil(next_ns);
+					m_scheduler->Suspend(st->awaitKey, next_ns);
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
@@ -259,17 +313,22 @@ namespace jam
 			},
 			FiberDesc{ .name = fiberName }
 		);
+		NotifyFiberWorkAvailable();
 
 		return PeriodicHandle{ id };
 	}
 
-	GlobalExecutor::PeriodicHandle GlobalExecutor::ScheduleFixedDelay(Job j, const PeriodicOptions& opt)
+	PeriodicHandle GlobalExecutor::ScheduleFixedDelay(Job j, const PeriodicOptions& opt)
 	{
+		if (!m_scheduler || opt.period_ns == 0)
+			return {};
+
 		auto st = std::make_shared<PeriodicState>();
 		st->period_ns = opt.period_ns;
 		st->initialDelay_ns = opt.initialDelay_ns;
 		st->maxCatchUp = 0;
 		st->fixedRate = false;
+		st->awaitKey = m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
 
 		const uint32 id = m_periodicId.fetch_add(1, std::memory_order_relaxed);
 
@@ -285,7 +344,7 @@ namespace jam
 			{
 				// 초기 지연
 				uint64 next = NOW_NS() + st->initialDelay_ns;
-				m_scheduler->SleepUntil(next);
+				m_scheduler->Suspend(st->awaitKey, next);
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
@@ -295,7 +354,7 @@ namespace jam
 						break;
 
 					// 2) 고정 딜레이
-					m_scheduler->SleepUntil(NOW_NS() + st->period_ns);
+					m_scheduler->Suspend(st->awaitKey, NOW_NS() + st->period_ns);
 				}
 
 				// 정리
@@ -304,11 +363,12 @@ namespace jam
 			},
 			FiberDesc{ .name = fiberName }
 		);
+		NotifyFiberWorkAvailable();
 
 		return PeriodicHandle{ id };
 	}
 
-	bool GlobalExecutor::CancelPerioidc(PeriodicHandle h)
+	bool GlobalExecutor::CancelPeriodic(PeriodicHandle h)
 	{
 		WRITE_LOCK
 		auto it = m_periodics.find(h.id);
@@ -316,6 +376,11 @@ namespace jam
 		if (auto st = it->second.lock())
 		{
 			st->cancelled.store(true, std::memory_order_relaxed);
+			if (m_scheduler)
+			{
+				m_scheduler->PostCancelByKey(st->awaitKey, eCancelCode::Manual);
+				NotifyFiberWorkAvailable();
+			}
 			return true;
 		}
 		return false;
@@ -324,19 +389,21 @@ namespace jam
 	void GlobalExecutor::OffloadWorkerLoop()
 	{
 		const uint32 myIndex = m_nextOffloadWorkerSlot.fetch_add(1, std::memory_order_relaxed);
-		JAM_ASSERT(myIndex < m_offloadMetricSlotCount)
+		JAM_ASSERT(myIndex < m_offloadMetricSlotCount);
 		if (myIndex >= m_offloadMetricSlotCount)
 			return;
 
 		auto& metricSlot = m_offloadMetricSlots[myIndex];
 		std::string threadName = std::format("GlobalExecutor#Offload{}", myIndex);
-		ThreadRegistry::InitExecutorThread(threadName, this);
+		InitThreadContext(threadName, this);
+		if (m_config.affinity.pinOffloadWorkers)
+			PinCurrentThreadForRole("Offload", myIndex, OffloadAffinitySlotBase() + myIndex);
 
 		while (m_running.load())
 		{
 			Job j([] {});
 			const uint64 waitStart_ns = NOW_NS();
-			const bool dequeued = m_offload.wait_dequeue_timed(j, 1);
+			const bool dequeued = m_offload.wait_dequeue_timed(j, 1000);
 			const uint64 waitCost_ns = NOW_NS() - waitStart_ns;
 			uint64 execCost_ns = 0;
 
@@ -395,7 +462,9 @@ namespace jam
 	void GlobalExecutor::IocpWorkerLoop(std::shared_ptr<IocpDomain> domain)
 	{
 		const std::string threadName = std::format("GlobalExecutor#IOCP{}", domain ? domain->id : 0);
-		ThreadRegistry::InitExecutorThread(threadName, this);
+		InitThreadContext(threadName, this);
+		if (m_config.affinity.pinIocpWorkers && domain)
+			PinCurrentThreadForRole("IOCP", domain->id, IocpAffinitySlotBase() + domain->id);
 
 		while (m_running.load(std::memory_order_acquire) && domain && domain->active.load(std::memory_order_acquire))
 		{
@@ -410,14 +479,16 @@ namespace jam
 
 	void GlobalExecutor::FiberLoop()
 	{
-		ThreadRegistry::InitExecutorThread("GlobalExecutor#Fiber", this);
+		InitThreadContext("GlobalExecutor#Fiber", this);
+		if (m_config.affinity.pinFiberWorker)
+			PinCurrentThreadForRole("Fiber", 0, FiberAffinitySlotBase());
 
 		m_scheduler->AttachToCurrentThread();
-		uint32 idlePolls = 0;
 		auto& metricSlot = m_fiberMetricSlot;
 
 		while (m_running.load(std::memory_order_acquire))
 		{
+			const uint64 observedWakeEpoch = m_fiberWakeEpoch.load(std::memory_order_acquire);
 			const uint64 pollStart_ns = NOW_NS();
 			m_scheduler->Poll(64, pollStart_ns);
 			const uint64 pollCost_ns = NOW_NS() - pollStart_ns;
@@ -435,16 +506,20 @@ namespace jam
 				metricSlot.value.readyRunCount = profile.readyRunCount;
 				metricSlot.seq.WriteEnd();
 
-				idlePolls = 0;
 				continue;
 			}
 
-			++idlePolls;
 			const uint64 idleStart_ns = NOW_NS();
-			if (idlePolls < 64)
-				std::this_thread::yield();
-			else
-				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			uint64 idleWait_ns = 1'000'000ull;
+			const uint64 now_ns = NOW_NS();
+			const uint64 nextFiberWakeup_ns = m_scheduler->NextWakeupTime();
+			if (nextFiberWakeup_ns != 0)
+			{
+				idleWait_ns = (now_ns < nextFiberWakeup_ns)
+					? std::min(idleWait_ns, nextFiberWakeup_ns - now_ns)
+					: 0_ns;
+			}
+			WaitForFiberWorkOrTimeout(observedWakeEpoch, idleWait_ns);
 			sleepCost_ns = NOW_NS() - idleStart_ns;
 
 			metricSlot.seq.WriteBegin();
@@ -459,6 +534,109 @@ namespace jam
 		}
 
 		m_scheduler->DetachFromThread();
+	}
+
+	void GlobalExecutor::NotifyFiberWorkAvailable() const
+	{
+		m_fiberWakeEpoch.fetch_add(1, std::memory_order_release);
+		m_fiberWakeCv.notify_one();
+	}
+
+	void GlobalExecutor::WaitForFiberWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns) const
+	{
+		if (timeout_ns == 0)
+		{
+			std::this_thread::yield();
+			return;
+		}
+
+		std::unique_lock lock(m_fiberWakeMutex);
+		m_fiberWakeCv.wait_for(
+			lock,
+			std::chrono::nanoseconds(timeout_ns),
+			[this, observedWakeEpoch]()
+			{
+				return !m_running.load(std::memory_order_acquire)
+					|| m_fiberWakeEpoch.load(std::memory_order_acquire) != observedWakeEpoch;
+			});
+	}
+
+	void GlobalExecutor::BuildAffinityPlan()
+	{
+		m_affinitySlots.clear();
+
+		const auto& cfg = m_config.affinity;
+		if (!cfg.pinShardWorkers
+			&& !cfg.pinOffloadWorkers
+			&& !cfg.pinFiberWorker
+			&& !cfg.pinIocpWorkers
+			&& !cfg.pinMainThread)
+		{
+			return;
+		}
+
+		m_affinitySlots = BuildRoundRobinCoreSlots(QueryNumaNodesWithPrimaryCoreSlots());
+		if (m_affinitySlots.empty())
+			JAMNET_LOG_WARN("Executor affinity is enabled, but no physical core slots were discovered");
+	}
+
+	bool GlobalExecutor::TryGetAffinitySlot(uint32 slotIndex, ThreadAffinitySlot& out) const
+	{
+		if (m_affinitySlots.empty())
+			return false;
+
+		out = m_affinitySlots[static_cast<size_t>(slotIndex) % m_affinitySlots.size()];
+		return out.core.mask != 0;
+	}
+
+	void GlobalExecutor::PinCurrentThreadForRole(std::string_view roleName, uint32 roleIndex, uint32 slotIndex) const
+	{
+		ThreadAffinitySlot slot = {};
+		if (!TryGetAffinitySlot(slotIndex, slot))
+		{
+			JAMNET_LOG_WARN("{}#{} affinity requested but no valid core slot exists", roleName, roleIndex);
+			return;
+		}
+
+		if (PinCurrentThreadTo(slot.core))
+		{
+			JAMNET_LOG_DEBUG("{}#{} pinned. numaNode={}, group={}, mask=0x{:X}",
+				roleName,
+				roleIndex,
+				slot.numaNode,
+				slot.core.group,
+				static_cast<unsigned long long>(slot.core.mask));
+			return;
+		}
+
+		const DWORD errorCode = GetLastError();
+		JAMNET_LOG_WARN_LOC("{}#{} pinning failed. numaNode={}, group={}, mask=0x{:X}, error={}",
+			roleName,
+			roleIndex,
+			slot.numaNode,
+			slot.core.group,
+			static_cast<unsigned long long>(slot.core.mask),
+			errorCode);
+	}
+
+	uint32 GlobalExecutor::OffloadAffinitySlotBase() const
+	{
+		return static_cast<uint32>(std::max(0, m_config.layout.shards));
+	}
+
+	uint32 GlobalExecutor::FiberAffinitySlotBase() const
+	{
+		return OffloadAffinitySlotBase() + static_cast<uint32>(std::max(0, m_config.layout.offload));
+	}
+
+	uint32 GlobalExecutor::IocpAffinitySlotBase() const
+	{
+		return FiberAffinitySlotBase() + static_cast<uint32>(std::max(0, m_config.layout.fiber));
+	}
+
+	uint32 GlobalExecutor::MainAffinitySlotIndex() const
+	{
+		return IocpAffinitySlotBase() + static_cast<uint32>(std::max(0, m_config.layout.iocp));
 	}
 
 	GlobalExecutor::OffloadWorkerMetrics GlobalExecutor::GetOffloadMetricsSnapshot(const MetricsSlot<OffloadWorkerMetrics>& slot) const

@@ -19,7 +19,7 @@ namespace jam::net
 	void JamNetRuntime::Init()
 	{
 		MEMORY_MANAGER_INIT();
-		LOGGER_INIT();
+		JAM_LOG_INIT("JamNet", "logs/jamnet.log");
 		SocketUtils::Init();
 		CLOCK.Start(m_config.clockTick);
 		MAIN_EXEC_INIT();
@@ -37,7 +37,7 @@ namespace jam::net
 		GLOBAL_EXEC_SHUTDOWN();
 		SocketUtils::Clear();
 
-		LOGGER_SHUTDOWN();
+		JAM_LOG_SHUTDOWN();
 
 		m_bInitialized = false;
 	}

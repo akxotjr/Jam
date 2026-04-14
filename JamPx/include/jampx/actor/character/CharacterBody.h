@@ -37,7 +37,9 @@ namespace jam::px
 		void                            ApplyAuthorityToBoth(const CharacterState& s);
 
 		void							SetPlayerInput(const CharacterInput& input);
+		void							SetReplayInput(const CharacterInput& input);
 		void                            SetFacing(float yaw, float pitch);
+		void                            SetReplayFacing(float yaw, float pitch);
 
 		const CharacterMoveConfig&		GetConfig() const;
 		void                            SetConfig(const CharacterMoveConfig& cfg);
@@ -59,6 +61,7 @@ namespace jam::px
 
 	private:
 		void							RebuildMoveStateFromAuthority(LocomotionComponent* mover, const CharacterState& s);
+		void							SetFacingOn(LocomotionComponent* mover, CharacterState& state, float yaw, float pitch);
 
 
 	private:

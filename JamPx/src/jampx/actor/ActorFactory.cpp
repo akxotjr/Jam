@@ -182,7 +182,7 @@ namespace jam::px
 		ObjectId					id,
 		const TargetPoseResolver&	resolver)
 	{
-		JAM_ASSERT(desc.IsRigid())
+		JAM_ASSERT(desc.IsRigid());
 
 		void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(id));
 
@@ -251,7 +251,7 @@ namespace jam::px
 		const SpawnDesc&		desc,
 		ObjectId				id)
 	{
-		JAM_ASSERT(desc.IsCharacter())
+		JAM_ASSERT(desc.IsCharacter());
 
 		void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(id));
 		const auto& bodyDef = std::get<CharacterBodyDef>(tplDef.body);
@@ -302,8 +302,7 @@ namespace jam::px
 		if (overrides.mask.has_any(SpawnOverrideMask::VIEW_PITCH))
 			s.facingPitch = overrides.pitch;
 
-		body.SetMainState(s);
-		body.SetReplayState(s);
+		body.ApplyAuthorityToBoth(s);
 
 		if (PxRigidActor* actor = mainCCT->getActor())
 			ApplyPackedId(*actor, desc.team, desc.part, desc.role);

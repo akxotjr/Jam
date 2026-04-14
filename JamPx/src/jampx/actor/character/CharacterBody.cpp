@@ -97,10 +97,31 @@ namespace jam::px
 		SetFacing(input.facingYaw, input.facingPitch);
 	}
 
+	void CharacterBody::SetReplayInput(const CharacterInput& input)
+	{
+		if (auto* brain = dynamic_cast<PlayerControllerComponent*>(m_brain.get()))
+			brain->SetInput(input);
+
+		SetReplayFacing(input.facingYaw, input.facingPitch);
+	}
+
 	void CharacterBody::SetFacing(float yaw, float pitch)
 	{
-		m_mainState.facingYaw   = yaw;
-		m_mainState.facingPitch = pitch;
+		SetFacingOn(m_mainMover.get(), m_mainState, yaw, pitch);
+	}
+
+	void CharacterBody::SetReplayFacing(float yaw, float pitch)
+	{
+		SetFacingOn(m_replayMover.get(), m_replayState, yaw, pitch);
+	}
+
+	void CharacterBody::SetFacingOn(LocomotionComponent* mover, CharacterState& state, float yaw, float pitch)
+	{
+		state.facingYaw   = yaw;
+		state.facingPitch = pitch;
+
+		if (mover)
+			mover->SetBodyYaw(yaw);
 	}
 
 	const CharacterMoveConfig& CharacterBody::GetConfig() const

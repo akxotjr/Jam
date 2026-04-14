@@ -131,7 +131,7 @@ namespace jam::net
         if (m_tickDebt < m_tickDebtCap)
             ++m_tickDebt;
 
-        auto& shard = SHARD_LOCAL_CHECKED();
+        auto& shard = CurrentShardLocalChecked();
         auto* sched = shard.scheduler;
 
         if (!sched) // if no scheduler then sync-path
@@ -269,7 +269,7 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        const entt::entity local = GetLocalEntity(m_world);
+        const entt::entity local = GetCachedLocalEntity(m_world);
         if (local == entt::null || !m_world.valid(local))
             return;
 
@@ -290,7 +290,7 @@ namespace jam::net
 
     void ClientPhysicsSystem::Reconcile()
     {
-        const entt::entity local = GetLocalEntity(m_world);
+        const entt::entity local = GetCachedLocalEntity(m_world);
         if (local == entt::null || !m_physics || !m_replayRunner) return;
 
         auto& signal = m_world.ctx().get<ReconcileSignal>();
@@ -310,6 +310,7 @@ namespace jam::net
 
         const auto& auth = m_world.get<CharAuthorityState>(local).state;
         const auto& live = m_world.ctx().get<LivePredictedState>();
+        const uint32 currentSeq = inputHistory.current.seq;
 
         auto absAngleDelta = [](float a, float b)
             {
@@ -327,6 +328,29 @@ namespace jam::net
         	(posErr <= m_config.positionErrorThreshold)
             &&  (yawErr <= m_config.rotationErrorThreshold)
             &&  (pitchErr <= m_config.rotationErrorThreshold);
+
+ /*       JAMNET_LOG_DEBUG(
+            "[ClientReconcile] serverTick={}, inputAck={}, currentSeq={}, posErr={}, yawErr={}, pitchErr={}, authPos=({}, {}, {}), livePos=({}, {}, {}), authYaw={}, liveYaw={}, authPitch={}, livePitch={}, inputFlags={}, inputYaw={}, inputPitch={}, inputMode={}",
+            signal.serverTick,
+            inputAck,
+            currentSeq,
+            posErr,
+            yawErr,
+            pitchErr,
+            auth.pos.x,
+            auth.pos.y,
+            auth.pos.z,
+            live.pos.x,
+            live.pos.y,
+            live.pos.z,
+            auth.facingYaw,
+            live.facingYaw,
+            auth.facingPitch,
+            live.facingPitch,
+            inputHistory.current.input.inputFlags,
+            inputHistory.current.input.facingYaw,
+            inputHistory.current.input.facingPitch,
+            E2U(inputHistory.current.input.moveMode));*/
 
         if (withinThreshold)
         {
@@ -361,11 +385,11 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        const entt::entity local = GetLocalEntity(m_world);
-        std::vector<px::ActorContext> contexts;
-        contexts.reserve(64);
+        const entt::entity local = GetCachedLocalEntity(m_world);
+        m_pushContexts.clear();
 
         auto view = m_world.view<NetId, NetActorBodyType>();
+        m_pushContexts.reserve(view.size_hint());
         for (auto e : view)
         {
             if (e == local) continue;
@@ -377,7 +401,7 @@ namespace jam::net
             if (bodyType == px::eBodyType::Character)
             {
                 ac.state = m_world.get<CharAuthorityState>(e).state;
-                contexts.push_back(ac);
+                m_pushContexts.push_back(ac);
             }
             else
             {
@@ -385,13 +409,13 @@ namespace jam::net
                 if (!px::IsLocalDrivenKine(auth.state.kineType))
                 {
                     ac.state = auth.state;
-                    contexts.push_back(ac);
+                    m_pushContexts.push_back(ac);
                 }
             }
         }
 
-        if (!contexts.empty())
-            m_physics->PushAuthorityStates(contexts);
+        if (!m_pushContexts.empty())
+            m_physics->PushAuthorityStates(m_pushContexts);
     }
 
 
@@ -399,19 +423,20 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        std::vector<px::ActorContext> contexts;
+        m_pullContexts.clear();
         auto view = m_world.view<NetId>();
+        m_pullContexts.reserve(64);
 
         for (auto e : view)
         {
             px::ActorContext ac{};
             ac.oid = MakeObjectId(e);
-            contexts.push_back(ac);
+            m_pullContexts.push_back(ac);
         }
 
-        m_physics->PullProxyStates(contexts);
+        m_physics->PullProxyStates(m_pullContexts);
 
-        for (auto& ac : contexts)
+        for (auto& ac : m_pullContexts)
         {
             const entt::entity e = static_cast<entt::entity>(ac.oid);
             if (!m_world.valid(e) || !m_world.all_of<NetActorBodyType>(e))
@@ -453,7 +478,7 @@ namespace jam::net
 
     void ClientPhysicsSystem::Replay(const ReplayContext& ctx)
     {
-        const entt::entity local = GetLocalEntity(m_world);
+        const entt::entity local = GetCachedLocalEntity(m_world);
         if (local == entt::null || !m_world.valid(local)) return;
 
         const px::ObjectId oid = MakeObjectId(local);
@@ -468,9 +493,11 @@ namespace jam::net
         uint32 replayCandidateCount = 0;
         uint32 replayStepCount = 0;
         uint32 replayMeaningfulInputCount = 0;
+        uint32 firstReplaySeq = 0;
+        uint32 lastReplaySeq = 0;
 
         inputHistory.ForEachReplayRange(ctx.inputAck, currentSeq,
-            [this, local, oid, &replayCandidateCount, &replayStepCount, &replayMeaningfulInputCount, &replayBuf, &ctx](const InputCmd& cmd)
+            [this, local, oid, &replayCandidateCount, &replayStepCount, &replayMeaningfulInputCount, &firstReplaySeq, &lastReplaySeq, &replayBuf, &ctx](const InputCmd& cmd)
             {
                 ++replayCandidateCount;
 
@@ -479,6 +506,10 @@ namespace jam::net
 
                 if (HasMeaningfulReplayInput(cmd.input))
                     ++replayMeaningfulInputCount;
+
+                if (firstReplaySeq == 0)
+                    firstReplaySeq = cmd.seq;
+                lastReplaySeq = cmd.seq;
 
                 ApplyInput(cmd, true);
 
@@ -498,18 +529,22 @@ namespace jam::net
         replayStats.truncated            = replayCandidateCount > replayStepCount;
 
         //JAMNET_LOG_DEBUG(
-        //    "[ClientPhysicsSystem] replay steps= {}, meaningfulInputs= {}, truncated= {}, inputAck= {}, currentSeq= {}",
+        //    "[ClientReplay] serverTick={}, inputAck={}, currentSeq={}, firstReplaySeq={}, lastReplaySeq={}, candidates={}, steps={}, meaningful={}, truncated={}",
+        //    ctx.tick,
+        //    ctx.inputAck,
+        //    currentSeq,
+        //    firstReplaySeq,
+        //    lastReplaySeq,
+        //    replayCandidateCount,
         //    replayStepCount,
         //    replayMeaningfulInputCount,
-        //    replayStats.truncated,
-        //    ctx.inputAck,
-        //    currentSeq);
+        //    replayStats.truncated);
     }
 
 
     void ClientPhysicsSystem::ApplyInput(const InputCmd& cmd, bool useReplayState)
     {
-        entt::entity player = GetLocalEntity(m_world);
+        entt::entity player = GetCachedLocalEntity(m_world);
         if (player == entt::null || !m_world.valid(player) || !m_physics)
             return;
 
@@ -518,7 +553,10 @@ namespace jam::net
             ? ResolveReplayCharacterState(m_world, player)
             : ResolveCharacterState(m_world, player);
         const px::CharacterInput resolvedInput = ResolveInputForSimulation(cmd.input, selfState, useReplayState);
-        m_physics->ApplyCharacterInput(id, resolvedInput);
+        if (useReplayState)
+            m_physics->ApplyReplayCharacterInput(id, resolvedInput);
+        else
+            m_physics->ApplyCharacterInput(id, resolvedInput);
     }
 
     px::CharacterInput ClientPhysicsSystem::ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState, bool useReplayState) const
@@ -565,16 +603,17 @@ namespace jam::net
             return false;
 
         const NetId targetNetId = NetId::MakeRaw(targetNetIdRaw);
-        auto view = m_world.view<NetId>();
-        for (const entt::entity e : view)
+        if (auto* nwPtr = m_world.ctx().find<ClientNetWorld*>(); nwPtr && *nwPtr)
         {
-            if (view.get<NetId>(e) != targetNetId)
-                continue;
-
-            return useReplayState
-                ? ResolveReplayActorTargetPos(m_world, e, outPos)
-                : ResolveActorTargetPos(m_world, e, outPos);
+            const entt::entity e = (*nwPtr)->GetEntity(targetNetId);
+            if (e != entt::null && m_world.valid(e))
+            {
+                return useReplayState
+                    ? ResolveReplayActorTargetPos(m_world, e, outPos)
+                    : ResolveActorTargetPos(m_world, e, outPos);
+            }
         }
+
         return false;
     }
 
@@ -583,7 +622,7 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        auto& shard = SHARD_LOCAL_CHECKED();
+        auto& shard = CurrentShardLocalChecked();
         auto* sched = shard.scheduler;
 
         const bool   inFiber  = sched && (sched->Current() != 0);
@@ -600,7 +639,7 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        auto& shard = SHARD_LOCAL_CHECKED();
+        auto& shard = CurrentShardLocalChecked();
         auto* sched = shard.scheduler;
 
         const bool   inFiber  = sched && (sched->Current() != 0);

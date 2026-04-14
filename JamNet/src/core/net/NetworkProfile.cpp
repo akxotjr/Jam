@@ -268,6 +268,8 @@ namespace jam::net::profile
 			const float delta = fabsf(rtt - prevRtt);
 			wireJitter_ms = (1.0f - k_rttJitterBeta) * wireJitter_ms + k_rttJitterBeta * delta;
 		}
+
+		//JAMNET_LOG_DEBUG("Link Quality State : avg wire rtt= {}ms", wireRttAvg_ms);
 	}
 
 	void LinkQualityState::AddAppRttSample(float rtt)
@@ -308,6 +310,8 @@ namespace jam::net::profile
 			const float delta = fabsf(rtt - prevRtt);
 			appJitter_ms = (1.0f - k_rttJitterBeta) * appJitter_ms + k_rttJitterBeta * delta;
 		}
+
+		//JAMNET_LOG_DEBUG("Link Quality State : avg app rtt= {}ms", appRttAvg_ms);
 	}
 
 	void LinkQualityState::AccumulatePacketLoss(uint32 lost, uint32 expected)

@@ -66,7 +66,7 @@ namespace jam::px
 
 	RigidState RigidBody::GetMainState() const
 	{
-		JAM_ASSERT(m_mainActor)
+		JAM_ASSERT(m_mainActor);
 
 		if (m_behavior) return m_mainState;
 

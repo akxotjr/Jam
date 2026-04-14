@@ -36,10 +36,10 @@ namespace jam
         constexpr bool has_all(FlagsT mask) const noexcept { return (m_bits & mask.m_bits) == mask.m_bits; }
 
         // modifiers
-        constexpr void set(Enum e) noexcept { m_bits |= static_cast<Storage>(u(e)); }
-        constexpr void reset(Enum e) noexcept { m_bits &= ~static_cast<Storage>(u(e)); }
+        constexpr void set(Enum e)    noexcept { m_bits |= static_cast<Storage>(u(e)); }
+        constexpr void reset(Enum e)  noexcept { m_bits &= ~static_cast<Storage>(u(e)); }
         constexpr void toggle(Enum e) noexcept { m_bits ^= static_cast<Storage>(u(e)); }
-        constexpr void clear() noexcept { m_bits = 0; }
+        constexpr void clear()        noexcept { m_bits = 0; }
 
         // ops (Flags <-> Flags)
         friend constexpr FlagsT operator|(FlagsT a, FlagsT b) noexcept { return FlagsT(a.m_bits | b.m_bits); }
@@ -68,12 +68,5 @@ namespace jam
         Storage m_bits{ 0 };
     };
 
-    //// unscoped enum의 정수 승격으로 built-in | 가 선택되는 것을 방지하기 위한 보조 오버로드
-    //template<class Enum, std::enable_if_t<std::is_enum_v<Enum>, int> = 0>
-    //constexpr FlagsT<Enum, underlying_t<Enum>> operator|(Enum a, Enum b) noexcept
-    //{
-    //    using F = FlagsT<Enum, underlying_t<Enum>>;
-    //    return F(a) | F(b);
-    //}
 
 } // namespace jam

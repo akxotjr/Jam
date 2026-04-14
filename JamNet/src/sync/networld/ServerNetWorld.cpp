@@ -20,20 +20,21 @@ namespace jam::net
 	namespace
 	{
 		
-		px::ObjectId BindingTarget(entt::registry& world, const entt::entity e, NetId target)
+		px::ObjectId BindingTarget(
+			entt::registry& world,
+			const entt::entity e,
+			NetId target,
+			const std::unordered_map<NetId, entt::entity>& index)
 		{
 			if (!target.IsValid()) return px::INVALID_OBJ_ID;
 
-			px::ObjectId resolved = px::INVALID_OBJ_ID;
-			auto view = world.view<NetId, PhysicsSpawnedTag>();
-
-			for (auto candidate : view)
+			if (auto it = index.find(target); it != index.end())
 			{
-				if (view.get<NetId>(candidate) == target)
+				const entt::entity candidate = it->second;
+				if (candidate != entt::null && world.valid(candidate) && world.all_of<PhysicsSpawnedTag>(candidate))
 				{
-					resolved = MakeObjectId(candidate);
+					const px::ObjectId resolved = MakeObjectId(candidate);
 					world.emplace<TargetInfo>(e, TargetInfo{ .targetNetId = target, .targetObjId = resolved });
-
 					return resolved;
 				}
 			}
@@ -54,6 +55,8 @@ namespace jam::net
 		NetWorld::Init();
 
 		if (!m_transport || !m_physics) return;
+
+		m_netIdToEntity.clear();
 
 		m_physics->SetJobBridge(m_bridge.get());
 		m_physics->Init();
@@ -255,6 +258,13 @@ namespace jam::net
 		m_pendingInitialFullSnapshot.store(true, std::memory_order_relaxed);
 	}
 
+	entt::entity ServerNetWorld::GetEntity(NetId netId) const
+	{
+		if (auto it = m_netIdToEntity.find(netId); it != m_netIdToEntity.end())
+			return it->second;
+		return entt::null;
+	}
+
 
 
 	void ServerNetWorld::TickOnShard()
@@ -322,6 +332,8 @@ namespace jam::net
 
 				if (m_physics->GetMotionType(inst.objectId) == px::eMotionType::Static)
 					m_world.emplace<ReplicationStaticTag>(e);
+
+				m_netIdToEntity[nid] = e;
 			}
 		}
 	}
@@ -336,6 +348,7 @@ namespace jam::net
 		const NetId nid = NetId::MakeRuntime(m_netIdGenerator.fetch_add(1, std::memory_order_relaxed));
 
 		m_world.emplace<NetId>(e, nid);
+		m_netIdToEntity[nid] = e;
 		m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ params.desc.prefab });
 		m_world.emplace<NewlyCreatedTag>(e);
 		m_world.emplace<NetSpawnRequestId>(e, NetSpawnRequestId{ params.spawnId });
@@ -347,7 +360,7 @@ namespace jam::net
 			.role = params.desc.role
 		});
 
-		params.desc.targetId = BindingTarget(m_world, e, params.targetNetId);
+		params.desc.targetId = BindingTarget(m_world, e, params.targetNetId, m_netIdToEntity);
 
 		m_world.ctx().get<ServerPhysicsSystem>().SpawnActor(e, params.desc);
 
@@ -359,18 +372,7 @@ namespace jam::net
 
 	bool ServerNetWorld::DespawnActorImpl(NetId netId, uint64 userId)
 	{
-		// 1. NetId로 엔티티 찾기
-		auto view = m_world.view<NetId>();
-		entt::entity targetEntity = entt::null;
-
-		for (auto actor : view)
-		{
-			if (view.get<NetId>(actor) == netId)
-			{
-				targetEntity = actor;
-				break;
-			}
-		}
+		const entt::entity targetEntity = GetEntity(netId);
 
 		if (targetEntity == entt::null)
 			return false;
@@ -383,6 +385,8 @@ namespace jam::net
 
 		if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 			repl->OnActorDestroyed(targetEntity);
+
+		m_netIdToEntity.erase(netId);
 
 		if (m_world.all_of<PhysicsSpawnedTag>(targetEntity))
 		{
@@ -403,22 +407,12 @@ namespace jam::net
 
 	bool ServerNetWorld::PossessActorImpl(NetId netId, uint64 userId)
 	{
-		auto view = m_world.view<NetId, OwnershipTag>();
-		entt::entity target = entt::null;
+		const entt::entity target = GetEntity(netId);
 
-		for (auto actor : view)
-		{
-			if (view.get<NetId>(actor) == netId)
-			{
-				target = actor;
-				break;
-			}
-		}
-
-		if (target == entt::null)
+		if (target == entt::null || !m_world.valid(target) || !m_world.all_of<OwnershipTag>(target))
 			return false;
 
-		auto& ownership = view.get<OwnershipTag>(target);
+		auto& ownership = m_world.get<OwnershipTag>(target);
 		if (ownership.userId != userId)
 			return false;
 
@@ -451,22 +445,12 @@ namespace jam::net
 
 	bool ServerNetWorld::UnpossessActorImpl(NetId netId, uint64 userId)
 	{
-		auto view = m_world.view<NetId, ControlTag>();
-		entt::entity targetEntity = entt::null;
+		const entt::entity targetEntity = GetEntity(netId);
 
-		for (auto actor : view)
-		{
-			if (view.get<NetId>(actor) == netId)
-			{
-				targetEntity = actor;
-				break;
-			}
-		}
-
-		if (targetEntity == entt::null)
+		if (targetEntity == entt::null || !m_world.valid(targetEntity) || !m_world.all_of<ControlTag>(targetEntity))
 			return false;
 
-		auto& controllable = view.get<ControlTag>(targetEntity);
+		auto& controllable = m_world.get<ControlTag>(targetEntity);
 
 		// 권한 검증
 		if (controllable.userId != userId)

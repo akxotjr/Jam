@@ -346,12 +346,12 @@ void UserInstance::OnClickMoveResolved(const net::ClickMoveResolvedEvent& evt)
 	if (evt.requestSeq != m_clickPickSeq)
 		return;
 
-	m_moveTarget = evt.targetPos;
-	m_hasMoveTarget = !evt.followTarget;
-	m_followMoveActive = evt.followTarget;
-	m_hasControlSample = false;
-	m_lastControlNs = 0;
-	m_estControlSpeed = 0.0f;
+	m_moveTarget		= evt.targetPos;
+	m_hasMoveTarget		= !evt.followTarget;
+	m_followMoveActive	= evt.followTarget;
+	m_hasControlSample	= false;
+	m_lastControlNs		= 0;
+	m_estControlSpeed	= 0.0f;
 }
 
 bool UserInstance::TryGetLocalActorPosition(OUT px::Vec3& outPos) const
@@ -515,8 +515,7 @@ void UserInstance::BuildRenderFrames()
 	static constexpr float kTickInterval = 1.0f / 60.0f;
 	const float tickAlpha = std::clamp(m_tickAccumulator / kTickInterval, 0.0f, 1.0f);
 	const float renderTick = (m_latestServerTick > INTERPOLATION_DELAY)
-		? static_cast<float>(m_latestServerTick - INTERPOLATION_DELAY) + tickAlpha
-		: tickAlpha;
+		? static_cast<float>(m_latestServerTick - INTERPOLATION_DELAY) + tickAlpha : tickAlpha;
 
 	for (auto& data : m_actorRenderData | views::values)
 	{
@@ -528,16 +527,7 @@ void UserInstance::BuildRenderFrames()
 		px::Vec3 interpPos;
 		px::Quat interpRot;
 		InterpolateActorTransform(data, renderTick, interpPos, interpRot);
-
-		if (data.isLocal)
-		{
-			GetSmoothedLocalTransform(data, interpPos, interpRot, data.cachedRenderPos, data.cachedRenderRot);
-		}
-		else
-		{
-			data.cachedRenderPos = interpPos;
-			data.cachedRenderRot = interpRot;
-		}
+		GetSmoothedLocalTransform(data, interpPos, interpRot, data.cachedRenderPos, data.cachedRenderRot);
 
 		data.renderFrameCached = true;
 	}

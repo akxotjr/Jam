@@ -80,7 +80,7 @@ namespace jam::px
 		PxRigidActor* inst = PHYSICS_PREFAB_REGISTRY.Instantiate(tpl, pose, userData);
 		if (!inst) return nullptr;
 
-		JAM_ASSERT(scene->addActor(*inst))
+		JAM_VERIFY(scene->addActor(*inst));
 
 		return inst;
 	}

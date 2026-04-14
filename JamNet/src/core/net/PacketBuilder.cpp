@@ -16,17 +16,17 @@ namespace jam::net
 
 	std::shared_ptr<SendBuffer> PacketBuilder::CreateHandshakePacket(eSystemPacketId id)
 	{
-		return CreateSystemPacket(id, PacketFlags::NONE, eChannelType::RELIABLE_ORDERED, nullptr, 0);
+		return CreateSystemPacket(id, PacketFlags::NONE, eChannelType::UNRELIABLE_UNORDERED, nullptr, 0);
 	}
 
 	std::shared_ptr<SendBuffer> PacketBuilder::CreatePingPacket(const PING_DATA& ping)
 	{
-		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::NONE, eChannelType::RELIABLE_ORDERED, &ping, sizeof(PING_DATA));
+		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::NONE, eChannelType::UNRELIABLE_UNORDERED, &ping, sizeof(PING_DATA));
 	}
 
 	std::shared_ptr<SendBuffer> PacketBuilder::CreatePongPacket(const PONG_DATA& pong)
 	{
-		return CreateSystemPacket(eSystemPacketId::PONG, PacketFlags::NONE, eChannelType::RELIABLE_ORDERED, &pong, sizeof(PONG_DATA));
+		return CreateSystemPacket(eSystemPacketId::PONG, PacketFlags::NONE, eChannelType::UNRELIABLE_UNORDERED, &pong, sizeof(PONG_DATA));
 	}
 
 

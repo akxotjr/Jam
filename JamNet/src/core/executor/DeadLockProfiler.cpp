@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "jamnet/core/executor/DeadLockProfiler.h"
+#include "jamnet/core/executor/ThreadContext.h"
 
 namespace jam
 {
@@ -22,13 +23,14 @@ namespace jam
 			lockId = findIt->second;
 		}
 
-		if (tl_LockStack.empty() == false)
+		auto& lockStack = CurrentThreadContext().lockStack;
+		if (lockStack.empty() == false)
 		{
-			const int32 prevId = tl_LockStack.top();
+			const int32 prevId = lockStack.top();
 			if (lockId != prevId)
 			{
 				std::set<int32>& history = m_lockHistory[prevId];
-				if (history.find(lockId) == history.end())
+				if (!history.contains(lockId))
 				{
 					history.insert(lockId);
 					CheckCycle();
@@ -36,21 +38,22 @@ namespace jam
 			}
 		}
 
-		tl_LockStack.push(lockId);
+		lockStack.push(lockId);
 	}
 
 	void DeadLockProfiler::PopLock(const char* name)
 	{
-		LockGuard guard(m_lock);
+		std::scoped_lock guard(m_lock);
 
-		if (tl_LockStack.empty())
+		auto& lockStack = CurrentThreadContext().lockStack;
+		if (lockStack.empty())
 			JAM_CRASH("MULTIPLE_UNLOCK");
 
 		int32 lockId = m_nameToId[name];
-		if (tl_LockStack.top() != lockId)
+		if (lockStack.top() != lockId)
 			JAM_CRASH("INVALID_UNLOCK");
 
-		tl_LockStack.pop();
+		lockStack.pop();
 	}
 
 	void DeadLockProfiler::CheckCycle()
@@ -109,7 +112,7 @@ namespace jam
 						break;
 				}
 
-				JAM_CRASH("DEADLOCK_DETECTED")
+				JAM_CRASH("DEADLOCK_DETECTED");
 			}
 		}
 

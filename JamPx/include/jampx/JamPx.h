@@ -2,6 +2,7 @@
 
 #include <jambase/JamTypes.h>
 #include <jambase/JamMacro.h>
+#include <jambase/JamAssert.h>
 #include <jambase/EnumUtils.h>
 #include <jambase/Fnv1a.h>
 

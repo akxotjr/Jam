@@ -375,7 +375,7 @@ namespace jam::net
     template<typename Req, typename Res>
     inline std::optional<Res> RPCCallAwait(entt::entity e, const Req& req, const RPCCallOptions& opt)
     {
-        auto& L = SHARD_LOCAL_CHECKED();
+        auto& L = CurrentShardLocalChecked();
         auto& R = L.registry;
         auto* scheduler = L.scheduler;
         if (!scheduler)

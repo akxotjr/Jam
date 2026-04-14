@@ -64,5 +64,9 @@ namespace jam
 
         uint64 wakeupTimerCount         = 0;
         uint64 wakeupTimeoutCount       = 0;
+
+        uint64 lastStackUsed            = 0;
+        uint64 lastStackTotal           = 0;
+        uint64 peakStackUsed            = 0;
     };
 }

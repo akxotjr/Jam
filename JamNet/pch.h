@@ -50,6 +50,7 @@
 #include <concurrentqueue/concurrentqueue.h>
 #include <concurrentqueue/blockingconcurrentqueue.h>
 #include <flatbuffers/flatbuffers.h>
+#include <xxhash.h>
 
 #include "JamNetAPI.h"
 

@@ -1,6 +1,6 @@
 ﻿#include "pch.h"
 #include "jamnet/core/net/SessionSystems.h"
-#include "jamnet/core/executor/ShardTLS.h"
+
 #include <limits>
 
 
@@ -333,7 +333,6 @@ namespace jam::net
         }
 
 
-        /// 우선순위 비교 함수
         int32 GetPriority(TransmissionWaitingQueue::Priority priority)
         {
             switch (priority)
@@ -411,7 +410,7 @@ namespace jam::net
         if (!R.all_of<profile::LinkQualityState>(e))     R.emplace<profile::LinkQualityState>(e);
         if (!R.all_of<profile::TrafficSampleState>(e))   R.emplace<profile::TrafficSampleState>(e);
 
-        JAMNET_LOG_DEBUG("[SessionSystems] [Thread #{}] Session entity {} initialized, protocol = {}", tl_ThreadId, static_cast<uint32>(e), session->IsUdp() ? "udp" : "tcp");
+        JAMNET_LOG_DEBUG("[SessionSystems] [Thread #{}] Session entity {} initialized, protocol = {}", CurrentThreadId(), static_cast<uint32>(e), session->IsUdp() ? "udp" : "tcp");
     }
 
     // ============================================================
@@ -764,6 +763,9 @@ namespace jam::net
                 return;
 
             const auto*  pong = reinterpret_cast<const PONG_DATA*>(ctx.view.Payload());
+            if (pong->t1App_ns < timesync->lastT1ClientSend_ns)
+                return;
+
             const uint64 t4_app  = now_ns;
             const uint64 t4_wire = ctx.ingressTime_ns;
 	    
@@ -1282,24 +1284,16 @@ namespace jam::net
                 continue;
 
             Session* session = info.session;
-            GlobalExecutor::Instance().Submit(Job([session, batch = std::move(batch)]() mutable
-                {
-                    if (!session) return;
-
-                    if (session->IsUdp())
-                    {
-                        auto* udp = static_cast<UdpSession*>(session);
-                        udp->RegisterSend(batch);
-                        return;
-                    }
-
-                    if (session->IsTcp())
-                    {
-                        auto* tcp = static_cast<TcpSession*>(session);
-                        tcp->RegisterSend(batch);
-                        return;
-                    }
-                }));
+            if (session->IsUdp())
+            {
+                auto* udp = static_cast<UdpSession*>(session);
+                udp->RegisterSend(batch);
+            }
+            else if (session->IsTcp())
+            {
+                auto* tcp = static_cast<TcpSession*>(session);
+                tcp->RegisterSend(batch);
+            }
 
             txQueue.lastFlushTime_ns = now_ns;
             info.lastSendTime_ns     = now_ns;
@@ -1486,7 +1480,7 @@ namespace jam::net
 
     void ConnectHandshake(entt::entity e)
     {
-        auto& L = SHARD_LOCAL_CHECKED();
+        auto& L = CurrentShardLocalChecked();
         RegisterNetworkDomain(L);
 
         auto& R = L.registry;
@@ -1528,12 +1522,12 @@ namespace jam::net
 
         info->state = SessionInfo::CONNECTING;
 
-        JAMNET_LOG_DEBUG("[Hanshake] [Thread #{}] CONNECT_SYN sent. entity= {}", tl_ThreadId, static_cast<uint32>(e));
+        JAMNET_LOG_DEBUG("[Hanshake] [Thread #{}] CONNECT_SYN sent. entity= {}", CurrentThreadId(), static_cast<uint32>(e));
     }
 
     void DisconnectHandshake(entt::entity e)
     {
-        auto& L = SHARD_LOCAL_CHECKED();
+        auto& L = CurrentShardLocalChecked();
         auto& R = L.registry;
 
         if (!R.valid(e))
@@ -1573,7 +1567,7 @@ namespace jam::net
     void SendPacketToSession(entt::entity e, const std::shared_ptr<SendBuffer>& buf)
     {
 
-    	auto& L = SHARD_LOCAL_CHECKED();
+        auto& L = CurrentShardLocalChecked();
         auto& R = L.registry;
         if (!R.valid(e))
         {
@@ -1608,7 +1602,7 @@ namespace jam::net
 
     void ProcessReceivedPacket(entt::entity e, const std::shared_ptr<RecvBuffer>& buf, uint64 ingressRecvTime_ns)
     {
-        auto& L = SHARD_LOCAL_CHECKED();
+        auto& L = CurrentShardLocalChecked();
         auto& R = L.registry;
 
         if (!R.valid(e))
@@ -1682,7 +1676,7 @@ namespace jam::net
 				return R.all_of<SessionInfo>(e);
             };
 
-        JAMNET_LOG_DEBUG("[RegisterNetworkDomain] [ThreadId #{}] register network domain system", tl_ThreadId);
+        JAMNET_LOG_DEBUG("[RegisterNetworkDomain] [ThreadId #{}] register network domain system", CurrentThreadId());
 
         R.ctx().emplace<NetworkDomainRegisteredTag>();
     }

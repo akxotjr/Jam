@@ -60,7 +60,7 @@ namespace jam::net
 
 		// local
 		{
-			const entt::entity local = GetLocalEntity(m_world);
+			const entt::entity local = GetCachedLocalEntity(m_world);
 
 			const auto& live = m_world.ctx().get<LivePredictedState>();
 			auto& delta = m_world.ctx().get<RenderCorrectionDelta>();

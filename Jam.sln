@@ -15,6 +15,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "JamPx", "JamPx\JamPx.vcxpro
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Benchmark", "Benchmark\Benchmark.vcxproj", "{0FB884A0-48D0-4B9A-9806-05B5440D5D9E}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "JamUnityBridge", "JamUnityBridge\JamUnityBridge.vcxproj", "{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -71,6 +73,14 @@ Global
 		{0FB884A0-48D0-4B9A-9806-05B5440D5D9E}.Release|x64.Build.0 = Release|x64
 		{0FB884A0-48D0-4B9A-9806-05B5440D5D9E}.Release|x86.ActiveCfg = Release|Win32
 		{0FB884A0-48D0-4B9A-9806-05B5440D5D9E}.Release|x86.Build.0 = Release|Win32
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Debug|x64.ActiveCfg = Debug|x64
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Debug|x64.Build.0 = Debug|x64
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Debug|x86.ActiveCfg = Debug|Win32
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Debug|x86.Build.0 = Debug|Win32
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Release|x64.ActiveCfg = Release|x64
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Release|x64.Build.0 = Release|x64
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Release|x86.ActiveCfg = Release|Win32
+		{9CE5934C-470F-4A3E-86D5-7C0E9E9FEDF9}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

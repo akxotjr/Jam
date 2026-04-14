@@ -24,6 +24,9 @@
     <ClInclude Include="include\jambase\Fnv1a.h" />
     <ClInclude Include="include\jambase\JamMacro.h" />
     <ClInclude Include="include\jambase\JamTypes.h" />
+    <ClInclude Include="include\jambase\Logger.h" />
+    <ClInclude Include="include\jambase\JamAssert.h" />
+    <ClInclude Include="include\jambase\TaggedKey.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

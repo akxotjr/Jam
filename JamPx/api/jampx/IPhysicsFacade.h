@@ -54,6 +54,7 @@ namespace jam::px
 		virtual void					PullProxyStates(OUT std::vector<ActorContext>& contexts) = 0;
 
 		virtual void 					ApplyCharacterInput(ObjectId id, const CharacterInput& input) = 0;
+		virtual void					ApplyReplayCharacterInput(ObjectId id, const CharacterInput& input) = 0;
 		virtual void					PullPredictedState(ObjectId oid, OUT CharacterState& state) = 0;
 
 		virtual bool					GetCharacterState(ObjectId id, CharacterState& state) const = 0;

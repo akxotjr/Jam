@@ -177,7 +177,8 @@
     <ClInclude Include="include\jamnet\core\executor\CoreTopology.h" />
     <ClInclude Include="include\jamnet\core\executor\DeadLockProfiler.h" />
     <ClInclude Include="include\jamnet\core\executor\ExecutorMetrics.h" />
-    <ClInclude Include="include\jamnet\core\executor\ExecutorTLS.h" />
+    <ClInclude Include="include\jamnet\core\executor\ExecutorPeriodic.h" />
+    <ClInclude Include="include\jamnet\core\executor\ThreadContext.h" />
     <ClInclude Include="include\jamnet\core\executor\FiberCommon.h" />
     <ClInclude Include="include\jamnet\core\executor\FiberScheduler.h" />
     <ClInclude Include="include\jamnet\core\executor\GlobalEventBus.h" />
@@ -191,14 +192,12 @@
     <ClInclude Include="include\jamnet\core\executor\Mailbox.h" />
     <ClInclude Include="include\jamnet\core\executor\MainExecutor.h" />
     <ClInclude Include="include\jamnet\core\executor\NumaTopology.h" />
-    <ClInclude Include="include\jamnet\core\executor\RoutingPolicy.h" />
+    <ClInclude Include="include\jamnet\core\executor\ShardRoutingPolicy.h" />
     <ClInclude Include="include\jamnet\core\executor\SeqLock.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardDirectory.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardDomain.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardExecutor.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardSlot.h" />
-    <ClInclude Include="include\jamnet\core\executor\ShardTLS.h" />
-    <ClInclude Include="include\jamnet\core\executor\ThreadRegistry.h" />
     <ClInclude Include="include\jamnet\core\executor\WinFiberBackend.h" />
     <ClInclude Include="include\jamnet\core\memory\JamNetMemory.h" />
     <ClInclude Include="include\jamnet\core\memory\MemoryManager.h" />
@@ -228,8 +227,6 @@
     <ClInclude Include="include\jamnet\core\net\UdpRouter.h" />
     <ClInclude Include="include\jamnet\core\net\UdpSession.h" />
     <ClInclude Include="include\jamnet\core\utils\Clock.h" />
-    <ClInclude Include="include\jamnet\core\utils\Logger.h" />
-    <ClInclude Include="include\jamnet\core\utils\TaggedKey.h" />
     <ClInclude Include="include\jamnet\core\utils\TimeUnits.h" />
     <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\ClientSession.h" />
@@ -285,7 +282,7 @@
     </ClCompile>
     <ClCompile Include="src\core\executor\CoreTopology.cpp" />
     <ClCompile Include="src\core\executor\DeadLockProfiler.cpp" />
-    <ClCompile Include="src\core\executor\ExecutorTLS.cpp" />
+    <ClCompile Include="src\core\executor\ThreadContext.cpp" />
     <ClCompile Include="src\core\executor\FiberScheduler.cpp" />
     <ClCompile Include="src\core\executor\GlobalEventBus.cpp" />
     <ClCompile Include="src\core\executor\GlobalExecutor.cpp" />
@@ -294,12 +291,10 @@
     <ClCompile Include="src\core\executor\Mailbox.cpp" />
     <ClCompile Include="src\core\executor\MainExecutor.cpp" />
     <ClCompile Include="src\core\executor\NumaTopology.cpp" />
-    <ClCompile Include="src\core\executor\RoutingPolicy.cpp" />
+    <ClCompile Include="src\core\executor\ShardRoutingPolicy.cpp" />
     <ClCompile Include="src\core\executor\ShardDirectory.cpp" />
     <ClCompile Include="src\core\executor\ShardExecutor.cpp" />
     <ClCompile Include="src\core\executor\ShardSlot.cpp" />
-    <ClCompile Include="src\core\executor\ShardTLS.cpp" />
-    <ClCompile Include="src\core\executor\ThreadRegistry.cpp" />
     <ClCompile Include="src\core\executor\WinFiberBackend.cpp" />
     <ClCompile Include="src\core\memory\MemoryManager.cpp" />
     <ClCompile Include="src\core\memory\MemoryPool.cpp" />
@@ -324,8 +319,6 @@
     <ClCompile Include="src\core\net\UdpRouter.cpp" />
     <ClCompile Include="src\core\net\UdpSession.cpp" />
     <ClCompile Include="src\core\utils\Clock.cpp" />
-    <ClCompile Include="src\core\utils\Logger.cpp" />
-    <ClCompile Include="src\core\utils\TaggedKey.cpp" />
     <ClCompile Include="src\runtime\ClientNetworkManager.cpp" />
     <ClCompile Include="src\runtime\ClientSession.cpp" />
     <ClCompile Include="src\runtime\ClientTransportAdapter.cpp" />
@@ -626,8 +619,6 @@ endlocal
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\Jam\JamNet Benchmark.md" />
-    <None Include="..\Jam\JamNet.md" />
     <CustomBuild Include="include\jamnet\sync\schema\fbs\lifecycle.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
@@ -652,7 +643,6 @@ endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\sync\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
     </CustomBuild>
-    <None Include="Snapshot Refactoring Guide.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

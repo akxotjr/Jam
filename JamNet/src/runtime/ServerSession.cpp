@@ -10,9 +10,9 @@ namespace jam::net
 {
 	namespace
 	{
-		static uint64 GetCallerPrincipalId(entt::entity sessionEntity)
+		uint64 GetCallerPrincipalId(entt::entity sessionEntity)
 		{
-			auto& L = SHARD_LOCAL_CHECKED();
+			auto& L = CurrentShardLocalChecked();
 			auto& R = L.registry;
 
 			if (!R.valid(sessionEntity))
@@ -25,7 +25,7 @@ namespace jam::net
 			return auth->principalId;
 		}
 
-		static WorldKey BuildTargetWorldKey(const fb::fbRequestWorldAssignmentReqT& req)
+		WorldKey BuildTargetWorldKey(const fb::fbRequestWorldAssignmentReqT& req)
 		{
 			return WorldKey
 			{
@@ -35,7 +35,7 @@ namespace jam::net
 			};
 		}
 
-		static fb::fbRequestWorldAssignmentResT BuildTransferAssignmentRes(
+		fb::fbRequestWorldAssignmentResT BuildTransferAssignmentRes(
 			uint8 requestAction,
 			uint8 assignmentAction,
 			const WorldTransferResult& transfer)
@@ -59,7 +59,7 @@ namespace jam::net
 			return res;
 		}
 
-		static void SendWorldAssignmentNotification(ServerUdpSession& session, const fb::fbRequestWorldAssignmentResT& res)
+		void SendWorldAssignmentNotification(ServerUdpSession& session, const fb::fbRequestWorldAssignmentResT& res)
 		{
 			flatbuffers::FlatBufferBuilder fbb(128);
 			const auto root = fb::CreatefbRequestWorldAssignmentRes(fbb, &res);
@@ -133,7 +133,7 @@ namespace jam::net
 		m_manager->RegisterTcpSession(m_userId, static_pointer_cast<ServerTcpSession>(shared_from_this()));
 
 		{
-			auto& L = SHARD_LOCAL_CHECKED();
+			auto& L = CurrentShardLocalChecked();
 			auto& R = L.registry;
 			if (R.valid(e))
 				R.emplace_or_replace<SessionAuth>(e, SessionAuth{ .principalId = m_userId, .authenticated = true });
@@ -220,7 +220,7 @@ namespace jam::net
 		m_manager->RegisterUdpSession(m_userId, static_pointer_cast<ServerUdpSession>(shared_from_this()));
 
 		{
-			auto& L = SHARD_LOCAL_CHECKED();
+			auto& L = CurrentShardLocalChecked();
 			auto& R = L.registry;
 			if (R.valid(e))
 				R.emplace_or_replace<SessionAuth>(e, SessionAuth{ .principalId = m_userId, .authenticated = true });

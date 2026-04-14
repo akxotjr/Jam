@@ -4,10 +4,16 @@
 
 namespace jam::net
 {
+	namespace
+	{
+		const RouteDomain kNetWorldRouteDomain = RouteDomain::From("NetWorld");
+	}
+
 	void NetWorld::Init()
 	{
-		m_key = GLOBAL_EXEC.MakeRouteKey("NetWorld", reinterpret_cast<uint64>(this));
-		auto shard = GLOBAL_EXEC.GetShard(m_key);
+		const RouteKey key = GLOBAL_EXEC.MakeRouteKey(kNetWorldRouteDomain, reinterpret_cast<uint64>(this));
+		m_route = GLOBAL_EXEC.PlaceRoute(key, RoutePlacementOptions{ .topK = 2 });
+		auto shard = GLOBAL_EXEC.GetShard(m_route);
 		if (!shard) return;
 
 		m_boundShard = shard;
@@ -55,6 +61,8 @@ namespace jam::net
 			m_bridge.reset();
 			m_mailbox.reset();
 			m_boundShard.reset();
+			GLOBAL_EXEC.ReleaseRoute(m_route);
+			m_route = {};
 
 			if (onClosed)
 				onClosed();
@@ -101,6 +109,8 @@ namespace jam::net
 		m_bridge.reset();
 		m_mailbox.reset();
 		m_boundShard.reset();
+		GLOBAL_EXEC.ReleaseRoute(m_route);
+		m_route = {};
 
 		if (onClosed)
 			onClosed();

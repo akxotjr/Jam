@@ -16,6 +16,18 @@ namespace jam::net
 
 	// ---- client ----
 
+	struct LocalActorRef
+	{
+		entt::entity	entity = entt::null;
+		NetId			netId = NetId::Invalid();
+
+		void Clear()
+		{
+			entity = entt::null;
+			netId = NetId::Invalid();
+		}
+	};
+
 	struct EstimatedServerTick
 	{
 		bool	valid				= false;
@@ -248,10 +260,22 @@ namespace jam::net
 
 	// ---- helpers ----
 
+	static entt::entity GetCachedLocalEntity(entt::registry& world)
+	{
+		if (auto* ref = world.ctx().find<LocalActorRef>())
+		{
+			if (ref->entity != entt::null && world.valid(ref->entity) && world.all_of<LocalActorTag>(ref->entity))
+				return ref->entity;
+		}
+
+		return GetLocalEntity(world);
+	}
+
 	static void InitClientNetWorldCtx(entt::registry& world)
 	{
 		world.ctx().emplace<TickCounter>();
 
+		world.ctx().emplace<LocalActorRef>();
 		world.ctx().emplace<EstimatedServerTick>();
 		world.ctx().emplace<ReconcileSignal>();
 		world.ctx().emplace<InputHistoryBuffer>();

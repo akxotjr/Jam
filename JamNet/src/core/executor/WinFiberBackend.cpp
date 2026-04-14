@@ -1,31 +1,34 @@
 ﻿#include "pch.h"
 #include "jamnet/core/executor/WinFiberBackend.h"
 
+#include <mutex>
+
 
 namespace jam
 {
 	static DWORD g_flsKey = FLS_OUT_OF_INDEXES;
+	static std::once_flag g_flsKeyOnce;
 
 
 	DWORD EnsureFlsKey()
 	{
-		if (g_flsKey == FLS_OUT_OF_INDEXES)
-		{
+		std::call_once(g_flsKeyOnce, []()
+			{
 			g_flsKey = ::FlsAlloc(nullptr);
 			if (g_flsKey == FLS_OUT_OF_INDEXES)
 				throw std::runtime_error("FlsAlloc failed");
-		}
+			});
 		return g_flsKey;
 	}
 
-	FlsFiberCtx* GetFlsCtx()
+	FiberContext* GetFiberContext()
 	{
 		if (g_flsKey == FLS_OUT_OF_INDEXES)
 			return nullptr;
-		return static_cast<FlsFiberCtx*>(::FlsGetValue(g_flsKey));
+		return static_cast<FiberContext*>(::FlsGetValue(g_flsKey));
 	}
 
-	void SetFlsCtx(FlsFiberCtx* ctx)
+	void SetFiberContext(FiberContext* ctx)
 	{
 		::FlsSetValue(EnsureFlsKey(), ctx);
 	}

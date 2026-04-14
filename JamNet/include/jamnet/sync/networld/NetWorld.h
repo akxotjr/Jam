@@ -58,7 +58,7 @@ namespace jam::net
 		std::unique_ptr<ShardJobBridge>		m_bridge;
 
 	private:
-		RouteKey							m_key;
+		RouteAssignment						m_route;
 		std::weak_ptr<ShardExecutor>		m_boundShard;
 		std::shared_ptr<Mailbox>			m_mailbox;
 

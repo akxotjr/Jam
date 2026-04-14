@@ -75,6 +75,9 @@ namespace jam::net
         uint32                              m_tickDebtCap       = 8; // 누적 가능한 최대 미처리 tick 수
         uint32                              m_tickBurstBudget   = 4; // 한 fiber에서 처리할 최대 tick 수
 
+        std::vector<px::ActorContext>       m_pushContexts;
+        std::vector<px::ActorContext>       m_pullContexts;
+
         mutable std::vector<PendingActorOp> m_pendingActorOps;
     };
 }

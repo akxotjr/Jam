@@ -116,12 +116,27 @@ namespace jam::net
 	{
 		RebuildGrid();
 
+		std::unordered_map<uint64, px::Vec3> userPositions;
+		{
+			auto view = m_world.view<ControlTag>();
+			userPositions.reserve(m_states.size());
+			for (auto e : view)
+			{
+				const uint64 userId = view.get<ControlTag>(e).userId;
+				if (userId == 0)
+					continue;
+
+				userPositions[userId] = GetEntityPosition(e);
+			}
+		}
+
 		std::vector<entt::entity> candidates;
 		candidates.reserve(64);
 
 		for (auto& [userId, state] : m_states)
 		{
-			const px::Vec3 userPos = GetUserPosition(userId);
+			const auto posIt = userPositions.find(userId);
+			const px::Vec3 userPos = (posIt != userPositions.end()) ? posIt->second : px::Vec3::Zero();
 
 			// 1. 격자 기반 후보 수집 (leave 임계 범위)
 			candidates.clear();
@@ -131,15 +146,19 @@ namespace jam::net
 			std::unordered_set<NetId> newVisible;
 			newVisible.reserve(state.visible.size() + 16);
 
-			// alwaysVisible 먼저 삽입 (격자 쿼리 불필요)
+			// alwaysVisible 삽입
+			//{
+			//	auto view = m_world.view<NetId>();
+			//	for (auto e : view)
+			//	{
+			//		const NetId netId = m_world.get<NetId>(e);
+			//		if (m_alwaysVisible.contains(netId))
+			//			newVisible.insert(netId);
+			//	}
+			//}
+			for (const NetId& netId : m_alwaysVisible)
 			{
-				auto view = m_world.view<NetId>();
-				for (auto e : view)
-				{
-					const NetId netId = m_world.get<NetId>(e);
-					if (m_alwaysVisible.contains(netId))
-						newVisible.insert(netId);
-				}
+				newVisible.insert(netId);
 			}
 
 			// 3. 후보별 조건식 + hysteresis + LOS 검사

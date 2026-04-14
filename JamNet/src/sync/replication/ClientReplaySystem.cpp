@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "jamnet/sync/replication/ClientReplaySystem.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
+#include "jamnet/sync/replication/NetWorldContext.h"
 
 
 namespace jam::net
@@ -17,7 +18,7 @@ namespace jam::net
 
 	void ClientReplaySystem::Tick()
 	{
-		const entt::entity local = GetLocalEntity(m_world);
+		const entt::entity local = GetCachedLocalEntity(m_world);
 		if (local == entt::null || !m_world.valid(local) || !m_world.all_of<CharProxyState>(local))
 			return;
 

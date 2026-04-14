@@ -42,6 +42,38 @@ namespace jam
         float                   usageScale       = 0.f;
     };
 
+    struct ExecutorAffinityConfig
+    {
+        bool                    useProfileDefaults = true;
+        bool                    pinShardWorkers    = true;
+        bool                    pinOffloadWorkers  = false;
+        bool                    pinFiberWorker     = false;
+        bool                    pinIocpWorkers     = false;
+        bool                    pinMainThread      = false;
+    };
+
+    inline ExecutorAffinityConfig DefaultExecutorAffinityConfig(eCoreUsageProfile profile)
+    {
+        ExecutorAffinityConfig cfg{};
+        cfg.useProfileDefaults  = false;
+        cfg.pinShardWorkers     = true;
+        cfg.pinIocpWorkers      = false;
+        cfg.pinMainThread       = false;
+
+        if (profile == CoreProfileServer)
+        {
+            cfg.pinOffloadWorkers = true;
+            cfg.pinFiberWorker    = true;
+        }
+        else
+        {
+            cfg.pinOffloadWorkers = false;
+            cfg.pinFiberWorker    = false;
+        }
+
+        return cfg;
+    }
+
     inline CoreLayout AutoLayout(const AutoCoreLayoutConfig& cfg)
     {
         auto ceilDiv = [](uint32 a, uint32 b) -> uint32 { return (a + b - 1) / b; };
@@ -106,7 +138,7 @@ namespace jam
             return static_cast<uint32>(layout.shards + layout.iocp + layout.fiber + layout.offload);
         };
 
-        const uint32 logicalCap = (logical > reserved) ? (logical - reserved) : 1u;
+        const uint32 logicalCap   = (logical > reserved) ? (logical - reserved) : 1u;
         const uint32 effectiveCap = std::max<uint32>(logicalCap, kMinRuntimeThreads);
         if (total() > effectiveCap)
         {

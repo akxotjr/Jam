@@ -2,8 +2,7 @@
 #include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/core/executor/Job.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
-#include "jamnet/core/executor/ShardTLS.h"
-#include "jamnet/core/executor/ThreadRegistry.h"
+
 
 namespace jam
 {
@@ -58,14 +57,31 @@ namespace jam
 					};
 
 				std::string threadName = std::format("ShardExecutor#{}", m_config.index);
-				ThreadRegistry::InitExecutorThread(threadName, this);
+				InitThreadContext(threadName, this);
 
 				if (m_pinEnabled)
-					PinCurrentThreadTo(m_pinSlot);
+				{
+					if (PinCurrentThreadTo(m_pinSlot))
+					{
+						JAMNET_LOG_DEBUG("ShardExecutor#{} pinned. group={}, mask=0x{:X}",
+							m_config.index,
+							m_pinSlot.group,
+							static_cast<unsigned long long>(m_pinSlot.mask));
+					}
+					else
+					{
+						const DWORD errorCode = GetLastError();
+						JAMNET_LOG_WARN_LOC("ShardExecutor#{} pinning failed. group={}, mask=0x{:X}, error={}",
+							m_config.index,
+							m_pinSlot.group,
+							static_cast<unsigned long long>(m_pinSlot.mask),
+							errorCode);
+					}
+				}
 
 				try 
 				{
-					ShardTLS::Bind(&m_local, std::this_thread::get_id());
+					BindShardContext(&m_local, std::this_thread::get_id());
 				}
 				catch (const std::exception& ex) 
 				{
@@ -77,8 +93,9 @@ namespace jam
 				m_scheduler->AttachToCurrentThread();
 				Loop();
 				m_scheduler->DetachFromThread();
+				m_local.scheduler = nullptr;
 
-				ShardTLS::Unbind();
+				UnbindShardContext();
 				markLoopExited();
 			});
 	}
@@ -88,7 +105,7 @@ namespace jam
 		if (!m_running.exchange(false))
 			return;
 
-		m_local.scheduler = nullptr;
+		NotifyWorkAvailable();
 
 		if (m_shardSlot)
 		{
@@ -108,6 +125,7 @@ namespace jam
 	void ShardExecutor::Submit(Job j)
 	{
 		m_jobIngress.enqueue(std::move(j));
+		NotifyWorkAvailable();
 	}
 
 	void ShardExecutor:: SubmitAfter(Job j, uint64 delay_ns)
@@ -128,6 +146,7 @@ namespace jam
 			},
 			FiberDesc{ .name = "Shard.SubmitAfter" }
 		);
+		NotifyWorkAvailable();
 	}
 
 	std::shared_ptr<Mailbox> ShardExecutor::CreateMailbox()
@@ -172,32 +191,39 @@ namespace jam
 			return;
 
 		m_readyMailboxes.enqueue(mailboxId);
+		NotifyWorkAvailable();
 	}
 
-	void ShardExecutor::PinCoreSlot(const CoreSlot& slot)
+	void ShardExecutor::PinCoreSlot(const CoreSlot& slot, uint16 numaNode)
 	{
 		m_pinSlot = slot;
 		m_pinEnabled = true;
+		if (numaNode != 0xFFFF)
+			m_config.numaNode = numaNode;
 	}
 
 	void ShardExecutor::SpawnFiber(FiberFn fn, const FiberDesc& desc)
 	{
 		m_scheduler->PostSpawn(std::move(fn), desc);
+		NotifyWorkAvailable();
 	}
 
 	void ShardExecutor::ResumeFiber(FiberAwaitKey key)
 	{
 		m_scheduler->PostResume(key);
+		NotifyWorkAvailable();
 	}
 
 	void ShardExecutor::CancelFiberByKey(FiberAwaitKey key, eCancelCode code)
 	{
 		m_scheduler->PostCancelByKey(key, code);
+		NotifyWorkAvailable();
 	}
 
 	void ShardExecutor::CancelFiberById(uint32 id, eCancelCode code)
 	{
 		m_scheduler->PostCancelById(id, code);
+		NotifyWorkAvailable();
 	}
 
 	void ShardExecutor::Tick(uint64 now_ns, uint64 dt_ns)
@@ -272,13 +298,17 @@ namespace jam
 		m_shardSlot->inbox.state.store(E2U(eShardState::Draining), std::memory_order_release);
 	}
 
-	ShardExecutor::PeriodicHandle ShardExecutor::ScheduleFixedRate(Job j, const PeriodicOptions& opt)
+	PeriodicHandle ShardExecutor::ScheduleFixedRate(Job j, const PeriodicOptions& opt)
 	{
+		if (opt.period_ns == 0)
+			return {};
+
 		auto st				= std::make_shared<PeriodicState>();
 		st->period_ns		= opt.period_ns;
 		st->initialDelay_ns = opt.initialDelay_ns;
 		st->maxCatchUp		= opt.maxCatchUp;
 		st->fixedRate		= true;
+		st->awaitKey		= m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
 
 		const uint32 id = m_periodicId.fetch_add(1, std::memory_order_relaxed);
 		{
@@ -296,7 +326,7 @@ namespace jam
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
-					m_scheduler->SleepUntil(next_ns);
+					m_scheduler->Suspend(st->awaitKey, next_ns);
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
@@ -319,17 +349,22 @@ namespace jam
 			},
 			FiberDesc{ .name = fiberName }
 		);
+		NotifyWorkAvailable();
 
 		return PeriodicHandle{ id };
 	}
 
-	ShardExecutor::PeriodicHandle ShardExecutor::ScheduleFixedDelay(Job j, const PeriodicOptions& opt)
+	PeriodicHandle ShardExecutor::ScheduleFixedDelay(Job j, const PeriodicOptions& opt)
 	{
+		if (opt.period_ns == 0)
+			return {};
+
 		auto st = std::make_shared<PeriodicState>();
 		st->period_ns		= opt.period_ns;
 		st->initialDelay_ns = opt.initialDelay_ns;
 		st->maxCatchUp		= 0;
 		st->fixedRate		= false;
+		st->awaitKey		= m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
 
 		const uint32 id = m_periodicId.fetch_add(1, std::memory_order_relaxed);
 		{
@@ -343,7 +378,7 @@ namespace jam
 			[this, st, j, id]()
 			{
 				uint64 next = NOW_NS() + st->initialDelay_ns;
-				m_scheduler->SleepUntil(next);
+				m_scheduler->Suspend(st->awaitKey, next);
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
@@ -351,7 +386,7 @@ namespace jam
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
-					m_scheduler->SleepUntil(NOW_NS() + st->period_ns);
+					m_scheduler->Suspend(st->awaitKey, NOW_NS() + st->period_ns);
 				}
 
 				WRITE_LOCK
@@ -359,6 +394,7 @@ namespace jam
 			},
 			FiberDesc{ .name = fiberName }
 		);
+		NotifyWorkAvailable();
 
 		return PeriodicHandle{ id };
 	}
@@ -371,6 +407,8 @@ namespace jam
 		if (auto st = it->second.lock())
 		{
 			st->cancelled.store(true, std::memory_order_relaxed);
+			m_scheduler->PostCancelByKey(st->awaitKey, eCancelCode::Manual);
+			NotifyWorkAvailable();
 			return true;
 		}
 		return false;
@@ -384,6 +422,7 @@ namespace jam
 		{
 			++m_metrics.loopCount;
 			bool didWork = false;
+			const uint64 observedWakeEpoch = m_wakeEpoch.load(std::memory_order_acquire);
 
 			DrainReadyMailboxes(64, m_config.batchBudget);
 			didWork |= ProcessJobsOnce();
@@ -429,10 +468,21 @@ namespace jam
 			}
 
 			if (!didWork)
-           {
+			{
 				++m_metrics.idleLoopCount;
 				const uint64 idleStart_ns = NOW_NS();
-				std::this_thread::sleep_for(std::chrono::milliseconds(m_config.idleSleepMs));
+				uint64 idleWait_ns = static_cast<uint64>(std::max(0, m_config.idleSleepMs)) * 1'000'000ull;
+				const uint64 nextTick_ns = m_lastTick_ns + tickPeriod;
+				if (now_ns < nextTick_ns)
+					idleWait_ns = std::min(idleWait_ns, nextTick_ns - now_ns);
+				const uint64 nextFiberWakeup_ns = m_scheduler->NextWakeupTime();
+				if (nextFiberWakeup_ns != 0)
+				{
+					idleWait_ns = (now_ns < nextFiberWakeup_ns)
+						? std::min(idleWait_ns, nextFiberWakeup_ns - now_ns)
+						: 0_ns;
+				}
+				WaitForWorkOrTimeout(observedWakeEpoch, idleWait_ns);
 				m_metrics.idleSleepCost_ns += NOW_NS() - idleStart_ns;
 			}
 			else
@@ -440,6 +490,31 @@ namespace jam
 				++m_metrics.didWorkLoopCount;
 			}
 		}
+	}
+
+	void ShardExecutor::NotifyWorkAvailable()
+	{
+		m_wakeEpoch.fetch_add(1, std::memory_order_release);
+		m_wakeCv.notify_one();
+	}
+
+	void ShardExecutor::WaitForWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns)
+	{
+		if (timeout_ns == 0)
+		{
+			std::this_thread::yield();
+			return;
+		}
+
+		std::unique_lock lock(m_wakeMutex);
+		m_wakeCv.wait_for(
+			lock,
+			std::chrono::nanoseconds(timeout_ns),
+			[this, observedWakeEpoch]()
+			{
+				return !m_running.load(std::memory_order_acquire)
+					|| m_wakeEpoch.load(std::memory_order_acquire) != observedWakeEpoch;
+			});
 	}
 
 
@@ -464,8 +539,8 @@ namespace jam
 			if (q.empty())
 				continue;
 
-			j = std::move(q.back());
-			q.pop_back();
+			j = std::move(q.front());
+			q.pop_front();
 			m_jobLocalTotal.fetch_sub(1, std::memory_order_relaxed);
 			return true;
 		}

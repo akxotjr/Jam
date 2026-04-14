@@ -8,28 +8,6 @@
 #define len16(arr)		static_cast<int16>(sizeof(arr) / sizeof(arr[0]))
 #define len32(arr)		static_cast<int32>(sizeof(arr) / sizeof(arr[0]))
 
-/*---------------
-      Crash
----------------*/
-
-#define JAM_CRASH(cause)					\
-{											\
-	uint32* crash = nullptr;				\
-	__analysis_assume(crash != nullptr);	\
-	*crash = 0xDEADBEEF;					\
-}
-
-#define JAM_ASSERT(expr)			        \
-{									        \
-	if (!(expr))					        \
-	{								        \
-		JAM_CRASH("ASSERT_CRASH");		    \
-		__analysis_assume(expr);	        \
-	}								        \
-}
-
-
-
 #define DECLARE_SINGLETON(ClassType)                            \
 public:                                                         \
     static ClassType& Instance()                                \

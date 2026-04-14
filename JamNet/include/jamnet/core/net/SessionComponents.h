@@ -97,7 +97,7 @@ namespace jam::net
 
 		uint16 AllocPacketSeq(uint16 count = 1)
 		{
-			JAM_ASSERT(count < 0x8000)
+			JAM_ASSERT(count < 0x8000);
 				
 			const uint16 base = nextPacketSeq;
 			nextPacketSeq = static_cast<uint16>(nextPacketSeq + count);
@@ -106,7 +106,7 @@ namespace jam::net
 
 		uint16 AllocOrderedSeq(uint16 count = 1)
 		{
-			JAM_ASSERT(count < 0x8000)
+			JAM_ASSERT(count < 0x8000);
 
 			const uint16 base = nextOrdredSeq;
 			nextOrdredSeq = static_cast<uint16>(nextOrdredSeq + count);

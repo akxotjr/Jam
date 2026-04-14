@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "jamnet/core/net/UdpSession.h"
+#include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/core/net/SessionSystems.h"
 
 namespace jam::net
@@ -91,6 +92,13 @@ namespace jam::net
 
 		const BYTE*  data = recvBuffer.ReadPos();
 		const int32  size = numOfBytes;
+		eJobPriority priority = eJobPriority::Normal;
+		if (size >= static_cast<int32>(PacketHeader::BASE_SIZE))
+		{
+			const auto* header = reinterpret_cast<const PacketHeader*>(recvBuffer.ReadPos());
+			if (header->IsValid() && header->GetGroup() == ePacketGroup::CTRL)
+				priority = eJobPriority::Control;
+		}
 
 		std::shared_ptr<RecvBuffer> buf = RecvBuffer::FromSpan(data, size);
 
@@ -101,7 +109,7 @@ namespace jam::net
 				if (e == entt::null) return;
 
 				ProcessReceivedPacket(e, buf, ingressRecvTime_ns);
-			}));
+			}, priority));
 
 		recvBuffer.OnRead(size);
 		recvBuffer.Clean();

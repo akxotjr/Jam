@@ -49,6 +49,7 @@ namespace jam::net
 		void								RequestInitialSnapshotNewClient();
 
 		void								GetMembers(OUT std::vector<uint64>& users) { users = m_members; };
+		entt::entity						GetEntity(NetId netId) const;
 
 
 	private:
@@ -73,5 +74,6 @@ namespace jam::net
 		std::atomic<bool>						m_pendingInitialFullSnapshot{ false };
 
 		std::vector<uint64>						m_members;
+		std::unordered_map<NetId, entt::entity>	m_netIdToEntity;
 	};
 }

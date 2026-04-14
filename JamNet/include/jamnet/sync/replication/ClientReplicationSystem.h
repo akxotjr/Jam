@@ -74,6 +74,8 @@ namespace jam::net
         void                                ResolveDeferredTargetBindingsAndSpawn();
         bool                                TryResolveTargetObjId(NetId targetNetId, OUT px::ObjectId& outObjId);
         uint32                              GetCurrentLocalCommandEpoch() const;
+        void                                SetLocalActorRef(NetId netId, entt::entity entity);
+        void                                ClearLocalActorRef();
 
     private:
         entt::registry&                     m_world;

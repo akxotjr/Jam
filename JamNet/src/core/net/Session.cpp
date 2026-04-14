@@ -4,6 +4,11 @@
 
 namespace jam::net
 {
+	namespace
+	{
+		const RouteDomain kSessionRouteDomain = RouteDomain::From("Session");
+	}
+
 	std::atomic<uint64> Session::s_sessionIdGenerator{ 1 };
 
 	Session::Session()
@@ -13,7 +18,7 @@ namespace jam::net
 
 	void Session::Init()
 	{
-		m_key = GLOBAL_EXEC.MakeRouteKey("Session", GetSessionId());
+		m_key = GLOBAL_EXEC.MakeRouteKey(kSessionRouteDomain, GetSessionId());
 		JAMNET_LOG_DEBUG("[Session::Init()] sessionId= {} protocol= {}", GetSessionId(), m_protocol == eProtocolType::UDP ? "udp" : "tcp");
 		EnsureBound();
 	}
@@ -82,7 +87,7 @@ namespace jam::net
 		if (!m_entityCreating.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
 			return;
 		
-		shard->Submit(Job(Self(), &Session::CreateEntity, eJobPriority::Control));
+		shard->Submit(Job(Self(), &Session::CreateEntity, eJobPriority::Critical));
 	}
 
 	void Session::CreateEntity()
@@ -93,7 +98,7 @@ namespace jam::net
 			return;
 		}
 
-		auto& L = SHARD_LOCAL_CHECKED();
+		auto& L = CurrentShardLocalChecked();
 		auto& R = L.registry;
 
 		if (m_entity == entt::null)

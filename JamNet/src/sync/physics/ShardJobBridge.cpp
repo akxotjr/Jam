@@ -21,7 +21,7 @@ namespace jam::net
 
 	bool ShardJobBridge::IsInFiberContext() const
 	{
-		const auto* shard = SHARD_LOCAL_CURRENT();
+		const auto* shard = CurrentShardLocal();
 		return shard && shard->scheduler && (shard->scheduler->Current() != 0);
 	}
 }

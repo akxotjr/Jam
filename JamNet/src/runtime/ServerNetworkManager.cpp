@@ -639,7 +639,7 @@ namespace jam::net
 
 	WorldTransferResult ServerNetworkManager::TransferWorldAwait(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, uint64 timeout_ns)
 	{
-		auto* shard = SHARD_LOCAL_CURRENT();
+		auto* shard = CurrentShardLocal();
 		auto* sched = shard ? shard->scheduler : nullptr;
 		if (!sched || sched->Current() == 0)
 			return TransferWorld(sourceWorldId, targetWorldId, userId);
@@ -686,7 +686,7 @@ namespace jam::net
 
 	WorldTransferResult ServerNetworkManager::TransferWorld(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId)
 	{
-		auto* shard = SHARD_LOCAL_CURRENT();
+		auto* shard = CurrentShardLocal();
 		auto* sched = shard ? shard->scheduler : nullptr;
 		if (sched && sched->Current() != 0)
 			return TransferWorldAwait(sourceWorldId, targetWorldId, userId);

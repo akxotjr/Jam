@@ -36,22 +36,17 @@ namespace jam
         }
 
         template<class T, class MemFn, class... Args>
-        Job(std::weak_ptr<T> owner, MemFn mf, Args&&... args, const eJobPriority p = eJobPriority::Normal)
+        Job(std::weak_ptr<T> owner, MemFn mf, Args&&... args, const eJobPriority p = eJobPriority::Normal) requires (std::is_member_function_pointer_v<MemFn>)
         {
             m_priority = p;
             auto tup = std::make_tuple(std::forward<Args>(args)...);
-
-            if (auto sp = owner.lock())
-            {
-                m_callback = [o = std::move(sp), mf, t = std::move(tup)]() mutable
+            m_callback = [w = std::move(owner), mf, t = std::move(tup)]() mutable
+                {
+                    if (auto o = w.lock())
                     {
                         std::apply([&]<typename... A>(A&&... a) { (o.get()->*mf)(std::forward<A>(a)...); }, t);
-                    };
-            }
-            else
-            {
-                m_callback = nullptr;
-            }
+                    }
+                };
         }
 
         eJobPriority    Priority() const noexcept { return m_priority; }

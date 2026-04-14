@@ -2,15 +2,15 @@
 
 namespace jam
 {
-	struct FlsFiberCtx
+	struct FiberContext
 	{
 		void*	scheduler = nullptr;
 		uint32	fiberId   = 0;
 	};
 
 	DWORD			EnsureFlsKey();
-	FlsFiberCtx*	GetFlsCtx();
-	void			SetFlsCtx(FlsFiberCtx* ctx);
+	FiberContext*	GetFiberContext();
+	void			SetFiberContext(FiberContext* ctx);
 
 	struct FiberBackendConfig
 	{

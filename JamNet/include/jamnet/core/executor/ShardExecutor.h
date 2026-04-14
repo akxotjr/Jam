@@ -4,11 +4,13 @@
 #include "jamnet/core/executor/NumaTopology.h"
 #include "jamnet/core/executor/ShardSlot.h"
 #include "jamnet/core/executor/GlobalEventBus.h"
-#include "jamnet/core/executor/RoutingPolicy.h"
+#include "jamnet/core/executor/ShardRoutingPolicy.h"
 #include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/executor/ExecutorMetrics.h"
+#include "jamnet/core/executor/ExecutorPeriodic.h"
 #include "jamnet/core/executor/ShardDomain.h"
 #include <condition_variable>
+#include <deque>
 
 namespace jam
 {
@@ -63,18 +65,6 @@ namespace jam
 	}
 
 
-
-
-	// ============================================================
-	// RouteHome
-	// ============================================================
-
-	struct RouteHome
-	{
-		std::shared_ptr<Mailbox> mb;
-	};
-
-
 	// ============================================================
 	// ShardExecutorConfig
 	// ============================================================
@@ -94,7 +84,7 @@ namespace jam
 	// ShardExecutor
 	// ============================================================
 
-	class ShardExecutor : public std::enable_shared_from_this<ShardExecutor>, IExecutor
+	class ShardExecutor : public std::enable_shared_from_this<ShardExecutor>, public IExecutor
 	{
 	public:
 		explicit ShardExecutor(const ShardExecutorConfig& config = {});
@@ -123,15 +113,8 @@ namespace jam
 		void							CancelFiberById(uint32 id, eCancelCode code);
 
 
-
-		struct PeriodicHandle { uint32 id = 0; };
-		struct PeriodicOptions
-		{
-			uint64      period_ns		= 0_ns;
-			uint64      initialDelay_ns = 0_ns;
-			int32       maxCatchUp		= 0;
-			const char* name			= "Shard.Periodic";
-		};
+		using PeriodicHandle = jam::PeriodicHandle;
+		using PeriodicOptions = jam::PeriodicOptions;
 
 		PeriodicHandle					ScheduleFixedRate(Job j, const PeriodicOptions& opt);
 		PeriodicHandle					ScheduleFixedDelay(Job j, const PeriodicOptions& opt);
@@ -145,10 +128,9 @@ namespace jam
 		ShardLocal&						Local() { return m_local; }
 		const ShardLocal&				Local() const { return m_local; }
 
-		size_t							GetQueueSize() const { return m_jobIngress.size_approx() + m_jobLocalTotal.load(std::memory_order_relaxed);
-		}
+		size_t							GetQueueSize() const { return m_jobIngress.size_approx() + m_jobLocalTotal.load(std::memory_order_relaxed); }
 
-		void							PinCoreSlot(const CoreSlot& slot);
+		void							PinCoreSlot(const CoreSlot& slot, uint16 numaNode = 0xFFFF);
 		uint16							GetNumaNode() const { return m_config.numaNode; }
 		ShardExecutorMetrics			Profile() const;
 		void							ResetMetrics();
@@ -160,6 +142,8 @@ namespace jam
 
 		void							Loop();
 		void							Tick(uint64 now_ns, uint64 dt_ns);
+		void							NotifyWorkAvailable();
+		void							WaitForWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns);
 
 		void							PushLocal(Job&& j);
 		bool							TryPopLocal(OUT Job& j);
@@ -171,9 +155,9 @@ namespace jam
 		std::shared_ptr<Mailbox>		FindMailbox(uint32 id);
 
 	private:
-		ShardExecutorConfig								m_config{};
+		ShardExecutorConfig								m_config = {};
 
-		std::atomic<bool>                               m_running{ false };
+		std::atomic<bool>                               m_running = false;
 		std::thread                                     m_thread;
 
 		std::atomic<uint64>                             m_nextAwaitSeq{ 1 };
@@ -185,15 +169,16 @@ namespace jam
 		ConcurrentQueue<Job>							m_jobIngress;
 		
 		static constexpr size_t							kPrioCount = static_cast<size_t>(eJobPriority::Count);
-		std::array<std::vector<Job>, kPrioCount>		m_jobLocalByPrio{};
+		std::array<std::deque<Job>, kPrioCount>			m_jobLocalByPrio{};
 		std::atomic<size_t>								m_jobLocalTotal = 0;
 
 		USE_LOCK
 		std::unordered_map<uint32, std::shared_ptr<Mailbox>>      m_mailboxes;
 		std::atomic<uint32>                             m_nextMailboxId{ 1 };
 		ConcurrentQueue<uint32>							m_readyMailboxes;
-
-		std::unordered_map<RouteKey, RouteHome>         m_routeHome;    // RouteKey -> Mailbox
+		std::mutex										m_wakeMutex;
+		std::condition_variable							m_wakeCv;
+		std::atomic<uint64>								m_wakeEpoch{ 0 };
 
 		std::atomic<bool>                               m_assistRequested{ false };
 
@@ -213,15 +198,16 @@ namespace jam
 			uint64				initialDelay_ns = 0_ns;
 			int32				maxCatchUp		= 0;
 			bool				fixedRate		= true;
+			FiberAwaitKey		awaitKey		= 0;
 		};
 
-		std::atomic<uint32>											m_periodicId{ 1 };
+		std::atomic<uint32>											m_periodicId		= 1;
 		std::unordered_map<uint32, std::weak_ptr<PeriodicState>>	m_periodics;
 
 		mutable std::mutex											m_metricSyncMutex;
 		mutable std::condition_variable								m_metricSyncCv;
-		mutable bool												m_loopExited = true;
-		ShardExecutorMetrics										m_metrics = {};
+		mutable bool												m_loopExited		= true;
+		ShardExecutorMetrics										m_metrics			= {};
 	};
 
 

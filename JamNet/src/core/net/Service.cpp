@@ -18,7 +18,7 @@ namespace jam::net
 	{
 		GlobalExecutor::Instance().ConveyAll(Job([this]
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				RegisterNetworkDomain(L);
 			}));
 	}
@@ -103,7 +103,7 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
-		JAM_ASSERT(m_tcpSessions.erase(session->GetRemoteNetAddress()) != 0);
+		JAM_VERIFY(m_tcpSessions.erase(session->GetRemoteNetAddress()) != 0);
 		m_tcpSessionCount--;
 	}
 
@@ -123,7 +123,7 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
-		JAM_ASSERT(m_udpSessions.erase(session->GetRemoteNetAddress()) != 0);
+		JAM_VERIFY(m_udpSessions.erase(session->GetRemoteNetAddress()) != 0);
 		m_udpSessionCount--;
 	}
 
@@ -141,7 +141,7 @@ namespace jam::net
 	{
 		WRITE_LOCK
 
-		JAM_ASSERT(m_handshakingUdpSessions.erase(session->GetRemoteNetAddress()) != 0)
+		JAM_VERIFY(m_handshakingUdpSessions.erase(session->GetRemoteNetAddress()) != 0);
 	}
 
 	void Service::CompleteUdpHandshake(const NetAddress& from)

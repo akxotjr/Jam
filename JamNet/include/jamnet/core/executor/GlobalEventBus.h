@@ -56,7 +56,7 @@ namespace jam
 	    Subscription Subscribe(std::function<void(const E&)> cb, SubscribeOptions opt = {})
 		{
 	        auto type = std::type_index(typeid(E));
-	        auto h = std::make_unique<Handler<E>>(std::move(cb));
+	        auto h = std::make_shared<Handler<E>>(std::move(cb));
 	        std::function<void(Job)> dispatch = MakeDispatcher(opt);
 
 	        std::size_t newId;
@@ -76,25 +76,25 @@ namespace jam
 
 	        std::vector<SlotView> snapshot;
 	        {
-				WRITE_LOCK
+				READ_LOCK
 	            auto it = m_handlers.find(std::type_index(typeid(EvT)));
 	            if (it == m_handlers.end()) return;
 	            snapshot.reserve(it->second.size());
 	            for (auto& s : it->second) 
 				{
-	                snapshot.push_back(SlotView{ s.h.get(), &s.dispatch });
+	                snapshot.push_back(SlotView{ s.h, s.dispatch });
 	            }
 	        }
 
 	        // 잠금 없이 디스패치(Job으로 래핑)
 			for (auto& sv : snapshot) 
 			{
-				auto* hb = sv.h;
+				auto hb = sv.h;
 				auto evpCopy = evp; // 각 작업이 shared_ptr을 소유
 				Job job([hb, evpCopy]() {
 					hb->invoke(static_cast<const void*>(evpCopy.get()));
 					});
-				(*sv.dispatch)(std::move(job));
+				sv.dispatch(std::move(job));
 			}
 	    }
 
@@ -123,13 +123,13 @@ namespace jam
 	    struct Slot
 		{
 	        size_t							id		 = 0;
-	        std::unique_ptr<HandlerBase>	h		 = nullptr;
+	        std::shared_ptr<HandlerBase>	h		 = nullptr;
 	        std::function<void(Job)>		dispatch = nullptr;
 	    };
 	    struct SlotView
 		{
-	        HandlerBase*					h		 = nullptr;
-	        std::function<void(Job)>*		dispatch = nullptr;
+	        std::shared_ptr<HandlerBase>	h		 = nullptr;
+	        std::function<void(Job)>		dispatch = nullptr;
 	    };
 
 

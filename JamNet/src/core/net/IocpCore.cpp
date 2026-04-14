@@ -7,7 +7,7 @@ namespace jam::net
 	IocpCore::IocpCore()
 	{
 		m_iocpHandle = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
-		JAM_ASSERT(m_iocpHandle != nullptr)
+		JAM_ASSERT(m_iocpHandle != nullptr);
 	}
 
 	IocpCore::~IocpCore()

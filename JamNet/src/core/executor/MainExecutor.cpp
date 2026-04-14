@@ -1,13 +1,13 @@
 #include "pch.h"
 #include "jamnet/core/executor/MainExecutor.h"
-#include "jamnet/core/executor/ThreadRegistry.h"
+
 
 namespace jam
 {
 	void MainExecutor::Init()
 	{
 		m_id = std::this_thread::get_id();
-		ThreadRegistry::InitExecutorThread("MainExecutor", this);
+		InitThreadContext("MainExecutor", this);
 	}
 
 	void MainExecutor::Submit(Job j)

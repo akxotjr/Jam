@@ -6,7 +6,7 @@ namespace jam
 	struct CoreSlot
 	{
 		USHORT		group = 0;	// Processor group
-		KAFFINITY	mask = 0;	// 
+		KAFFINITY	mask  = 0;	// One logical processor from a physical core.
 	};
 
 	struct NodeInfo
@@ -15,10 +15,20 @@ namespace jam
 		std::vector<CoreSlot>	cores;			// Logical core-slot per physical core
 	};
 
-	std::vector<NodeInfo> QueryNumaNodesWithPrimaryCoreSlots();
+	struct ThreadAffinitySlot
+	{
+		USHORT					numaNode = 0xFFFF;
+		CoreSlot				core	 = {};
+	};
+
+	std::vector<NodeInfo>			QueryNumaNodesWithPrimaryCoreSlots();
+	std::vector<ThreadAffinitySlot> BuildRoundRobinCoreSlots(const std::vector<NodeInfo>& nodes);
 
 	inline bool PinCurrentThreadTo(const CoreSlot& slot)
 	{
+		if (slot.mask == 0)
+			return false;
+
 		GROUP_AFFINITY ga = {};
 		ga.Group = slot.group;
 		ga.Mask  = slot.mask;
@@ -32,8 +42,7 @@ namespace jam
 
 	inline void NumaFree(void* p)
 	{
-		if (p)
-			VirtualFree(p, 0, MEM_RELEASE);
+		if (p) VirtualFree(p, 0, MEM_RELEASE);
 	}
 
 }

@@ -44,14 +44,14 @@ namespace jam
 		if (!IsAcceptingPosts())
 			return 0;
 
-		bool expected = m_queue.try_enqueue_bulk(token, j, count);
-		if (expected)
+		const bool enqueued = m_queue.try_enqueue_bulk(token, j, count);
+		if (enqueued)
 		{
 			const uint64 prev = m_size.fetch_add(count, std::memory_order_relaxed);
 			if (prev == 0)
 				NotifyReadyIfFirst();
 		}
-		return expected;
+		return enqueued ? count : 0;
 	}
 
 	bool Mailbox::Close(eMailboxCloseMode mode, std::function<void()> onClosed)

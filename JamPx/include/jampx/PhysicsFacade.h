@@ -65,6 +65,7 @@ namespace jam::px
 		void								PullProxyStates(OUT std::vector<ActorContext>& contexts) override;
 
 		void								ApplyCharacterInput(ObjectId id, const CharacterInput& input) override;
+		void								ApplyReplayCharacterInput(ObjectId id, const CharacterInput& input) override;
 		void								PullPredictedState(ObjectId oid, OUT CharacterState& state) override;
 
 

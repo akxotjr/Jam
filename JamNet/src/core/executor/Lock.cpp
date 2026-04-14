@@ -1,7 +1,7 @@
 ﻿#include "pch.h"
 #include "jamnet/core/executor/Lock.h"
 #include "jamnet/core/executor/DeadLockProfiler.h"
-#include "jamnet/core/executor/ExecutorTLS.h"
+#include "jamnet/core/executor/ThreadContext.h"
 
 namespace jam
 {
@@ -12,14 +12,15 @@ namespace jam
 #endif
 
 		const uint32 lockThreadId = (m_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
-		if (tl_ThreadId == lockThreadId)
+		const uint32 threadId = CurrentThreadId();
+		if (threadId == lockThreadId)
 		{
 			m_writeCount++;
 			return;
 		}
 
 		const uint64 beginTick = ::GetTickCount64();
-		const uint32 desired   = ((tl_ThreadId << 16) & WRITE_THREAD_MASK);
+		const uint32 desired   = ((threadId << 16) & WRITE_THREAD_MASK);
 
 		while (true)
 		{
@@ -62,7 +63,7 @@ namespace jam
 #endif
 
 		const uint32 lockThreadId = (m_lockFlag.load() & WRITE_THREAD_MASK) >> 16;
-		if (tl_ThreadId == lockThreadId)
+		if (CurrentThreadId() == lockThreadId)
 		{
 			m_lockFlag.fetch_add(1);
 			return;

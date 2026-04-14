@@ -16,9 +16,9 @@ namespace jam
 		void			DrainAll();
 
 	private:
-		std::thread::id						m_id{};
+		std::thread::id						m_id		= {};
 		moodycamel::ConcurrentQueue<Job>	m_queue;
-		std::atomic<size_t>					m_pending{ 0 };
+		std::atomic<size_t>					m_pending	= 0;
 	};
 }
 

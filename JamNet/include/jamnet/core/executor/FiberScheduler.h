@@ -46,6 +46,7 @@ namespace jam
 
 		void                    DrainInbox();
 		void                    Poll(int32 budget, uint64 now_ns);
+		uint64                  NextWakeupTime() const;
         void                    ResetProfile() { m_metrics = {}; }
 
 		uint32                  Current() const;
@@ -71,8 +72,9 @@ namespace jam
 
             eFiberState     state           = eFiberState::Ready;
             eResumeCode     resume          = eResumeCode::None;
-            uint64          wakeup_ns       = 0;
-            uint64          deadline_ns     = 0;
+            uint64          wakeup_ns       = 0_ns;
+            uint64          deadline_ns     = 0_ns;
+            uint64          sleepGeneration = 0;
             FiberAwaitKey   awaitKey        = 0;
             bool            inReadyQ        = false;
 
@@ -82,12 +84,15 @@ namespace jam
             CancelToken*    cancel          = nullptr;
             uint64          switches        = 0;
             uint64          steps           = 0;
-            uint64          runtimeAcc_ns   = 0;
-            uint64          lastRunStart_ns = 0;
+            uint64          runtimeAcc_ns   = 0_ns;
+            uint64          lastRunStart_ns = 0_ns;
+            uint64          stackUsed       = 0;
+            uint64          stackTotal      = 0;
+            uint64          stackPeak       = 0;
 
             FiberFn         entry           = nullptr;
             TrampolineParam param           = {};
-            FlsFiberCtx     fls             = {};
+            FiberContext    fiberContext    = {};
         };
 
         struct ResumeMsg
@@ -132,8 +137,9 @@ namespace jam
 
         struct SleepItem
         {
-            uint64          wakeup_ns = 0;
-            uint32          fiberId   = 0;
+            uint64          wakeup_ns  = 0_ns;
+            uint32          fiberId    = 0;
+            uint64          generation = 0;
         };
 
         struct SleepCmp
@@ -157,6 +163,7 @@ namespace jam
         void                        BindFls(Fiber* f);
         void                        StartRun(Fiber* f);
         void                        EndRun(Fiber* f);
+        void                        ProbeFiberStack(Fiber* f);
         void                        CompleteAwait(Fiber* f, eResumeCode rc, eCancelCode cc = eCancelCode::None);
 
         void                        WakeupTimed(uint64 wakeup_ns);
@@ -167,7 +174,7 @@ namespace jam
 
         WinFiberBackend&                                                    m_backend;
         void*                                                               m_main      = nullptr;
-        FlsFiberCtx                                                         m_mainCtx   = {};
+        FiberContext                                                        m_mainCtx   = {};
         uint32                                                              m_currentId = 0;
 
         uint64                                                              m_readySeq  = 0;
@@ -193,9 +200,5 @@ namespace jam
         moodycamel::ConsumerToken                                           m_cancelIdCtok;
 
         FiberMetrics                                                        m_metrics   = {};
-
-        // 기본 스택 크기
-        static constexpr size_t kDefReserve = 512 * 1024;
-        static constexpr size_t kDefCommit = 128 * 1024;
 	};
 }

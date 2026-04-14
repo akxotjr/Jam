@@ -29,6 +29,7 @@ namespace jam::net
 		m_pendingSnapshots.clear();
 		m_localNetId = NetId::Invalid();
 		m_localEntity = entt::null;
+		ClearLocalActorRef();
 		m_lastServerTick = 0;
 		m_lastInputAck = 0;
 
@@ -124,6 +125,7 @@ namespace jam::net
 				{
 					m_localNetId = NetId::Invalid();
 					m_localEntity = entt::null;
+					ClearLocalActorRef();
 				}
 				return;
 			}
@@ -279,7 +281,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAM_CRASH("[ApplyFullSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyFullSnapshot] : Invalid entity");
 			return;
 		}
 
@@ -294,7 +296,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAM_CRASH("[ApplyDeltaSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyDeltaSnapshot] : Invalid entity");
 			return;
 		}
 
@@ -330,7 +332,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAM_CRASH("[ApplyKinematicStateSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyKinematicStateSnapshot] : Invalid entity");
 			return;
 		}
 
@@ -391,7 +393,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAM_CRASH("[ApplyCharacterFullSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyCharacterFullSnapshot] : Invalid entity");
 			return;
 		}
 
@@ -424,7 +426,7 @@ namespace jam::net
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
-			JAM_CRASH("[ApplyCharacterDeltaSnapshot] : Invalid entity")
+			JAM_CRASH("[ApplyCharacterDeltaSnapshot] : Invalid entity");
 			return;
 		}
 
@@ -513,6 +515,7 @@ namespace jam::net
 			{
 				m_localNetId  = NetId::Invalid();
 				m_localEntity = entt::null;
+				ClearLocalActorRef();
 
 				if (replica.e != entt::null && m_world.valid(replica.e))
 				{
@@ -527,6 +530,7 @@ namespace jam::net
 		if (m_localNetId == netId && m_localEntity == replica.e)
 		{
 			replica.isLocal = true;
+			SetLocalActorRef(netId, replica.e);
 			if (replica.e != entt::null && m_world.valid(replica.e))
 			{
 				m_world.remove<RemoteActorTag>(replica.e);
@@ -550,6 +554,7 @@ namespace jam::net
 
 		m_localNetId  = netId;
 		m_localEntity = replica.e;
+		SetLocalActorRef(netId, replica.e);
 
 		replica.isLocal = true;
 		if (replica.e != entt::null && m_world.valid(replica.e))
@@ -620,5 +625,20 @@ namespace jam::net
 			return (*nwPtr)->GetLatestLocalCommandEpoch();
 
 		return 0;
+	}
+
+	void ClientReplicationSystem::SetLocalActorRef(NetId netId, entt::entity entity)
+	{
+		if (auto* ref = m_world.ctx().find<LocalActorRef>())
+		{
+			ref->netId = netId;
+			ref->entity = entity;
+		}
+	}
+
+	void ClientReplicationSystem::ClearLocalActorRef()
+	{
+		if (auto* ref = m_world.ctx().find<LocalActorRef>())
+			ref->Clear();
 	}
 }

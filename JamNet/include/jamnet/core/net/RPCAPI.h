@@ -33,7 +33,7 @@ namespace jam::net
 			std::move(weak),
 			[f = std::move(fn)](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterRequest<T>(R, e, std::move(f));
 			});
@@ -46,7 +46,7 @@ namespace jam::net
 			std::move(weak),
 			[obj, mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterRequest<T>(R, e, obj, mf);
 			});
@@ -59,7 +59,7 @@ namespace jam::net
 			std::move(weak),
 			[obj, mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterRequest<T>(R, e, obj, mf);
 			});
@@ -72,7 +72,7 @@ namespace jam::net
 			std::move(weak),
 			[sp = std::move(sp), mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterRequest<T>(R, e, std::move(sp), mf);
 			});
@@ -85,7 +85,7 @@ namespace jam::net
 			std::move(weak),
 			[wp = std::move(wp), mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterRequest<T>(R, e, std::move(wp), mf);
 			});
@@ -100,7 +100,7 @@ namespace jam::net
 			std::move(weak),
 			[f = std::move(fn)](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterResponse<T>(R, e, std::move(f));
 			});
@@ -113,7 +113,7 @@ namespace jam::net
 			std::move(weak),
 			[obj, mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterResponse<T>(R, e, obj, mf);
 			});
@@ -126,7 +126,7 @@ namespace jam::net
 			std::move(weak),
 			[obj, mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterResponse<T>(R, e, obj, mf);
 			});
@@ -139,7 +139,7 @@ namespace jam::net
 			std::move(weak),
 			[sp = std::move(sp), mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterResponse<T>(R, e, std::move(sp), mf);
 			});
@@ -152,7 +152,7 @@ namespace jam::net
 			std::move(weak),
 			[wp = std::move(wp), mf](entt::entity e) mutable
 			{
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto& R = L.registry;
 				RPCRegisterResponse<T>(R, e, std::move(wp), mf);
 			});
@@ -199,7 +199,7 @@ namespace jam::net
 					return;
 				}
 
-				auto& L = SHARD_LOCAL_CHECKED();
+				auto& L = CurrentShardLocalChecked();
 				auto* scheduler = L.scheduler;
 				if (!scheduler)
 				{

@@ -5,8 +5,21 @@
 
 #include "jamnet/sync/replication/NetWorldContext.h"
 
+#include <cmath>
+
 namespace jam::net
 {
+	namespace
+	{
+		float WrapAngleDelta(float delta)
+		{
+			float d = std::fmod(delta, px::TWO_PI);
+			if (d > px::PI)  d -= px::TWO_PI;
+			if (d < -px::PI) d += px::TWO_PI;
+			return d;
+		}
+	}
+
 	CorrectionReplayRunner::CorrectionReplayRunner(px::IPhysicsFacade* physics)
 		: m_physics(physics)
 	{
@@ -123,10 +136,10 @@ namespace jam::net
 		else
 		{
 			delta.pos   = correction.pos - preLive.pos;
-			delta.yaw   = correction.facingYaw - preLive.facingYaw;
+			delta.yaw   = WrapAngleDelta(correction.facingYaw - preLive.facingYaw);
 			delta.pitch = correction.facingPitch - preLive.facingPitch;
 
-			JAMNET_LOG_DEBUG("[CorrectionReplayRunner] delta pos= ({}, {}, {})", delta.pos.x, delta.pos.y, delta.pos.z);
+			//JAMNET_LOG_DEBUG("[CorrectionReplayRunner] delta pos= ({}, {}, {})", delta.pos.x, delta.pos.y, delta.pos.z);
 		}
 
 		live = correction; // logical state overwrite

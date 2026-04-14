@@ -31,7 +31,7 @@ namespace jam::net
 		if (m_tickDebt < m_tickDebtCap)
 			++m_tickDebt;
 
-		auto& shard = SHARD_LOCAL_CHECKED();
+		auto& shard = CurrentShardLocalChecked();
 		auto* sched = shard.scheduler;
 
 		if (!sched)
@@ -105,7 +105,7 @@ namespace jam::net
 		if (bodyType == px::eBodyType::Character)
 		{
 			auto& cs = m_world.emplace<px::CharacterState>(e);
-			JAM_ASSERT(m_physics->GetCharacterState(oid, cs))
+			JAM_VERIFY(m_physics->GetCharacterState(oid, cs));
 
 			const uint64 controller = m_world.get<ControlTag>(e).userId;
 			const uint64 owner		= m_world.get<OwnershipTag>(e).userId;
@@ -118,7 +118,7 @@ namespace jam::net
 		else
 		{
 			auto& rs = m_world.emplace<px::RigidState>(e);
-			JAM_ASSERT(m_physics->GetRigidState(oid, rs))
+			JAM_VERIFY(m_physics->GetRigidState(oid, rs));
 		}
 	}
 
@@ -167,7 +167,7 @@ namespace jam::net
 	{
 		if (!m_physics) return;
 
-		auto& shard = SHARD_LOCAL_CHECKED();
+		auto& shard = CurrentShardLocalChecked();
 		auto* sched = shard.scheduler;
 
 		const bool inFiber = sched && (sched->Current() != 0);
@@ -280,7 +280,7 @@ namespace jam::net
 				if (op.bodyType == px::eBodyType::Character)
 				{
 					auto& cs = m_world.emplace_or_replace<px::CharacterState>(op.e);
-					JAM_ASSERT(m_physics->GetCharacterState(oid, cs))
+					JAM_VERIFY(m_physics->GetCharacterState(oid, cs));
 
 					const uint64 controller = m_world.get<ControlTag>(op.e).userId;
 					const uint64 owner	    = m_world.get<OwnershipTag>(op.e).userId;
@@ -293,7 +293,7 @@ namespace jam::net
 				else if (op.bodyType == px::eBodyType::Rigid)
 				{
 					auto& rs = m_world.emplace_or_replace<px::RigidState>(op.e);
-					JAM_ASSERT(m_physics->GetRigidState(oid, rs))
+					JAM_VERIFY(m_physics->GetRigidState(oid, rs));
 				}
 			}
 			else

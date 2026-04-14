@@ -18,6 +18,7 @@ namespace jam::px
 
         void                            SetMoveState(const CharacterMoveState& state);
         const CharacterMoveState&       GetMoveState() const { return m_state; }
+        void                            SetBodyYaw(float yaw) { m_state.bodyYaw = yaw; }
 
         void                            Tick(float dt, const MoveIntent& intent);
 

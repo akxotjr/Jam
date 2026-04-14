@@ -76,10 +76,12 @@ namespace jam::net
 		nw->GetMembers(users);
 		if (users.empty()) return;
 
+		auto* inputSys = m_world.ctx().find<ServerInputSystem>();
+
 		for (const uint64 user : users)
 		{
-			const uint32 ack = m_world.ctx().get<ServerInputSystem>().LastAppliedSeq(user);
-			const uint32 inputEpoch = m_world.ctx().get<ServerInputSystem>().LastAppliedCommandEpoch(user);
+			const uint32 ack = inputSys ? inputSys->LastAppliedSeq(user) : 0;
+			const uint32 inputEpoch = inputSys ? inputSys->LastAppliedCommandEpoch(user) : 0;
 
 			std::unordered_set<NetId> sentThisTick;
 			sentThisTick.reserve(256);
@@ -115,21 +117,18 @@ namespace jam::net
 			}
 
 			std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)> buckets;
-			auto view = m_world.view<NetId, NetActorBodyType>();
-
-			for (auto e : view)
+			const auto baseIt = m_entityBaselinePerUser.find(user);
+			auto addCandidate = [&](entt::entity e, NetId nid)
 			{
-				const NetId nid = m_world.get<NetId>(e);
+				if (e == entt::null || !m_world.valid(e) || !m_world.all_of<NetActorBodyType>(e))
+					return;
 
 				if (m_world.all_of<ReplicationStaticTag>(e))
-					continue;
-
-				if (aoi && !aoi->IsVisible(user, nid))
-					continue;
+					return;
 
 				const bool baselineInvalid = ShouldForceFullState(user, nid)
-					|| (!m_entityBaselinePerUser.contains(user))
-					|| (!m_entityBaselinePerUser[user].contains(nid));
+					|| (baseIt == m_entityBaselinePerUser.end())
+					|| (!baseIt->second.contains(nid));
 				const bool enteredNow = enteredSet.contains(nid.Raw());
 
 				Candidate c{ .e = e, .netId = nid };
@@ -138,20 +137,20 @@ namespace jam::net
 				{
 					c.useFull = true;
 					buckets[static_cast<size_t>(eBucket::B0_MustSendFull)].push_back(c);
-					continue;
+					return;
 				}
 
 				if (periodicFull)
 				{
 					c.useFull = true;
 					buckets[static_cast<size_t>(eBucket::B0_MustSendFull)].push_back(c);
-					continue;
+					return;
 				}
 
 				if (!m_world.all_of<ReplicationActiveTag>(e))
 				{
 					buckets[static_cast<size_t>(eBucket::B3_LowPriority)].push_back(c);
-					continue;
+					return;
 				}
 
 				const auto body = m_world.get<NetActorBodyType>(e).body;
@@ -159,6 +158,24 @@ namespace jam::net
 					buckets[static_cast<size_t>(eBucket::B1_HighDelta)].push_back(c);
 				else
 					buckets[static_cast<size_t>(eBucket::B2_NormalDelta)].push_back(c);
+			};
+
+			if (aoi)
+			{
+				if (const UserAoiState* st = aoi->GetState(user))
+				{
+					for (const NetId nid : st->visible)
+						addCandidate(nw->GetEntity(nid), nid);
+				}
+			}
+			else
+			{
+				auto view = m_world.view<NetId, NetActorBodyType>();
+				for (auto e : view)
+				{
+					const NetId nid = view.get<NetId>(e);
+					addCandidate(e, nid);
+				}
 			}
 
 			std::vector<Candidate> ordered;
@@ -794,15 +811,7 @@ namespace jam::net
 				entt::entity e = entt::null;
 				if (event.op != fb::fbLifecycleOp_Remove)
 				{
-					auto netView = m_world.view<NetId>();
-					for (auto candidate : netView)
-					{
-						if (netView.get<NetId>(candidate) == netId)
-						{
-							e = candidate;
-							break;
-						}
-					}
+					e = nw.GetEntity(netId);
 				}
 
 				const auto off = BuildLifecycleActor(event, e, netId, userId);
@@ -846,6 +855,8 @@ namespace jam::net
 		if (userIt == m_pendingLifecyclePerUser.end())
 			return;
 
+		auto* nw = m_world.ctx().get<ServerNetWorld*>();
+
 		for (const auto& [netId, event] : sentEvents)
 		{
 			auto pendingIt = userIt->second.find(netId);
@@ -857,15 +868,11 @@ namespace jam::net
 				MarkActorKnownToUser(userId, netId);
 				m_forceFullStateBudgetPerUser[userId][netId] = kCreateFullStateBudget;
 
-				auto view = m_world.view<NetId, OwnershipTag>();
-				for (auto e : view)
+				const entt::entity e = nw ? nw->GetEntity(netId) : entt::null;
+				if (e != entt::null && m_world.valid(e) && m_world.all_of<OwnershipTag>(e))
 				{
-					if (view.get<NetId>(e) != netId)
-						continue;
-
-					if (view.get<OwnershipTag>(e).userId == userId && m_world.all_of<NetSpawnRequestId>(e))
+					if (m_world.get<OwnershipTag>(e).userId == userId && m_world.all_of<NetSpawnRequestId>(e))
 						m_world.remove<NetSpawnRequestId>(e);
-					break;
 				}
 			}
 			else if (event.op == fb::fbLifecycleOp_Remove && event.reason == fb::fbRemovalReason_Destroyed)

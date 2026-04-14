@@ -160,7 +160,7 @@ namespace
 			{
 				try
 				{
-					auto& L = SHARD_LOCAL_CHECKED();
+					auto& L = CurrentShardLocalChecked();
 					auto& R = L.registry;
 
 					const entt::entity e = session->GetEntity();
