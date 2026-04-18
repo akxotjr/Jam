@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "Lock.h"
+#include "jamnet/core/executor/Lock.h"
 
 namespace jam
 {

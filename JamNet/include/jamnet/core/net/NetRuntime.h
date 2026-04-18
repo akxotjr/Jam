@@ -1,4 +1,5 @@
 #pragma once
+#include "jamnet/core/executor/GlobalExecutor.h"
 
 
 namespace jam::net
@@ -9,14 +10,14 @@ namespace jam::net
 		GlobalExecutorConfig	geConfig  = {};
 	};
 
-	class JamNetRuntime
+	class NetRuntime
 	{
 	public:
-		explicit JamNetRuntime(const RuntimeConfig& config = {});
-		~JamNetRuntime();
+		explicit NetRuntime(const RuntimeConfig& config = {});
+		~NetRuntime();
 
-		JamNetRuntime(const JamNetRuntime&) = delete;
-		JamNetRuntime& operator=(const JamNetRuntime&) = delete;
+		NetRuntime(const NetRuntime&) = delete;
+		NetRuntime& operator=(const NetRuntime&) = delete;
 
 		bool			IsInitialized() const noexcept { return m_bInitialized; }
 

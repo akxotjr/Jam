@@ -1,7 +1,11 @@
 #include "pch.h"
 #include "jamnet/core/net/Service.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
+#include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/SessionSystems.h"
+#include "jamnet/core/net/TcpSession.h"
+#include "jamnet/core/net/UdpSession.h"
 
 namespace jam::net
 {
@@ -52,6 +56,9 @@ namespace jam::net
 		if (m_listener) m_listener->CloseSocket();
 		if (m_udpRouter) m_udpRouter->CloseSocket();
 		m_iocpCore.reset();
+
+		GlobalExecutor::Instance().ConveyAll(Job([] { FlushNetBufferThreadLocalCaches(); }));
+		FlushNetBufferThreadLocalCaches();
 	}
 
 
@@ -127,14 +134,15 @@ namespace jam::net
 		m_udpSessionCount--;
 	}
 
-	void Service::RegisterHandshakingUdpSession(const std::shared_ptr<UdpSession>& session)
+	bool Service::RegisterHandshakingUdpSession(const std::shared_ptr<UdpSession>& session)
 	{
 		WRITE_LOCK
 
 		auto addr = session->GetRemoteNetAddress();
-		if (m_handshakingUdpSessions.contains(addr)) return;
+		if (m_handshakingUdpSessions.contains(addr)) return false;
 
 		m_handshakingUdpSessions[addr] = session;
+		return true;
 	}
 
 	void Service::ReleaseHandshakingUdpSession(const std::shared_ptr<UdpSession>& session)
@@ -178,12 +186,12 @@ namespace jam::net
 		return nullptr;
 	}
 
-	void Service::ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer, uint64 ingressRecvTime_ns)
+	void Service::ProcessUdpSession(const NetAddress& from, int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns)
 	{
 		std::shared_ptr<UdpSession> session;
 
 		{
-			WRITE_LOCK
+			READ_LOCK
 			if (auto it = m_udpSessions.find(from); it != m_udpSessions.end())
 				session = it->second;
 			else if (auto ht = m_handshakingUdpSessions.find(from); ht != m_handshakingUdpSessions.end())
@@ -192,14 +200,15 @@ namespace jam::net
 
 		if (!session)
 		{
-			WRITE_LOCK
 			session = static_pointer_cast<UdpSession>(CreateSession(eProtocolType::UDP));
 			if (!session) return;
 			session->SetRemoteNetAddress(from);
+
+			WRITE_LOCK
 			m_handshakingUdpSessions[from] = session;
 		}
 
-		session->ProcessRecv(numOfBytes, recvBuffer, ingressRecvTime_ns);
+		session->ProcessRecv(numOfBytes, packet, ingressRecvTime_ns);
 	}
 
 

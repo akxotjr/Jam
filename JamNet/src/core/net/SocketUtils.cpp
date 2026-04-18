@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "jamnet/core/net/SocketUtils.h"
 #include "jamnet/core/net/NetAddress.h"
+#include "jamnet/core/net/Session.h"
 
 namespace jam::net
 {

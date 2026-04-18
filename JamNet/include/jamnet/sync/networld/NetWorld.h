@@ -1,13 +1,17 @@
 ﻿#pragma once
 
-#include <jampx/PhysicsTypes.h>
-
-#include "jamnet/runtime/world/WorldAssignmentTypes.h"
+#include "jamnet/core/executor/Mailbox.h"
+#include "jamnet/core/executor/ShardRoutingPolicy.h"
 #include "jamnet/sync/physics/ShardJobBridge.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
+#include "jamnet/runtime/world/WorldAssignmentTypes.h"
+
+#include <jampx/PhysicsTypes.h>
 
 #include <atomic>
 #include <functional>
+
+
 
 namespace jam::net
 {
@@ -36,22 +40,22 @@ namespace jam::net
 		NetWorld() = default;
 		virtual ~NetWorld() = default;
 
-		virtual void					Init();
-		void							Tick(uint64 dt_ns);
-		void							Stop();
-		bool							BeginShutdown(eMailboxCloseMode mode = eMailboxCloseMode::Drain, std::function<void()> onClosed = {});
+		virtual void						Init();
+		void								Tick(uint64 dt_ns);
+		void								Stop();
+		bool								BeginShutdown(eMailboxCloseMode mode = eMailboxCloseMode::Drain, std::function<void()> onClosed = {});
 
-		void							Submit(Job j) const;
-		bool							Post(Job j) const;
+		void								Submit(Job j) const;
+		bool								Post(Job j) const;
 
-		entt::registry&					GetRegistry() { return m_world; }
+		entt::registry&						GetRegistry() { return m_world; }
 
-		void							SetWorldId(WorldId worldId) { m_worldId = worldId; }
-		WorldId							GetWorldId() const { return m_worldId; }
+		void								SetWorldId(WorldId worldId) { m_worldId = worldId; }
+		WorldId								GetWorldId() const { return m_worldId; }
 
 	private:
-		void							FinalizeShutdownOnShard(std::function<void()> onClosed);
-		virtual void					TickOnShard() = 0;
+		void								FinalizeShutdownOnShard(std::function<void()> onClosed);
+		virtual void						TickOnShard() = 0;
 
 	protected:
 		entt::registry						m_world;

@@ -1,6 +1,5 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/RPC.h"
-#include "jamnet/core/net/RecvBuffer.h"
 #include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/core/net/SessionComponents.h"
 
@@ -14,9 +13,12 @@ namespace jam::net
         }
     }
 
-    void RPC::HandleIncomingPacket(entt::registry& R, const entt::entity e, const PacketView& view, const std::shared_ptr<RecvBuffer>&)
+    void RPC::HandleIncomingPacket(entt::registry& R, const entt::entity e, const PacketHeaderView& view, Packet packet)
     {
         if (view.Type() != ePacketType::RPC)
+            return;
+
+        if (view.Id() != E2U(eRpcPacketId::FLATBUFFER_RPC))
             return;
 
         BYTE*  payload = view.Payload();
@@ -39,17 +41,22 @@ namespace jam::net
         const uint32 requestId = hdr.requestId;
         const uint8  flags     = hdr.flags;
 
+        const bool isRequest  = (flags & RpcFlags::REQUEST) != 0;
+        const bool isResponse = (flags & RpcFlags::RESPONSE) != 0;
+        if (isRequest == isResponse)
+            return;
+
         const BYTE*  body    = payload + sizeof(RpcHeader);
         const uint32 bodyLen = len - static_cast<uint32>(sizeof(RpcHeader));
 
         // RESPONSE: RpcState inflight 우선 처리
-        if ((flags & RpcFlags::RESPONSE) != 0)
+        if (isResponse)
         {
             if (auto* rpcState = R.try_get<RpcState>(e))
             {
 	            if (auto st = rpcState->PopRequest(requestId))
                 {
-                    if (st->onPayload) st->onPayload(body, bodyLen);
+                    if (st->onPayload) st->onPayload(body, bodyLen, packet);
                     if (st->onDone)    st->onDone(true);
                     return;
                 }
@@ -75,6 +82,8 @@ namespace jam::net
                 }
             }
 
+            JAMNET_LOG_WARN("[RPC] Unhandled response. entity={}, rpcId={}, requestId={}, bodyLen={}",
+                static_cast<uint32>(e), rpcId, requestId, bodyLen);
             return;
         }
 
@@ -95,8 +104,16 @@ namespace jam::net
             if (gitReq != reg.globalReqHandlers.end())
             {
                 gitReq->second(e, body, bodyLen, requestId);
+                return;
             }
+
+            JAMNET_LOG_WARN("[RPC] Unhandled request. entity={}, rpcId={}, requestId={}, bodyLen={}",
+                static_cast<uint32>(e), rpcId, requestId, bodyLen);
+            return;
         }
+
+        JAMNET_LOG_WARN("[RPC] Missing handler registry. entity={}, rpcId={}, requestId={}, flags={}",
+            static_cast<uint32>(e), rpcId, requestId, flags);
     }
 
     void RPCUnregisterAll(entt::registry& R, entt::entity e)

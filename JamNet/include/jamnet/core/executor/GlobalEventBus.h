@@ -1,9 +1,11 @@
 ﻿#pragma once
 
-#include <typeindex>
-
 #include "jamnet/core/executor/Job.h"
 #include "jamnet/core/executor/IExecutor.h"
+#include "jamnet/core/executor/Lock.h"
+
+#include <typeindex>
+
 
 namespace jam
 {

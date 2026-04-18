@@ -9,8 +9,8 @@
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
 static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
-              FLATBUFFERS_VERSION_MINOR == 1 &&
-              FLATBUFFERS_VERSION_REVISION == 21,
+              FLATBUFFERS_VERSION_MINOR == 12 &&
+              FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
 namespace jam {
@@ -321,7 +321,8 @@ struct fbRemovedActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   jam::net::fb::fbRemovalReason reason() const {
     return static_cast<jam::net::fb::fbRemovalReason>(GetField<uint8_t>(VT_REASON, 0));
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            VerifyField<uint8_t>(verifier, VT_REASON, 1) &&
@@ -394,7 +395,8 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool global_keyframe() const {
     return GetField<uint8_t>(VT_GLOBAL_KEYFRAME, 0) != 0;
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SERVER_TICK, 4) &&
            VerifyField<uint32_t>(verifier, VT_INPUT_ACK, 4) &&
@@ -484,7 +486,8 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t packed_id() const {
     return GetField<uint32_t>(VT_PACKED_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
@@ -594,7 +597,8 @@ struct fbActorEntity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const jam::net::fb::fbKinematicState *kinematic_state() const {
     return GetStruct<const jam::net::fb::fbKinematicState *>(VT_KINEMATIC_STATE);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            VerifyField<uint32_t>(verifier, VT_BASELINE_REV, 4) &&
@@ -691,7 +695,8 @@ struct fbSnapshot FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> *entities() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> *>(VT_ENTITIES);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_HEADER) &&
            verifier.VerifyTable(header()) &&
@@ -762,11 +767,11 @@ inline void fbRemovedActor::UnPackTo(fbRemovedActorT *_o, const ::flatbuffers::r
   { auto _e = reason(); _o->reason = _e; }
 }
 
-inline ::flatbuffers::Offset<fbRemovedActor> fbRemovedActor::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbRemovedActor(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbRemovedActor> CreatefbRemovedActor(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbRemovedActor::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbRemovedActor> CreatefbRemovedActor(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbRemovedActor> fbRemovedActor::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRemovedActorT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -793,11 +798,11 @@ inline void fbSnapshotHeader::UnPackTo(fbSnapshotHeaderT *_o, const ::flatbuffer
   { auto _e = global_keyframe(); _o->global_keyframe = _e; }
 }
 
-inline ::flatbuffers::Offset<fbSnapshotHeader> fbSnapshotHeader::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotHeaderT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbSnapshotHeader(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbSnapshotHeader> CreatefbSnapshotHeader(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotHeaderT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbSnapshotHeader::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbSnapshotHeader> CreatefbSnapshotHeader(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotHeaderT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbSnapshotHeader> fbSnapshotHeader::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotHeaderT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSnapshotHeaderT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -829,11 +834,11 @@ inline void fbActorMeta::UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolve
   { auto _e = packed_id(); _o->packed_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbActorMeta(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbActorMeta::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbActorMetaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -890,11 +895,11 @@ inline void fbActorEntity::UnPackTo(fbActorEntityT *_o, const ::flatbuffers::res
   { auto _e = kinematic_state(); if (_e) _o->kinematic_state = std::unique_ptr<jam::net::fb::fbKinematicState>(new jam::net::fb::fbKinematicState(*_e)); }
 }
 
-inline ::flatbuffers::Offset<fbActorEntity> fbActorEntity::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorEntityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbActorEntity(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorEntityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbActorEntity::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorEntityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbActorEntity> fbActorEntity::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorEntityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbActorEntityT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -938,14 +943,14 @@ inline void fbSnapshot::UnPackTo(fbSnapshotT *_o, const ::flatbuffers::resolver_
   (void)_o;
   (void)_resolver;
   { auto _e = header(); if (_e) { if(_o->header) { _e->UnPackTo(_o->header.get(), _resolver); } else { _o->header = std::unique_ptr<jam::net::fb::fbSnapshotHeaderT>(_e->UnPack(_resolver)); } } else if (_o->header) { _o->header.reset(); } }
-  { auto _e = entities(); if (_e) { _o->entities.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->entities[_i]) { _e->Get(_i)->UnPackTo(_o->entities[_i].get(), _resolver); } else { _o->entities[_i] = std::unique_ptr<jam::net::fb::fbActorEntityT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->entities.resize(0); } }
-}
-
-inline ::flatbuffers::Offset<fbSnapshot> fbSnapshot::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbSnapshot(_fbb, _o, _rehasher);
+  { auto _e = entities(); if (_e) { _o->entities.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->entities[_i]) { _e->Get(_i)->UnPackTo(_o->entities[_i].get(), _resolver); } else { _o->entities[_i] = std::unique_ptr<jam::net::fb::fbActorEntityT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->entities.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbSnapshot::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<fbSnapshot> fbSnapshot::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSnapshotT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -979,14 +984,16 @@ inline bool SizePrefixedfbSnapshotBufferHasIdentifier(const void *buf) {
       buf, fbSnapshotIdentifier(), true);
 }
 
+template <bool B = false>
 inline bool VerifyfbSnapshotBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifyBuffer<jam::net::fb::fbSnapshot>(fbSnapshotIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifyBuffer<jam::net::fb::fbSnapshot>(fbSnapshotIdentifier());
 }
 
+template <bool B = false>
 inline bool VerifySizePrefixedfbSnapshotBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifySizePrefixedBuffer<jam::net::fb::fbSnapshot>(fbSnapshotIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbSnapshot>(fbSnapshotIdentifier());
 }
 
 inline void FinishfbSnapshotBuffer(

@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/SessionComponents.h"
 #include "jamnet/core/net/Session.h"
 
@@ -101,7 +101,7 @@ namespace jam::net
 	//  OrderState
 	// ============================================================
 
-	bool OrderState::StoreRecvPacket(uint16 orderedSeq, uint16 span, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns)
+	bool OrderState::StoreRecvPacket(uint16 orderedSeq, uint16 span, ::jam::net::Packet packet, uint64 now_ns)
 	{
 		if (pendings.size() >= kMaxRecvBufferSize)
 			return false;
@@ -109,18 +109,18 @@ namespace jam::net
 		if (pendings.contains(orderedSeq))
 			return false;
 
-		pendings.emplace(orderedSeq, RecvPacket{
+		pendings.emplace(orderedSeq, OrderedPacket{
 			.orderedSeq  = orderedSeq,
 			.span		 = span,
 			.recvTime_ns = now_ns,
-			.buf		 = buf
+			.packet		 = std::move(packet)
 		});
 		return true;
 	}
 
-	std::vector<OrderState::RecvPacket> OrderState::PopOrderedPackets(OUT uint16& expectedSeq)
+	std::vector<OrderState::OrderedPacket> OrderState::PopOrderedPackets(OUT uint16& expectedSeq)
 	{
-		std::vector<RecvPacket> out;
+		std::vector<OrderedPacket> out;
 		while (true)
 		{
 			auto it = pendings.find(expectedSeq);
@@ -140,7 +140,7 @@ namespace jam::net
 	//  ReliabilityState
 	// ============================================================
 
-	bool ReliabilityState::StoreSendPacket(eChannelType ch, const std::shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns)
+	bool ReliabilityState::StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns)
 	{
 		if (!IsReliableChannel(ch))
 			return false;
@@ -154,10 +154,10 @@ namespace jam::net
 				.sendTime_ns		   = now_ns,
 				.lastRetransmitTime_ns = now_ns,
 				.retryCount			   = 0,
-				.buf				   = buf
+				.packet				   = packet
 			});
 
-		if (buf) inflightSize += buf->WriteSize();
+		if (packet.IsValid()) inflightSize += packet->Size();
 
 		return true;
 	}
@@ -203,9 +203,9 @@ namespace jam::net
 		if (it == reliablePendings.end())
 			return;
 
-		if (it->second.buf)
+		if (it->second.packet.IsValid())
 		{
-			const uint32 size = it->second.buf->WriteSize();
+			const uint32 size = it->second.packet->Size();
 			inflightSize = (inflightSize >= size) ? (inflightSize - size) : 0;
 		}
 
@@ -265,9 +265,9 @@ namespace jam::net
 				if (it == reliablePendings.end())
 					return;
 
-				if (it->second.buf)
+				if (it->second.packet.IsValid())
 				{
-					const uint32 size = it->second.buf->WriteSize();
+					const uint32 size = it->second.packet->Size();
 					inflightSize = (inflightSize >= size) ? (inflightSize - size) : 0;
 				}
 
@@ -355,9 +355,27 @@ namespace jam::net
 	//  RPC State
 	// ============================================================
 
-	void RpcState::RegisterRequest(uint32 reqId, AwaitState&& state)
+	uint32 RpcState::GenerateRequestId()
 	{
-		inflight.emplace(reqId, std::move(state));
+		for (uint32 i = 0; i < std::numeric_limits<uint32>::max(); ++i)
+		{
+			uint32 id = nextRequestId++;
+			if (nextRequestId == 0)
+				nextRequestId = 1;
+
+			if (id != 0 && !inflight.contains(id))
+				return id;
+		}
+
+		return 0;
+	}
+
+	bool RpcState::RegisterRequest(uint32 reqId, AwaitState&& state)
+	{
+		if (reqId == 0)
+			return false;
+
+		return inflight.emplace(reqId, std::move(state)).second;
 	}
 
 	std::optional<RpcState::AwaitState> RpcState::PopRequest(uint32 reqId)
@@ -472,12 +490,12 @@ namespace jam::net
 	//  TransmissionWaitingQueue
 	// ============================================================
 
-	void TransmissionWaitingQueue::Enqueue(const std::shared_ptr<SendBuffer>& buf, Priority prio)
+	void TransmissionWaitingQueue::Enqueue(Packet packet, Priority priority)
 	{
-		if (!buf) return;
+		if (!packet.IsValid()) return;
 
-		const uint32 size = buf->WriteSize();
-		queue.push_back({ prio, size, buf });
+		const uint32 size = packet->Size();
+		queue.push_back({ priority, size, packet, {} });
 		bytesQueued += size;
 	}
 

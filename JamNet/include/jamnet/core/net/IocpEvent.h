@@ -1,26 +1,28 @@
-﻿#pragma once
-#include "IocpCore.h"
-#include "NetAddress.h"
+#pragma once
+#include "jamnet/core/net/Buffer.h"
+#include "jamnet/core/net/IocpCore.h"
+#include "jamnet/core/net/NetAddress.h"
 
 namespace jam::net
 {
-	class Session;
+
 	class TcpSession;
-	class SendBuffer;
-	class RecvBuffer;
 
 	enum class eEventType : uint8
 	{
-		CONNECT,
-		DISCONNECT,
-		ACCEPT,
-		RECV,
-		SEND
+		TcpConnect,
+		TcpDisconnect,
+		TcpAccept,
+		TcpSend,
+		TcpRecv,
+
+
+		UdpConnect,
+		UdpDisconnect,
+		UdpSend,
+		UdpRecv,
 	};
 
-	/*--------------
-		IocpEvent
-	---------------*/
 
 	class IocpEvent : public OVERLAPPED
 	{
@@ -34,75 +36,93 @@ namespace jam::net
 		std::shared_ptr<IocpObject>		m_owner;
 	};
 
-	/*----------------
-		ConnectEvent
-	-----------------*/
 
-	class ConnectEvent : public IocpEvent
+	class TcpConnectEvent : public IocpEvent
 	{
 	public:
-		ConnectEvent() : IocpEvent(eEventType::CONNECT) {}
+		TcpConnectEvent() : IocpEvent(eEventType::TcpConnect) {}
 	};
 
-	/*----------------
-	  DisconnectEvent
-	-----------------*/
-
-	class DisconnectEvent : public IocpEvent
+	class TcpDisconnectEvent : public IocpEvent
 	{
 	public:
-		DisconnectEvent() : IocpEvent(eEventType::DISCONNECT) {}
+		TcpDisconnectEvent() : IocpEvent(eEventType::TcpDisconnect) {}
 	};
 
-	/*----------------
-		AcceptEvent
-	-----------------*/
-
-	class AcceptEvent : public IocpEvent
+	class TcpAcceptEvent : public IocpEvent
 	{
 	public:
-		AcceptEvent() : IocpEvent(eEventType::ACCEPT) {}
+		TcpAcceptEvent() : IocpEvent(eEventType::TcpAccept) {}
 
 	public:
-		std::shared_ptr<TcpSession>			session = nullptr;
+		std::shared_ptr<TcpSession>	session = nullptr;
+
+		// AcceptEx output buffer:
+		// [optional initial data][local addr][remote addr]
+		static constexpr DWORD kAddrLen = sizeof(SOCKADDR_IN) + 16;
+		std::array<BYTE, kAddrLen * 2> acceptBuf = {}; // initialLen=0이면 주소용 2개만 필요
 	};
 
-	/*----------------
-		RecvEvent
-	-----------------*/
-
-	class RecvEvent : public IocpEvent
+	class TcpSendEvent : public IocpEvent
 	{
 	public:
-		RecvEvent() : IocpEvent(eEventType::RECV) {}
+		TcpSendEvent() : IocpEvent(eEventType::TcpSend) {}
 
-	public:
-		RecvBuffer*							recvBuffer{};
-		int32								fromLen = sizeof(SOCKADDR_IN);
-		NetAddress							remoteAddress;
+		std::vector<WSABUF>			wsaBufs;				// TCP gather-send
+		std::vector<PacketChain>	chains;
+
+		size_t						curIndex	= 0;	// current WSABUF index
+		ULONG						curOffset	= 0;	// current offset within WSABUF
+		uint32						totalBytes	= 0;
 	};
 
-	/*----------------
-		SendEvent
-	-----------------*/
-
-	class SendEvent : public IocpEvent
+	class TcpRecvEvent : public IocpEvent
 	{
 	public:
-		SendEvent() : IocpEvent(eEventType::SEND) {}
+		static constexpr uint32 k_chunkSize = 4096;
 
 	public:
-		// 단일 / 다중 중 하나만 사용
-		bool										use_gather = false;
-		WSABUF										single{};          // 단일 경로
-		std::vector<WSABUF>							gather;            // S/G 경로
+		TcpRecvEvent() : IocpEvent(eEventType::TcpRecv) {}
 
-		std::vector<std::shared_ptr<SendBuffer>>    sendBuffers;       // 데이터 생존 보장
-		NetAddress									remoteAddress;
+		WSABUF							wsaBuf = {};
+		std::array<BYTE, k_chunkSize>	buffer = {};
+	};
 
-		// TCP partial-send 재시도용
-		size_t										curIndex   = 0;   // 현재 WSABUF 인덱스
-		ULONG										curOffset  = 0;  // 현재 WSABUF 내 오프셋
-		uint32										totalBytes = 0;
+
+
+	class UdpConnectEvent : public IocpEvent
+	{
+	public:
+		UdpConnectEvent() : IocpEvent(eEventType::UdpConnect) {}
+	};
+
+
+	class UdpDisconnectEvent : public IocpEvent
+	{
+	public:
+		UdpDisconnectEvent() : IocpEvent(eEventType::UdpDisconnect) {}
+
+	};
+
+	class UdpSendEvent : public IocpEvent
+	{
+	public:
+		UdpSendEvent() : IocpEvent(eEventType::UdpSend) {}
+
+		std::vector<WSABUF>			wsaBufs;
+		PacketChain					chain;
+		NetAddress					remoteAddr	= {};
+	};
+
+	class UdpRecvEvent : public IocpEvent
+	{
+	public:
+		UdpRecvEvent() : IocpEvent(eEventType::UdpRecv) {}
+
+		WSABUF						wsaBuf			= {};
+		Packet						packet			= {};
+		NetAddress					remoteAddr		= {};
+		int32						remoteAddrLen	= sizeof(SOCKADDR_IN);
+		DWORD						flags			= 0;
 	};
 }

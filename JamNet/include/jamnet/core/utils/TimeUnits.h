@@ -1,4 +1,6 @@
-﻿#pragma once
+#pragma once
+
+#include <jambase/JamTypes.h>
 
 namespace jam
 {

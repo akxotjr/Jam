@@ -1,11 +1,18 @@
-﻿#pragma once
+#pragma once
+
+#include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/executor/ShardExecutor.h"
 
 #include "jamnet/core/net/SessionComponents.h"
+#include "jamnet/core/net/SessionSystems.h"
+#include "jamnet/core/net/PacketBuilder.h"
+
+#include <flatbuffers/flatbuffers.h>
+
 
 namespace jam::net
 {
-	class RecvBuffer;
-	struct PacketView;
+	struct PacketHeaderView;
 
 	template<typename T, typename = void>
 	struct RPCKey { using type = T; };
@@ -13,25 +20,63 @@ namespace jam::net
 	template<typename T>
 	struct RPCKey<T, std::void_t<typename T::TableType>> { using type = typename T::TableType; };
 
-	template<typename T>
-    constexpr uint16_t TypeId16()
-    {
-        // FNV-1a 16bit compile-time hash
-        constexpr const char* sig = __FUNCSIG__;
-        uint32_t hash = 2166136261u;
-        for (const char* p = sig; *p != '\0'; ++p)
-        {
-            hash = (hash ^ static_cast<uint8_t>(*p)) * 16777619u;
-        }
-        return static_cast<uint16_t>(hash & 0xFFFF);
-    }
+    template<typename T, typename = void>
+    struct IsFlatBufferNative : std::false_type {};
 
     template<typename T>
-    constexpr uint16 RPCIdOf() { return TypeId16<typename RPCKey<T>::type>(); }
+    struct IsFlatBufferNative<T, std::void_t<typename T::TableType>> : std::true_type {};
+
+    template<typename T>
+    inline constexpr bool IsFlatBufferNativeV = IsFlatBufferNative<T>::value;
+
+    template<typename T>
+    using RPCWireTableT = typename RPCKey<T>::type;
+
+    template<typename>
+    inline constexpr bool AlwaysFalseV = false;
+
+    template<typename Table>
+    struct RPCIdTraits
+    {
+        static constexpr bool registered = false;
+    };
+
+    template<typename Table>
+    const Table* RPCGetVerifiedRoot(const BYTE* data, size_t size)
+    {
+        if (!data || size == 0)
+            return nullptr;
+
+        flatbuffers::Verifier verifier(reinterpret_cast<const uint8_t*>(data), size);
+        const auto* table = flatbuffers::GetRoot<Table>(data);
+        if (!table || !table->Verify(verifier))
+            return nullptr;
+
+        return table;
+    }
+
+    template<typename Table>
+    struct RPCTableRef
+    {
+        Packet owner;
+        const Table* table = nullptr;
+
+        explicit operator bool() const { return owner.IsValid() && table; }
+        const Table& operator*() const { return *table; }
+        const Table* operator->() const { return table; }
+    };
+
+    template<typename T>
+    constexpr uint16 RPCIdOf()
+    {
+        using Table = RPCWireTableT<T>;
+        static_assert(RPCIdTraits<Table>::registered, "Missing RPCIdTraits specialization for this RPC table type.");
+        return RPCIdTraits<Table>::value;
+    }
 
     struct RPCCallOptions
     {
-        eChannelType    channel    = eChannelType::RELIABLE_ORDERED;
+        eChannel    channel    = eChannel::RELIABLE_ORDERED;
         uint64          timeout_ns = 0;
     };
 
@@ -98,6 +143,10 @@ namespace jam::net
     void RPCRegisterRequest(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn);
     template<typename T>
     void RPCRegisterRequest(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn);
+    template<typename T>
+    void RPCRegisterRequestNative(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn);
+    template<typename T>
+    void RPCRegisterRequestNative(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn);
 
 
     template<typename T, class C>
@@ -155,6 +204,10 @@ namespace jam::net
     inline void RPCRegisterResponse(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn);
     template<typename T>
     inline void RPCRegisterResponse(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn);
+    template<typename T>
+    inline void RPCRegisterResponseNative(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn);
+    template<typename T>
+    inline void RPCRegisterResponseNative(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn);
 
 
 
@@ -213,94 +266,192 @@ namespace jam::net
     struct RPC
     {
         static void EnsureRegistry(entt::registry& R);
-        static void HandleIncomingPacket(entt::registry& R, entt::entity e, const PacketView& view, const std::shared_ptr<RecvBuffer>& buf);
+        static void HandleIncomingPacket(entt::registry& R, entt::entity e, const PacketHeaderView& view, Packet packet);
     };
 
 
     template<typename T>
-    inline void RPCRegisterRequest(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn)
+    inline void RPCRegisterRequestNative(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn)
+    {
+        using Table = RPCWireTableT<T>;
+
+        if constexpr (IsFlatBufferNativeV<T>)
+        {
+            RPCRegisterRequest<Table>(
+                R,
+                e,
+                [f = std::move(fn)](entt::entity e, const Table& table, uint32 requestId) mutable
+                {
+                    T obj;
+                    table.UnPackTo(&obj);
+                    f(e, obj, requestId);
+                });
+        }
+        else
+        {
+            RPCRegisterRequest<T>(R, e, std::move(fn));
+        }
+    }
+
+    template<typename T>
+    inline void RPCRegisterRequestNative(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn)
+    {
+        using Table = RPCWireTableT<T>;
+
+        if constexpr (IsFlatBufferNativeV<T>)
+        {
+            RPCRegisterRequest<Table>(
+                R,
+                [f = std::move(fn)](entt::entity e, const Table& table, uint32 requestId) mutable
+                {
+                    T obj;
+                    table.UnPackTo(&obj);
+                    f(e, obj, requestId);
+                });
+        }
+        else
+        {
+            RPCRegisterRequest<T>(R, std::move(fn));
+        }
+    }
+
+    template<typename Table>
+    inline void RPCRegisterRequest(entt::registry& R, entt::entity e, std::function<void(entt::entity, const Table&, uint32)> fn)
     {
         RPC::EnsureRegistry(R);
 
-        const uint16 rpcId = RPCIdOf<T>();
+        const uint16 rpcId = RPCIdOf<Table>();
         EntityRPCKey key{ e, rpcId };
         auto& reg = R.ctx().get<RPCHandlersRegistry>();
 
-        reg.reqHandlers[key] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t, uint32 requestId)
+        reg.reqHandlers[key] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t size, uint32 requestId) mutable
             {
-                if (auto table = flatbuffers::GetRoot<typename T::TableType>(data))
-                {
-                    T obj;
-                    table->UnPackTo(&obj);
-                    f(e, obj, requestId);
-                }
+                if (const auto* table = RPCGetVerifiedRoot<Table>(data, size))
+                    f(e, *table, requestId);
             };
     }
 
-    template<typename T>
-    inline void RPCRegisterRequest(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn)
+    template<typename Table>
+    inline void RPCRegisterRequest(entt::registry& R, std::function<void(entt::entity, const Table&, uint32)> fn)
     {
         RPC::EnsureRegistry(R);
 
-        const uint16 rpcId = RPCIdOf<T>();
+        const uint16 rpcId = RPCIdOf<Table>();
         auto& reg = R.ctx().get<RPCHandlersRegistry>();
 
-        reg.globalReqHandlers[rpcId] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t, uint32 requestId)
+        reg.globalReqHandlers[rpcId] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t size, uint32 requestId) mutable
             {
-                if (auto table = flatbuffers::GetRoot<typename T::TableType>(data))
-                {
-                    T obj;
-                    table->UnPackTo(&obj);
-                    f(e, obj, requestId);
-                }
+                if (const auto* table = RPCGetVerifiedRoot<Table>(data, size))
+                    f(e, *table, requestId);
             };
     }
 
+    template<typename T>
+    inline void RPCRegisterResponseNative(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn)
+    {
+        using Table = RPCWireTableT<T>;
 
+        if constexpr (IsFlatBufferNativeV<T>)
+        {
+            RPCRegisterResponse<Table>(
+                R,
+                e,
+                [f = std::move(fn)](entt::entity e, const Table& table, uint32 requestId) mutable
+                {
+                    T obj;
+                    table.UnPackTo(&obj);
+                    f(e, obj, requestId);
+                });
+        }
+        else
+        {
+            RPCRegisterResponse<T>(R, e, std::move(fn));
+        }
+    }
 
     template<typename T>
-    inline void RPCRegisterResponse(entt::registry& R, entt::entity e, std::function<void(entt::entity, const T&, uint32)> fn)
+    inline void RPCRegisterResponseNative(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn)
+    {
+        using Table = RPCWireTableT<T>;
+
+        if constexpr (IsFlatBufferNativeV<T>)
+        {
+            RPCRegisterResponse<Table>(
+                R,
+                [f = std::move(fn)](entt::entity e, const Table& table, uint32 requestId) mutable
+                {
+                    T obj;
+                    table.UnPackTo(&obj);
+                    f(e, obj, requestId);
+                });
+        }
+        else
+        {
+            RPCRegisterResponse<T>(R, std::move(fn));
+        }
+    }
+
+    template<typename Table>
+    inline void RPCRegisterResponse(entt::registry& R, entt::entity e, std::function<void(entt::entity, const Table&, uint32)> fn)
     {
         RPC::EnsureRegistry(R);
 
-        const uint16 rpcId = RPCIdOf<T>();
+        const uint16 rpcId = RPCIdOf<Table>();
         EntityRPCKey key{ e, rpcId };
         auto& reg = R.ctx().get<RPCHandlersRegistry>();
 
-        reg.resHandlers[key] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t, uint32 requestId)
+        reg.resHandlers[key] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t size, uint32 requestId) mutable
             {
-                if (auto table = flatbuffers::GetRoot<typename T::TableType>(data))
-                {
-                    T obj;
-                    table->UnPackTo(&obj);
-                    f(e, obj, requestId);
-                }
+                if (const auto* table = RPCGetVerifiedRoot<Table>(data, size))
+                    f(e, *table, requestId);
             };
     }
 
-
-    template<typename T>
-    inline void RPCRegisterResponse(entt::registry& R, std::function<void(entt::entity, const T&, uint32)> fn)
+    template<typename Table>
+    inline void RPCRegisterResponse(entt::registry& R, std::function<void(entt::entity, const Table&, uint32)> fn)
     {
         RPC::EnsureRegistry(R);
 
-        const uint16 rpcId = RPCIdOf<T>();
+        const uint16 rpcId = RPCIdOf<Table>();
         auto& reg = R.ctx().get<RPCHandlersRegistry>();
 
-        reg.globalResHandlers[rpcId] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t, uint32 requestId)
+        reg.globalResHandlers[rpcId] = [f = std::move(fn)](entt::entity e, const BYTE* data, size_t size, uint32 requestId) mutable
             {
-                if (auto table = flatbuffers::GetRoot<typename T::TableType>(data))
-                {
-                    T obj;
-                    table->UnPackTo(&obj);
-                    f(e, obj, requestId);
-                }
+                if (const auto* table = RPCGetVerifiedRoot<Table>(data, size))
+                    f(e, *table, requestId);
             };
     }
 
+    inline Packet RPCBuildFlatBufferPacket(uint16 rpcId, uint32 requestId, uint8 rpcFlags, eChannel channel, const void* flatBufferData, uint32 flatBufferSize)
+    {
+        if (!flatBufferData || flatBufferSize == 0)
+            return {};
+
+        const RpcHeader rpc{ .rpcId = rpcId, .requestId = requestId, .flags = rpcFlags };
+
+        return PacketBuilder::CreateRpcPacket(&rpc, flatBufferData, flatBufferSize, PacketFlags::NONE, channel);
+    }
+
+    template<typename Table>
+    Packet RPCBuildRequestPacket(const void* flatBufferData, uint32 flatBufferSize, const RPCCallOptions& opt, uint32 requestId)
+    {
+        if (!RPCGetVerifiedRoot<Table>(reinterpret_cast<const BYTE*>(flatBufferData), flatBufferSize))
+            return {};
+
+        return RPCBuildFlatBufferPacket(RPCIdOf<Table>(), requestId, RpcFlags::REQUEST, opt.channel, flatBufferData, flatBufferSize);
+    }
+
+    template<typename Table>
+    Packet RPCBuildResponsePacket(const void* flatBufferData, uint32 flatBufferSize, uint32 requestId, eChannel channel)
+    {
+        if (!RPCGetVerifiedRoot<Table>(reinterpret_cast<const BYTE*>(flatBufferData), flatBufferSize))
+            return {};
+
+        return RPCBuildFlatBufferPacket(RPCIdOf<Table>(), requestId, RpcFlags::RESPONSE, channel, flatBufferData, flatBufferSize);
+    }
 
     template<typename Req>
-    std::shared_ptr<SendBuffer> RPCBuildRequestPacket(const Req& req, const RPCCallOptions& opt, uint32 requestId)
+    Packet RPCBuildNativeRequestPacket(const Req& req, const RPCCallOptions& opt, uint32 requestId)
     {
         flatbuffers::FlatBufferBuilder fbb;
         auto offset = Req::TableType::Pack(fbb, &req);
@@ -309,71 +460,44 @@ namespace jam::net
         const uint8_t* bufPtr  = fbb.GetBufferPointer();
         const size_t   bufSize = fbb.GetSize();
 
-        const uint16 rpcId = RPCIdOf<Req>();
-        constexpr auto rpcPktId = eRpcPacketId::FLATBUFFER_RPC;
-
-        const uint32 payloadSize = sizeof(RpcHeader) + static_cast<uint32>(bufSize);
-        auto open = PacketBuilder::OpenRpcPacket(rpcPktId, PacketFlags::NONE, opt.channel, payloadSize);
-        if (!open.IsValid()) return {};
-
-        auto* rh = open.writer.Reserve<RpcHeader>();
-        if (!rh) return {};
-
-        rh->rpcId     = rpcId;
-        rh->requestId = requestId;
-        rh->flags     = RpcFlags::REQUEST;
-
-        if (!open.writer.WriteBytes(bufPtr, static_cast<uint32>(bufSize)))
-            return {};
-
-        open.buf->CloseWithReserve(open.writer.WriteSize(), open.buf->AllocSize());
-        return open.buf;
+        return RPCBuildRequestPacket<typename Req::TableType>(bufPtr, static_cast<uint32>(bufSize), opt, requestId);
     }
 
     template<typename Res>
-    inline std::shared_ptr<SendBuffer> RPCBuildResponsePacket(const Res& response, uint32 requestId, eChannelType channel)
+    Packet RPCBuildNativeResponsePacket(const Res& response, uint32 requestId, eChannel channel)
     {
         flatbuffers::FlatBufferBuilder fbb;
         auto offset = Res::TableType::Pack(fbb, &response);
         fbb.Finish(offset);
 
-        const uint8_t* bufPtr = fbb.GetBufferPointer();
-        const size_t bufSize = fbb.GetSize();
+        const uint8_t* bufPtr  = fbb.GetBufferPointer();
+        const size_t   bufSize = fbb.GetSize();
 
-        constexpr auto rpcPktId = eRpcPacketId::FLATBUFFER_RPC;
-        const uint32 payloadSize = sizeof(RpcHeader) + static_cast<uint32>(bufSize);
-
-        auto open = PacketBuilder::OpenRpcPacket(rpcPktId, PacketFlags::NONE, channel, payloadSize);
-        if (!open.IsValid())
-            return {};
-
-        auto* rh = open.writer.Reserve<RpcHeader>();
-        if (!rh)
-            return {};
-
-        rh->rpcId = RPCIdOf<Res>();
-        rh->requestId = requestId;
-        rh->flags = RpcFlags::RESPONSE;
-
-        if (!open.writer.WriteBytes(bufPtr, static_cast<uint32>(bufSize)))
-            return {};
-
-        open.buf->CloseWithReserve(open.writer.WriteSize(), open.buf->AllocSize());
-        return open.buf;
+        return RPCBuildResponsePacket<typename Res::TableType>(bufPtr, static_cast<uint32>(bufSize), requestId, channel);
     }
 
     template<typename Req>
-    inline void RPCCall(entt::entity e, const Req& req, const RPCCallOptions& opt)
+    void RPCCallNative(entt::entity e, const Req& req, const RPCCallOptions& opt)
     {
-        auto buf = RPCBuildRequestPacket(req, opt, 0);
-        if (!buf)
+        auto buf = RPCBuildNativeRequestPacket(req, opt, 0);
+        if (!buf.IsValid())
             return;
 
-        SendPacketToSession(e, buf);
+        (void)SendPacketToSession(e, buf);
+    }
+
+    template<typename Table>
+    bool RPCCall(entt::entity e, const void* flatBufferData, uint32 flatBufferSize, const RPCCallOptions& opt)
+    {
+        auto buf = RPCBuildRequestPacket<Table>(flatBufferData, flatBufferSize, opt, 0);
+        if (!buf.IsValid())
+            return false;
+
+        return SendPacketToSession(e, buf);
     }
 
     template<typename Req, typename Res>
-    inline std::optional<Res> RPCCallAwait(entt::entity e, const Req& req, const RPCCallOptions& opt)
+    std::optional<Res> RPCCallAwaitNative(entt::entity e, const Req& req, const RPCCallOptions& opt)
     {
         auto& L = CurrentShardLocalChecked();
         auto& R = L.registry;
@@ -391,18 +515,19 @@ namespace jam::net
         }
 
         const uint32 requestId = rpcState->GenerateRequestId();
-
-        auto buf = RPCBuildRequestPacket(req, opt, requestId);
-        if (!buf)
+        if (requestId == 0)
             return std::nullopt;
+
+        Packet pkt = RPCBuildNativeRequestPacket(req, opt, requestId);
+        if (!pkt.IsValid()) return std::nullopt;
 
         std::optional<Res> out{};
         const auto awaitKey = (static_cast<uint64>(static_cast<uint32>(e)) << 32) | static_cast<uint64>(requestId);
 
         RpcState::AwaitState st{};
-        st.onPayload = [&out](const BYTE* data, size_t)
+        st.onPayload = [&out](const BYTE* data, size_t size, Packet)
             {
-                if (auto table = flatbuffers::GetRoot<typename Res::TableType>(data))
+                if (auto table = RPCGetVerifiedRoot<typename Res::TableType>(data, size))
                 {
                     Res tmp;
                     table->UnPackTo(&tmp);
@@ -422,9 +547,91 @@ namespace jam::net
             deadline_ns = st.deadline_ns;
         }
 
-        rpcState->RegisterRequest(requestId, std::move(st));
+        if (!rpcState->RegisterRequest(requestId, std::move(st)))
+            return std::nullopt;
 
-        SendPacketToSession(e, buf);
+        if (!SendPacketToSession(e, pkt))
+        {
+            if (auto* rpcState2 = R.try_get<RpcState>(e))
+            {
+                rpcState2->PopRequest(requestId);
+            }
+            return std::nullopt;
+        }
+
+        const bool ok = scheduler->Suspend(awaitKey, deadline_ns);
+        if (!ok)
+        {
+            if (auto* rpcState2 = R.try_get<RpcState>(e))
+            {
+                rpcState2->PopRequest(requestId);
+            }
+            return std::nullopt;
+        }
+
+        return out;
+    }
+
+    template<typename ReqTable, typename ResTable>
+    inline std::optional<RPCTableRef<ResTable>> RPCCallAwait(entt::entity e, const void* flatBufferData, uint32 flatBufferSize, const RPCCallOptions& opt)
+    {
+        auto& L = CurrentShardLocalChecked();
+        auto& R = L.registry;
+        auto* scheduler = L.scheduler;
+        if (!scheduler)
+            return std::nullopt;
+
+        auto* rpcState = R.try_get<RpcState>(e);
+        if (!rpcState)
+        {
+            R.emplace<RpcState>(e);
+            rpcState = R.try_get<RpcState>(e);
+            if (!rpcState)
+                return std::nullopt;
+        }
+
+        const uint32 requestId = rpcState->GenerateRequestId();
+        if (requestId == 0)
+            return std::nullopt;
+
+        Packet pkt = RPCBuildRequestPacket<ReqTable>(flatBufferData, flatBufferSize, opt, requestId);
+        if (!pkt.IsValid()) return std::nullopt;
+
+        std::optional<RPCTableRef<ResTable>> out{};
+        const auto awaitKey = (static_cast<uint64>(static_cast<uint32>(e)) << 32) | static_cast<uint64>(requestId);
+
+        RpcState::AwaitState st{};
+        st.onPayload = [&out](const BYTE* data, size_t size, Packet owner)
+            {
+                if (auto table = RPCGetVerifiedRoot<ResTable>(data, size))
+                {
+                    out = RPCTableRef<ResTable>{ .owner = std::move(owner), .table = table };
+                }
+            };
+        st.onDone = [scheduler, awaitKey](bool)
+            {
+                scheduler->PostResume(awaitKey);
+            };
+
+        uint64 deadline_ns = 0;
+        if (opt.timeout_ns > 0)
+        {
+            st.hasDeadline = true;
+            st.deadline_ns = NOW_NS() + opt.timeout_ns;
+            deadline_ns = st.deadline_ns;
+        }
+
+        if (!rpcState->RegisterRequest(requestId, std::move(st)))
+            return std::nullopt;
+
+        if (!SendPacketToSession(e, pkt))
+        {
+            if (auto* rpcState2 = R.try_get<RpcState>(e))
+            {
+                rpcState2->PopRequest(requestId);
+            }
+            return std::nullopt;
+        }
 
         const bool ok = scheduler->Suspend(awaitKey, deadline_ns);
         if (!ok)
@@ -440,13 +647,21 @@ namespace jam::net
     }
 
     template<typename Res>
-    inline void RPCSendResponse(entt::entity e, const Res& response, uint32 requestId, eChannelType channel)
+    void RPCSendResponseNative(entt::entity e, const Res& response, uint32 requestId, eChannel channel)
     {
-        auto buf = RPCBuildResponsePacket(response, requestId, channel);
-        if (!buf)
-            return;
+        auto pkt = RPCBuildNativeResponsePacket(response, requestId, channel);
+        if (!pkt.IsValid()) return;
 
-        SendPacketToSession(e, buf);
+        (void)SendPacketToSession(e, pkt);
+    }
+
+    template<typename Table>
+    bool RPCSendResponse(entt::entity e, const void* flatBufferData, uint32 flatBufferSize, uint32 requestId, eChannel channel)
+    {
+        auto pkt = RPCBuildResponsePacket<Table>(flatBufferData, flatBufferSize, requestId, channel);
+        if (!pkt.IsValid()) return false;
+
+        return SendPacketToSession(e, pkt);
     }
 
 

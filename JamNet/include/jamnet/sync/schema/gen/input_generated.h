@@ -9,8 +9,8 @@
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
 static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
-              FLATBUFFERS_VERSION_MINOR == 1 &&
-              FLATBUFFERS_VERSION_REVISION == 21,
+              FLATBUFFERS_VERSION_MINOR == 12 &&
+              FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
 namespace jam {
@@ -90,7 +90,8 @@ struct fbGameInput FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t target_net_id() const {
     return GetField<uint32_t>(VT_TARGET_NET_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_SEQUENCE, 4) &&
@@ -217,11 +218,11 @@ inline void fbGameInput::UnPackTo(fbGameInputT *_o, const ::flatbuffers::resolve
   { auto _e = target_net_id(); _o->target_net_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbGameInput> fbGameInput::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbGameInputT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbGameInput(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbGameInput> CreatefbGameInput(::flatbuffers::FlatBufferBuilder &_fbb, const fbGameInputT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbGameInput::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbGameInput> CreatefbGameInput(::flatbuffers::FlatBufferBuilder &_fbb, const fbGameInputT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbGameInput> fbGameInput::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbGameInputT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbGameInputT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -275,14 +276,16 @@ inline bool SizePrefixedfbGameInputBufferHasIdentifier(const void *buf) {
       buf, fbGameInputIdentifier(), true);
 }
 
+template <bool B = false>
 inline bool VerifyfbGameInputBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifyBuffer<jam::net::fb::fbGameInput>(fbGameInputIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifyBuffer<jam::net::fb::fbGameInput>(fbGameInputIdentifier());
 }
 
+template <bool B = false>
 inline bool VerifySizePrefixedfbGameInputBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifySizePrefixedBuffer<jam::net::fb::fbGameInput>(fbGameInputIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbGameInput>(fbGameInputIdentifier());
 }
 
 inline void FinishfbGameInputBuffer(

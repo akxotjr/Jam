@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 
@@ -15,7 +15,7 @@ namespace jam::net
 		void SetTcpSession(std::weak_ptr<Session> session);
 		void SetUdpSession(std::weak_ptr<Session> session);
 
-		void Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf) override;
+		void Send(const TransportInfo& info, Packet packet) override;
 
 		void EnumerateWorldUsers(uint32 worldId, const std::function<void(uint64)>& fn) override {};
 

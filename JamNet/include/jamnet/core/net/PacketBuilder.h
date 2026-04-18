@@ -1,8 +1,6 @@
-﻿#pragma once
-#include "jamnet/core/net/BufferReader.h"
-#include "jamnet/core/net/BufferWriter.h"
+#pragma once
+#include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/PacketStructure.h"
-#include "jamnet/core/net/SendBuffer.h"
 
 
 namespace jam::net
@@ -75,7 +73,7 @@ namespace jam::net
 			SetFixedBits(bits);
 		}
 
-		void SetChannel(eChannelType channel)
+		void SetChannel(eChannel channel)
 		{
 			uint32 bits = GetFixedBits();
 			bits = (bits & ~CHANNEL_MASK) | (static_cast<uint32>(E2U(channel) & MAX_CHANNEL) << CHANNEL_SHIFT);
@@ -100,7 +98,7 @@ namespace jam::net
 		bool IsReliable() const
 		{
 			uint8 ch = GetChannel();
-			return ch == E2U(eChannelType::RELIABLE_ORDERED) || ch == E2U(eChannelType::RELIABLE_UNORDERED);
+			return ch == E2U(eChannel::RELIABLE_ORDERED) || ch == E2U(eChannel::RELIABLE_UNORDERED);
 		}
 
 		bool IsFragmented() const { return HasFlag(GetFlags(), PacketFlags::FRAGMENTED); }
@@ -112,7 +110,7 @@ namespace jam::net
 
 		uint32	GetActualSize() const
 		{
-			return CalcHeaderSize(U2E(eChannelType, GetChannel()), GetFlags());
+			return CalcHeaderSize(U2E(eChannel, GetChannel()), GetFlags());
 		}
 
 		static constexpr uint32 BASE_SIZE = 3;
@@ -120,7 +118,7 @@ namespace jam::net
 		static constexpr uint32 FULL_SIZE = 7;
 		static constexpr uint32 MAX_WIRE_SIZE = 9;
 
-		static uint32 CalcHeaderSize(eChannelType channel, uint8 flags)
+		static uint32 CalcHeaderSize(eChannel channel, uint8 flags)
 		{
 			if (!HasSequence(channel))
 				return BASE_SIZE;
@@ -194,40 +192,39 @@ namespace jam::net
 
 
 
-	struct PacketView
+	struct PacketHeaderView
 	{
 		bool            isValid		= false;
 		BYTE*			data		= nullptr;
-		PacketHeader*	header		= nullptr;
+		PacketHeader	header		= {};
 		BYTE*			payload		= nullptr;
 		uint32          headerSize  = 0;
 		uint32          payloadSize = 0;
 		uint32          totalSize   = 0;
 
 
-		PacketView() = default;
+		PacketHeaderView() = default;
 
-		static PacketView Parse(BYTE* buf, uint32 size)
+		static PacketHeaderView Parse(BYTE* buf, uint32 size)
 		{
-			PacketView view{};
+			PacketHeaderView view{};
 
-			if (size < PacketHeader::BASE_SIZE)
+			if (!buf || size < PacketHeader::BASE_SIZE)
 				return view;  // isValid = false
 
-			BufferReader br(buf, size);
-
 			view.data   = buf;
-			view.header = reinterpret_cast<PacketHeader*>(buf);
+			std::memcpy(&view.header, buf, PacketHeader::BASE_SIZE);
 
-			if (!view.header->IsValid())
+			if (!view.header.IsValid())
 				return view;
 
-			view.headerSize = view.header->GetActualSize();
+			view.headerSize = view.header.GetActualSize();
 
 			if (size < view.headerSize)
 				return view;
 
-			view.totalSize = view.header->GetSize();
+			std::memcpy(&view.header, buf, view.headerSize);
+			view.totalSize = view.header.GetSize();
 
 			if (size < view.totalSize || view.totalSize < view.headerSize)
 			{
@@ -242,25 +239,37 @@ namespace jam::net
 			return view;
 		}
 
-		bool			IsValid()      const { return isValid; }
-		bool			IsReliable()   const { return header && header->IsReliable(); }
-		bool			IsFragmented() const { return header && header->IsFragmented(); }
-		bool			IsNeedToFragmentation() const { return header && header->GetGroup() == ePacketGroup::NORMAL && header->IsReliable() && header->GetSize() > JAMNET_MTU; }
-		bool			IsCtrlGroup()   const { return header && header->GetGroup() == ePacketGroup::CTRL; }
-		bool			IsNormalGroup() const { return header && header->GetGroup() == ePacketGroup::NORMAL; }
+		bool			IsValid()				const { return isValid; }
+		bool			IsReliable()			const { return isValid && header.IsReliable(); }
+		bool			IsFragmented()			const { return isValid && header.IsFragmented(); }
+		bool			IsNeedToFragmentation() const { return isValid && header.GetGroup() == ePacketGroup::NORMAL && header.IsReliable() && header.GetSize() > JAMNET_MTU; }
+		bool			IsCtrlGroup()			const { return isValid && header.GetGroup() == ePacketGroup::CTRL; }
+		bool			IsNormalGroup()			const { return isValid && header.GetGroup() == ePacketGroup::NORMAL; }
 
-		ePacketGroup    Group()			 const { return header->GetGroup(); }
-		ePacketType     Type()			 const { return U2E(ePacketType, header->GetType()); }
-		uint8           Id()			 const { return header->GetId(); }
-		uint8           Flags()			 const { return header->GetFlags(); }
-		eChannelType    Channel()		 const { return U2E(eChannelType, header->GetChannel()); }
-		uint16          Sequence()		 const { return header->GetSequence(); }
-		uint8           FragmentIndex()  const { return header->GetFragmentIndex(); }
-		uint8           TotalFragments() const { return header->GetTotalFragments(); }
+		ePacketGroup    Group()			  const { return header.GetGroup(); }
+		ePacketType     Type()			  const { return U2E(ePacketType, header.GetType()); }
+		uint8           Id()			  const { return header.GetId(); }
+		uint8           Flags()			  const { return header.GetFlags(); }
+		eChannel		Channel()		  const { return U2E(eChannel, header.GetChannel()); }
+		uint16          Sequence()		  const { return header.GetSequence(); }
+		uint16			OrderedSequence() const { return header.GetOrderedSequence(); }
+		uint8           FragmentIndex()   const { return header.GetFragmentIndex(); }
+		uint8           TotalFragments()  const { return header.GetTotalFragments(); }
 
-		uint16 OrderedSequence() const { return header->GetOrderedSequence(); }
 
-		PacketHeader*	Header()	  const { return header; }
+		PacketHeader*		Header()		  { return &header; }
+		const PacketHeader*	Header()	const { return &header; }
+		void				WriteHeaderTo(BYTE* dst) const
+		{
+			JAM_ASSERT(isValid);
+			JAM_ASSERT(dst != nullptr);
+			std::memcpy(dst, &header, headerSize);
+		}
+		void				WriteHeaderTo(Packet& packet) const
+		{
+			JAM_ASSERT(packet.IsValid());
+			WriteHeaderTo(packet->Head());
+		}
 		uint32			HeaderSize()  const { return headerSize; }
 		BYTE*			Payload()	  const { return payload; }
 		uint32          PayloadSize() const { return payloadSize; }
@@ -268,43 +277,31 @@ namespace jam::net
 	};
 
 
-	struct RpcPacketOpenResult
-	{
-		std::shared_ptr<SendBuffer>	buf;			// 생성된 송신 버퍼
-		BufferWriter				writer;			// PacketHeader 후부터 쓰기 시작하도록 설정됨
-		uint32						headerSize = 0; // PacketHeader 실제 크기
-		uint32						totalSize  = 0; // headerSize + payloadSize
-
-		bool						IsValid() const { return static_cast<bool>(buf); }
-	};
-
-
 	class PacketBuilder
 	{
 	public:
 		// Common
-		static std::shared_ptr<SendBuffer>		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static Packet		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 
 		// System 
-		static std::shared_ptr<SendBuffer>		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
-		static std::shared_ptr<SendBuffer>		CreateHandshakePacket(eSystemPacketId id);
-		static std::shared_ptr<SendBuffer>		CreatePingPacket(const PING_DATA& ping);
-		static std::shared_ptr<SendBuffer>		CreatePongPacket(const PONG_DATA& pong);
+		static Packet		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
+		static Packet		CreateHandshakePacket(eSystemPacketId id);
+		static Packet		CreatePingPacket(const PING_DATA& ping);
+		static Packet		CreatePongPacket(const PONG_DATA& pong);
 
 		// Ack 
-		static std::shared_ptr<SendBuffer>		CreateAckPacket(const ACK_DATA& ack);
-		static std::shared_ptr<SendBuffer>		CreateNackPacket(const NACK_DATA& nack);
+		static Packet		CreateAckPacket(const ACK_DATA& ack);
+		static Packet		CreateNackPacket(const NACK_DATA& nack);
 
 		// Rpc
-		static std::shared_ptr<SendBuffer>		CreateRpcPacket(eRpcPacketId id, uint8 flags = PacketFlags::NONE, eChannelType channel = eChannelType::RELIABLE_ORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
-		static RpcPacketOpenResult				OpenRpcPacket(eRpcPacketId id, uint8 flags, eChannelType channel, uint32 payloadSize);
+		static Packet		CreateRpcPacket(const RpcHeader* rpc, const void* payload = nullptr, uint32 payloadSize = 0, uint8 flags = PacketFlags::NONE, eChannel ch = eChannel::RELIABLE_ORDERED);
 
 		// Custom
-		static std::shared_ptr<SendBuffer>		CreateCustomPacket(uint8 id, uint8 flags, eChannelType channel, const void* payload, uint32 payloadSize);
+		static Packet		CreateCustomPacket(uint8 id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize);
 
 
 	private:
-		static std::shared_ptr<SendBuffer>		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 channel, const void* payload, uint32 payloadSize, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static Packet		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 	};
 }
 

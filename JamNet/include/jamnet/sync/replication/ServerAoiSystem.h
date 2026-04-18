@@ -22,11 +22,11 @@ namespace jam::net
 		float			gridCellSize		= 50.f;		// Uniform Grid Cell size
 		float			hysteresisOffset	= 10.f;		// leave threshold = enter + hysteresis
 
-		float			aabbX				= 100.f;	// AABB half-size X 
-		float			aabbY				= 100.f;	// AABB half-size Y (only 3D)
-		float			aabbZ				= 100.f;	// AABB half-size Z
-
-		float			radius				= 100.f;	// CIRCLE / SPHERE radius
+		float			aabbX				= 50.f;	// AABB half-size X 
+		float			aabbY				= 50.f;	// AABB half-size Y (only 3D)
+		float			aabbZ				= 50.f;	// AABB half-size Z
+											  
+		float			radius				= 50.f;	// CIRCLE / SPHERE radius
 
 		bool			enableLos			= false;	// enable LOS inspection
 

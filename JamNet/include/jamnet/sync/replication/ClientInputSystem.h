@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "jamnet/core/executor/SeqLock.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
 namespace jam::net

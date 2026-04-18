@@ -1,7 +1,14 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/UdpRouter.h"
+
+#include "jamnet/core/memory/ObjectPool.h"
 #include "jamnet/core/net/IocpEvent.h"
+#include "jamnet/core/net/PacketBuilder.h"
+#include "jamnet/core/net/Service.h"
+#include "jamnet/core/net/Session.h"
+#include "jamnet/core/net/UdpSession.h"
 #include "jamnet/core/net/SocketUtils.h"
+#include "jamnet/core/utils/Clock.h"
 
 #pragma warning(disable : 4996)
 
@@ -56,33 +63,34 @@ namespace jam::net
     {
         switch (iocpEvent->m_eventType)
         {
-        case eEventType::RECV:
+        case eEventType::UdpRecv:
         {
-            auto* ev = static_cast<RecvEvent*>(iocpEvent);
-
-            if (ev->recvBuffer != nullptr)
+            auto* ev = static_cast<UdpRecvEvent*>(iocpEvent);
+            if (ev->packet.IsValid() && numOfBytes > 0)
             {
-                if (numOfBytes > 0)
+                auto& s = ev->packet.Get();
+                if (s.TryAppendPayload(static_cast<uint32>(numOfBytes)))
                 {
-                    const uint64 ingressRecvTime_ns = NOW_NS(); 
-                    ProcessRecv(numOfBytes, ev->remoteAddress, *ev->recvBuffer, ingressRecvTime_ns);
+                    s.CloseWithCommit(static_cast<uint32>(numOfBytes));
+                    const uint64 ingress = NOW_NS();
+                    ProcessRecv(numOfBytes, ev->remoteAddr, ev->packet, ingress);
                 }
-                ObjectPool<jam::net::RecvBuffer>::Push(ev->recvBuffer);
-                ev->recvBuffer = nullptr;
             }
-            ObjectPool<net::RecvEvent>::Push(ev);
 
+            ev->packet.Reset();
+            ObjectPool<UdpRecvEvent>::Push(ev);
             RegisterRecv();
             break;
         }
-        case eEventType::SEND:
+        case eEventType::UdpSend:
         {
-			auto* sendEvent = static_cast<SendEvent*>(iocpEvent);
+			auto* ev = static_cast<UdpSendEvent*>(iocpEvent);
 
-        	if (numOfBytes > 0)
-        		ProcessSend(numOfBytes, sendEvent->remoteAddress);
-            sendEvent->sendBuffers.clear();
-			ObjectPool<net::SendEvent>::Push(sendEvent);
+            if (numOfBytes > 0)
+                ProcessSend(numOfBytes, ev->remoteAddr);
+            ev->chain.Clear();
+            ev->wsaBufs.clear();
+			ObjectPool<UdpSendEvent>::Push(ev);
 			break;
         }
         default:
@@ -91,48 +99,68 @@ namespace jam::net
     }
 
 
-    void UdpRouter::RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs, const NetAddress& to)
+    void UdpRouter::RegisterSend(std::vector<PacketChain>&& chains, const NetAddress& to)
     {
-        for (auto& buf : bufs)
+        for (auto& chain : chains)
         {
-            if (!buf || !buf->Buffer()) continue;
+            if (chain.Empty()) continue;
 
-            PacketView v = PacketView::Parse(buf->Buffer(), buf->WriteSize());
-            if (v.IsValid() && v.Type() == ePacketType::SYSTEM)
+            if (chain.Count() == 1)
             {
-                const uint64 wireNow_ns = NOW_NS();
+                const BufferSlice& first = chain[0];
+                PacketHeaderView v = PacketHeaderView::Parse(first.Head(), first.Size());
+                if (v.IsValid() && v.Type() == ePacketType::SYSTEM)
+                {
+                    const uint64 wireNow_ns = NOW_NS();
 
-                if (U2E(eSystemPacketId, v.Id()) == eSystemPacketId::PING && v.PayloadSize() >= sizeof(PING_DATA))
-                {
-                    auto* ping = reinterpret_cast<PING_DATA*>(v.Payload());
-                    ping->t1Wire_ns = wireNow_ns;
-                }
-                else if (U2E(eSystemPacketId, v.Id()) == eSystemPacketId::PONG && v.PayloadSize() >= sizeof(PONG_DATA))
-                {
-                    auto* pong = reinterpret_cast<PONG_DATA*>(v.Payload());
-                    pong->t3Wire_ns = wireNow_ns;
+                    if (U2E(eSystemPacketId, v.Id()) == eSystemPacketId::PING && v.PayloadSize() >= sizeof(PING_DATA))
+                    {
+                        auto* ping = reinterpret_cast<PING_DATA*>(v.Payload());
+                        ping->t1Wire_ns = wireNow_ns;
+                    }
+                    else if (U2E(eSystemPacketId, v.Id()) == eSystemPacketId::PONG && v.PayloadSize() >= sizeof(PONG_DATA))
+                    {
+                        auto* pong = reinterpret_cast<PONG_DATA*>(v.Payload());
+                        pong->t3Wire_ns = wireNow_ns;
+                    }
                 }
             }
 
-            auto* ev = ObjectPool<SendEvent>::Pop();
+            auto* ev = ObjectPool<UdpSendEvent>::Pop();
             ev->Init();
-            ev->m_owner         = shared_from_this();
-            ev->remoteAddress   = to;
+            ev->m_owner    = shared_from_this();
+            ev->remoteAddr = to;
+            ev->chain      = std::move(chain);
+            ev->wsaBufs.clear();
+            ev->wsaBufs.reserve(ev->chain.Count());
 
-            ev->use_gather      = false;                // 단일 datagram
-            ev->sendBuffers.clear();
-            ev->sendBuffers.push_back(buf);        // 생존 보장용
-            ev->single.buf      = reinterpret_cast<char*>(buf->Buffer());
-            ev->single.len      = static_cast<ULONG>(buf->WriteSize());
+            for (const BufferSlice& part : ev->chain.Parts())
+            {
+                if (!part.IsValid() || part.Size() == 0)
+                    continue;
 
-            DWORD sent = 0;
-            if (SOCKET_ERROR == ::WSASendTo(m_socket, &ev->single, 1, OUT &sent, 0, reinterpret_cast<const SOCKADDR*>(&ev->remoteAddress.GetSockAddr()), sizeof(SOCKADDR_IN), ev, nullptr))
+                WSABUF w;
+                w.buf = reinterpret_cast<char*>(part.Head());
+                w.len = static_cast<ULONG>(part.Size());
+                ev->wsaBufs.push_back(w);
+            }
+
+            if (ev->wsaBufs.empty())
+            {
+                ev->chain.Clear();
+                ObjectPool<UdpSendEvent>::Push(ev);
+                continue;
+            }
+
+            if (SOCKET_ERROR == ::WSASendTo(m_socket, ev->wsaBufs.data(), static_cast<DWORD>(ev->wsaBufs.size()), nullptr, 0, ev->remoteAddr.GetSockAddrPtr(), sizeof(SOCKADDR_IN), ev, nullptr))
             {
                 const int32 ec = ::WSAGetLastError();
                 if (ec != WSA_IO_PENDING)
                 {
                     HandleError(ec);
-                    ObjectPool<SendEvent>::Push(ev);
+                    ev->chain.Clear();
+                    ev->wsaBufs.clear();
+                    ObjectPool<UdpSendEvent>::Push(ev);
                 }
             }
         }
@@ -140,31 +168,29 @@ namespace jam::net
 
     void UdpRouter::RegisterRecv()
     {
-        auto* ev  = ObjectPool<RecvEvent>::Pop();
-        auto* buf = ObjectPool<RecvBuffer>::Pop();
-        buf->Init(1500, 1);
+        eNetBufferPoolKind kind = m_service->GetServiceType() == eServiceType::CLIENT ?
+            eNetBufferPoolKind::UdpClientIo : eNetBufferPoolKind::UdpServerIo;
 
+        BufWriter writer(GetNetBufferPool(kind));
+        BufferSlice slice = writer.OpenForPayload(JAMNET_MTU, alignof(PacketHeader));
+
+        auto* ev  = ObjectPool<UdpRecvEvent>::Pop();
         ev->Init();
-        ev->m_owner     = shared_from_this();
-        ev->fromLen     = sizeof(SOCKADDR_IN);
-        ev->recvBuffer  = buf;
+        ev->m_owner         = shared_from_this();
+        ev->packet          = MakeOwned(slice);
+        ev->wsaBuf.buf      = reinterpret_cast<char*>(ev->packet->Head());
+        ev->wsaBuf.len      = ev->packet->Capacity();
+        ev->remoteAddrLen   = sizeof(SOCKADDR_IN);
 
-        WSABUF wsaBuf;
-        wsaBuf.len = buf->FreeSize();
-        wsaBuf.buf = reinterpret_cast<CHAR*>(buf->WritePos());
 
-        DWORD numOfBytes = 0;
-        DWORD flags = 0;
-
-        if (SOCKET_ERROR == ::WSARecvFrom(m_socket, &wsaBuf, 1, OUT &numOfBytes, OUT &flags, reinterpret_cast<SOCKADDR*>(&ev->remoteAddress.GetSockAddr()), OUT &ev->fromLen, ev, nullptr))
+        if (SOCKET_ERROR == ::WSARecvFrom(m_socket, &ev->wsaBuf, 1, nullptr, &ev->flags, ev->remoteAddr.GetSockAddrPtr(), OUT &ev->remoteAddrLen, ev, nullptr))
         {
-            const int32 errorCode = ::WSAGetLastError();
-            if (errorCode != WSA_IO_PENDING)
+            const int32 error = ::WSAGetLastError();
+            if (error != WSA_IO_PENDING)
             {
-                HandleError(errorCode);
-
-                ObjectPool<RecvBuffer>::Push(buf);
-                ObjectPool<RecvEvent>::Push(ev);
+                HandleError(error);
+                ev->packet.Reset();
+                ObjectPool<UdpRecvEvent>::Push(ev);
             }
         }
     }
@@ -180,11 +206,11 @@ namespace jam::net
         udpSession->OnSend(numOfBytes);
     }
 
-    void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, RecvBuffer& buf, uint64 ingressRecvTime_ns)
+    void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, Packet packet, uint64 ingressRecvTime_ns)
     {
         if (numOfBytes == 0 || !m_service) return;
 
-        m_service->ProcessUdpSession(remoteAddress, numOfBytes, buf, ingressRecvTime_ns);
+        m_service->ProcessUdpSession(remoteAddress, numOfBytes, packet, ingressRecvTime_ns);
     }
 
     void UdpRouter::HandleError(int32 errorCode)

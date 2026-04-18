@@ -9,8 +9,8 @@
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
 static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
-              FLATBUFFERS_VERSION_MINOR == 1 &&
-              FLATBUFFERS_VERSION_REVISION == 21,
+              FLATBUFFERS_VERSION_MINOR == 12 &&
+              FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
 namespace jam {
@@ -47,7 +47,8 @@ struct fbPossessActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            verifier.EndTable();
@@ -104,7 +105,8 @@ struct fbPossessActorRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
@@ -162,7 +164,8 @@ struct fbUnpossessActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            verifier.EndTable();
@@ -214,7 +217,8 @@ struct fbUnpossessActorRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   bool success() const {
     return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            verifier.EndTable();
@@ -264,11 +268,11 @@ inline void fbPossessActorReq::UnPackTo(fbPossessActorReqT *_o, const ::flatbuff
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbPossessActorReq> fbPossessActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbPossessActorReq(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbPossessActorReq> CreatefbPossessActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbPossessActorReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbPossessActorReq> CreatefbPossessActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbPossessActorReq> fbPossessActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbPossessActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -291,11 +295,11 @@ inline void fbPossessActorRes::UnPackTo(fbPossessActorResT *_o, const ::flatbuff
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbPossessActorRes> fbPossessActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbPossessActorRes(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbPossessActorRes> CreatefbPossessActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbPossessActorRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbPossessActorRes> CreatefbPossessActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbPossessActorRes> fbPossessActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbPossessActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbPossessActorResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -319,11 +323,11 @@ inline void fbUnpossessActorReq::UnPackTo(fbUnpossessActorReqT *_o, const ::flat
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbUnpossessActorReq> fbUnpossessActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbUnpossessActorReq(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbUnpossessActorReq> CreatefbUnpossessActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbUnpossessActorReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbUnpossessActorReq> CreatefbUnpossessActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbUnpossessActorReq> fbUnpossessActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUnpossessActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -345,11 +349,11 @@ inline void fbUnpossessActorRes::UnPackTo(fbUnpossessActorResT *_o, const ::flat
   { auto _e = success(); _o->success = _e; }
 }
 
-inline ::flatbuffers::Offset<fbUnpossessActorRes> fbUnpossessActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbUnpossessActorRes(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbUnpossessActorRes> CreatefbUnpossessActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbUnpossessActorRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbUnpossessActorRes> CreatefbUnpossessActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbUnpossessActorRes> fbUnpossessActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUnpossessActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUnpossessActorResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -381,14 +385,16 @@ inline bool SizePrefixedfbPossessActorReqBufferHasIdentifier(const void *buf) {
       buf, fbPossessActorReqIdentifier(), true);
 }
 
+template <bool B = false>
 inline bool VerifyfbPossessActorReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifyBuffer<jam::net::fb::fbPossessActorReq>(fbPossessActorReqIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifyBuffer<jam::net::fb::fbPossessActorReq>(fbPossessActorReqIdentifier());
 }
 
+template <bool B = false>
 inline bool VerifySizePrefixedfbPossessActorReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifySizePrefixedBuffer<jam::net::fb::fbPossessActorReq>(fbPossessActorReqIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbPossessActorReq>(fbPossessActorReqIdentifier());
 }
 
 inline void FinishfbPossessActorReqBuffer(

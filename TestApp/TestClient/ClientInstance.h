@@ -5,12 +5,25 @@
 
 #include "jampx/PhysicsTypes.h"
 
+using namespace std;
 using namespace jam;
+
+struct ClientInstanceConfig
+{
+	bool	headlessNetWorld = false;
+};
+
+enum class eClientType
+{
+	User,
+	Bot
+};
+
 
 class ClientInstance
 {
 public:
-	explicit ClientInstance(uint32 instanceId, uint64 userId);
+	explicit ClientInstance(uint32 instanceId, uint64 userId, ClientInstanceConfig config = {});
 	virtual ~ClientInstance();
 
 	bool                                Connect(const string& serverIp, uint16 tcpPort, uint16 udpPort);
@@ -21,7 +34,7 @@ public:
 	virtual void                        Render();
 
 	void								SpawnActor();
-	void								SpawnPlayer();
+	virtual void						SpawnPlayer();
 	void								SpawnPlayerDrone();
 	void								SpawnBullet(const px::Vec3& muzzlePos, const px::Vec3& shootDir);
 
@@ -60,6 +73,7 @@ protected:
 protected:
 	float                               m_yaw = 0.0f;
 	float                               m_pitch = 0.0f;
+	eClientType							m_type;
 
 private:
 	void                                HandleSessionReady(const net::ClientSessionReadyEvent& evt);
@@ -75,6 +89,7 @@ private:
 	uint32									m_instanceId	= 0;
 	uint64									m_userId		= 0;
 	uint32									m_windowIndex	= 0;
+	ClientInstanceConfig					m_config		= {};
 
 	unique_ptr<net::ClientNetworkManager>	m_networkManager = nullptr;
 

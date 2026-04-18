@@ -1,5 +1,8 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/runtime/ClientTransportAdapter.h"
+
+#include "jamnet/core/net/PacketBuilder.h"
+#include "jamnet/core/net/Session.h"
 
 namespace jam::net
 {
@@ -13,11 +16,11 @@ namespace jam::net
 		m_udp = std::move(session);
 	}
 
-	void ClientTransportAdapter::Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf)
+	void ClientTransportAdapter::Send(const TransportInfo& info, Packet packet)
 	{
 		(void)info;
 
-		if (!buf)
+		if (!packet.IsValid())
 		{
 			JAMNET_LOG_WARN_LOC("send buffer is nullptr");
 			return;
@@ -30,15 +33,17 @@ namespace jam::net
 			return;
 		}
 
-		const PacketView view = PacketView::Parse(buf->Buffer(), buf->WriteSize());
+		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+		if (!view.IsValid())
+			return;
 
 		if (IsTcp(view.Channel()))
 		{
-			if (auto tcp = m_tcp.lock()) tcp->Send(buf);
+			if (auto tcp = m_tcp.lock()) tcp->Send(packet);
 			return;
 		}
 
-		if (auto udp = m_udp.lock()) udp->Send(buf);
+		if (auto udp = m_udp.lock()) udp->Send(packet);
 	}
 
 

@@ -1,14 +1,19 @@
 ﻿#pragma once
 
-#include "jamnet/runtime/world/WorldAssignmentTypes.h"
+#include "jamnet/core/net/NetAddress.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
+#include "jamnet/runtime/world/WorldAssignmentTypes.h"
+
 #include <jampx/IPhysicsFacade.h>
+
 #include <mutex>
 #include <optional>
 
+
 namespace jam::net
 {
-    class ClientTcpSession;
+	class ClientService;
+	class ClientTcpSession;
 	class ClientUdpSession;
     class ClientTransportAdapter;
     class ClientNetWorld;
@@ -22,6 +27,7 @@ namespace jam::net
         PhysicsFactory  physicsFactory      = nullptr;
 
         std::string     levelPath;
+        bool            headlessWorld       = false;
     };
 
     class ClientNetworkManager

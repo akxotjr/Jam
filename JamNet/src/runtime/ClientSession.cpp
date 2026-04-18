@@ -1,5 +1,7 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/runtime/ClientSession.h"
+
+#include "jamnet/core/net/RPCAPI.h"
 #include "jamnet/runtime/ClientNetworkManager.h"
 
 #include "jamnet/sync/networld/ClientNetWorld.h"
@@ -22,7 +24,7 @@ namespace jam::net
         JAMNET_LOG_INFO("[Client #{}, UserId = {}] ClientTcpSession disconnected", m_userId - 1000, m_userId);
     }
 
-    void ClientTcpSession::HandleCustomPacket(const PacketView& view)
+    void ClientTcpSession::HandleCustomPacket(const PacketHeaderView& view)
     {
         if (!m_manager)
             return;
@@ -41,22 +43,23 @@ namespace jam::net
             return;
         }
 
-        fb::fbTcpBindReqT req{};
-        req.user_id = m_userId;
+        flatbuffers::FlatBufferBuilder fbb(64);
+        const auto root = fb::CreatefbTcpBindReq(fbb, m_userId);
+        fbb.Finish(root);
 
-        RPCCallOptions opt{ eChannelType::TCP_DEFAULT, 3_s };
+        RPCCallOptions opt{ eChannel::TCP_DEFAULT, 3_s };
         auto self = static_pointer_cast<ClientTcpSession>(shared_from_this());
-        RPCCallAsyncMember<fb::fbTcpBindReqT, fb::fbTcpBindResT>(self, std::move(req), opt, this, &ClientTcpSession::OnTcpBindResponse);
+        RPCCallAsyncMember<fb::fbTcpBindReq, fb::fbTcpBindRes>(self, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientTcpSession::OnTcpBindResponse);
     }
 
-    void ClientTcpSession::OnTcpBindResponse(std::optional<fb::fbTcpBindResT> res)
+    void ClientTcpSession::OnTcpBindResponse(std::optional<RPCTableRef<fb::fbTcpBindRes>> res)
     {
         if (!res.has_value())
         {
             JAMNET_LOG_ERROR_LOC("TCP Bind RPC timeout or connection lost");
             return;
         }
-        if (!res->success || m_userId != res->user_id)
+        if (!(*res)->success() || m_userId != (*res)->user_id())
         {
             JAMNET_LOG_ERROR_LOC("TCP Bind RPC failed on server");
             return;
@@ -82,7 +85,7 @@ namespace jam::net
         JAMNET_LOG_INFO("[Client #{}, UserId = {}] ClientUdpSession disconnected", m_userId - 1000, m_userId);
     }
 
-    void ClientUdpSession::HandleCustomPacket(const PacketView& view)
+    void ClientUdpSession::HandleCustomPacket(const PacketHeaderView& view)
     {
         if (!m_manager)
             return;
@@ -94,10 +97,8 @@ namespace jam::net
             if (!table || !table->Verify(verifier))
                 return;
 
-            fb::fbRequestWorldAssignmentResT res{};
-            table->UnPackTo(&res);
-            m_worldId = res.world_id;
-            m_manager->NotifyWorldRequestResult(res.status, res.request_action, res.assignment_action, res.reason, m_worldId);
+            m_worldId = table->world_id();
+            m_manager->NotifyWorldRequestResult(table->status(), table->request_action(), table->assignment_action(), table->reason(), m_worldId);
             return;
         }
 
@@ -115,13 +116,14 @@ namespace jam::net
             return;
         }
 
-        fb::fbUdpBindReqT req{};
-        req.user_id = m_userId;
+        flatbuffers::FlatBufferBuilder fbb(64);
+        const auto root = fb::CreatefbUdpBindReq(fbb, m_userId);
+        fbb.Finish(root);
 
-        RPCCallOptions opt{ eChannelType::RELIABLE_ORDERED, 3_s };
+        RPCCallOptions opt{ eChannel::RELIABLE_ORDERED, 3_s };
 
         auto self = static_pointer_cast<ClientUdpSession>(shared_from_this());
-		RPCCallAsyncMember<fb::fbUdpBindReqT, fb::fbUdpBindResT>(self, std::move(req), opt, this, &ClientUdpSession::OnUdpBindResponse);
+		RPCCallAsyncMember<fb::fbUdpBindReq, fb::fbUdpBindRes>(self, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnUdpBindResponse);
     }
 
     void ClientUdpSession::RequestAutoAssignWorld()
@@ -144,19 +146,19 @@ namespace jam::net
 		RequestWorldAction(fb::fbWorldRequestAction_Transfer, targetWorld);
 	}
 
-    void ClientUdpSession::OnUdpBindResponse(std::optional<fb::fbUdpBindResT> res)
+    void ClientUdpSession::OnUdpBindResponse(std::optional<RPCTableRef<fb::fbUdpBindRes>> res)
     {
         if (!res.has_value())
         {
             JAMNET_LOG_ERROR_LOC("UDP Bind RPC timeout or connection lost");
             return;
         }
-        if (!res->success)
+        if (!(*res)->success())
         {
             JAMNET_LOG_ERROR_LOC("UDP Bind RPC failed on server");
             return;
         }
-		if (m_userId != res->user_id)
+		if (m_userId != (*res)->user_id())
         {
             JAMNET_LOG_ERROR_LOC("UDP Bind RPC userId mismatch");
             return;
@@ -166,7 +168,7 @@ namespace jam::net
     }
 
 
-    void ClientUdpSession::OnRequestWorldAssignmentRes(std::optional<fb::fbRequestWorldAssignmentResT> res)
+    void ClientUdpSession::OnRequestWorldAssignmentRes(std::optional<RPCTableRef<fb::fbRequestWorldAssignmentRes>> res)
     {
         if (!res.has_value())
         {
@@ -181,24 +183,28 @@ namespace jam::net
             return;
         }
 
-        m_worldId = res->world_id;
+        m_worldId = (*res)->world_id();
 
         if (m_manager)
-			m_manager->NotifyWorldRequestResult(res->status, res->request_action, res->assignment_action, res->reason, m_worldId);
+			m_manager->NotifyWorldRequestResult((*res)->status(), (*res)->request_action(), (*res)->assignment_action(), (*res)->reason(), m_worldId);
     }
 
 	void ClientUdpSession::RequestWorldAction(fb::fbWorldRequestAction action, const WorldKey& targetWorld)
 	{
-		fb::fbRequestWorldAssignmentReqT req{};
-		req.action                   = action;
-		req.target_world_kind        = static_cast<uint8>(targetWorld.kind);
-		req.target_world_template_id = targetWorld.templateId;
-		req.target_world_instance_id = targetWorld.instanceId;
+		flatbuffers::FlatBufferBuilder fbb(128);
+		const auto root = fb::CreatefbRequestWorldAssignmentReq(
+            fbb,
+            action,
+            INVALID_WORLD_ID,
+            static_cast<uint8>(targetWorld.kind),
+            targetWorld.templateId,
+            targetWorld.instanceId);
+		fbb.Finish(root);
 
-		RPCCallOptions opt{ eChannelType::RELIABLE_ORDERED, 10_s };
+		RPCCallOptions opt{ eChannel::RELIABLE_ORDERED, 10_s };
 		m_pendingWorldAction = static_cast<uint8>(action);
 
 		auto self = static_pointer_cast<ClientUdpSession>(shared_from_this());
-		RPCCallAsyncMember<fb::fbRequestWorldAssignmentReqT, fb::fbRequestWorldAssignmentResT>(self, std::move(req), opt, this, &ClientUdpSession::OnRequestWorldAssignmentRes);
+		RPCCallAsyncMember<fb::fbRequestWorldAssignmentReq, fb::fbRequestWorldAssignmentRes>(self, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnRequestWorldAssignmentRes);
 	}
 }

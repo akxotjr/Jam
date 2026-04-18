@@ -13,7 +13,7 @@ namespace jam
         
     	Count
     };
-
+    inline constexpr size_t k_jobPriorityCount = static_cast<size_t>(eJobPriority::Count);
 
     class Job
 	{

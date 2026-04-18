@@ -195,6 +195,9 @@ namespace jam::net
 		replica.lastSeenTick = serverTick;
 
 		const bool wasHidden = m_world.all_of<OutOfAoiTag>(resolved) || m_world.all_of<PredictedDespawnTag>(resolved);
+		const px::eBodyType snapshotBodyType = (hasCharFull || hasCharDelta) ? px::eBodyType::Character : px::eBodyType::Rigid;
+		if (hasFull || hasDelta || hasKine || hasCharFull || hasCharDelta)
+			EnsureSnapshotStateComponents(resolved, snapshotBodyType);
 
 		if (hasCharFull)
 		{
@@ -264,6 +267,46 @@ namespace jam::net
 			return entt::null;
 
 		return (*ctx)->GetEntity(netId);
+	}
+
+	void ClientReplicationSystem::EnsureSnapshotStateComponents(entt::entity entity, px::eBodyType bodyType)
+	{
+		if (entity == entt::null || !m_world.valid(entity))
+			return;
+
+		m_world.emplace_or_replace<NetActorBodyType>(entity, NetActorBodyType{ bodyType });
+
+		if (bodyType == px::eBodyType::Character)
+		{
+			if (!m_world.all_of<CharAuthorityState>(entity))
+				m_world.emplace<CharAuthorityState>(entity);
+			if (!m_world.all_of<CharProxyState>(entity))
+				m_world.emplace<CharProxyState>(entity);
+			if (!m_world.all_of<CharReplayHistory>(entity))
+				m_world.emplace<CharReplayHistory>(entity);
+
+			if (m_world.all_of<RigidAuthorityState>(entity))
+				m_world.remove<RigidAuthorityState>(entity);
+			if (m_world.all_of<RigidProxyState>(entity))
+				m_world.remove<RigidProxyState>(entity);
+			if (m_world.all_of<RigidReplayHistory>(entity))
+				m_world.remove<RigidReplayHistory>(entity);
+			return;
+		}
+
+		if (!m_world.all_of<RigidAuthorityState>(entity))
+			m_world.emplace<RigidAuthorityState>(entity);
+		if (!m_world.all_of<RigidProxyState>(entity))
+			m_world.emplace<RigidProxyState>(entity);
+		if (!m_world.all_of<RigidReplayHistory>(entity))
+			m_world.emplace<RigidReplayHistory>(entity);
+
+		if (m_world.all_of<CharAuthorityState>(entity))
+			m_world.remove<CharAuthorityState>(entity);
+		if (m_world.all_of<CharProxyState>(entity))
+			m_world.remove<CharProxyState>(entity);
+		if (m_world.all_of<CharReplayHistory>(entity))
+			m_world.remove<CharReplayHistory>(entity);
 	}
 
 	void ClientReplicationSystem::ApplyRigidFullSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformFull* tf, uint32 baselineRev)

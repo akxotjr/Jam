@@ -1,19 +1,19 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/TcpSession.h"
+
+#include "jamnet/core/executor/Job.h"
+#include "jamnet/core/memory/ObjectPool.h"
 #include "jamnet/core/net/SocketUtils.h"
 #include "jamnet/core/net/SessionSystems.h"
+#include "jamnet/core/net/Service.h"
 
 namespace jam::net
 {
-	/*-----------------
-		TcpSession
-	------------------*/
-
 	TcpSession::TcpSession() 
+		: m_recvAssembler(GetNetBufferPool(eNetBufferPoolKind::TcpIo))
 	{
 		m_protocol = eProtocolType::TCP;
-		m_socket = SocketUtils::CreateSocket(eProtocolType::TCP);
-		m_streamBuffer.Init(BUFFER_SIZE, 1);
+		m_socket   = SocketUtils::CreateSocket(eProtocolType::TCP);
 	}
 
 	TcpSession::~TcpSession()
@@ -31,18 +31,18 @@ namespace jam::net
 		RegisterDisconnect();
 	}
 
-	void TcpSession::Send(const std::shared_ptr<SendBuffer>& buf)
+	void TcpSession::Send(Packet packet)
 	{
-		if (!buf || !buf->Buffer())
+		if (!packet.IsValid())
 			return;
 
 		auto self = static_pointer_cast<TcpSession>(shared_from_this());
-		Post(Job([self, buf]
+		Post(Job([self, packet]
 			{
 				const entt::entity e = self->GetEntity();
 				if (e == entt::null) return;
 
-				SendPacketToSession(e, buf);
+				SendPacketToSession(e, packet);
 			}));
 	}
 
@@ -61,24 +61,24 @@ namespace jam::net
 		return reinterpret_cast<HANDLE>(m_socket);
 	}
 
-	void TcpSession::Dispatch(IocpEvent* iocpEvent, int32 numOfBytes)
+	void TcpSession::Dispatch(IocpEvent* iocpEvent, int32 bytes)
 	{
 		switch (iocpEvent->m_eventType)
 		{
-		case eEventType::CONNECT:
+		case eEventType::TcpConnect:
 			ProcessConnect();
 			break;
 
-		case eEventType::DISCONNECT:
+		case eEventType::TcpDisconnect:
 			ProcessDisconnect();
 			break;
 
-		case eEventType::RECV:
-			ProcessRecv(static_cast<RecvEvent*>(iocpEvent), numOfBytes);
+		case eEventType::TcpSend:
+			ProcessSend(static_cast<TcpSendEvent*>(iocpEvent), bytes);
 			break;
 
-		case eEventType::SEND:
-			ProcessSend(static_cast<SendEvent*>(iocpEvent), numOfBytes);
+		case eEventType::TcpRecv:
+			ProcessRecv(static_cast<TcpRecvEvent*>(iocpEvent), bytes);
 			break;
 
 		default:break;
@@ -93,9 +93,9 @@ namespace jam::net
 		m_connectEvent.Init();
 		m_connectEvent.m_owner = shared_from_this();
 
-		DWORD numOfBytes = 0;
+		DWORD		bytes	 = 0;
 		SOCKADDR_IN sockAddr = GetService()->GetRemoteTcpNetAddress().GetSockAddr();
-		if (SOCKET_ERROR == SocketUtils::ConnectEx(m_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &numOfBytes, &m_connectEvent))
+		if (SOCKET_ERROR == SocketUtils::ConnectEx(m_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &bytes, &m_connectEvent))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
@@ -124,69 +124,76 @@ namespace jam::net
 		return true;
 	}
 
-
-	void TcpSession::RegisterRecv()
+	void TcpSession::RegisterSend(std::vector<PacketChain>&& chains)
 	{
-		auto* ev = ObjectPool<RecvEvent>::Pop();
+		auto* ev = ObjectPool<TcpSendEvent>::Pop();
 		ev->Init();
-		ev->m_owner = shared_from_this();
-		ev->fromLen = 0; // TCP는 발신자 주소 없음
+		ev->m_owner    = shared_from_this();
+		ev->chains     = std::move(chains);
+		ev->curIndex   = 0;
+		ev->curOffset  = 0;
+		ev->totalBytes = 0;
+		ev->wsaBufs.clear();
+		size_t partCount = 0;
+		for (const auto& chain : ev->chains)
+			partCount += chain.Count();
+		ev->wsaBufs.reserve(partCount);
 
-		auto* buf = ObjectPool<RecvBuffer>::Pop();
-		buf->Init(BUFFER_SIZE, 1);
-		ev->recvBuffer = buf;
-
-		WSABUF wsaBuf;
-		wsaBuf.buf = reinterpret_cast<char*>(buf->WritePos());
-		wsaBuf.len = buf->FreeSize();
-
-		DWORD numOfBytes = 0;
-		DWORD flags = 0;
-		if (SOCKET_ERROR == ::WSARecv(m_socket, &wsaBuf, 1, OUT &numOfBytes, OUT &flags, ev, nullptr))
+		for (auto& chain : ev->chains)
 		{
-			const int32 errorCode = ::WSAGetLastError();
-			if (errorCode != WSA_IO_PENDING)
+			for (const BufferSlice& part : chain.Parts())
 			{
-				HandleError(errorCode);
-				ObjectPool<RecvBuffer>::Push(buf);
-				ObjectPool<RecvEvent>::Push(ev);
+				if (!part.IsValid() || part.Size() == 0)
+					continue;
+
+				WSABUF w;
+				w.buf = reinterpret_cast<char*>(part.Head());
+				w.len = static_cast<ULONG>(part.Size());
+
+				ev->wsaBufs.push_back(w);
+				ev->totalBytes += w.len;
 			}
 		}
-	}
 
-
-	void TcpSession::RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs)
-	{
-		auto* ev = ObjectPool<SendEvent>::Pop();
-		ev->Init();
-		ev->m_owner		= shared_from_this();
-		ev->use_gather	= true;
-		ev->sendBuffers = bufs;       // 생존 보장
-		ev->gather.clear();
-		ev->gather.reserve(bufs.size());
-		ev->curIndex	= 0;
-		ev->curOffset	= 0;
-		ev->totalBytes	= 0;
-
-		for (auto& sb : bufs)
+		if (ev->wsaBufs.empty())
 		{
-			WSABUF w;
-			w.buf = reinterpret_cast<char*>(sb->Buffer());
-			w.len = static_cast<ULONG>(sb->WriteSize());
-			ev->gather.push_back(w);
-			ev->totalBytes += w.len;
+			ev->chains.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
+			return;
 		}
 
 		DWORD sent = 0;
-		if (SOCKET_ERROR == ::WSASend(m_socket, ev->gather.data(), static_cast<DWORD>(ev->gather.size()), OUT &sent, 0, ev, nullptr))
+		if (SOCKET_ERROR == ::WSASend(m_socket, ev->wsaBufs.data(), static_cast<DWORD>(ev->wsaBufs.size()), OUT & sent, 0, ev, nullptr))
 		{
 			const int32 ec = ::WSAGetLastError();
 			if (ec != WSA_IO_PENDING)
 			{
 				HandleError(ec);
-				ev->sendBuffers.clear();
-				ev->gather.clear();
-				ObjectPool<SendEvent>::Push(ev);
+				ev->chains.clear();
+				ev->wsaBufs.clear();
+				ObjectPool<TcpSendEvent>::Push(ev);
+			}
+		}
+	}
+
+
+	void TcpSession::RegisterRecv()
+	{
+		auto* ev = ObjectPool<TcpRecvEvent>::Pop();
+		ev->Init();
+		ev->m_owner    = shared_from_this();
+		ev->wsaBuf.buf = reinterpret_cast<char*>(ev->buffer.data());
+		ev->wsaBuf.len = static_cast<ULONG>(ev->buffer.size());
+
+		DWORD bytes = 0;
+		DWORD flags = 0;
+		if (SOCKET_ERROR == ::WSARecv(m_socket, &ev->wsaBuf, 1, OUT &bytes, OUT &flags, ev, nullptr))
+		{
+			const int32 errorCode = ::WSAGetLastError();
+			if (errorCode != WSA_IO_PENDING)
+			{
+				HandleError(errorCode);
+				ObjectPool<TcpRecvEvent>::Push(ev);
 			}
 		}
 	}
@@ -217,180 +224,92 @@ namespace jam::net
 		GetService()->ReleaseTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
 	}
 
-	void TcpSession::ProcessRecv(RecvEvent* ev, int32 numOfBytes)
+	void TcpSession::ProcessRecv(const TcpRecvEvent* ev, int32 bytes)
 	{
 		if (!ev) return;
 
-		RecvBuffer* ioBuf = ev->recvBuffer;
-
-		if (!ioBuf)
+		if (bytes == 0)
 		{
-			ObjectPool<RecvEvent>::Push(ev);
-			return;
-		}
-
-		if (numOfBytes <= 0)
-		{
-			ObjectPool<RecvBuffer>::Push(ioBuf);
-			ev->recvBuffer = nullptr;
-			ObjectPool<RecvEvent>::Push(ev);
 			Disconnect();
-
-			JAMNET_LOG_WARN_LOC("[TcpSession] Receive 0 byte");
 			return;
 		}
 
-		if (!ioBuf->OnWrite(numOfBytes))
+		if (!m_recvAssembler.Append(ev->buffer.data(), bytes))
 		{
-			ObjectPool<RecvBuffer>::Push(ioBuf);
-			ev->recvBuffer = nullptr;
-			ObjectPool<RecvEvent>::Push(ev);
+			JAMNET_LOG_ERROR("TcpRecvAssembler::Append failed");
 			Disconnect();
-
-			JAMNET_LOG_WARN_LOC("[TcpSession] OnWrite Overflow");
 			return;
 		}
 
-		const uint32 sz = static_cast<uint32>(ioBuf->DataSize());
-		std::shared_ptr<RecvBuffer> snap = RecvBuffer::FromSpan(ioBuf->ReadPos(), sz);
+		for (;;)
+		{
+			Packet pkt;
+			const auto result = m_recvAssembler.TryExtractPacket(pkt);
 
-		auto self = static_pointer_cast<TcpSession>(shared_from_this());
-		self->Post(Job([self, snap]
+			if (result == TcpRecvAssembler::eAssembleResult::NeedMoreData)
+				break;
+
+			if (result == TcpRecvAssembler::eAssembleResult::ProtocolError)
 			{
-				self->ProcessRecvOnShard(snap);
-			},
-			eJobPriority::Control
-		));
+				JAMNET_LOG_ERROR("Tcp recv protocol error");
+				Disconnect();
+				return;
+			}
 
-
-		ObjectPool<RecvBuffer>::Push(ioBuf);
-		ev->recvBuffer = nullptr;
-		ObjectPool<RecvEvent>::Push(ev);
+			auto self = std::static_pointer_cast<TcpSession>(shared_from_this());
+			self->Post(Job([self, packet = std::move(pkt)]() mutable
+				{
+					const entt::entity e = self->GetEntity();
+					if (e != entt::null)
+					{
+						ProcessReceivedPacket(e, std::move(packet));
+					}
+				}, eJobPriority::Control));
+		}
 
 		RegisterRecv();
 	}
 
-	void TcpSession::ProcessRecvOnShard(const std::shared_ptr<RecvBuffer>& snap)
-	{
-		if (!snap) return;
-		const int32 size = snap->DataSize();
-		if (size <= 0) return;
-
-		// 누적
-		if (m_streamBuffer.FreeSize() < size)
-		{
-			Disconnect();
-			JAMNET_LOG_WARN_LOC("[TcpSession] OnWrite Overflow");
-			return;
-		}
-		::memcpy(m_streamBuffer.WritePos(), snap->ReadPos(), size);
-		if (!m_streamBuffer.OnWrite(size))
-		{
-			Disconnect();
-			JAMNET_LOG_WARN_LOC("[TcpSession] OnWrite Overflow");
-			return;
-		}
-
-		// 프레이밍: [TcpPacketHeader][payload] 반복
-		int32 processed = 0;
-		while (true)
-		{
-			const int32 available = m_streamBuffer.DataSize() - processed;
-			if (available < static_cast<int32>(PacketHeader::BASE_SIZE))
-				break;
-
-			BYTE* base = m_streamBuffer.ReadPos() + processed;
-
-			// PacketView로 파싱 시도
-			PacketView view = PacketView::Parse(base, static_cast<uint32>(available));
-
-			// 헤더가 불완전하면 대기
-			if (!view.IsValid())
-			{
-				// 최소 헤더조차 없으면 대기
-				if (available < static_cast<int32>(PacketHeader::BASE_SIZE))
-					break;
-
-				// 헤더는 있지만 검증 실패 → 연결 종료
-				Disconnect();
-				JAMNET_LOG_WARN_LOC("[TcpSession] Invalid Packet Header");
-				return;
-			}
-
-			const uint32 headerSize = view.HeaderSize();
-			const uint32 totalSize = view.TotalSize();
-
-			if (totalSize < headerSize)
-			{
-				Disconnect();
-				JAMNET_LOG_WARN_LOC("[TcpSession] Invalid Packet size");
-				return;
-			}
-
-			// 전체 패킷이 아직 도착하지 않았으면 대기
-			if (available < static_cast<int32>(totalSize))
-				break;
-
-			// 패킷 단위로 ECS에 전달
-			std::shared_ptr<RecvBuffer> pkt = RecvBuffer::FromSpan(base, totalSize);
-			const entt::entity e = GetEntity();
-			if (e != entt::null)
-			{
-				ProcessReceivedPacket(e, pkt);
-			}
-
-			processed += static_cast<int32>(totalSize);
-		}
-
-		// 소비
-		if (processed < 0 || m_streamBuffer.DataSize() < processed || !m_streamBuffer.OnRead(processed))
-		{
-			Disconnect();
-			JAMNET_LOG_WARN_LOC("[TcpSession] OnRead Overflow");
-			return;
-		}
-		m_streamBuffer.Clean();
-	}
 
 	//	부분전송 지원- 남은 구간을 재등록, 다 보냈으면 정리. 
-	void TcpSession::ProcessSend(SendEvent* ev,  int32 numOfBytes)
+	void TcpSession::ProcessSend(TcpSendEvent* ev,  int32 bytes)
 	{
 		if (!ev) return;
 
-		if (numOfBytes <= 0)
+		if (bytes <= 0)
 		{
-			ev->sendBuffers.clear();
-			ev->gather.clear();
-			ObjectPool<SendEvent>::Push(ev);
+			ev->chains.clear();
+			ev->wsaBufs.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
 			Disconnect();
 			JAMNET_LOG_WARN_LOC("[TcpSession] Send 0 byte");
 			return;
 		}
 
 		// 상위 통지(이번 완료 바이트)
-		OnSend(numOfBytes);
+		OnSend(bytes);
 
 		// 남은 바이트 계산
 		uint32 remaining = 0;
-		if (numOfBytes < static_cast<int32>(ev->totalBytes))
-			remaining = ev->totalBytes - static_cast<uint32>(numOfBytes);
+		if (bytes < static_cast<int32>(ev->totalBytes))
+			remaining = ev->totalBytes - static_cast<uint32>(bytes);
 
 		if (remaining == 0)
 		{
-			ev->sendBuffers.clear();
-			ev->gather.clear();
-			ObjectPool<SendEvent>::Push(ev);
+			ev->chains.clear();
+			ev->wsaBufs.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
 		}
 
 		// curIndex/curOffset 갱신
-		uint32 advance = static_cast<uint32>(numOfBytes);
-		size_t idx = ev->curIndex;
-		ULONG off = ev->curOffset;
+		uint32 advance = static_cast<uint32>(bytes);
+		size_t idx	   = ev->curIndex;
+		ULONG  off	   = ev->curOffset;
 
-		while (advance > 0 && idx < ev->gather.size())
+		while (advance > 0 && idx < ev->wsaBufs.size())
 		{
-			const ULONG leftInBuf = ev->gather[idx].len - off;
+			const ULONG leftInBuf = ev->wsaBufs[idx].len - off;
 			if (advance < leftInBuf)
 			{
 				off = off + advance;
@@ -404,31 +323,29 @@ namespace jam::net
 				off = 0;
 			}
 		}
-		ev->curIndex = idx;
-		ev->curOffset = off;
+		ev->curIndex   = idx;
+		ev->curOffset  = off;
 		ev->totalBytes = remaining;
 
 		// 다음 WSABUF 배열 구성(첫 요소 offset 적용)
-		WSABUF first{};
 		std::vector<WSABUF> bufs;
-		if (ev->curIndex < ev->gather.size())
+		if (ev->curIndex < ev->wsaBufs.size())
 		{
-			first = ev->gather[ev->curIndex];
+			WSABUF first = ev->wsaBufs[ev->curIndex];
 			first.buf += ev->curOffset;
 			first.len -= ev->curOffset;
-			first.len -= ev->curOffset;
 
-			bufs.reserve(ev->gather.size() - ev->curIndex);
+			bufs.reserve(ev->wsaBufs.size() - ev->curIndex);
 			bufs.push_back(first);
-			for (size_t i = ev->curIndex + 1; i < ev->gather.size(); ++i)
-				bufs.push_back(ev->gather[i]);
+			for (size_t i = ev->curIndex + 1; i < ev->wsaBufs.size(); ++i)
+				bufs.push_back(ev->wsaBufs[i]);
 		}
 
 		if (bufs.empty())
 		{
-			ev->sendBuffers.clear();
-			ev->gather.clear();
-			ObjectPool<SendEvent>::Push(ev);
+			ev->chains.clear();
+			ev->wsaBufs.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
 		}
 
@@ -439,9 +356,9 @@ namespace jam::net
 			if (ec != WSA_IO_PENDING)
 			{
 				HandleError(ec);
-				ev->sendBuffers.clear();
-				ev->gather.clear();
-				ObjectPool<SendEvent>::Push(ev);
+				ev->chains.clear();
+				ev->wsaBufs.clear();
+				ObjectPool<TcpSendEvent>::Push(ev);
 			}
 		}
 	}

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "jamnet/core/executor/MainExecutor.h"
+#include "jamnet/core/executor/ThreadContext.h"
 
 
 namespace jam

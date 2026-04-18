@@ -1,6 +1,7 @@
 #pragma once
 
-#include <algorithm>
+#include <jambase/TaggedKey.h>
+
 #include <array>
 #include <functional>
 #include <limits>
@@ -8,8 +9,6 @@
 #include <string_view>
 #include <vector>
 
-#include <jambase/JamTypes.h>
-#include <jambase/TaggedKey.h>
 
 namespace jam
 {

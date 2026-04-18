@@ -1,8 +1,16 @@
-﻿#pragma once
+#pragma once
+#include "jamnet/core/executor/ShardRoutingPolicy.h"
 #include "jamnet/core/net/IocpCore.h"
 #include "jamnet/core/net/NetAddress.h"
 #include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/core/net/SessionComponents.h"
+
+namespace jam
+{
+	class Job;
+	class ShardExecutor;
+	class Mailbox;
+}
 
 namespace jam::net
 {
@@ -39,9 +47,9 @@ namespace jam::net
 
 		virtual bool							Connect() = 0;
 		virtual void							Disconnect() = 0;
-		virtual void							Send(const std::shared_ptr<SendBuffer>& buf) = 0;
+		virtual void							Send(Packet packet) = 0;
 
-		virtual void							HandleCustomPacket(const PacketView& view) {}
+		virtual void							HandleCustomPacket(const PacketHeaderView& view) {}
 
 		virtual void                            OnLinkEstablished() {}
 		virtual void                            OnLinkTerminated() {}
@@ -66,9 +74,7 @@ namespace jam::net
 
 		std::shared_ptr<Session>				Self() { return static_pointer_cast<Session>(shared_from_this()); }
 
-
 		void									Post(Job j) const;
-
 		void									Submit(Job j) const;
 		void									SubmitAfter(Job j, uint64 delay_ns) const;
 
@@ -77,10 +83,7 @@ namespace jam::net
 		void									SetReady(bool ready) { m_isReady = ready; }
 		bool									IsReady() { return m_isReady; }
 
-
-
 	protected:
-		// application level callback
 		virtual void							OnConnected() {}
 		virtual void							OnDisconnected() {}
 		virtual void							OnSend(int32 len) {}
@@ -106,15 +109,15 @@ namespace jam::net
 		bool									m_isReady = false;
 
 	private:
-		RouteKey								m_key{};
+		RouteKey								m_key				= {};
 		std::weak_ptr<ShardExecutor>			m_boundShard;
-		std::shared_ptr<Mailbox>				m_mailbox;
+		std::shared_ptr<Mailbox>				m_mailbox			= nullptr;
 
-		entt::entity							m_entity{entt::null };
+		entt::entity							m_entity			= entt::null;
 
-		std::atomic_bool						m_closed{ false };
-		std::atomic_bool						m_entityReady{ false };
-		std::atomic_bool						m_entityCreating{ false };
-		std::atomic_bool						m_pendingConnect{ false };
+		std::atomic<bool>						m_closed			= false;
+		std::atomic<bool>						m_entityReady		= false;
+		std::atomic<bool>						m_entityCreating	= false;
+		std::atomic<bool>						m_pendingConnect	= false;
 	};
 }

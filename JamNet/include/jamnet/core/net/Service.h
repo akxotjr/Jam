@@ -1,4 +1,9 @@
-﻿#pragma once
+#pragma once
+
+#include "jamnet/core/executor/Lock.h"
+
+#include "jamnet/core/utils/TimeUnits.h"
+
 #include "jamnet/core/net/IocpCore.h"
 #include "jamnet/core/net/NetAddress.h"
 #include "jamnet/core/net/Session.h"
@@ -62,13 +67,13 @@ namespace jam::net
 		void								RegisterUdpSession(const std::shared_ptr<UdpSession>& session);
 		void								ReleaseUdpSession(const std::shared_ptr<UdpSession>& session);
 
-		void								RegisterHandshakingUdpSession(const std::shared_ptr<UdpSession>& session);
+		bool								RegisterHandshakingUdpSession(const std::shared_ptr<UdpSession>& session);
 		void								ReleaseHandshakingUdpSession(const std::shared_ptr<UdpSession>& session);
 		void								CompleteUdpHandshake(const NetAddress& from);
 		std::shared_ptr<UdpSession>			FindSessionInConnected(const NetAddress& from);
 		std::shared_ptr<UdpSession>			FindSessionInHandshaking(const NetAddress& from);
 
-		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, RecvBuffer& recvBuffer, uint64 ingressRecvTime_ns);
+		void								ProcessUdpSession(const NetAddress& from, int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns);
 
 		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount; }
 		int32								GetMaxTcpSessionCount() const { return m_config.maxTcpSessionCount; }
@@ -106,19 +111,19 @@ namespace jam::net
 		std::unordered_map<NetAddress, std::shared_ptr<UdpSession>>	m_handshakingUdpSessions;
 
 
-		int32												m_sessionCount = 0;
-		int32												m_tcpSessionCount = 0;
-		int32												m_udpSessionCount = 0;
+		int32												m_sessionCount			= 0;
+		int32												m_tcpSessionCount		= 0;
+		int32												m_udpSessionCount		= 0;
 
 		SessionFactory										m_tcpSessionFactory;
 		SessionFactory										m_udpSessionFactory;
 		SessionInitCallback									m_sessionInitCallback;
 
-		std::shared_ptr<TcpListener>						m_listener = nullptr;
-		std::shared_ptr<UdpRouter>							m_udpRouter = nullptr;
+		std::shared_ptr<TcpListener>						m_listener				= nullptr;
+		std::shared_ptr<UdpRouter>							m_udpRouter				= nullptr;
 
-		std::atomic<bool>									m_running{ false };
-		uint64												m_lastUpdateTime_ns = 0_ns;
+		std::atomic<bool>									m_running				= false;
+		uint64												m_lastUpdateTime_ns		= 0_ns;
 
 		void*												m_userData = nullptr;
 	};
@@ -133,12 +138,12 @@ namespace jam::net
 
 		m_tcpSessionFactory = []() -> std::shared_ptr<Session>
 			{
-				return MakeShared<TCP>();
+				return std::make_shared<TCP>();
 			};
 
 		m_udpSessionFactory = []() -> std::shared_ptr<Session>
 			{
-				return MakeShared<UDP>();
+				return std::make_shared<UDP>();
 			};
 		return true;
 	}

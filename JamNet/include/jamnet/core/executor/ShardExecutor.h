@@ -9,6 +9,7 @@
 #include "jamnet/core/executor/ExecutorMetrics.h"
 #include "jamnet/core/executor/ExecutorPeriodic.h"
 #include "jamnet/core/executor/ShardDomain.h"
+
 #include <condition_variable>
 #include <deque>
 
@@ -35,9 +36,7 @@ namespace jam
 	};
 
 
-	// ============================================================
-	//  ShardLocal
-	// ============================================================
+
 
 	struct ShardLocal
 	{
@@ -65,9 +64,7 @@ namespace jam
 	}
 
 
-	// ============================================================
-	// ShardExecutorConfig
-	// ============================================================
+
 
 	struct ShardExecutorConfig
 	{
@@ -75,14 +72,11 @@ namespace jam
 		int32       batchBudget		= 32;
 		int32       idleSleepMs		= 1;
 		uint16      numaNode		= 0xFFFF;
-		uint64      tickPeriod_ns	= 1'000'000_ns;
+		uint64      tickPeriod_ns	= 16'666'666_ns;
 		int32		maxTickCatchUp  = 4;
 	};
 
 
-	// ============================================================
-	// ShardExecutor
-	// ============================================================
 
 	class ShardExecutor : public std::enable_shared_from_this<ShardExecutor>, public IExecutor
 	{
@@ -112,17 +106,9 @@ namespace jam
 		void							CancelFiberByKey(FiberAwaitKey key, eCancelCode code);
 		void							CancelFiberById(uint32 id, eCancelCode code);
 
-
-		using PeriodicHandle = jam::PeriodicHandle;
-		using PeriodicOptions = jam::PeriodicOptions;
-
 		PeriodicHandle					ScheduleFixedRate(Job j, const PeriodicOptions& opt);
 		PeriodicHandle					ScheduleFixedDelay(Job j, const PeriodicOptions& opt);
 		bool							CancelPeriodic(PeriodicHandle h);
-
-		// ============================================================
-		// Accessors
-		// ============================================================
 
 		int32							GetIndex() const { return m_config.index; }
 		ShardLocal&						Local() { return m_local; }
@@ -150,45 +136,44 @@ namespace jam
 		bool							DrainIngressOnce(int32 budget);
 
 		bool							ProcessJobsOnce();
-		void							ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget);
-		void							DrainReadyMailboxes(int32 maxMailboxes, int32 budgetPerMailbox);
+		uint64							ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget);
+		void							DrainReadyMailboxes(int32 maxMailboxes, int32 totalJobBudget, int32 budgetPerMailbox);
 		std::shared_ptr<Mailbox>		FindMailbox(uint32 id);
 
 	private:
-		ShardExecutorConfig								m_config = {};
+		ShardExecutorConfig										m_config  = {};
 
-		std::atomic<bool>                               m_running = false;
-		std::thread                                     m_thread;
+		std::atomic<bool>										m_running = false;
+		std::thread												m_thread;
 
-		std::atomic<uint64>                             m_nextAwaitSeq{ 1 };
-		WinFiberBackend                                 m_backend;
-		std::unique_ptr<FiberScheduler>                 m_scheduler;
+		std::atomic<uint64>										m_nextAwaitSeq = 1;
+		WinFiberBackend											m_backend;
+		std::unique_ptr<FiberScheduler>							m_scheduler;
 
-		ShardSlot*										m_shardSlot = nullptr;
+		ShardSlot*												m_shardSlot	= nullptr;
 
-		ConcurrentQueue<Job>							m_jobIngress;
+		ConcurrentQueue<Job>									m_jobIngress;
 		
-		static constexpr size_t							kPrioCount = static_cast<size_t>(eJobPriority::Count);
-		std::array<std::deque<Job>, kPrioCount>			m_jobLocalByPrio{};
-		std::atomic<size_t>								m_jobLocalTotal = 0;
+		std::array<std::deque<Job>, k_jobPriorityCount>			m_jobLocalByPrio = {};
+		std::atomic<size_t>										m_jobLocalTotal	 = 0;
 
 		USE_LOCK
-		std::unordered_map<uint32, std::shared_ptr<Mailbox>>      m_mailboxes;
-		std::atomic<uint32>                             m_nextMailboxId{ 1 };
-		ConcurrentQueue<uint32>							m_readyMailboxes;
-		std::mutex										m_wakeMutex;
-		std::condition_variable							m_wakeCv;
-		std::atomic<uint64>								m_wakeEpoch{ 0 };
+		std::unordered_map<uint32, std::shared_ptr<Mailbox>>    m_mailboxes;
+		std::atomic<uint32>										m_nextMailboxId	 = 1;
+		ConcurrentQueue<uint32>									m_readyMailboxes;
+		std::mutex												m_wakeMutex;
+		std::condition_variable									m_wakeCv;
+		std::atomic<uint64>										m_wakeEpoch		 = 0;
 
-		std::atomic<bool>                               m_assistRequested{ false };
+		std::atomic<bool>										m_assistRequested = false;
 
 		// Shard Pinning
-		bool                                            m_pinEnabled = false;
-		CoreSlot                                        m_pinSlot	 = {};
+		bool													m_pinEnabled = false;
+		CoreSlot												m_pinSlot	 = {};
 
-		ShardLocal										m_local;
+		ShardLocal												m_local;
 
-		uint64                                          m_lastTick_ns = 0_ns;
+		uint64													m_lastTick_ns = 0_ns;
 
 		// Periodic
 		struct PeriodicState

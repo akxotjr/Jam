@@ -3,12 +3,9 @@
 
 namespace jam::net
 {
-	class AcceptEvent;
+	class TcpAcceptEvent;
 	class Service;
 
-	/*------------------
-		  TcpListener
-	-------------------*/
 
 	class TcpListener : public IocpObject
 	{
@@ -20,21 +17,18 @@ namespace jam::net
 		bool					StartAccept(Service* service);
 		void					CloseSocket();
 
-		// IocpObject impl
 
 		virtual HANDLE			GetHandle() override;
-		virtual void			Dispatch(class IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
+		virtual void			Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 	private:
-		// 수신 관련
-		void					RegisterAccept(AcceptEvent* acceptEvent);
-		void					ProcessAccept(AcceptEvent* acceptEvent);
+		void					RegisterAccept(TcpAcceptEvent* acceptEvent);
+		void					ProcessAccept(TcpAcceptEvent* acceptEvent);
 
 	private:
-		Service*					m_service = nullptr;
-
-		SOCKET						m_socket  = INVALID_SOCKET;
-		std::vector<AcceptEvent*>	m_acceptEvents;
+		Service*										m_service	= nullptr;
+		SOCKET											m_socket	= INVALID_SOCKET;
+		std::vector<std::unique_ptr<TcpAcceptEvent>>	m_events;
 	};
 }
 

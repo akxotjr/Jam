@@ -6,6 +6,8 @@
 
 #include "jampx/PhysicsAsset.h"
 
+using namespace std;
+
 struct ActorSnapshot
 {
 	uint32                          tick = 0;

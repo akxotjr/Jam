@@ -3,10 +3,11 @@
 
 #include <cmath>
 
-BotInstance::BotInstance(uint32 instanceId, uint64 userId)
-	: ClientInstance(instanceId, userId)
+BotInstance::BotInstance(uint32 instanceId, uint64 userId, BotTrafficConfig config)
+	: ClientInstance(instanceId, userId, ClientInstanceConfig{ .headlessNetWorld = config.headlessNetWorld })
+	, m_cfg(config)
 {
-
+	m_type = eClientType::Bot;
 }
 
 void BotInstance::UpdateInput(float deltaTime)
@@ -19,7 +20,7 @@ void BotInstance::UpdateInput(float deltaTime)
 	m_botElapsedSec   += clampedDelta;
 	m_botActionAccSec += deltaTime;
 
-	// ClientInputSystem latches a single "current" input sample per world tick.
+	// ClientInputSystem latches a buf "current" input sample per world tick.
 	// Compute the bot command from absolute patrol phase and publish one sample here.
 	constexpr float k_sideSec		 = 2.2f;
 	constexpr float k_turnSec		 = 0.35f;

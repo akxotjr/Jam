@@ -9,8 +9,8 @@
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
 static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
-              FLATBUFFERS_VERSION_MINOR == 1 &&
-              FLATBUFFERS_VERSION_REVISION == 21,
+              FLATBUFFERS_VERSION_MINOR == 12 &&
+              FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
 namespace jam {
@@ -47,7 +47,8 @@ struct fbTcpBindReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            verifier.EndTable();
@@ -104,7 +105,8 @@ struct fbTcpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
@@ -162,7 +164,8 @@ struct fbUdpBindReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            verifier.EndTable();
@@ -219,7 +222,8 @@ struct fbUdpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
@@ -275,11 +279,11 @@ inline void fbTcpBindReq::UnPackTo(fbTcpBindReqT *_o, const ::flatbuffers::resol
   { auto _e = user_id(); _o->user_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbTcpBindReq> fbTcpBindReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbTcpBindReq(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbTcpBindReq> CreatefbTcpBindReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbTcpBindReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbTcpBindReq> CreatefbTcpBindReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbTcpBindReq> fbTcpBindReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbTcpBindReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -302,11 +306,11 @@ inline void fbTcpBindRes::UnPackTo(fbTcpBindResT *_o, const ::flatbuffers::resol
   { auto _e = user_id(); _o->user_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbTcpBindRes> fbTcpBindRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbTcpBindRes(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbTcpBindRes> CreatefbTcpBindRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbTcpBindRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbTcpBindRes> CreatefbTcpBindRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbTcpBindRes> fbTcpBindRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbTcpBindResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -330,11 +334,11 @@ inline void fbUdpBindReq::UnPackTo(fbUdpBindReqT *_o, const ::flatbuffers::resol
   { auto _e = user_id(); _o->user_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbUdpBindReq> fbUdpBindReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbUdpBindReq(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbUdpBindReq> CreatefbUdpBindReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbUdpBindReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbUdpBindReq> CreatefbUdpBindReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbUdpBindReq> fbUdpBindReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUdpBindReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -357,11 +361,11 @@ inline void fbUdpBindRes::UnPackTo(fbUdpBindResT *_o, const ::flatbuffers::resol
   { auto _e = user_id(); _o->user_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbUdpBindRes> fbUdpBindRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbUdpBindRes(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbUdpBindRes> CreatefbUdpBindRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbUdpBindRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbUdpBindRes> CreatefbUdpBindRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbUdpBindRes> fbUdpBindRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUdpBindResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -395,14 +399,16 @@ inline bool SizePrefixedfbTcpBindReqBufferHasIdentifier(const void *buf) {
       buf, fbTcpBindReqIdentifier(), true);
 }
 
+template <bool B = false>
 inline bool VerifyfbTcpBindReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifyBuffer<jam::net::fb::fbTcpBindReq>(fbTcpBindReqIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifyBuffer<jam::net::fb::fbTcpBindReq>(fbTcpBindReqIdentifier());
 }
 
+template <bool B = false>
 inline bool VerifySizePrefixedfbTcpBindReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifySizePrefixedBuffer<jam::net::fb::fbTcpBindReq>(fbTcpBindReqIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbTcpBindReq>(fbTcpBindReqIdentifier());
 }
 
 inline void FinishfbTcpBindReqBuffer(

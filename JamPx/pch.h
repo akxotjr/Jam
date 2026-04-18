@@ -2,7 +2,7 @@
 
 #include <variant>
 
-
+#define PX_PHYSX_STATIC_LIB
 #include <physx/PxPhysicsAPI.h>
 
 

@@ -1,8 +1,10 @@
-﻿#pragma once
-#include <bitset>
+#pragma once
 
-#include "jamnet/core/net/RecvBuffer.h"
+#include "jamnet/core/net/Buffer.h"
+#include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/core/net/NetworkProfile.h"
+
+#include <bitset>
 
 
 namespace jam::net
@@ -83,7 +85,6 @@ namespace jam::net
 	// Channel State Components
 	// ============================================================
 
-	/// 시퀀스 상태 - 4개 채널 모두 사용
 	struct SequenceState
 	{
 		// global packet sequence (ACK/Retransmit 대상)
@@ -127,20 +128,20 @@ namespace jam::net
 	/// 순서 보장 상태 - RELIABLE_ORDERED만 사용
 	struct OrderState
 	{
-		struct RecvPacket
+		struct OrderedPacket
 		{
 			uint16							orderedSeq	= 0;
 			uint16							span		= 1;
 			uint64							recvTime_ns = 0_ns;
-			std::shared_ptr<RecvBuffer>		buf;
+			Packet							packet;
 		};
 
-		std::map<uint16, RecvPacket>		pendings;
+		std::map<uint16, OrderedPacket>		pendings;
 
 		static constexpr uint32		kMaxRecvBufferSize = 256;
 
-		bool						StoreRecvPacket(uint16 orderedSeq, uint16 span, const std::shared_ptr<RecvBuffer>& buf, uint64 now_ns);
-		std::vector<RecvPacket>		PopOrderedPackets(OUT uint16& expectedSeq);
+		bool						StoreRecvPacket(uint16 orderedSeq, uint16 span, Packet packet, uint64 now_ns);
+		std::vector<OrderedPacket>	PopOrderedPackets(OUT uint16& expectedSeq);
 	};
 
 	/// 신뢰성 상태 - RELIABLE_ORDERED, RELIABLE_UNORDERED 2개만 사용
@@ -149,14 +150,14 @@ namespace jam::net
 		struct PendingPacket
 		{
 			uint16							seq						= 0;
-			eChannelType                    channel					= eChannelType::UNRELIABLE_UNORDERED;
+			eChannel						channel					= eChannel::UNRELIABLE_UNORDERED;
 			uint64							sendTime_ns				= 0;
 			uint64							lastRetransmitTime_ns	= 0;
 			uint8							retryCount				= 0;
 			bool							hasInitialSend			= false;
 			bool							hasRetransmitted		= false;
 			bool							countedGiveup			= false;
-			std::shared_ptr<SendBuffer>		buf;
+			Packet							packet;
 		};
 
 		// reliable 송신 추적 (global seq 기준)
@@ -178,7 +179,7 @@ namespace jam::net
 		uint64                              lastNackTime_ns			= 0;
 
 
-		bool							StoreSendPacket(eChannelType ch, const std::shared_ptr<SendBuffer>& buf, uint16 seq, uint64 now_ns);
+		bool							StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns);
 		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns) const;
 		
 		PendingPacket*					TryGetPending(uint16 seq);
@@ -247,17 +248,17 @@ namespace jam::net
 	{
 		struct AwaitState
 		{
-			std::function<void(const BYTE*, size_t)>	onPayload	= nullptr;
-			std::function<void(bool)>					onDone		= nullptr;
-			uint64										deadline_ns = 0_ns;
-			bool										hasDeadline = false;
+			std::function<void(const BYTE*, size_t, Packet)>	onPayload	= nullptr;
+			std::function<void(bool)>							onDone		= nullptr;
+			uint64												deadline_ns = 0_ns;
+			bool												hasDeadline = false;
 		};
 
 		uint32										nextRequestId = 1;
 		std::unordered_map<uint32, AwaitState>		inflight;
 
-		uint32										GenerateRequestId() { return nextRequestId++; }
-		void										RegisterRequest(uint32 reqId, AwaitState&& state);
+		uint32										GenerateRequestId();
+		bool										RegisterRequest(uint32 reqId, AwaitState&& state);
 		std::optional<AwaitState>					PopRequest(uint32 reqId);
 		std::vector<uint32>							GetTimedOutRequests(uint64 now_ns) const;
 	};
@@ -390,7 +391,8 @@ namespace jam::net
 		{
 			Priority					priority = NORMAL;
 			uint32						size	 = 0;
-			std::shared_ptr<SendBuffer>	buf;
+			Packet						packet;
+			PacketChain					wire;
 		};
 
 		std::vector<PendingPacket>		queue;
@@ -400,10 +402,10 @@ namespace jam::net
 
 
 		static constexpr uint32		kMaxTransportBatch			= 32;
-		static constexpr uint64		kTransportFlushInterval_ns = 1_ms;
-		static constexpr uint64		kTransportImmediateCtrl_ns = 0_ns;
+		static constexpr uint64		kTransportFlushInterval_ns  = 1_ms;
+		static constexpr uint64		kTransportImmediateCtrl_ns  = 0_ns;
 
-		void						Enqueue(const std::shared_ptr<SendBuffer>& buf, Priority prio);
+		void						Enqueue(Packet packet, Priority priority);
 		bool						ShouldFlush(uint64 now_ns) const;
 		void						Clear();
 	};

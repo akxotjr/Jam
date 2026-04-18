@@ -9,8 +9,8 @@
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
 static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
-              FLATBUFFERS_VERSION_MINOR == 1 &&
-              FLATBUFFERS_VERSION_REVISION == 21,
+              FLATBUFFERS_VERSION_MINOR == 12 &&
+              FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
 #include "snapshot_generated.h"
@@ -93,7 +93,8 @@ struct fbLifecycleActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   jam::net::fb::fbRemovalReason remove_reason() const {
     return static_cast<jam::net::fb::fbRemovalReason>(GetField<uint8_t>(VT_REMOVE_REASON, 0));
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_OP, 1) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
@@ -173,7 +174,8 @@ struct fbLifecycleBatch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbLifecycleActor>> *actors() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbLifecycleActor>> *>(VT_ACTORS);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SERVER_TICK, 4) &&
            VerifyOffset(verifier, VT_ACTORS) &&
@@ -260,11 +262,11 @@ inline void fbLifecycleActor::UnPackTo(fbLifecycleActorT *_o, const ::flatbuffer
   { auto _e = remove_reason(); _o->remove_reason = _e; }
 }
 
-inline ::flatbuffers::Offset<fbLifecycleActor> fbLifecycleActor::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleActorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbLifecycleActor(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbLifecycleActor> CreatefbLifecycleActor(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleActorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbLifecycleActor::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbLifecycleActor> CreatefbLifecycleActor(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleActorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbLifecycleActor> fbLifecycleActor::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleActorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbLifecycleActorT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -302,14 +304,14 @@ inline void fbLifecycleBatch::UnPackTo(fbLifecycleBatchT *_o, const ::flatbuffer
   (void)_o;
   (void)_resolver;
   { auto _e = server_tick(); _o->server_tick = _e; }
-  { auto _e = actors(); if (_e) { _o->actors.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->actors[_i]) { _e->Get(_i)->UnPackTo(_o->actors[_i].get(), _resolver); } else { _o->actors[_i] = std::unique_ptr<jam::net::fb::fbLifecycleActorT>(_e->Get(_i)->UnPack(_resolver)); }; } } else { _o->actors.resize(0); } }
-}
-
-inline ::flatbuffers::Offset<fbLifecycleBatch> fbLifecycleBatch::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleBatchT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbLifecycleBatch(_fbb, _o, _rehasher);
+  { auto _e = actors(); if (_e) { _o->actors.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->actors[_i]) { _e->Get(_i)->UnPackTo(_o->actors[_i].get(), _resolver); } else { _o->actors[_i] = std::unique_ptr<jam::net::fb::fbLifecycleActorT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->actors.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<fbLifecycleBatch> CreatefbLifecycleBatch(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleBatchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbLifecycleBatch::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<fbLifecycleBatch> fbLifecycleBatch::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleBatchT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbLifecycleBatchT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -343,14 +345,16 @@ inline bool SizePrefixedfbLifecycleBatchBufferHasIdentifier(const void *buf) {
       buf, fbLifecycleBatchIdentifier(), true);
 }
 
+template <bool B = false>
 inline bool VerifyfbLifecycleBatchBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifyBuffer<jam::net::fb::fbLifecycleBatch>(fbLifecycleBatchIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifyBuffer<jam::net::fb::fbLifecycleBatch>(fbLifecycleBatchIdentifier());
 }
 
+template <bool B = false>
 inline bool VerifySizePrefixedfbLifecycleBatchBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifySizePrefixedBuffer<jam::net::fb::fbLifecycleBatch>(fbLifecycleBatchIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbLifecycleBatch>(fbLifecycleBatchIdentifier());
 }
 
 inline void FinishfbLifecycleBatchBuffer(

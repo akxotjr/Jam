@@ -36,6 +36,11 @@ namespace jam
         return (n + align - 1) / align * align;
     }
 
+    constexpr std::size_t AlignDown(std::size_t n, std::size_t align) noexcept
+    {
+        return n / align * align;
+    }
+
     // "멤버 하나를 캐시라인 단독 점유"시키는 래퍼
     template<class T, std::size_t Align = destructive_interference_size>
     struct alignas(Align) CachelineIsolated

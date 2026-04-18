@@ -1,7 +1,7 @@
 ﻿#pragma once
-#include "concurrentqueue/concurrentqueue.h"
-
 #include "jamnet/core/executor/Job.h"
+
+#include "concurrentqueue/moodycamel/concurrentqueue.h"
 
 #include <atomic>
 #include <functional>
@@ -58,15 +58,15 @@ namespace jam
 		uint64								DiscardPending();
 		bool								TryFinalizeClose();
 
-		bool								IsEmpty() const { return GetSizeApprox() == 0; }
-		uint64								GetSizeApprox() const { return m_size.load(std::memory_order_relaxed); }
-		uint32								GetId() const { return m_id; }
-		bool								IsProcessing() const { return m_processing.load(std::memory_order_relaxed); }
-		bool								IsAcceptingPosts() const { return m_state.load(std::memory_order_acquire) == eMailboxState::Open; }
-		bool								IsClosing() const;
-		bool								IsClosed() const { return m_state.load(std::memory_order_acquire) == eMailboxState::Closed; }
+		bool								IsEmpty()			 const { return GetSizeApprox() == 0; }
+		uint64								GetSizeApprox()		 const { return m_size.load(std::memory_order_relaxed); }
+		uint32								GetId()				 const { return m_id; }
+		bool								IsProcessing()		 const { return m_processing.load(std::memory_order_relaxed); }
+		bool								IsAcceptingPosts()   const { return m_state.load(std::memory_order_acquire) == eMailboxState::Open; }
+		bool								IsClosing()			 const;
+		bool								IsClosed()			 const { return m_state.load(std::memory_order_acquire) == eMailboxState::Closed; }
 		bool								ShouldAbortPending() const { return m_state.load(std::memory_order_acquire) == eMailboxState::ClosingAbort; }
-		eMailboxState						GetState() const { return m_state.load(std::memory_order_acquire); }
+		eMailboxState						GetState()			 const { return m_state.load(std::memory_order_acquire); }
 
 	private:
 		void								NotifyReadyIfFirst();
@@ -76,7 +76,7 @@ namespace jam
 	private:
 		uint32								m_id			= 0;
 		std::weak_ptr<ShardExecutor>		m_owner;
-		ConcurrentQueue<Job>				m_queue;				// MPSC
+		ConcurrentQueue<Job>				m_queue;			
 		ConsumerToken						m_consumerToken;
 		std::atomic<uint64>					m_size			= 0;
 		std::atomic<uint64>					m_inFlight		= 0;

@@ -42,7 +42,7 @@ namespace jam::net
 	};
 
 
-	enum class eChannelType : uint8
+	enum class eChannel : uint8
 	{
 		TCP_DEFAULT				= 0,
 
@@ -52,31 +52,31 @@ namespace jam::net
 		RELIABLE_UNORDERED		= 3
 	};
 
-	constexpr bool IsTcp(eChannelType channel)
+	constexpr bool IsTcp(eChannel channel)
 	{
-		return channel == eChannelType::TCP_DEFAULT;
+		return channel == eChannel::TCP_DEFAULT;
 	}
 
-	constexpr bool IsReliableChannel(eChannelType channel)
+	constexpr bool IsReliableChannel(eChannel channel)
 	{
-		return channel == eChannelType::RELIABLE_ORDERED || channel == eChannelType::RELIABLE_UNORDERED;
+		return channel == eChannel::RELIABLE_ORDERED || channel == eChannel::RELIABLE_UNORDERED;
 	}
 
-	constexpr bool IsOrderedChannel(eChannelType channel)
+	constexpr bool IsOrderedChannel(eChannel channel)
 	{
-		return channel == eChannelType::RELIABLE_ORDERED;
+		return channel == eChannel::RELIABLE_ORDERED;
 	}
 
-	constexpr bool HasSequence(eChannelType channel)
+	constexpr bool HasSequence(eChannel channel)
 	{
-		if (channel == eChannelType::TCP_DEFAULT || channel == eChannelType::UNRELIABLE_UNORDERED)
+		if (channel == eChannel::TCP_DEFAULT || channel == eChannel::UNRELIABLE_UNORDERED)
 			return false;
 		return true;
 	}
 
-	constexpr bool HasOrderedSequence(eChannelType channel)
+	constexpr bool HasOrderedSequence(eChannel channel)
 	{
-		return channel == eChannelType::RELIABLE_ORDERED;
+		return channel == eChannel::RELIABLE_ORDERED;
 	}
 
 	namespace PacketFlags

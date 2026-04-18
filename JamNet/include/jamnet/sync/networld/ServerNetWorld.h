@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "jamnet/sync/networld/NetWorld.h"
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 
@@ -8,6 +8,7 @@
 
 namespace jam::net
 {
+	struct PacketHeaderView;
 	struct TransportInfo;
 	class ITransportEndpoint;
 
@@ -27,11 +28,11 @@ namespace jam::net
 		bool								Enter(uint64 userId, std::function<void()> onEntered = {});
 		bool								Leave(uint64 userId, std::function<void()> onLeft = {});
 
-		void								Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf);
-		void								Multicast(const std::shared_ptr<SendBuffer>& buf);
+		void								Send(const TransportInfo& info, Packet packet);
+		void								Multicast(Packet packet);
 		void								FanOut(TransportInfo::PayloadFactory factory);
 		
-		void								OnRecvPacket(uint64 callerUserId, const PacketView& pkt);
+		void								OnRecvPacket(uint64 callerUserId, const PacketHeaderView& pkt);
 
 		
 		void								SpawnActor(SpawnParams params);
@@ -61,7 +62,7 @@ namespace jam::net
 		bool								PossessActorImpl(NetId netId, uint64 userId = 0);
 		bool								UnpossessActorImpl(NetId netId, uint64 userId = 0);
 
-		void								ProcessGameInput(uint64 callerUserId, const PacketView& pkt);
+		void								ProcessGameInput(uint64 callerUserId, const PacketHeaderView& pkt);
 
 	private:
 		std::atomic<uint32>						m_netIdGenerator{ 1 };

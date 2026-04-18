@@ -1,5 +1,6 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/runtime/ServerTransportAdapter.h"
+#include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
 #include "jamnet/runtime/ServerSession.h"
 
@@ -12,7 +13,7 @@ namespace jam::net
 	}
 
 
-	void ServerTransportAdapter::Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf)
+	void ServerTransportAdapter::Send(const TransportInfo& info, Packet packet)
 	{
 		ServerNetworkManager* nm = nullptr;
 		{
@@ -25,18 +26,21 @@ namespace jam::net
 			return;
 		}
 
-		// base buf가 없으면 protocol 판별 불가. (FanOut에서 base buf 없이 보내고 싶으면 다음 단계에서 확장)
-		if (!buf && !info.payloadFactory)
+		// base packet이 없으면 protocol 판별 불가. (FanOut에서는 payloadFactory로 생성 가능)
+		if (!packet.IsValid() && !info.payloadFactory)
 		{
-			JAMNET_LOG_WARN_LOC("send buffer is nullptr");
+			JAMNET_LOG_WARN_LOC("send packet is invalid");
 			return;
 		}
 
 
 		eProtocolType protocol = eProtocolType::UDP;
-		if (buf)
+		if (packet.IsValid())
 		{
-			const PacketView view = PacketView::Parse(buf->Buffer(), buf->WriteSize());
+			const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+			if (!view.IsValid())
+				return;
+
 			protocol = IsTcp(view.Channel()) ? eProtocolType::TCP : eProtocolType::UDP;
 		}
 
@@ -44,13 +48,13 @@ namespace jam::net
 		{
 		case eTransportMethod::Single:
 			if (info.userId == 0) return;
-			nm->SendToUser(info.userId, buf, protocol);
+			nm->SendToUser(info.userId, packet, protocol);
 			return;
 
 		case eTransportMethod::Broadcast:
 			nm->EnumerateConnectedUsers([&](uint64 uid)
 				{
-					nm->SendToUser(uid, CloneBuffer(buf), protocol);
+					nm->SendToUser(uid, ClonePacket(packet), protocol);
 				});
 			return;
 
@@ -58,7 +62,7 @@ namespace jam::net
 			if (info.worldId == 0) return;
 			nm->EnumerateWorldUsers(info.worldId, [&](uint64 uid)
 				{
-					nm->SendToUser(uid, CloneBuffer(buf), protocol);
+					nm->SendToUser(uid, ClonePacket(packet), protocol);
 				});
 			return;
 
@@ -69,7 +73,7 @@ namespace jam::net
 					if (info.payloadFactory)
 						nm->SendToUser(uid, info.payloadFactory(uid), protocol);
 					else
-						nm->SendToUser(uid, CloneBuffer(buf), protocol);
+						nm->SendToUser(uid, ClonePacket(packet), protocol);
 				});
 			return;
 
@@ -122,16 +126,16 @@ namespace jam::net
 		JAMNET_LOG_ERROR_LOC("invalid protocol for RPC call");
 	}
 
-	std::shared_ptr<SendBuffer> ServerTransportAdapter::CloneBuffer(const std::shared_ptr<SendBuffer>& buf) const
+	Packet ServerTransportAdapter::ClonePacket(const Packet& packet) const
 	{
-		if (!buf) return nullptr;
+		if (!packet.IsValid()) return {};
 
-		const uint32 sz = buf->WriteSize();
-		auto dup = jam::net::SendBufferManager::Instance().Open(sz);
-		if (!dup) return nullptr;
+		const uint32 sz = packet->Size();
+		BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Clone));
+		BufferSlice slice = writer.OpenForPayload(sz, alignof(PacketHeader));
+		WritePayload(slice, packet->Head(), sz);
+		slice.Close();
 
-		::memcpy(dup->Buffer(), buf->Buffer(), sz);
-		dup->Close(sz);
-		return dup;
+		return MakeOwned(slice);
 	}
 }

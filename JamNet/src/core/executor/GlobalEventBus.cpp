@@ -1,5 +1,7 @@
 ﻿#include "pch.h"
 #include "jamnet/core/executor/GlobalEventBus.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
+#include "jamnet/core/executor/MainExecutor.h"
 
 namespace jam
 {

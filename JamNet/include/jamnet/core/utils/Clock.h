@@ -1,13 +1,14 @@
-﻿#pragma once
-#include <chrono>
+#pragma once
 #include "jamnet/core/utils/TimeUnits.h"
+
+#include <chrono>
 
 
 namespace jam
 {
 	struct FractionalTick
 	{
-		uint64 tick		= 0;     
+		uint64 tick		= 0;
 		double alpha	= 0.0;    // [0, 1)
 	};
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "jamnet/core/utils/TimeUnits.h"
 
 namespace jam
 {

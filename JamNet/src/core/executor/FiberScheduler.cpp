@@ -1,7 +1,6 @@
 ﻿#include "pch.h"
 #include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/executor/ConcurrentQueueToken.h"
-#include <algorithm>
 
 
 namespace jam
@@ -303,11 +302,9 @@ namespace jam
 			f->entry();
 		}
 		catch (const std::exception& e) {
-			//std::cout << "Fiber Exception: " << e.what() << std::endl;
 			self->OnFiberException(id, e.what());
 		}
 		catch (...) {
-			//std::cout << "Fiber Unknown Exception" << std::endl;
 			self->OnFiberException(id, "unknown exception");
 		}
 

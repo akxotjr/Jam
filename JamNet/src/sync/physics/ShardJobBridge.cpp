@@ -1,4 +1,8 @@
 ﻿#include "pch.h"
+
+#include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/executor/ShardExecutor.h"
+
 #include "jamnet/sync/physics/ShardJobBridge.h"
 
 

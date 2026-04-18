@@ -297,11 +297,11 @@ namespace jam::net
 				auto buf = PacketBuilder::CreateCustomPacket(
 					CustomPacketId::SNAPSHOT,
 					PacketFlags::NONE,
-					eChannelType::UNRELIABLE_SEQUENCED,
+					eChannel::UNRELIABLE_SEQUENCED,
 					m_fbb->GetBufferPointer(),
 					m_fbb->GetSize());
 
-				if (!buf)
+				if (!buf.IsValid())
 					continue;
 
 				TransportInfo info{};
@@ -833,11 +833,11 @@ namespace jam::net
 			auto buf = PacketBuilder::CreateCustomPacket(
 				CustomPacketId::LIFECYCLE,
 				PacketFlags::NONE,
-				eChannelType::RELIABLE_ORDERED,
+				eChannel::RELIABLE_ORDERED,
 				m_fbb->GetBufferPointer(),
 				m_fbb->GetSize());
 
-			if (!buf)
+			if (!buf.IsValid())
 				continue;
 
 			TransportInfo info{};

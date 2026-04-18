@@ -2,6 +2,7 @@
 
 namespace jam::net
 {
+	enum class eProtocolType : uint8;
 	class NetAddress;
 	
 

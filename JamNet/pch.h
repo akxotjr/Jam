@@ -3,6 +3,15 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
+#ifndef JAMNET_USE_MIMALLOC
+#define JAMNET_USE_MIMALLOC 1
+#endif
+
+#if JAMNET_USE_MIMALLOC
+#pragma comment(lib, "Advapi32.lib")
+#include <mimalloc.h>
+#include <mimalloc-override.h>
+#endif
 
 // platform
 
@@ -15,10 +24,9 @@
 #pragma comment(lib, "ws2_32.lib")
 
 
-// std
+// stl
 
 #include <iostream>
-
 #include <algorithm>
 #include <vector>
 #include <queue>
@@ -38,7 +46,9 @@
 #include <string>
 #include <string_view>
 #include <format>
-
+#include <limits>
+#include <mutex>
+#include <future>
 
 
 // 3rd party
@@ -47,10 +57,16 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <entt/entt.hpp>
-#include <concurrentqueue/concurrentqueue.h>
-#include <concurrentqueue/blockingconcurrentqueue.h>
+#include <concurrentqueue/moodycamel/concurrentqueue.h>
+#include <concurrentqueue/moodycamel/blockingconcurrentqueue.h>
 #include <flatbuffers/flatbuffers.h>
 #include <xxhash.h>
 
-#include "JamNetAPI.h"
+#include <jambase/JamMacro.h>
+#include <jambase/JamTypes.h>
+#include <jambase/Logger.h>
+#include <jambase/JamAssert.h>
 
+
+#include "jamnet/core/utils/TimeUnits.h"
+#include "jamnet/core/utils/Clock.h"

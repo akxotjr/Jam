@@ -1,12 +1,16 @@
 ﻿#include "pch.h"
 
 #include "jamnet/runtime/ClientNetworkManager.h"
-#include "jamnet/runtime/ClientSession.h"
-#include "jamnet/runtime/ClientTransportAdapter.h"
+
+#include "jamnet/core/executor/GlobalEventBus.h"
+#include "jamnet/core/executor/Mailbox.h"
+#include "jamnet/core/net/Service.h"
 
 #include "jamnet/sync/networld/ClientNetWorld.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
+#include "jamnet/runtime/ClientSession.h"
+#include "jamnet/runtime/ClientTransportAdapter.h"
 
 namespace jam::net
 {
@@ -262,7 +266,9 @@ namespace jam::net
 		if (m_transportAdapter)
 			m_world->SetTransportSystem(m_transportAdapter);
 
-		if (m_config.physicsFactory)
+		m_world->SetHeadless(m_config.headlessWorld);
+
+		if (!m_config.headlessWorld && m_config.physicsFactory)
 		{
 			if (auto phys = m_config.physicsFactory())
 				m_world->SetPhysicsFacade(std::move(phys));

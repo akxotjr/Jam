@@ -2,8 +2,12 @@
 
 
 // Prevent windows.h from pulling in winsock.h and defining min/max macros
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 // Winsock2 must be included before windows.h
 #include <WinSock2.h>
@@ -11,7 +15,6 @@
 #include <mswsock.h>
 #pragma comment(lib, "ws2_32.lib")
 
-// platform
 #include <windows.h>
 #include <winnt.h>         //  SLIST_ENTRY, SLIST_HEADER
 #include <intrin.h>        //  InterlockedPushEntrySList
@@ -39,21 +42,21 @@
 #include <format>
 #include <random>
 
-using namespace std;
 
 // 3rd party
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <entt/entt.hpp>
-#include <concurrentqueue/concurrentqueue.h>
-#include <concurrentqueue/blockingconcurrentqueue.h>
+#include <concurrentqueue/moodycamel/concurrentqueue.h>
+#include <concurrentqueue/moodycamel/blockingconcurrentqueue.h>
 #include <flatbuffers/flatbuffers.h>
+
+#define PX_PHYSX_STATIC_LIB
 #include <physx/PxPhysicsAPI.h>
 
-using namespace physx;
-
-#include "JamNetAPI.h"
+#include "jamnet/JamNet.h"
 #include "jampx/JamPx.h"
 
 

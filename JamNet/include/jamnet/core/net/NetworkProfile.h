@@ -1,9 +1,8 @@
 #pragma once
+#include "jamnet/core/net/PacketStructure.h"
 
 #include <array>
 #include <cfloat>
-
-#include "jamnet/core/net/PacketStructure.h"
 
 
 namespace jam::net::profile
@@ -28,8 +27,8 @@ namespace jam::net::profile
 
 		void							OnRecv(uint32 bytes);
 		void							OnSend(uint32 bytes);
-		void							OnRecv(eChannelType ch, uint32 bytes);
-		void							OnSend(eChannelType ch, uint32 bytes);
+		void							OnRecv(eChannel ch, uint32 bytes);
+		void							OnSend(eChannel ch, uint32 bytes);
 	};
 
 	struct LinkQualityState
@@ -58,6 +57,12 @@ namespace jam::net::profile
 		float						appRttAvg_ms			= 0.0f;
 		float						appRttCumulativeAvg_ms  = 0.0f;
 		float						appJitter_ms			= 0.0f;
+		float						appRttQueueTotal_ms		= 0.0f;
+		float						pingClientQueue_ms		= 0.0f;
+		float						pingServerQueue_ms		= 0.0f;
+		float						pongServerProc_ms		= 0.0f;
+		float						pongServerQueue_ms		= 0.0f;
+		float						pongClientQueue_ms		= 0.0f;
 
 		double						appRttCumulativeSum_ms	= 0.0;
 		uint64						appRttCumulativeCount	= 0;
@@ -70,6 +75,7 @@ namespace jam::net::profile
 
 		void						AddWireRttSample(float rtt);
 		void						AddAppRttSample(float rtt);
+		void						RecordPingPongBreakdown(const PONG_DATA& pong, uint64 t4App_ns, uint64 t4Wire_ns);
 		void						AccumulatePacketLoss(uint32 lost, uint32 expected);
 		float						GetPacketLoss() const;
 	};
@@ -142,6 +148,8 @@ namespace jam::net::profile
 		uint64					ackStandalonePackets		= 0;
 		uint64					ackPiggybackedPackets		= 0;
 
+		uint64					windowStart_ns				= 0;
+
 
 		void AddDeliveryLatency(uint64 latency_ns)
 		{
@@ -163,7 +171,20 @@ namespace jam::net::profile
 	struct NetworkStatsView
 	{
 		float wireRtt_ms			= 0.0f;
+		float wireRttSample_ms		= 0.0f;
+		float pipelineRtt_ms		= 0.0f;
+		float pipelineRttSample_ms	= 0.0f;
+		float pipelineQueueTotal_ms	= 0.0f;
+
+		// Compatibility aliases. Prefer pipeline* for this tick-scheduled path.
 		float appRtt_ms				= 0.0f;
+		float appRttSample_ms		= 0.0f;
+		float appRttQueueTotal_ms	= 0.0f;
+		float pingClientQueue_ms		= 0.0f;
+		float pingServerQueue_ms		= 0.0f;
+		float pongServerProc_ms		= 0.0f;
+		float pongServerQueue_ms		= 0.0f;
+		float pongClientQueue_ms		= 0.0f;
 		float rtt_ms				= 0.0f;
 		float jitter_ms				= 0.0f;
 		float packetLoss			= 0.0f;
@@ -256,6 +277,8 @@ namespace jam::net::profile
 		uint64				ackStandalonePackets		= 0;
 		uint64				ackPiggybackedPackets		= 0;
 
+		uint64				windowStart_ns				= 0;
+
 		RudpLatencyStats	deliveryLatency				= {};
 		RudpLatencyStats	recoveryLatency				= {};
 
@@ -263,6 +286,7 @@ namespace jam::net::profile
 	};
 
 	void AccumulateSystemNetworkStats(TrafficSampleState& sampleState, const SessionTotalTraffic& totalTraffic, LinkQualityState* linkQuality, const RudpMetrics* metrics, uint64 interval_ns);
+	void ResetNetworkProfileWindow(entt::registry& R, entt::entity e, uint64 now_ns = 0);
 
 
 } // namespace jam::net::profile

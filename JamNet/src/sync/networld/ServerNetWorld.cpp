@@ -1,4 +1,7 @@
-﻿#include "pch.h"
+#include "pch.h"
+
+#include "jamnet/core/net/PacketBuilder.h"
+
 #include "jamnet/sync/networld/ServerNetWorld.h"
 
 #include "jamnet/sync/transport/ITransportEndpoint.h"
@@ -129,20 +132,20 @@ namespace jam::net
 			}));
 	}
 
-	void ServerNetWorld::Send(const TransportInfo& info, const std::shared_ptr<SendBuffer>& buf)
+	void ServerNetWorld::Send(const TransportInfo& info, Packet packet)
 	{
 		if (m_transport)
-			m_transport->Send(info, buf);
+			m_transport->Send(info, packet);
 	}
 
-	void ServerNetWorld::Multicast(const std::shared_ptr<SendBuffer>& buf)
+	void ServerNetWorld::Multicast(Packet packet)
 	{
 		TransportInfo info{};
 		info.method = eTransportMethod::Multicast;
 		info.worldId = GetWorldId();
 
 		if (m_transport)
-			m_transport->Send(info, buf);
+			m_transport->Send(info, packet);
 	}
 
 	void ServerNetWorld::FanOut(TransportInfo::PayloadFactory factory)
@@ -153,11 +156,11 @@ namespace jam::net
 		info.payloadFactory = std::move(factory);
 
 		if (m_transport)
-			m_transport->Send(info, nullptr);
+			m_transport->Send(info, {});
 	}
 
 
-	void ServerNetWorld::OnRecvPacket(uint64 callerUserId, const PacketView& pkt)
+	void ServerNetWorld::OnRecvPacket(uint64 callerUserId, const PacketHeaderView& pkt)
 	{
 		switch (pkt.Id())
 		{
@@ -466,7 +469,7 @@ namespace jam::net
 		return true;
 	}
 
-	void ServerNetWorld::ProcessGameInput(uint64 callerUserId, const PacketView& pkt)
+	void ServerNetWorld::ProcessGameInput(uint64 callerUserId, const PacketHeaderView& pkt)
 	{
 		flatbuffers::Verifier verfier(pkt.Payload(), pkt.PayloadSize());
 		if (!fb::VerifyfbGameInputBuffer(verfier)) return;

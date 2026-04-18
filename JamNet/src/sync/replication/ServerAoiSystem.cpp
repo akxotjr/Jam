@@ -205,6 +205,20 @@ namespace jam::net
 				if (!newVisible.contains(id))
 					state.left.push_back(id);
 
+			if (!state.entered.empty() || !state.left.empty())
+			{
+				JAMNET_LOG_INFO(
+					"[AOI][Server] user={} pos=({:.2f},{:.2f},{:.2f}) candidates={} visible={} entered={} left={}",
+					userId,
+					userPos.x,
+					userPos.y,
+					userPos.z,
+					candidates.size(),
+					newVisible.size(),
+					state.entered.size(),
+					state.left.size());
+			}
+
 			state.visible = std::move(newVisible);
 		}
 	}

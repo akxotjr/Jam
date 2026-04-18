@@ -1,12 +1,16 @@
 ﻿#include "pch.h"
 #include "jamnet/core/net/Session.h"
+
+#include "jamnet/core/executor/GlobalExecutor.h"
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/Service.h"
+#include "jamnet/core/net/SessionSystems.h"
 
 namespace jam::net
 {
 	namespace
 	{
-		const RouteDomain kSessionRouteDomain = RouteDomain::From("Session");
+		const RouteDomain k_sessionRouteDomain = RouteDomain::From("Session");
 	}
 
 	std::atomic<uint64> Session::s_sessionIdGenerator{ 1 };
@@ -18,7 +22,7 @@ namespace jam::net
 
 	void Session::Init()
 	{
-		m_key = GLOBAL_EXEC.MakeRouteKey(kSessionRouteDomain, GetSessionId());
+		m_key = GLOBAL_EXEC.MakeRouteKey(k_sessionRouteDomain, GetSessionId());
 		JAMNET_LOG_DEBUG("[Session::Init()] sessionId= {} protocol= {}", GetSessionId(), m_protocol == eProtocolType::UDP ? "udp" : "tcp");
 		EnsureBound();
 	}

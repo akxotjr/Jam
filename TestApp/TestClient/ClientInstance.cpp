@@ -4,8 +4,8 @@
 #include "jamnet/sync/networld/ClientNetWorld.h"
 #include "jampx/PhysicsFacade.h"
 
-ClientInstance::ClientInstance(uint32 instanceId, uint64 userId)
-	: m_instanceId(instanceId), m_userId(userId)
+ClientInstance::ClientInstance(uint32 instanceId, uint64 userId, ClientInstanceConfig config)
+	: m_instanceId(instanceId), m_userId(userId), m_config(config)
 {
 	m_subSessionReady = GLOBAL_EVENTBUS_SUBSCRIBE(
 		jam::net::ClientSessionReadyEvent,
@@ -85,7 +85,9 @@ bool ClientInstance::Connect(const string& serverIp, uint16 tcpPort, uint16 udpP
 	net::ClientConfig config{};
 	config.serverTcpAddress = net::NetAddress(serverIp, tcpPort);
 	config.serverUdpAddress = net::NetAddress(serverIp, udpPort);
-	config.physicsFactory	= [] { return std::make_unique<jam::px::PhysicsFacade>(); };
+	config.headlessWorld	= m_config.headlessNetWorld;
+	if (!config.headlessWorld)
+		config.physicsFactory = [] { return std::make_unique<jam::px::PhysicsFacade>(); };
 	config.levelPath		= "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
 
 	m_networkManager = std::make_unique<net::ClientNetworkManager>(config, m_userId);
@@ -144,13 +146,24 @@ void ClientInstance::SpawnPlayer()
 	auto* world = m_networkManager->GetWorld();
 	if (!world) return;
 
+
+	px::Vec3 pos;
+	if (m_type == eClientType::User)
+	{
+		pos = { 5.0f * static_cast<float>(m_instanceId), 10.f, 0.f };
+	}
+	else
+	{
+		pos = { static_cast<float>(m_instanceId % 10) * 5.f, 5.f, -10.f - (static_cast<float>(m_instanceId) / 10.f) * 5.f };
+	}
+
 	net::SpawnParams charParams{};
 	charParams.spawnId		  = m_nextSpawnReqId++;
 	charParams.owned		  = true;
 	charParams.controlled	  = true;
 
 	charParams.desc.prefab    = px::MakePrefabKey("Character");
-	charParams.desc.pose	  = { .p = { 5.0f * static_cast<float>(m_instanceId), 10.f, -10.f } };
+	charParams.desc.pose	  = { .p = pos };
 	charParams.desc.overrides = px::CharacterSpawnOverrides{};
 
 	m_pendingPlayerSpawnReqIds.insert(charParams.spawnId);

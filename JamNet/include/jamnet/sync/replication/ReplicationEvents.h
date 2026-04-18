@@ -1,11 +1,19 @@
 #pragma once
+#include "jamnet/runtime/world/WorldAssignmentTypes.h"
 
 #include <jampx/PhysicsTypes.h>
 
-#include "jamnet/runtime/world/WorldAssignmentTypes.h"
-
 namespace jam::net
 {
+	enum class eRenderActorLifecycleReason : uint8
+	{
+		Created,
+		AoiEntered,
+		AoiLeft,
+		Destroyed,
+		PredictedDespawn
+	};
+
 	struct ClientTcpBoundEvent
 	{
 		uint64	userId = 0;
@@ -54,8 +62,10 @@ namespace jam::net
 	{
 		uint64			userId		= 0;
 		uint32			spawnReqId	= 0;
+		uint32			netId		= 0;
 		uint32			objectId	= 0;
 		bool			isLocal		= false;
+		eRenderActorLifecycleReason reason = eRenderActorLifecycleReason::Created;
 		px::PrefabKey	prefab		= {};
 	};
 
@@ -67,8 +77,10 @@ namespace jam::net
 
 	struct RenderActorDespawnedEvent
 	{
-		uint64	userId	 = 0;
-		uint32	objectId = 0;
+		uint64	userId		= 0;
+		uint32	netId		= 0;
+		uint32	objectId	= 0;
+		eRenderActorLifecycleReason reason = eRenderActorLifecycleReason::Destroyed;
 	};
 
 	struct ClickMoveResolvedEvent

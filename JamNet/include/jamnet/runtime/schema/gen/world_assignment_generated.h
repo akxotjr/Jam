@@ -9,8 +9,8 @@
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
 static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
-              FLATBUFFERS_VERSION_MINOR == 1 &&
-              FLATBUFFERS_VERSION_REVISION == 21,
+              FLATBUFFERS_VERSION_MINOR == 12 &&
+              FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
 namespace jam {
@@ -95,7 +95,8 @@ struct fbRequestWorldAssignmentReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffe
   uint64_t target_world_instance_id() const {
     return GetField<uint64_t>(VT_TARGET_WORLD_INSTANCE_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_ACTION, 1) &&
            VerifyField<uint32_t>(verifier, VT_TARGET_WORLD_ID, 4) &&
@@ -191,7 +192,8 @@ struct fbRequestWorldAssignmentRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffe
   uint32_t world_id() const {
     return GetField<uint32_t>(VT_WORLD_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_STATUS, 1) &&
            VerifyField<uint8_t>(verifier, VT_REQUEST_ACTION, 1) &&
@@ -269,11 +271,11 @@ inline void fbRequestWorldAssignmentReq::UnPackTo(fbRequestWorldAssignmentReqT *
   { auto _e = target_world_instance_id(); _o->target_world_instance_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> fbRequestWorldAssignmentReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbRequestWorldAssignmentReq(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAssignmentReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbRequestWorldAssignmentReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAssignmentReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> fbRequestWorldAssignmentReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRequestWorldAssignmentReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -307,11 +309,11 @@ inline void fbRequestWorldAssignmentRes::UnPackTo(fbRequestWorldAssignmentResT *
   { auto _e = world_id(); _o->world_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> fbRequestWorldAssignmentRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbRequestWorldAssignmentRes(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> CreatefbRequestWorldAssignmentRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbRequestWorldAssignmentRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> CreatefbRequestWorldAssignmentRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> fbRequestWorldAssignmentRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRequestWorldAssignmentResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -337,14 +339,16 @@ inline const jam::net::fb::fbRequestWorldAssignmentReq *GetSizePrefixedfbRequest
   return ::flatbuffers::GetSizePrefixedRoot<jam::net::fb::fbRequestWorldAssignmentReq>(buf);
 }
 
+template <bool B = false>
 inline bool VerifyfbRequestWorldAssignmentReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifyBuffer<jam::net::fb::fbRequestWorldAssignmentReq>(nullptr);
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifyBuffer<jam::net::fb::fbRequestWorldAssignmentReq>(nullptr);
 }
 
+template <bool B = false>
 inline bool VerifySizePrefixedfbRequestWorldAssignmentReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifySizePrefixedBuffer<jam::net::fb::fbRequestWorldAssignmentReq>(nullptr);
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbRequestWorldAssignmentReq>(nullptr);
 }
 
 inline void FinishfbRequestWorldAssignmentReqBuffer(

@@ -9,8 +9,8 @@
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
 static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
-              FLATBUFFERS_VERSION_MINOR == 1 &&
-              FLATBUFFERS_VERSION_REVISION == 21,
+              FLATBUFFERS_VERSION_MINOR == 12 &&
+              FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
 #include "physics_type_generated.h"
@@ -139,7 +139,8 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t target_net_id() const {
     return GetField<uint32_t>(VT_TARGET_NET_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_REQ_ID, 4) &&
            VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
@@ -303,7 +304,8 @@ struct fbSpawnActorRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            VerifyField<uint64_t>(verifier, VT_SPAWN_REQ_ID, 8) &&
@@ -367,7 +369,8 @@ struct fbDespawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            verifier.EndTable();
@@ -419,7 +422,8 @@ struct fbDespawnActorRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   bool success() const {
     return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
   }
-  bool Verify(::flatbuffers::Verifier &verifier) const {
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            verifier.EndTable();
@@ -529,11 +533,11 @@ inline void fbSpawnActorReq::UnPackTo(fbSpawnActorReqT *_o, const ::flatbuffers:
   { auto _e = target_net_id(); _o->target_net_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbSpawnActorReq(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbSpawnActorReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSpawnActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -591,11 +595,11 @@ inline void fbSpawnActorRes::UnPackTo(fbSpawnActorResT *_o, const ::flatbuffers:
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbSpawnActorRes> fbSpawnActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbSpawnActorRes(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbSpawnActorRes> CreatefbSpawnActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbSpawnActorRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbSpawnActorRes> CreatefbSpawnActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbSpawnActorRes> fbSpawnActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSpawnActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSpawnActorResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -621,11 +625,11 @@ inline void fbDespawnActorReq::UnPackTo(fbDespawnActorReqT *_o, const ::flatbuff
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbDespawnActorReq> fbDespawnActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbDespawnActorReq(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbDespawnActorReq> CreatefbDespawnActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbDespawnActorReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbDespawnActorReq> CreatefbDespawnActorReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbDespawnActorReq> fbDespawnActorReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbDespawnActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -647,11 +651,11 @@ inline void fbDespawnActorRes::UnPackTo(fbDespawnActorResT *_o, const ::flatbuff
   { auto _e = success(); _o->success = _e; }
 }
 
-inline ::flatbuffers::Offset<fbDespawnActorRes> fbDespawnActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return CreatefbDespawnActorRes(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbDespawnActorRes> CreatefbDespawnActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbDespawnActorRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbDespawnActorRes> CreatefbDespawnActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbDespawnActorRes> fbDespawnActorRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbDespawnActorResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
@@ -683,14 +687,16 @@ inline bool SizePrefixedfbSpawnActorReqBufferHasIdentifier(const void *buf) {
       buf, fbSpawnActorReqIdentifier(), true);
 }
 
+template <bool B = false>
 inline bool VerifyfbSpawnActorReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifyBuffer<jam::net::fb::fbSpawnActorReq>(fbSpawnActorReqIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifyBuffer<jam::net::fb::fbSpawnActorReq>(fbSpawnActorReqIdentifier());
 }
 
+template <bool B = false>
 inline bool VerifySizePrefixedfbSpawnActorReqBuffer(
-    ::flatbuffers::Verifier &verifier) {
-  return verifier.VerifySizePrefixedBuffer<jam::net::fb::fbSpawnActorReq>(fbSpawnActorReqIdentifier());
+    ::flatbuffers::VerifierTemplate<B> &verifier) {
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbSpawnActorReq>(fbSpawnActorReqIdentifier());
 }
 
 inline void FinishfbSpawnActorReqBuffer(

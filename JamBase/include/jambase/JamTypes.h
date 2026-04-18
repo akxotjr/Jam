@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 

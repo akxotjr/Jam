@@ -1,5 +1,11 @@
 #pragma once
+#include "jamnet/core/net/IocpEvent.h"
 #include "jamnet/core/net/Session.h"
+
+namespace jam
+{
+	struct ShardLocal;
+}
 
 namespace jam::net
 {
@@ -19,20 +25,30 @@ namespace jam::net
 
 		bool							Connect() override;
 		void							Disconnect() override;
-		void							Send(const std::shared_ptr<SendBuffer>& buf) override;
+		void							Send(Packet packet) override;
 
 		void							OnLinkEstablished() override;
 		void							OnLinkTerminated() override;
 
 	private:
 		HANDLE							GetHandle() override { return HANDLE(); }
-		void							Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override {}
+		void							Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 	public:
-		void							ProcessRecv(int32 numOfBytes, RecvBuffer& recvBuffer, uint64 ingressRecvTime_ns);
-		void							RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs);
+		void							ProcessRecv(int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns);
+		void							RegisterSend(std::vector<PacketChain>&& chains);
 
 		void							HandleError(int32 errorCode);
+
+	private:
+		bool							RegisterConnect();
+		bool							RegisterDisconnect();
+		void							ProcessConnect();
+		void							ProcessDisconnect();
+
+	private:
+		UdpConnectEvent					m_connectEvent;
+		UdpDisconnectEvent				m_disconnectEvent;
 	};
 
 } // namespace jam::net

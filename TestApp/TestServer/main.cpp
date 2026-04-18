@@ -3,11 +3,11 @@
 #include <filesystem>
 
 
-#include "jamnet/runtime/ServerNetworkManager.h"
-#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jampx/PhysicsCore.h"
 #include "jampx/PhysicsFacade.h"
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
+
+using namespace std;
 
 using namespace jam::net;
 
@@ -24,7 +24,7 @@ int main()
 			.profile = jam::CoreProfileServer,
 		}
 	};
-	JamNetRuntime runtime(config);
+	NetRuntime runtime(config);
 
 	try
 	{

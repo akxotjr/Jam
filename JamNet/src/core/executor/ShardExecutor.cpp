@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
-#include "jamnet/core/executor/ShardExecutor.h"
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/Job.h"
+#include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
 
 
@@ -424,7 +425,7 @@ namespace jam
 			bool didWork = false;
 			const uint64 observedWakeEpoch = m_wakeEpoch.load(std::memory_order_acquire);
 
-			DrainReadyMailboxes(64, m_config.batchBudget);
+			DrainReadyMailboxes(64, 64 * m_config.batchBudget, m_config.batchBudget);
 			didWork |= ProcessJobsOnce();
 
 			const uint64 pollStart_ns = NOW_NS();
@@ -521,7 +522,7 @@ namespace jam
 	void ShardExecutor::PushLocal(Job&& j)
 	{
 		const size_t idx = static_cast<size_t>(j.Priority());
-		if (idx >= kPrioCount)
+		if (idx >= k_jobPriorityCount)
 			return;
 
 		m_jobLocalByPrio[idx].push_back(std::move(j));
@@ -533,7 +534,7 @@ namespace jam
 		if (m_jobLocalTotal.load(std::memory_order_relaxed) == 0)
 			return false;
 
-		for (size_t i = 0; i < kPrioCount; ++i)
+		for (size_t i = 0; i < k_jobPriorityCount; ++i)
 		{
 			auto& q = m_jobLocalByPrio[i];
 			if (q.empty())
@@ -596,7 +597,7 @@ namespace jam
 
 			j.Execute();
 			didWork = true;
-            ++execCount;
+			++execCount;
 		}
 
 		m_metrics.processJobsExecCount += execCount;
@@ -604,14 +605,15 @@ namespace jam
 		return didWork;
 	}
 
-	void ShardExecutor::ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget)
+	uint64 ShardExecutor::ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget)
 	{
-		if (!mb) return;
+		if (!mb || budget <= 0) return 0;
 
 		thread_local std::vector<Job> batch;
 
 		batch.clear();
 		batch.resize(static_cast<size_t>(budget));
+		uint64 movedCount = 0;
 
 		if (mb->ShouldAbortPending())
 		{
@@ -636,6 +638,7 @@ namespace jam
 							mb->OnJobExecuted();
 						}, priority));
 				}
+				movedCount = n;
 			}
 		}
 
@@ -644,21 +647,27 @@ namespace jam
 		if (mb->TryFinalizeClose())
 		{
 			RemoveMailbox(mb->GetId());
-			return;
+			return movedCount;
 		}
 
 		if (!mb->IsEmpty() && mb->TryBeginConsume())
 		{
 			m_readyMailboxes.enqueue(mb->GetId());
 		}
+
+		return movedCount;
 	}
 
 
-	void ShardExecutor::DrainReadyMailboxes(int32 maxMailboxes, int32 budgetPerMailbox)
+	void ShardExecutor::DrainReadyMailboxes(int32 maxMailboxes, int32 totalJobBudget, int32 budgetPerMailbox)
 	{
-		uint32 mailboxId = 0;
+		if (maxMailboxes <= 0 || totalJobBudget <= 0 || budgetPerMailbox <= 0)
+			return;
 
-		for (int32 i = 0; i < maxMailboxes; ++i)
+		uint32 mailboxId = 0;
+		int32 remainingJobBudget = totalJobBudget;
+
+		for (int32 i = 0; i < maxMailboxes && remainingJobBudget > 0; ++i)
 		{
 			if (!m_readyMailboxes.try_dequeue(mailboxId))
 				break;
@@ -670,8 +679,13 @@ namespace jam
 				continue;
 
 			++m_metrics.mailboxProcessCount;
-			ProcessMailbox(mailbox, budgetPerMailbox);
+			const int32 mailboxBudget = std::min(budgetPerMailbox, remainingJobBudget);
+			const uint64 moved = ProcessMailbox(mailbox, mailboxBudget);
+			remainingJobBudget -= static_cast<int32>(std::min<uint64>(moved, static_cast<uint64>(remainingJobBudget)));
 		}
+
+		if (remainingJobBudget < 0)
+			JAMNET_LOG_DEBUG("remaining job budget < 0");
 	}
 
 	std::shared_ptr<Mailbox> ShardExecutor::FindMailbox(uint32 id)

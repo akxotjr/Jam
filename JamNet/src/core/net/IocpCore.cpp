@@ -4,6 +4,7 @@
 
 namespace jam::net
 {
+
 	IocpCore::IocpCore()
 	{
 		m_iocpHandle = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
@@ -23,7 +24,7 @@ namespace jam::net
 		if (h == INVALID_HANDLE_VALUE)
 			return false;
 
-		if (::CreateIoCompletionPort(h, m_iocpHandle, 0, 0) == NULL)
+		if (::CreateIoCompletionPort(h, m_iocpHandle, 0, 0) == nullptr)
 		{
 			DWORD ec = ::GetLastError();
 			std::cout << "[IOCP] Register failed ec=" << ec << "\n";
@@ -32,18 +33,18 @@ namespace jam::net
 		return true;
 	}
 
-	bool IocpCore::Dispatch(uint32 timeoutMs)
+	bool IocpCore::Dispatch(uint32 timeout_ms)
 	{
-		DWORD	   numOfBytes = 0;
-		ULONG_PTR  key		  = 0;
-		IocpEvent* iocpEvent  = nullptr;
+		DWORD	   bytse = 0;
+		ULONG_PTR  key	 = 0;
+		IocpEvent* event = nullptr;
 
-		if (::GetQueuedCompletionStatus(m_iocpHandle, OUT &numOfBytes, OUT &key, OUT reinterpret_cast<LPOVERLAPPED*>(&iocpEvent), timeoutMs))
+		if (::GetQueuedCompletionStatus(m_iocpHandle, OUT &bytse, OUT &key, OUT reinterpret_cast<LPOVERLAPPED*>(&event), timeout_ms))
 		{
-			if (iocpEvent == nullptr) return false;
+			if (event == nullptr) return false;
 
-			std::shared_ptr<IocpObject> iocpObject = iocpEvent->m_owner;
-			iocpObject->Dispatch(iocpEvent, static_cast<int32>(numOfBytes));
+			std::shared_ptr<IocpObject> iocpObject = event->m_owner;
+			iocpObject->Dispatch(event, static_cast<int32>(bytse));
 		}
 		else
 		{
@@ -52,13 +53,21 @@ namespace jam::net
 			case WAIT_TIMEOUT:
 				return false;
 			default:
-				std::shared_ptr<IocpObject> iocpObject = iocpEvent->m_owner;
-				iocpObject->Dispatch(iocpEvent, static_cast<int32>(numOfBytes));
+				std::shared_ptr<IocpObject> iocpObject = event->m_owner;
+				iocpObject->Dispatch(event, static_cast<int32>(bytse));
 				break;
 			}
 		}
 
 		return true;
+	}
+
+	bool IocpCore::Post(IocpEvent* event, int32 bytes)
+	{
+		if (!event)
+			return false;
+
+		return ::PostQueuedCompletionStatus(m_iocpHandle, static_cast<DWORD>(bytes), 0, event) != FALSE;
 	}
 
 	void IocpCore::Wake(uint32 count)

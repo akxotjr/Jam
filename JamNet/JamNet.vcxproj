@@ -29,26 +29,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -69,7 +69,9 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="UserMacros">
+    <JamNetUseMimalloc Condition="'$(JamNetUseMimalloc)'==''">1</JamNetUseMimalloc>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>libjamnet</TargetName>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
@@ -94,11 +96,16 @@
     <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jamnet\</IntDir>
     <TargetName>libjamnet</TargetName>
   </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>true</VcpkgUseMD>
+    <VcpkgTriplet>x64-windows-static-md</VcpkgTriplet>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;JAMNET_USE_MIMALLOC=$(JamNetUseMimalloc);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -120,7 +127,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;JAMNET_USE_MIMALLOC=$(JamNetUseMimalloc);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -137,7 +144,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_LIB;JAMNET_USE_MIMALLOC=$(JamNetUseMimalloc);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -157,7 +164,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_LIB;JAMNET_USE_MIMALLOC=$(JamNetUseMimalloc);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -172,7 +179,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="include\JamNetAPI.h" />
     <ClInclude Include="include\jamnet\core\executor\ConcurrentQueueToken.h" />
     <ClInclude Include="include\jamnet\core\executor\CoreTopology.h" />
     <ClInclude Include="include\jamnet\core\executor\DeadLockProfiler.h" />
@@ -184,7 +190,6 @@
     <ClInclude Include="include\jamnet\core\executor\GlobalEventBus.h" />
     <ClInclude Include="include\jamnet\core\executor\GlobalExecutor.h" />
     <ClInclude Include="include\jamnet\core\executor\IExecutor.h" />
-    <ClInclude Include="include\jamnet\core\executor\JamNetExecutor.h" />
     <ClInclude Include="include\jamnet\core\executor\Job.h" />
     <ClInclude Include="include\jamnet\core\executor\Lock.h" />
     <ClInclude Include="include\jamnet\core\executor\LockDeque.h" />
@@ -199,45 +204,42 @@
     <ClInclude Include="include\jamnet\core\executor\ShardExecutor.h" />
     <ClInclude Include="include\jamnet\core\executor\ShardSlot.h" />
     <ClInclude Include="include\jamnet\core\executor\WinFiberBackend.h" />
-    <ClInclude Include="include\jamnet\core\memory\JamNetMemory.h" />
-    <ClInclude Include="include\jamnet\core\memory\MemoryManager.h" />
-    <ClInclude Include="include\jamnet\core\memory\MemoryPool.h" />
+    <ClInclude Include="include\jamnet\core\memory\DefaultAllocator.h" />
     <ClInclude Include="include\jamnet\core\memory\ObjectPool.h" />
+    <ClInclude Include="include\jamnet\core\net\Buffer.h" />
     <ClInclude Include="include\jamnet\core\net\BufferReader.h" />
     <ClInclude Include="include\jamnet\core\net\BufferWriter.h" />
     <ClInclude Include="include\jamnet\core\net\IocpCore.h" />
     <ClInclude Include="include\jamnet\core\net\IocpEvent.h" />
-    <ClInclude Include="include\jamnet\core\net\JamNetNetwork.h" />
-    <ClInclude Include="include\jamnet\core\net\JamNetRuntime.h" />
+    <ClInclude Include="include\jamnet\core\net\NetRuntime.h" />
     <ClInclude Include="include\jamnet\core\net\NetAddress.h" />
     <ClInclude Include="include\jamnet\core\net\NetworkProfile.h" />
     <ClInclude Include="include\jamnet\core\net\PacketBuilder.h" />
     <ClInclude Include="include\jamnet\core\net\PacketStructure.h" />
-    <ClInclude Include="include\jamnet\core\net\RecvBuffer.h" />
     <ClInclude Include="include\jamnet\core\net\RPC.h" />
     <ClInclude Include="include\jamnet\core\net\RPCAPI.h" />
-    <ClInclude Include="include\jamnet\core\net\SendBuffer.h" />
     <ClInclude Include="include\jamnet\core\net\Service.h" />
     <ClInclude Include="include\jamnet\core\net\Session.h" />
     <ClInclude Include="include\jamnet\core\net\SessionComponents.h" />
     <ClInclude Include="include\jamnet\core\net\SessionSystems.h" />
     <ClInclude Include="include\jamnet\core\net\SocketUtils.h" />
     <ClInclude Include="include\jamnet\core\net\TcpListener.h" />
+    <ClInclude Include="include\jamnet\core\net\TcpRecvAssembler.h" />
     <ClInclude Include="include\jamnet\core\net\TcpSession.h" />
     <ClInclude Include="include\jamnet\core\net\UdpRouter.h" />
     <ClInclude Include="include\jamnet\core\net\UdpSession.h" />
     <ClInclude Include="include\jamnet\core\utils\Clock.h" />
     <ClInclude Include="include\jamnet\core\utils\TimeUnits.h" />
+    <ClInclude Include="include\jamnet\JamNet.h" />
     <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\ClientSession.h" />
     <ClInclude Include="include\jamnet\runtime\ClientTransportAdapter.h" />
+    <ClInclude Include="include\jamnet\runtime\schema\RPCSchemaIds.h" />
     <ClInclude Include="include\jamnet\runtime\world\DefaultWorldAssignmentPolicy.h" />
     <ClInclude Include="include\jamnet\runtime\world\IWorldAssignmentPolicy.h" />
     <ClInclude Include="include\jamnet\runtime\world\DefaultWorldAssignmentService.h" />
     <ClInclude Include="include\jamnet\runtime\world\WorldDirectory.h" />
     <ClInclude Include="include\jamnet\runtime\world\IWorldAssignmentService.h" />
-    <ClInclude Include="include\jamnet\runtime\schema\gen\binding_handshake_generated.h" />
-    <ClInclude Include="include\jamnet\runtime\schema\gen\world_assignment_generated.h" />
     <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\ServerSession.h" />
     <ClInclude Include="include\jamnet\runtime\ServerTransportAdapter.h" />
@@ -296,25 +298,24 @@
     <ClCompile Include="src\core\executor\ShardExecutor.cpp" />
     <ClCompile Include="src\core\executor\ShardSlot.cpp" />
     <ClCompile Include="src\core\executor\WinFiberBackend.cpp" />
-    <ClCompile Include="src\core\memory\MemoryManager.cpp" />
-    <ClCompile Include="src\core\memory\MemoryPool.cpp" />
+    <ClCompile Include="src\core\memory\DefaultAllocator.cpp" />
+    <ClCompile Include="src\core\net\Buffer.cpp" />
     <ClCompile Include="src\core\net\BufferReader.cpp" />
     <ClCompile Include="src\core\net\BufferWriter.cpp" />
     <ClCompile Include="src\core\net\IocpCore.cpp" />
     <ClCompile Include="src\core\net\IocpEvent.cpp" />
-    <ClCompile Include="src\core\net\JamNetRuntime.cpp" />
+    <ClCompile Include="src\core\net\NetRuntime.cpp" />
     <ClCompile Include="src\core\net\NetAddress.cpp" />
     <ClCompile Include="src\core\net\NetworkProfile.cpp" />
     <ClCompile Include="src\core\net\PacketBuilder.cpp" />
-    <ClCompile Include="src\core\net\RecvBuffer.cpp" />
     <ClCompile Include="src\core\net\RPC.cpp" />
-    <ClCompile Include="src\core\net\SendBuffer.cpp" />
     <ClCompile Include="src\core\net\Service.cpp" />
     <ClCompile Include="src\core\net\Session.cpp" />
     <ClCompile Include="src\core\net\SessionComponents.cpp" />
     <ClCompile Include="src\core\net\SessionSystems.cpp" />
     <ClCompile Include="src\core\net\SocketUtils.cpp" />
     <ClCompile Include="src\core\net\TcpListener.cpp" />
+    <ClCompile Include="src\core\net\TcpRecvAssembler.cpp" />
     <ClCompile Include="src\core\net\TcpSession.cpp" />
     <ClCompile Include="src\core\net\UdpRouter.cpp" />
     <ClCompile Include="src\core\net\UdpSession.cpp" />

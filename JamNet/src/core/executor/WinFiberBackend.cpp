@@ -1,8 +1,6 @@
 ﻿#include "pch.h"
 #include "jamnet/core/executor/WinFiberBackend.h"
 
-#include <mutex>
-
 
 namespace jam
 {

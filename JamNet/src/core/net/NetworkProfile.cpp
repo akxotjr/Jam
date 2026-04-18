@@ -57,6 +57,14 @@ namespace jam::net::profile
 			return static_cast<double>(duration_ns) / 1'000'000'000.0;
 		}
 
+		float NsDeltaToMs(uint64 from_ns, uint64 to_ns)
+		{
+			if (from_ns == 0 || to_ns == 0 || to_ns < from_ns)
+				return 0.0f;
+
+			return static_cast<float>(to_ns - from_ns) / 1'000'000.0f;
+		}
+
 		uint32 ClampToUint32(uint64 value)
 		{
 			return static_cast<uint32>(std::min<uint64>(value, std::numeric_limits<uint32>::max()));
@@ -133,6 +141,7 @@ namespace jam::net::profile
 
 			snapshot.ackStandalonePackets		= metrics.ackStandalonePackets;
 			snapshot.ackPiggybackedPackets		= metrics.ackPiggybackedPackets;
+			snapshot.windowStart_ns				= metrics.windowStart_ns;
 
 			snapshot.deliveryLatency = BuildLatencyStatsFromRing(metrics.deliveryLatencySamples_ns, metrics.deliveryLatencyCount);
 			snapshot.recoveryLatency = BuildLatencyStatsFromRing(metrics.recoveryLatencySamples_ns, metrics.recoveryLatencyCount);
@@ -168,7 +177,14 @@ namespace jam::net::profile
 
 		RudpKpiView BuildRudpKpiView(const RudpMetricsSnapshot& snapshot, uint64 connectionDuration_ns)
 		{
-			const double connectedSeconds = NsToSeconds(connectionDuration_ns);
+			uint64 duration_ns = connectionDuration_ns;
+			if (snapshot.windowStart_ns != 0)
+			{
+				const uint64 now_ns = NOW_NS();
+				duration_ns = (now_ns > snapshot.windowStart_ns) ? (now_ns - snapshot.windowStart_ns) : 0;
+			}
+
+			const double connectedSeconds = NsToSeconds(duration_ns);
 
 			RudpKpiView view{};
 			view.txPacketsPerSec	 = PerSecond(snapshot.txPackets, connectedSeconds);
@@ -216,14 +232,14 @@ namespace jam::net::profile
 		totalSendPackets++;
 	}
 
-	void SessionTotalTraffic::OnRecv(eChannelType ch, uint32 bytes)
+	void SessionTotalTraffic::OnRecv(eChannel ch, uint32 bytes)
 	{
 		OnRecv(bytes);
 		channelTraffic[E2U(ch)].recvBytes += bytes;
 		channelTraffic[E2U(ch)].recvPackets++;
 	}
 
-	void SessionTotalTraffic::OnSend(eChannelType ch, uint32 bytes)
+	void SessionTotalTraffic::OnSend(eChannel ch, uint32 bytes)
 	{
 		OnSend(bytes);
 		channelTraffic[E2U(ch)].sendBytes += bytes;
@@ -314,6 +330,20 @@ namespace jam::net::profile
 		//JAMNET_LOG_DEBUG("Link Quality State : avg app rtt= {}ms", appRttAvg_ms);
 	}
 
+	void LinkQualityState::RecordPingPongBreakdown(const PONG_DATA& pong, uint64 t4App_ns, uint64 t4Wire_ns)
+	{
+		pingClientQueue_ms = NsDeltaToMs(pong.t1App_ns, pong.t1Wire_ns);
+		pingServerQueue_ms = NsDeltaToMs(pong.t2Wire_ns, pong.t2App_ns);
+		pongServerProc_ms  = NsDeltaToMs(pong.t2App_ns, pong.t3App_ns);
+		pongServerQueue_ms = NsDeltaToMs(pong.t3App_ns, pong.t3Wire_ns);
+		pongClientQueue_ms = NsDeltaToMs(t4Wire_ns, t4App_ns);
+
+		appRttQueueTotal_ms = pingClientQueue_ms
+			+ pingServerQueue_ms
+			+ pongServerQueue_ms
+			+ pongClientQueue_ms;
+	}
+
 	void LinkQualityState::AccumulatePacketLoss(uint32 lost, uint32 expected)
 	{
 		lostPackets += lost;
@@ -359,8 +389,19 @@ namespace jam::net::profile
 		{
 			hasLinkQuality  = true;
 			view.wireRtt_ms = linkQuality->wireRttAvg_ms;
-			view.appRtt_ms	= linkQuality->appRttAvg_ms;
-			view.rtt_ms		= view.appRtt_ms;
+			view.wireRttSample_ms = linkQuality->wireRtt_ms;
+			view.pipelineRtt_ms = linkQuality->appRttAvg_ms;
+			view.pipelineRttSample_ms = linkQuality->appRtt_ms;
+			view.pipelineQueueTotal_ms = linkQuality->appRttQueueTotal_ms;
+			view.appRtt_ms	= view.pipelineRtt_ms;
+			view.appRttSample_ms = view.pipelineRttSample_ms;
+			view.appRttQueueTotal_ms = view.pipelineQueueTotal_ms;
+			view.pingClientQueue_ms = linkQuality->pingClientQueue_ms;
+			view.pingServerQueue_ms = linkQuality->pingServerQueue_ms;
+			view.pongServerProc_ms = linkQuality->pongServerProc_ms;
+			view.pongServerQueue_ms = linkQuality->pongServerQueue_ms;
+			view.pongClientQueue_ms = linkQuality->pongClientQueue_ms;
+			view.rtt_ms		= view.wireRtt_ms;
 			view.jitter_ms  = linkQuality->appJitter_ms;
 			view.packetLoss = linkQuality->GetPacketLoss();
 		}
@@ -447,6 +488,42 @@ namespace jam::net::profile
 		sampleState.prevRetransmitPackets = rtxNow;
 
 		linkQuality->AccumulatePacketLoss(ClampToUint32(rtxDelta), ClampToUint32(txDelta));
+	}
+
+	void ResetNetworkProfileWindow(entt::registry& R, entt::entity e, uint64 now_ns)
+	{
+		if (e == entt::null || !R.valid(e))
+			return;
+
+		if (now_ns == 0)
+			now_ns = NOW_NS();
+
+		if (auto* metrics = R.try_get<RudpMetrics>(e))
+		{
+			*metrics = RudpMetrics{};
+			metrics->windowStart_ns = now_ns;
+		}
+
+		if (auto* linkQuality = R.try_get<LinkQualityState>(e))
+			*linkQuality = LinkQualityState{};
+
+		if (auto* sampleState = R.try_get<TrafficSampleState>(e))
+		{
+			if (const auto* totalTraffic = R.try_get<SessionTotalTraffic>(e))
+			{
+				sampleState->prevRecvBytes = totalTraffic->totalRecvBytes;
+				sampleState->prevSendBytes = totalTraffic->totalSendBytes;
+				sampleState->prevTxPackets = 0;
+				sampleState->prevRetransmitPackets = 0;
+				sampleState->sampleRecvBytes = 0;
+				sampleState->sampleSendBytes = 0;
+				sampleState->sampleInterval_ns = 0;
+			}
+			else
+			{
+				*sampleState = TrafficSampleState{};
+			}
+		}
 	}
 
 } // namespace jam::net::profile

@@ -105,7 +105,8 @@ namespace jam::net
 			cmd.input.targetNetId);
 		m_fbb->Finish(gameInput, fb::fbGameInputIdentifier());
 
-		if (auto buf = PacketBuilder::CreateCustomPacket(CustomPacketId::INPUT, PacketFlags::NONE, eChannelType::UNRELIABLE_SEQUENCED, m_fbb->GetBufferPointer(), m_fbb->GetSize())) 
+		auto buf = PacketBuilder::CreateCustomPacket(CustomPacketId::INPUT, PacketFlags::NONE, eChannel::UNRELIABLE_SEQUENCED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
+		if (buf.IsValid())
 			netWorld->Send(buf);
 	}
 }

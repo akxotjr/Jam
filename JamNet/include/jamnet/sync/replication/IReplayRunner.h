@@ -17,8 +17,8 @@ namespace jam::net
 		virtual ~IReplayRunner() = default;
 
 		virtual void Prepare(entt::registry& world, const ReplayContext& ctx) = 0;
-		virtual void Run(entt::registry& world, const ReplayContext& ctx) = 0;
-		virtual void Commit(entt::registry& world, const ReplayContext& ctx) = 0;
+		virtual void Run(entt::registry& world, const ReplayContext& ctx)     = 0;
+		virtual void Commit(entt::registry& world, const ReplayContext& ctx)  = 0;
 	};
 
 } // namespace jam::net

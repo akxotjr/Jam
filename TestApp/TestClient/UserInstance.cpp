@@ -10,6 +10,19 @@
 
 namespace
 {
+	const char* LifecycleReasonName(net::eRenderActorLifecycleReason reason)
+	{
+		switch (reason)
+		{
+		case net::eRenderActorLifecycleReason::Created: return "CREATE";
+		case net::eRenderActorLifecycleReason::AoiEntered: return "AOI_ENTER";
+		case net::eRenderActorLifecycleReason::AoiLeft: return "AOI_LEAVE";
+		case net::eRenderActorLifecycleReason::Destroyed: return "DESTROY";
+		case net::eRenderActorLifecycleReason::PredictedDespawn: return "PREDICTED_DESPAWN";
+		default: return "UNKNOWN";
+		}
+	}
+
 	glm::vec4 ResolveColor(
 		px::eActorType actorType,
 		px::eBodyType bodyType,
@@ -56,6 +69,7 @@ namespace
 UserInstance::UserInstance(uint32 instanceId, uint64 userId)
 	: ClientInstance(instanceId, userId)
 {
+	m_type = eClientType::User;
 }
 
 void UserInstance::Update(float deltaTime)
@@ -150,7 +164,14 @@ void UserInstance::OnActorSpawned(const net::RenderActorSpawnedEvent& evt)
 		data.oid = evt.objectId;
 		data.isLocal = evt.isLocal;
 
-		JAMNET_LOG_DEBUG("PendingSpawn : UserId= {}, ObjectId= {}, local= {}", GetUserId(), data.oid, data.isLocal ? "yes" : "no");
+		JAMNET_LOG_INFO(
+			"[AOI][ClientUser] {} user={} netId={} objectId={} local={} spawnReq={}",
+			LifecycleReasonName(evt.reason),
+			GetUserId(),
+			evt.netId,
+			data.oid,
+			data.isLocal ? "yes" : "no",
+			evt.spawnReqId);
 
 		m_actorRenderData.emplace(evt.objectId, std::move(data));
 		return;
@@ -163,12 +184,26 @@ void UserInstance::OnActorSpawned(const net::RenderActorSpawnedEvent& evt)
 	data->pendingSpawnReqId = 0;
 	data->isLocal = evt.isLocal;
 
-	JAMNET_LOG_DEBUG("EnsureSpawn : UserId= {}, ObjectId= {}, local= {}", GetUserId(), data->oid, data->isLocal ? "yes" : "no");
+	JAMNET_LOG_INFO(
+		"[AOI][ClientUser] {} user={} netId={} objectId={} local={} spawnReq={}",
+		LifecycleReasonName(evt.reason),
+		GetUserId(),
+		evt.netId,
+		data->oid,
+		data->isLocal ? "yes" : "no",
+		evt.spawnReqId);
 }
 
 void UserInstance::OnActorDespawned(const net::RenderActorDespawnedEvent& evt)
 {
 	m_actorRenderData.erase(evt.objectId);
+
+	JAMNET_LOG_INFO(
+		"[AOI][ClientUser] {} user={} netId={} objectId={}",
+		LifecycleReasonName(evt.reason),
+		GetUserId(),
+		evt.netId,
+		evt.objectId);
 }
 
 void UserInstance::OnRenderSamples(const net::RenderSamplesEvent& evt)
@@ -664,7 +699,7 @@ glm::vec3 UserInstance::QuatToEuler(const px::Quat& q) const
 
 	float sinp = 2.0f * (q.w * q.y - q.z * q.x);
 	if (std::abs(sinp) >= 1.0f)
-		euler.y = std::copysign(PxPi / 2.0f, sinp);
+		euler.y = std::copysign(physx::PxPi / 2.0f, sinp);
 	else
 		euler.y = std::asin(sinp);
 

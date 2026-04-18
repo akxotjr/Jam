@@ -9,8 +9,12 @@ namespace jam::net
 		NetAddress(SOCKADDR_IN sockAddr);
 		NetAddress(const std::string& ip, uint16 port);
 
-		SOCKADDR_IN&		GetSockAddr() { return m_sockAddr; }
-		const SOCKADDR_IN&	GetSockAddr()  const { return m_sockAddr; }
+		SOCKADDR_IN&		GetSockAddr()		{ return m_sockAddr; }
+		const SOCKADDR_IN&	GetSockAddr() const { return m_sockAddr; }
+
+		SOCKADDR*			GetSockAddrPtr()	   { return reinterpret_cast<SOCKADDR*>(&m_sockAddr); }
+		const SOCKADDR*		GetSockAddrPtr() const { return reinterpret_cast<const SOCKADDR*>(&m_sockAddr); }
+
 		std::string			GetIpAddress() const;
 		uint64				GetIpAddressU64() const { return m_sockAddr.sin_addr.S_un.S_addr; }
 		uint16				GetPort() const { return ::ntohs(m_sockAddr.sin_port); }

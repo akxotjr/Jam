@@ -1,17 +1,40 @@
 #include "pch.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
 
-#include "jamnet/runtime/ServerSession.h"
-#include "jamnet/runtime/ServerTransportAdapter.h"
-#include "jamnet/runtime/world/DefaultWorldAssignmentService.h"
+#include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/executor/FiberCommon.h"
+#include "jamnet/core/executor/Mailbox.h"
+#include "jamnet/core/executor/ShardExecutor.h"
+
+#include "jamnet/core/net/Service.h"
 
 #include "jamnet/sync/networld/ServerNetWorld.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
-#include <future>
+#include "jamnet/runtime/ServerSession.h"
+#include "jamnet/runtime/ServerTransportAdapter.h"
+#include "jamnet/runtime/world/DefaultWorldAssignmentService.h"
+
+
 
 namespace jam::net
 {
+	namespace
+	{
+		Packet ClonePacket(const Packet& packet)
+		{
+			if (!packet.IsValid())
+				return {};
+
+			const uint32 size = packet->Size();
+			BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Clone));
+			BufferSlice slice = writer.OpenForPayload(size, alignof(PacketHeader));
+			WritePayload(slice, packet->Head(), size);
+			slice.Close();
+			return MakeOwned(slice);
+		}
+	}
+
 	struct ServerNetworkManager::WorldTransferRecord
 	{
 		enum class ePhase : uint8
@@ -27,7 +50,7 @@ namespace jam::net
 		WorldId							sourceWorldId	= INVALID_WORLD_ID;
 		WorldId							targetWorldId	= INVALID_WORLD_ID;
 		uint64							userId			= 0;
-		std::atomic<ePhase>			phase			= ePhase::Reserved;
+		std::atomic<ePhase>				phase			= ePhase::Reserved;
 		std::atomic<bool>				completed		= false;
 		WorldTransferResult				result			= {};
 		std::mutex						callbackMutex;
@@ -495,9 +518,9 @@ namespace jam::net
 		return (it != m_udpSessions.end()) ? it->second : nullptr;
 	}
 
-	void ServerNetworkManager::BroadcastPacket(const std::shared_ptr<SendBuffer>& buf, eProtocolType protocol)
+	void ServerNetworkManager::BroadcastPacket(Packet packet, eProtocolType protocol)
 	{
-		if (!buf)
+		if (!packet.IsValid())
 			return;
 
 		READ_LOCK
@@ -507,7 +530,7 @@ namespace jam::net
 			for (auto& session : m_tcpSessions | std::views::values)
 			{
 				if (session && session->IsConnected())
-					session->Send(buf);
+					session->Send(ClonePacket(packet));
 			}
 		}
 
@@ -516,14 +539,14 @@ namespace jam::net
 			for (auto& session : m_udpSessions | std::views::values)
 			{
 				if (session && session->IsConnected())
-					session->Send(buf);
+					session->Send(ClonePacket(packet));
 			}
 		}
 	}
 
-	void ServerNetworkManager::SendToUser(uint64 userId, const std::shared_ptr<SendBuffer>& buf, eProtocolType protocol)
+	void ServerNetworkManager::SendToUser(uint64 userId, Packet packet, eProtocolType protocol)
 	{
-		if (!buf)
+		if (!packet.IsValid())
 			return;
 
 		if (protocol == eProtocolType::TCP)
@@ -531,7 +554,7 @@ namespace jam::net
 			if (auto tcp = FindTcpSession(userId))
 			{
 				if (tcp->IsConnected())
-					tcp->Send(buf);
+					tcp->Send(packet);
 			}
 		}
 
@@ -540,7 +563,7 @@ namespace jam::net
 			if (auto udp = FindUdpSession(userId))
 			{
 				if (udp->IsConnected())
-					udp->Send(buf);
+					udp->Send(packet);
 			}
 		}
 	}
@@ -985,17 +1008,17 @@ namespace jam::net
 				if (auto tcp = dynamic_pointer_cast<ServerTcpSession>(session))
 				{
 					tcp->SetNetworkManager(this);
-					RPCRegisterRequest<fb::fbTcpBindReqT>(tcp, tcp.get(), &ServerTcpSession::OnTcpBindRequest);
+					RPCRegisterRequest<fb::fbTcpBindReq>(tcp, tcp.get(), &ServerTcpSession::OnTcpBindRequest);
 				}
 				else if (auto udp = dynamic_pointer_cast<ServerUdpSession>(session))
 				{
 					udp->SetNetworkManager(this);
-					RPCRegisterRequest<fb::fbUdpBindReqT>(udp, udp.get(), &ServerUdpSession::OnUdpBindRequest);
-					RPCRegisterRequest<fb::fbRequestWorldAssignmentReqT>(udp, udp.get(), &ServerUdpSession::OnRequestWorldAssignmentReq);
-					RPCRegisterRequest<fb::fbSpawnActorReqT>(udp, udp.get(), &ServerUdpSession::OnSpawnActorRequest);
-					RPCRegisterRequest<fb::fbDespawnActorReqT>(udp, udp.get(), &ServerUdpSession::OnDespawnActorRequest);
-					RPCRegisterRequest<fb::fbPossessActorReqT>(udp, udp.get(), &ServerUdpSession::OnPossessActorRequest);
-					RPCRegisterRequest<fb::fbUnpossessActorReqT>(udp, udp.get(), &ServerUdpSession::OnUnpossessActorRequest);
+					RPCRegisterRequest<fb::fbUdpBindReq>(udp, udp.get(), &ServerUdpSession::OnUdpBindRequest);
+					RPCRegisterRequest<fb::fbRequestWorldAssignmentReq>(udp, udp.get(), &ServerUdpSession::OnRequestWorldAssignmentReq);
+					RPCRegisterRequest<fb::fbSpawnActorReq>(udp, udp.get(), &ServerUdpSession::OnSpawnActorRequest);
+					RPCRegisterRequest<fb::fbDespawnActorReq>(udp, udp.get(), &ServerUdpSession::OnDespawnActorRequest);
+					RPCRegisterRequest<fb::fbPossessActorReq>(udp, udp.get(), &ServerUdpSession::OnPossessActorRequest);
+					RPCRegisterRequest<fb::fbUnpossessActorReq>(udp, udp.get(), &ServerUdpSession::OnUnpossessActorRequest);
 				}
 			});
 

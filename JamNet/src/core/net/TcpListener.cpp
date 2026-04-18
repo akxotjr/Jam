@@ -1,7 +1,10 @@
 ﻿#include "pch.h"
 #include "jamnet/core/net/TcpListener.h"
-#include "jamnet/core/net/Service.h"
+
+#include "jamnet/core/net/IocpEvent.h"
 #include "jamnet/core/net/SocketUtils.h"
+#include "jamnet/core/net/TcpSession.h"
+#include "jamnet/core/net/Service.h"
 
 namespace jam::net
 {
@@ -12,11 +15,6 @@ namespace jam::net
 	TcpListener::~TcpListener()
 	{
 		SocketUtils::Close(m_socket);
-
-		for (AcceptEvent* acceptEvent : m_acceptEvents)
-		{
-			xdelete(acceptEvent);
-		}
 	}
 
 	bool TcpListener::StartAccept(Service* service)
@@ -45,10 +43,11 @@ namespace jam::net
 
 		for (int32 i = 0; i < 4; i++)
 		{
-			AcceptEvent* acceptEvent = xnew<AcceptEvent>();
-			acceptEvent->m_owner = shared_from_this();
-			m_acceptEvents.push_back(acceptEvent);
-			RegisterAccept(acceptEvent);
+			auto ev = std::make_unique<TcpAcceptEvent>();
+			ev->m_owner = shared_from_this();
+			RegisterAccept(ev.get());
+
+			m_events.push_back(std::move(ev));
 		}
 
 		return true;
@@ -66,12 +65,13 @@ namespace jam::net
 
 	void TcpListener::Dispatch(IocpEvent* iocpEvent, int32 /*numOfBytes*/)
 	{
-		JAM_ASSERT(iocpEvent->m_eventType == eEventType::ACCEPT);
-		AcceptEvent* acceptEvent = static_cast<AcceptEvent*>(iocpEvent);
+		JAM_ASSERT(iocpEvent->m_eventType == eEventType::TcpAccept);
+
+		TcpAcceptEvent* acceptEvent = static_cast<TcpAcceptEvent*>(iocpEvent);
 		ProcessAccept(acceptEvent);
 	}
 
-	void TcpListener::RegisterAccept(AcceptEvent* acceptEvent)
+	void TcpListener::RegisterAccept(TcpAcceptEvent* acceptEvent)
 	{
 		std::shared_ptr<TcpSession> session = static_pointer_cast<TcpSession>(m_service->CreateSession(eProtocolType::TCP));
 
@@ -80,11 +80,10 @@ namespace jam::net
 
 		DWORD bytesReceived = 0;
 
-		// TcpSession은 스트림 버퍼 사용
-		BYTE* initialBuf = session->m_streamBuffer.WritePos();
-		const DWORD initialLen = 0;
+		BYTE* initialBuf = acceptEvent->acceptBuf.data();
+		const DWORD initialLen = 0; // 초기 payload 수신 안 함
 
-		if (false == SocketUtils::AcceptEx(m_socket, session->GetSocket(), initialBuf, initialLen, static_cast<DWORD>(sizeof(SOCKADDR_IN) + 16), static_cast<DWORD>(sizeof(SOCKADDR_IN) + 16), OUT &bytesReceived, static_cast<LPOVERLAPPED>(acceptEvent)))
+		if (false == SocketUtils::AcceptEx(m_socket, session->GetSocket(), initialBuf, initialLen, TcpAcceptEvent::kAddrLen, TcpAcceptEvent::kAddrLen, OUT &bytesReceived, static_cast<LPOVERLAPPED>(acceptEvent)))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
@@ -94,7 +93,7 @@ namespace jam::net
 		}
 	}
 
-	void TcpListener::ProcessAccept(AcceptEvent* acceptEvent)
+	void TcpListener::ProcessAccept(TcpAcceptEvent* acceptEvent)
 	{
 		std::shared_ptr<TcpSession> session = acceptEvent->session;
 
@@ -114,10 +113,8 @@ namespace jam::net
 		}
 
 		session->SetRemoteNetAddress(NetAddress(sockAddress));
-
 		session->ProcessConnect();
 
-		// 다음 Accept 재등록
 		RegisterAccept(acceptEvent);
 	}
 }

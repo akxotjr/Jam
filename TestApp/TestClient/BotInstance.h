@@ -3,6 +3,7 @@
 
 struct BotTrafficConfig
 {
+	bool	headlessNetWorld	= true;
 	bool	enabled				= false;
 	float	inputHz				= 30.0f;	// UNRELIABLE_SEQUENCED 경로
 	float	reliableActionHz	= 1.0f;		// SpawnBullet 기반 reliable 경로
@@ -14,7 +15,7 @@ struct BotTrafficConfig
 class BotInstance : public ClientInstance
 {
 public:
-	BotInstance(uint32 instanceId, uint64 userId);
+	BotInstance(uint32 instanceId, uint64 userId, BotTrafficConfig config = {});
 	~BotInstance() override = default;
 
 protected:

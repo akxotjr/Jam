@@ -1,8 +1,11 @@
-﻿#pragma once
-#include "IocpCore.h"
+#pragma once
+#include "jamnet/core/net/Buffer.h"
+#include "jamnet/core/net/IocpCore.h"
+#include "jamnet/core/net/NetAddress.h"
 
 namespace jam::net
 {
+	class Service;
 
 	class UdpRouter final : public IocpObject
 	{
@@ -20,18 +23,18 @@ namespace jam::net
 		void					Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
 
-		void					RegisterSend(const std::vector<std::shared_ptr<SendBuffer>>& bufs, const NetAddress& to);
+		void					RegisterSend(std::vector<PacketChain>&& chains, const NetAddress& to);
 		void					RegisterRecv();
 
 		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddress);
-		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, RecvBuffer& buf, uint64 ingressRecvTime_ns);
+		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, Packet packet, uint64 ingressRecvTime_ns);
 
 		void					HandleError(int32 errorCode);
 
 	private:
-		Service*				m_service = nullptr;
+		Service*				m_service		= nullptr;
 
-		SOCKET					m_socket = INVALID_SOCKET;
+		SOCKET					m_socket		= INVALID_SOCKET;
 		SOCKADDR_IN				m_remoteSockAddr{};
 	};
 }

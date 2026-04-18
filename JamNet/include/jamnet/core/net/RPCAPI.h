@@ -1,5 +1,7 @@
-﻿#pragma once
+#pragma once
 
+#include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/net/RPC.h"
 #include "jamnet/core/net/Session.h"
 
@@ -16,7 +18,7 @@ namespace jam::net
 		if (!s) return;
 
 		auto self = s->Self();
-		self->Post(Job([weak, fnsp] mutable 
+		self->Post(Job([weak, fnsp]() mutable
 			{
 				auto sp = weak.lock();
 				if (!sp) return;
@@ -26,7 +28,7 @@ namespace jam::net
 			}));
 	}
 
-	template<typename T, class C>
+	template<typename T>
 	static void RPCRegisterRequest(std::weak_ptr<Session> weak, std::function<void(entt::entity, const T&, uint32)> fn)
 	{
 		RunOnSessionJob(
@@ -93,7 +95,7 @@ namespace jam::net
 
 	// ---- RPCRegister (Response) ----
 
-	template<typename T, class C>
+	template<typename T>
 	static void RPCRegisterResponse(std::weak_ptr<Session> weak, std::function<void(entt::entity, const T&, uint32)> fn)
 	{
 		RunOnSessionJob(
@@ -161,13 +163,13 @@ namespace jam::net
 	// ---- RPCCall ----
 
 	template<typename Req>
-	static void RPCCall(std::weak_ptr<Session> weak, const Req& req, const RPCCallOptions& opt)
+	static void RPCCallNative(std::weak_ptr<Session> weak, const Req& req, const RPCCallOptions& opt)
 	{
 		RunOnSessionJob(
 			std::move(weak),
 			[req, opt](entt::entity e) mutable
 			{
-				RPCCall(e, req, opt);
+				RPCCallNative(e, req, opt);
 			}
 		);
 	}
@@ -224,7 +226,7 @@ namespace jam::net
 
 	// Req/Res 타입만 알면, 파이버에서 RPCCallAwait 하고 cb를 호출하는 단일 진입점
 	template <typename Req, typename Res, typename Cb>
-	static void RPCCallAsync(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, Cb&& cb)
+	static void RPCCallAsyncNative(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, Cb&& cb)
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
@@ -235,7 +237,7 @@ namespace jam::net
 		RunOnSessionFiber(
 			std::move(weak),
 			[req = std::forward<Req>(req), opt, cbsp](entt::entity e) mutable {
-				auto res = jam::net::RPCCallAwait<ReqT, ResT>(e, req, opt);
+				auto res = jam::net::RPCCallAwaitNative<ReqT, ResT>(e, req, opt);
 				(*cbsp)(std::move(res));
 			},
 			[cbsp] {
@@ -243,13 +245,47 @@ namespace jam::net
 			});
 	}
 
+	template <typename ReqTable, typename ResTable, typename Cb>
+	static void RPCCallAsync(std::weak_ptr<Session> weak, const void* flatBufferData, uint32 flatBufferSize, RPCCallOptions opt, Cb&& cb)
+	{
+		using CbT = std::decay_t<Cb>;
+
+		auto cbsp = std::make_shared<CbT>(std::forward<Cb>(cb));
+		auto payload = std::make_shared<std::vector<BYTE>>(flatBufferSize);
+		if (flatBufferData && flatBufferSize != 0)
+			::memcpy(payload->data(), flatBufferData, flatBufferSize);
+
+		RunOnSessionFiber(
+			std::move(weak),
+			[payload, opt, cbsp](entt::entity e) mutable {
+				auto res = jam::net::RPCCallAwait<ReqTable, ResTable>(e, payload->data(), static_cast<uint32>(payload->size()), opt);
+				(*cbsp)(std::move(res));
+			},
+			[cbsp] {
+				(*cbsp)(std::optional<RPCTableRef<ResTable>>{});
+			});
+	}
+
+	template <typename ReqTable, typename ResTable, class C>
+	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, const void* flatBufferData, uint32 flatBufferSize, RPCCallOptions opt, C* obj, void (C::* mf)(std::optional<RPCTableRef<ResTable>>))
+	{
+		RPCCallAsync<ReqTable, ResTable>(
+			std::move(weak),
+			flatBufferData,
+			flatBufferSize,
+			opt,
+			[obj, mf](std::optional<RPCTableRef<ResTable>> r) {
+				(obj->*mf)(std::move(r));
+			});
+	}
+
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, C* obj, void (C::* mf)(std::optional<std::decay_t<Res>>))
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, C* obj, void (C::* mf)(std::optional<std::decay_t<Res>>))
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -259,12 +295,12 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, const C* obj, void (C::* mf)(std::optional<std::decay_t<Res>>) const)
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, const C* obj, void (C::* mf)(std::optional<std::decay_t<Res>>) const)
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -274,12 +310,12 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::shared_ptr<C> sp, void (C::* mf)(std::optional<std::decay_t<Res>>))
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::shared_ptr<C> sp, void (C::* mf)(std::optional<std::decay_t<Res>>))
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -289,12 +325,12 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::weak_ptr<C> wp, void (C::* mf)(std::optional<std::decay_t<Res>>))
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::weak_ptr<C> wp, void (C::* mf)(std::optional<std::decay_t<Res>>))
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -305,12 +341,12 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, C* obj, void (C::* mf)(bool, std::decay_t<Res>))
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, C* obj, void (C::* mf)(bool, std::decay_t<Res>))
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -321,12 +357,12 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, const C* obj, void (C::* mf)(bool, std::decay_t<Res>) const)
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, const C* obj, void (C::* mf)(bool, std::decay_t<Res>) const)
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -337,12 +373,12 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::shared_ptr<C> sp, void (C::* mf)(bool, std::decay_t<Res>))
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::shared_ptr<C> sp, void (C::* mf)(bool, std::decay_t<Res>))
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -353,12 +389,12 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, class C>
-	static void RPCCallAsyncMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::weak_ptr<C> wp, void (C::* mf)(bool, std::decay_t<Res>))
+	static void RPCCallAsyncNativeMember(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, std::weak_ptr<C> wp, void (C::* mf)(bool, std::decay_t<Res>))
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,
@@ -372,7 +408,7 @@ namespace jam::net
 	}
 
 	template <typename Req, typename Res, typename Fn>
-	static void RPCCallAsyncBR(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, Fn&& fn)
+	static void RPCCallAsyncNativeBR(std::weak_ptr<Session> weak, Req&& req, RPCCallOptions opt, Fn&& fn)
 	{
 		using ReqT = std::decay_t<Req>;
 		using ResT = std::decay_t<Res>;
@@ -380,7 +416,7 @@ namespace jam::net
 
 		auto f = std::make_shared<FnT>(std::forward<Fn>(fn));
 
-		RPCCallAsync<ReqT, ResT>(
+		RPCCallAsyncNative<ReqT, ResT>(
 			std::move(weak),
 			std::forward<Req>(req),
 			opt,

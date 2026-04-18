@@ -1,6 +1,8 @@
 ﻿#include "pch.h"
 #include "jamnet/sync/networld/NetWorld.h"
 
+#include "jamnet/core/executor/GlobalExecutor.h"
+
 
 namespace jam::net
 {

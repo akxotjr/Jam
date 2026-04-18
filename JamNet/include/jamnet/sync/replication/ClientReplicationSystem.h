@@ -59,6 +59,7 @@ namespace jam::net
         void                                ApplyActorMeta(NetId netId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica);
         void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
         entt::entity                        ResolveEntityForSnapshot(NetId netId);
+        void                                EnsureSnapshotStateComponents(entt::entity entity, px::eBodyType bodyType);
         
 		void                                ApplyRigidFullSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformFull* tf, uint32 baselineRev);
         void                                ApplyRigidDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformDelta* tf, uint32 baselineRev);

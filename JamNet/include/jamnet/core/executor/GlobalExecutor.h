@@ -37,16 +37,16 @@ namespace jam
 
 
 	public:
-		void								Init(const GlobalExecutorConfig& config);
-		void								ShutDown();
+		void											Init(const GlobalExecutorConfig& config);
+		void											ShutDown();
 
 
-		void								Start();
-		void								Stop();
-		void								Join();	
+		void											Start();
+		void											Stop();
+		void											Join();	
 
-		void								Submit(Job j) override;
-		void								SubmitAfter(Job j, uint64 delay_ns);
+		void											Submit(Job j) override;
+		void											SubmitAfter(Job j, uint64 delay_ns);
 
 		// shard/endpoint
 		uint32											GetShardCount() const { return m_directory ? static_cast<uint32>(m_directory->Size()) : 0; }
@@ -69,25 +69,20 @@ namespace jam
 		
 		void											ConveyAll(Job j);		// Convey job to all shards
 
-
-		// GE용 Fiber API
 		void											SpawnFiber(FiberFn fn, const FiberDesc& desc = {}) const;
 		void											ResumeFiber(FiberAwaitKey key) const;
 		void											CancelFiberByKey(FiberAwaitKey key, eCancelCode code) const;
 		void											CancelFiberById(uint32 id, eCancelCode code) const;
 
 
-		using PeriodicHandle = jam::PeriodicHandle;
-		using PeriodicOptions = jam::PeriodicOptions;
+		PeriodicHandle									ScheduleFixedRate(Job j, const PeriodicOptions& opt);
+		PeriodicHandle									ScheduleFixedDelay(Job j, const PeriodicOptions& opt);
+		bool											CancelPeriodic(PeriodicHandle h);
+		bool											CancelPerioidc(PeriodicHandle h) { return CancelPeriodic(h); }
 
-		PeriodicHandle							ScheduleFixedRate(Job j, const PeriodicOptions& opt);
-		PeriodicHandle							ScheduleFixedDelay(Job j, const PeriodicOptions& opt);
-		bool									CancelPeriodic(PeriodicHandle h);
-		bool									CancelPerioidc(PeriodicHandle h) { return CancelPeriodic(h); }
-
-		GlobalExecutorMetrics					GetMetricsSnapshot() const;
-		std::vector<ShardExecutorMetrics>		GetShardMetricsSnapshots() const;
-		void									ResetMetrics();
+		GlobalExecutorMetrics							GetMetricsSnapshot() const;
+		std::vector<ShardExecutorMetrics>				GetShardMetricsSnapshots() const;
+		void											ResetMetrics();
 
 	private:
 		struct OffloadWorkerMetrics
@@ -112,7 +107,7 @@ namespace jam
 		template <typename TMetrics>
 		struct MetricsSlot
 		{
-			net::SeqLock	seq;
+			SeqLock			seq;
 			TMetrics		value = {};
 		};
 
@@ -170,7 +165,7 @@ namespace jam
 		std::unique_ptr<MetricsSlot<OffloadWorkerMetrics>[]>	m_offloadMetricSlots;
 		size_t													m_offloadMetricSlotCount	= 0;
 		MetricsSlot<FiberWorkerMetrics>							m_fiberMetricSlot			= {};
-		net::SeqLockBox<GlobalExecutorMetrics>					m_metricBaseline			= {};
+		SeqLockBox<GlobalExecutorMetrics>						m_metricBaseline			= {};
 		std::vector<ThreadAffinitySlot>							m_affinitySlots;
 
 

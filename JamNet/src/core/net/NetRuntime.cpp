@@ -1,25 +1,30 @@
 #include "pch.h"
-#include "jamnet/core/net/JamNetRuntime.h"
+#include "jamnet/core/net/NetRuntime.h"
+
+#include "jamnet/core/executor/MainExecutor.h"
+#include "jamnet/core/memory/DefaultAllocator.h"
 #include "jamnet/core/net/SocketUtils.h"
+#include "jamnet/core/utils/Clock.h"
 
 namespace jam::net
 {
-	JamNetRuntime::JamNetRuntime(const RuntimeConfig& config)
+	NetRuntime::NetRuntime(const RuntimeConfig& config)
 		: m_config(config)
 	{
 		Init();
 	}
 
-	JamNetRuntime::~JamNetRuntime()
+	NetRuntime::~NetRuntime()
 	{
 		if (m_bInitialized)
 			Shutdown();
 	}
 
-	void JamNetRuntime::Init()
+	void NetRuntime::Init()
 	{
-		MEMORY_MANAGER_INIT();
+		DEFAULT_ALLOCATOR_INIT();
 		JAM_LOG_INIT("JamNet", "logs/jamnet.log");
+		JAMNET_LOG_INFO("JamNet default allocator: {}", DefaultAllocatorName());
 		SocketUtils::Init();
 		CLOCK.Start(m_config.clockTick);
 		MAIN_EXEC_INIT();
@@ -30,7 +35,7 @@ namespace jam::net
 		JAMNET_LOG_INFO("JamNet Runtime initialized");
 	}
 
-	void JamNetRuntime::Shutdown()
+	void NetRuntime::Shutdown()
 	{
 		JAMNET_LOG_INFO("JamNet Runtime shutting down... ");
 

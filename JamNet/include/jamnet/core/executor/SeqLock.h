@@ -2,7 +2,7 @@
 
 #include <jambase/CacheLine.h>
 
-namespace jam::net
+namespace jam
 {
     // Writer 단일 가정 seqlock.
     // (멀티 writer이면 외부에서 writer mutex를 걸거나 아래 SeqLockBoxMT를 사용)
