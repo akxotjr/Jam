@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "jamnet/sync/replication/NetActorComponents.h"
 
 #include <jampx/PhysicsTypes.h>

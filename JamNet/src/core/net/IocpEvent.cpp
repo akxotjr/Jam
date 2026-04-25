@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/IocpEvent.h"
 
 #include "jamnet/core/net/Session.h"

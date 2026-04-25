@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "jamnet/core/executor/IExecutor.h"
 #include "jamnet/core/executor/ShardExecutor.h"

@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/sync/networld/NetWorld.h"
 
 #include "jamnet/core/executor/GlobalExecutor.h"

@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/utils/Clock.h"
 
 namespace jam

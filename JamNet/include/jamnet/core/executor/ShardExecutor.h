@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "jamnet/core/executor/Mailbox.h"
 #include "jamnet/core/executor/Job.h"
 #include "jamnet/core/executor/NumaTopology.h"

@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/executor/Lock.h"
 #include "jamnet/core/executor/DeadLockProfiler.h"
 #include "jamnet/core/executor/ThreadContext.h"

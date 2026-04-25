@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/executor/ConcurrentQueueToken.h"
 
@@ -146,7 +146,7 @@ namespace jam
 		Fiber* f = fit->second;
 		CompleteAwait(f, eResumeCode::Cancelled, code);
 		return true;
- 	}
+	}
 
 	void FiberScheduler::PostResume(FiberAwaitKey key)
 	{
@@ -184,7 +184,7 @@ namespace jam
 		while (m_spawnInbox.try_dequeue(m_spawnCtok, s))
 		{
 			SpawnFiber(std::move(s.fn), s.desc);
-           ++m_metrics.inboxSpawnCount;
+		   ++m_metrics.inboxSpawnCount;
 		}
 		CancelKeyMsg ck;
 		while (m_cancelKeyInbox.try_dequeue(m_cancelKeyCtok, ck))
@@ -213,7 +213,7 @@ namespace jam
 
 		// 2) ready 실행 (budget 만큼)
 		int32 steps = 0;
-        m_metrics.lastPollReadyRunCount = 0;
+		m_metrics.lastPollReadyRunCount = 0;
 		while (steps < budget && !m_readyPQ.empty()) 
 		{
 			const uint32 id = m_readyPQ.top().id;
@@ -242,8 +242,8 @@ namespace jam
 			EndRun(f);
 			m_currentId = 0;
 			++steps;
-            ++m_metrics.readyRunCount;
-            ++m_metrics.lastPollReadyRunCount;
+			++m_metrics.readyRunCount;
+			++m_metrics.lastPollReadyRunCount;
 			++m_metrics.stepCount;
 
 			if (f->state == eFiberState::Terminated) 
@@ -262,7 +262,7 @@ namespace jam
 		DrainInbox();
 		const uint64 pollEnd_ns = NOW_NS();
 		m_metrics.lastPollCost_ns = pollEnd_ns - pollStart_ns;
-        m_metrics.pollCostAcc_ns += m_metrics.lastPollCost_ns;
+		m_metrics.pollCostAcc_ns += m_metrics.lastPollCost_ns;
 
 		if (steps == 0)
 			++m_metrics.emptyPollCount;
@@ -451,7 +451,7 @@ namespace jam
 				if (wake != f->wakeup_ns)
 					continue;
 				f->wakeup_ns = 0_ns;
-                ++m_metrics.wakeupTimerCount;
+				++m_metrics.wakeupTimerCount;
 				MakeReady(id);
 			}
 			else if (f->state == eFiberState::WatingExternal)
@@ -472,7 +472,7 @@ namespace jam
 					if (f->cancel) 
 						f->cancel->RequestCancel(eCancelCode::Timeout);
 
-                    ++m_metrics.wakeupTimeoutCount;
+					++m_metrics.wakeupTimeoutCount;
 					MakeReady(id);
 				}
 			}

@@ -972,7 +972,7 @@ int main(int argc, char** argv)
 			.profile		  = CoreProfileServer,
 		}
 	};
-	net::JamNetRuntime runtime(config);
+	net::NetRuntime runtime(config);
 
 	if (measureAll || measureArch || measureNonArch)
 	{

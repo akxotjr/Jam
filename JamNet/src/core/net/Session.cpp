@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/Session.h"
 
 #include "jamnet/core/executor/GlobalExecutor.h"

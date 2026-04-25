@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "jamnet/core/executor/Lock.h"
 
 namespace jam
@@ -10,7 +10,7 @@ namespace jam
 		void Push(T job)
 		{
 			WRITE_LOCK
-			m_items.push(job);
+			m_items.push(std::move(job));
 		}
 
 		std::optional<T> TryPop()
@@ -30,7 +30,7 @@ namespace jam
 				if (m_items.empty())
 					return T();
 
-			T ret = m_items.front();
+			T ret = std::move(m_items.front());
 			m_items.pop();
 			return ret;
 		}

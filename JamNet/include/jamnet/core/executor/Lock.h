@@ -1,9 +1,9 @@
-﻿#pragma once
+#pragma once
 
 namespace jam
 {
-    /*----------------
-	    RW SpinLock
+	/*----------------
+		RW SpinLock
 	-----------------*/
 
 	/*--------------------------------------------
@@ -12,53 +12,53 @@ namespace jam
 	R : ReadFlag (Shared Lock Count)
 	---------------------------------------------*/
 
-    class Lock
-    {
-        enum : uint32
-        {
-            ACQUIRE_TIMEOUT_TICK = 10000,
-            MAX_SPIN_COUNT       = 5000,
-            WRITE_THREAD_MASK    = 0xFFFF'0000,
-            READ_COUNT_MASK      = 0x0000'FFFF,
-            EMPTY_FLAG           = 0x0000'0000
-        };
+	class Lock
+	{
+		enum : uint32
+		{
+			ACQUIRE_TIMEOUT_TICK = 10000,
+			MAX_SPIN_COUNT       = 5000,
+			WRITE_THREAD_MASK    = 0xFFFF'0000,
+			READ_COUNT_MASK      = 0x0000'FFFF,
+			EMPTY_FLAG           = 0x0000'0000
+		};
 
-    public:
-        void            WriteLock(const char* name);
-        void            WriteUnlock(const char* name);
-        void            ReadLock(const char* name);
-        void            ReadUnlock(const char* name);
+	public:
+		void            WriteLock(const char* name);
+		void            WriteUnlock(const char* name);
+		void            ReadLock(const char* name);
+		void            ReadUnlock(const char* name);
 
-    private:
-        Atomic<uint32>  m_lockFlag = EMPTY_FLAG;
-        uint16          m_writeCount = 0;
-    };
+	private:
+		Atomic<uint32>  m_lockFlag = EMPTY_FLAG;
+		uint16          m_writeCount = 0;
+	};
 
-    /*----------------
-        LockGuards
-    -----------------*/
+	/*----------------
+		LockGuards
+	-----------------*/
 
-    class ReadLockGuard
-    {
-    public:
-        ReadLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.ReadLock(name); }
-        ~ReadLockGuard() { m_lock.ReadUnlock(m_name); }
+	class ReadLockGuard
+	{
+	public:
+		ReadLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.ReadLock(name); }
+		~ReadLockGuard() { m_lock.ReadUnlock(m_name); }
 
-    private:
-        Lock&           m_lock;
-        const char*     m_name;
-    };
+	private:
+		Lock&           m_lock;
+		const char*     m_name;
+	};
 
-    class WriteLockGuard
-    {
-    public:
-        WriteLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.WriteLock(name); }
-        ~WriteLockGuard() { m_lock.WriteUnlock(m_name); }
+	class WriteLockGuard
+	{
+	public:
+		WriteLockGuard(Lock& lock, const char* name) : m_lock(lock), m_name(name) { m_lock.WriteLock(name); }
+		~WriteLockGuard() { m_lock.WriteUnlock(m_name); }
 
-    private:
-        Lock&           m_lock;
-        const char*     m_name;
-    };
+	private:
+		Lock&           m_lock;
+		const char*     m_name;
+	};
 }
 
 

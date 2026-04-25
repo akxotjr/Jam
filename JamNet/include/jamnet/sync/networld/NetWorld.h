@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "jamnet/core/executor/Mailbox.h"
 #include "jamnet/core/executor/ShardRoutingPolicy.h"

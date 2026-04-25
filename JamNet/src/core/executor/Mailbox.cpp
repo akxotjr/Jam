@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/executor/Mailbox.h"
 #include "jamnet/core/executor/ShardExecutor.h"
 

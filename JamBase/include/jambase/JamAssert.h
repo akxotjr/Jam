@@ -155,8 +155,9 @@ namespace jam::detail
 #define JAM_ASSERT_OR_RETURN(expr)                                                  \
 	do                                                                              \
 	{                                                                               \
-		JAM_ASSERT(expr);                                                           \
-		if (!(expr))                                                                \
+		const bool jam_assert_or_return_result__ = static_cast<bool>(expr);          \
+		JAM_ASSERT(jam_assert_or_return_result__);                                  \
+		if (!jam_assert_or_return_result__)                                         \
 		{                                                                           \
 			::jam::detail::OnCheckFailure(#expr, __FILE__, __LINE__, __func__);     \
 			return;                                                                 \
@@ -166,8 +167,9 @@ namespace jam::detail
 #define JAM_ASSERT_OR_RETURN_MSG(expr, ...)                                         \
 	do                                                                              \
 	{                                                                               \
-		JAM_ASSERT_MSG(expr, __VA_ARGS__);                                           \
-		if (!(expr))                                                                \
+		const bool jam_assert_or_return_result__ = static_cast<bool>(expr);          \
+		JAM_ASSERT_MSG(jam_assert_or_return_result__, __VA_ARGS__);                 \
+		if (!jam_assert_or_return_result__)                                         \
 		{                                                                           \
 			::jam::detail::OnCheckFailureMsg(#expr, __FILE__, __LINE__, __func__,   \
 				__VA_ARGS__);                                                       \
@@ -178,8 +180,9 @@ namespace jam::detail
 #define JAM_ASSERT_OR_RETURN_VALUE(expr, value)                                     \
 	do                                                                              \
 	{                                                                               \
-		JAM_ASSERT(expr);                                                           \
-		if (!(expr))                                                                \
+		const bool jam_assert_or_return_result__ = static_cast<bool>(expr);          \
+		JAM_ASSERT(jam_assert_or_return_result__);                                  \
+		if (!jam_assert_or_return_result__)                                         \
 		{                                                                           \
 			::jam::detail::OnCheckFailure(#expr, __FILE__, __LINE__, __func__);     \
 			return (value);                                                         \
@@ -189,8 +192,9 @@ namespace jam::detail
 #define JAM_ASSERT_OR_RETURN_VALUE_MSG(expr, value, ...)                            \
 	do                                                                              \
 	{                                                                               \
-		JAM_ASSERT_MSG(expr, __VA_ARGS__);                                           \
-		if (!(expr))                                                                \
+		const bool jam_assert_or_return_result__ = static_cast<bool>(expr);          \
+		JAM_ASSERT_MSG(jam_assert_or_return_result__, __VA_ARGS__);                 \
+		if (!jam_assert_or_return_result__)                                         \
 		{                                                                           \
 			::jam::detail::OnCheckFailureMsg(#expr, __FILE__, __LINE__, __func__,   \
 				__VA_ARGS__);                                                       \

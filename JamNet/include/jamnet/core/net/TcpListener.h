@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "jamnet/core/net/IocpCore.h"
 
 namespace jam::net

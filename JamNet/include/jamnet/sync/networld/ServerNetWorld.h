@@ -75,8 +75,8 @@ namespace jam::net
 
 		std::atomic<bool>						m_pendingInitialFullSnapshot{ false };
 
-		std::vector<uint64>						m_members;
-		std::unordered_map<NetId, entt::entity>	m_netIdToEntity;
+		std::vector<uint64>							m_members;
+		std::unordered_map<NetId, entt::entity>		m_netIdToEntity;
 		std::unordered_map<uint64, entt::entity>	m_userToControlledEntity;
 	};
 }

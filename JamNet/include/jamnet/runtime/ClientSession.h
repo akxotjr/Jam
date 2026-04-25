@@ -10,61 +10,63 @@
 
 namespace jam::net
 {
-    class ClientNetworkManager;
+	class ClientNetworkManager;
 
-    class ClientTcpSession : public TcpSession
-    {
-    protected:
-        void                    OnConnected() override;
-        void                    OnDisconnected() override;
-        void                    OnSend(int32 len) override {}
-        void                    OnRecv(BYTE* buffer, int32 len) override {}
-        void                    HandleCustomPacket(const PacketHeaderView& view) override;
+	class ClientTcpSession : public TcpSession
+	{
+	protected:
+		void                    OnConnected() override;
+		void                    OnDisconnected() override;
+		void                    OnSend(int32 len) override {}
+		void                    OnRecv(BYTE* buffer, int32 len) override {}
+		void                    HandleCustomPacket(const PacketHeaderView& view) override;
 
-    public:
-        void                    SetNetworkManager(ClientNetworkManager* manager) { m_manager = manager; }
-        void					SetUserId(uint64 userId) { m_userId = userId; }
-        uint64					GetUserId() const { return m_userId; }
+	public:
+		void                    SetNetworkManager(ClientNetworkManager* manager) { m_manager = manager; }
+		void					SetUserId(uint64 userId) { m_userId = userId; }
+		uint64					GetUserId() const { return m_userId; }
 
-    private:
-        void                    RequestTcpBind();
-        void                    OnTcpBindResponse(std::optional<RPCTableRef<fb::fbTcpBindRes>> res);
+	private:
+		void                    RequestTcpBind();
+		void                    OnTcpBindResponse(std::optional<RPCTableRef<fb::fbTcpBindRes>> res);
 
-    private:
-        ClientNetworkManager*   m_manager = nullptr;
+	private:
+		ClientNetworkManager*   m_manager = nullptr;
 		uint64                  m_userId = 0;
-    };
+	};
 
-    class ClientUdpSession : public UdpSession
-    {
-    protected:
-        void                    OnConnected() override;
-        void                    OnDisconnected() override;
-        void                    OnSend(int32 len) override {}
-        void                    OnRecv(BYTE* buffer, int32 len) override {}
-        void                    HandleCustomPacket(const PacketHeaderView& view) override;
+	class ClientUdpSession : public UdpSession
+	{
+		friend class ClientNetworkManager;
 
-    public:
-        void                    SetNetworkManager(ClientNetworkManager* manager) { m_manager = manager; }
-        void					SetUserId(uint64 userId) { m_userId = userId; }
-        uint64					GetUserId() const { return m_userId; }
+	protected:
+		void                    OnConnected() override;
+		void                    OnDisconnected() override;
+		void                    OnSend(int32 len) override {}
+		void                    OnRecv(BYTE* buffer, int32 len) override {}
+		void                    HandleCustomPacket(const PacketHeaderView& view) override;
 
-        void                    RequestAutoAssignWorld();
-        void                    RequestJoinWorld(const WorldKey& targetWorld);
-        void                    RequestLeaveWorld();
-        void                    RequestTransferWorld(const WorldKey& targetWorld);
+	public:
+		void                    SetNetworkManager(ClientNetworkManager* manager) { m_manager = manager; }
+		void					SetUserId(uint64 userId) { m_userId = userId; }
+		uint64					GetUserId() const { return m_userId; }
 
-    private:
-        void                    RequestUdpBind();
-        void                    RequestWorldAction(fb::fbWorldRequestAction action, const WorldKey& targetWorld = INVALID_WORLD_KEY);
+		void                    RequestAutoAssignWorld();
+		void                    RequestJoinWorld(const WorldKey& targetWorld);
+		void                    RequestLeaveWorld();
+		void                    RequestTransferWorld(const WorldKey& targetWorld);
 
-        void                    OnUdpBindResponse(std::optional<RPCTableRef<fb::fbUdpBindRes>> res);
-        void                    OnRequestWorldAssignmentRes(std::optional<RPCTableRef<fb::fbRequestWorldAssignmentRes>> res);
+	private:
+		void                    RequestUdpBind();
+		void                    RequestWorldAction(fb::fbWorldRequestAction action, const WorldKey& targetWorld = INVALID_WORLD_KEY);
 
-    private:
-        ClientNetworkManager*   m_manager            = nullptr;
-        uint64                  m_userId             = 0;
-        WorldId                 m_worldId            = INVALID_WORLD_ID;
-        uint8                   m_pendingWorldAction = static_cast<uint8>(fb::fbWorldRequestAction_AutoAssign);
-    };
+		void                    OnUdpBindResponse(std::optional<RPCTableRef<fb::fbUdpBindRes>> res);
+		void                    OnRequestWorldAssignmentRes(std::optional<RPCTableRef<fb::fbRequestWorldAssignmentRes>> res);
+
+	private:
+		ClientNetworkManager*   m_manager            = nullptr;
+		uint64                  m_userId             = 0;
+		WorldId                 m_worldId            = INVALID_WORLD_ID;
+		uint8                   m_pendingWorldAction = static_cast<uint8>(fb::fbWorldRequestAction_AutoAssign);
+	};
 }

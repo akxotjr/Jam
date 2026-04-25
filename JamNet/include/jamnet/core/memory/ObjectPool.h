@@ -66,10 +66,10 @@ namespace jam
 				}
 			}
 
-			SLIST_HEADER freeList;
-			std::atomic<std::uint64_t> allocCount = 0;
-			std::atomic<std::uint64_t> reuseCount = 0;
-			std::atomic<std::uint64_t> freeCount  = 0;
+			SLIST_HEADER				freeList;
+			std::atomic<std::uint64_t>	allocCount = 0;
+			std::atomic<std::uint64_t>	reuseCount = 0;
+			std::atomic<std::uint64_t>	freeCount  = 0;
 		};
 
 	public:

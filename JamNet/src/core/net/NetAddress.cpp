@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/NetAddress.h"
 
 namespace jam::net
