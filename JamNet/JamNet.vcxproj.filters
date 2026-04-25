@@ -240,7 +240,7 @@
     <ClInclude Include="include\jamnet\sync\replication\ReplicationTypes.h">
       <Filter>sync\replication</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ReplicationUtils.h">
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationCodec.h">
       <Filter>sync\replication</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h">
@@ -318,9 +318,6 @@
     <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h">
       <Filter>sync\replication\server system</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerAoiSystem.h">
-      <Filter>sync\replication\server system</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\sync\replication\CorrectionReplayRunner.h">
       <Filter>sync\replication\client system</Filter>
     </ClInclude>
@@ -350,6 +347,18 @@
     </ClInclude>
     <ClInclude Include="include\jamnet\JamNet.h">
       <Filter>Header</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\ServerAoiSystem.h">
+      <Filter>sync\replication\server system</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\replication\BitBuffer.h">
+      <Filter>sync\replication</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\SessionShardState.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\PacketWireTime.h">
+      <Filter>core\net</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -524,9 +533,6 @@
     <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp">
       <Filter>sync\replication\server system</Filter>
     </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerAoiSystem.cpp">
-      <Filter>sync\replication\server system</Filter>
-    </ClCompile>
     <ClCompile Include="src\sync\replication\CorrectionReplayRunner.cpp">
       <Filter>sync\replication\client system</Filter>
     </ClCompile>
@@ -537,6 +543,15 @@
       <Filter>core\net</Filter>
     </ClCompile>
     <ClCompile Include="src\core\net\TcpRecvAssembler.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\ServerAoiSystem.cpp">
+      <Filter>sync\replication\server system</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\replication\BitBuffer.cpp">
+      <Filter>sync\replication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\PacketWireTime.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
   </ItemGroup>

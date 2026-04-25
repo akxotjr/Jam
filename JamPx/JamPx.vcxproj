@@ -169,15 +169,17 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(ProjectDir)api\;$(ProjectDir);$(ProjectDir)include\</IncludePath>
+    <IncludePath>
+    </IncludePath>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jampx\</IntDir>
-    <TargetName>libjampx</TargetName>
+    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <TargetName>libjampx_d</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(ProjectDir)api\;$(ProjectDir);$(ProjectDir)include\</IncludePath>
+    <IncludePath>
+    </IncludePath>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jampx\</IntDir>
+    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
     <TargetName>libjampx</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -196,6 +198,13 @@
     <VcpkgUseStatic>true</VcpkgUseStatic>
     <VcpkgUseMD>true</VcpkgUseMD>
     <VcpkgTriplet>x64-windows-static-md</VcpkgTriplet>
+    <VcpkgInstalledDir>$(VcpkgRoot)\installed\</VcpkgInstalledDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>true</VcpkgUseMD>
+    <VcpkgTriplet>x64-windows-static-md</VcpkgTriplet>
+    <VcpkgInstalledDir>$(VcpkgRoot)\installed</VcpkgInstalledDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -232,9 +241,10 @@
       <PreprocessorDefinitions>JAMPX_WITH_EDITOR=1;JAMPX_PREFAB_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_asset.schema.json";JAMPX_LEVEL_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_level.schema.json";_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamBase\include\;$(VcpkgRoot)\installed\x64-windows\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir)api\;$(SolutionDir)JamBase\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -250,9 +260,10 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(VcpkgRoot)\installed\x64-windows\include\;C:\Users\akxotjr\GameWorkSpace\JamPx\JamPhysicsAPI\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir)api\;$(SolutionDir)JamBase\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

@@ -73,10 +73,11 @@
     <JamNetUseMimalloc Condition="'$(JamNetUseMimalloc)'==''">1</JamNetUseMimalloc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <TargetName>libjamnet</TargetName>
+    <TargetName>libjamnet_d</TargetName>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jamnet\</IntDir>
-    <LibraryPath>$(SolutionDir)lib\$(Platform)\$(Configuration)\</LibraryPath>
+    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <LibraryPath>
+    </LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
@@ -87,7 +88,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>libjamnet</TargetName>
     <OutDir>$(SolutionDir)lib\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\jamnet\</IntDir>
+    <IntDir>$(SolutionDir)intermediates\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
     <LibraryPath>$(SolutionDir)lib\$(Platform)\$(Configuration)\</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -100,6 +101,13 @@
     <VcpkgUseStatic>true</VcpkgUseStatic>
     <VcpkgUseMD>true</VcpkgUseMD>
     <VcpkgTriplet>x64-windows-static-md</VcpkgTriplet>
+    <VcpkgInstalledDir>$(VcpkgRoot)\installed\</VcpkgInstalledDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>true</VcpkgUseMD>
+    <VcpkgTriplet>x64-windows-static-md</VcpkgTriplet>
+    <VcpkgInstalledDir>$(VcpkgRoot)\installed\</VcpkgInstalledDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -151,6 +159,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)JamPx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -169,8 +178,9 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\jampx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -216,11 +226,13 @@
     <ClInclude Include="include\jamnet\core\net\NetworkProfile.h" />
     <ClInclude Include="include\jamnet\core\net\PacketBuilder.h" />
     <ClInclude Include="include\jamnet\core\net\PacketStructure.h" />
+    <ClInclude Include="include\jamnet\core\net\PacketWireTime.h" />
     <ClInclude Include="include\jamnet\core\net\RPC.h" />
     <ClInclude Include="include\jamnet\core\net\RPCAPI.h" />
     <ClInclude Include="include\jamnet\core\net\Service.h" />
     <ClInclude Include="include\jamnet\core\net\Session.h" />
     <ClInclude Include="include\jamnet\core\net\SessionComponents.h" />
+    <ClInclude Include="include\jamnet\core\net\SessionShardState.h" />
     <ClInclude Include="include\jamnet\core\net\SessionSystems.h" />
     <ClInclude Include="include\jamnet\core\net\SocketUtils.h" />
     <ClInclude Include="include\jamnet\core\net\TcpListener.h" />
@@ -248,7 +260,7 @@
     <ClInclude Include="include\jamnet\sync\networld\NetWorld.h" />
     <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h" />
     <ClInclude Include="include\jamnet\sync\physics\ShardJobBridge.h" />
-    <ClInclude Include="include\jamnet\sync\replication\ServerAoiSystem.h" />
+    <ClInclude Include="include\jamnet\sync\replication\BitBuffer.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ClientReplaySystem.h" />
@@ -260,7 +272,8 @@
     <ClInclude Include="include\jamnet\sync\replication\NetWorldContext.h" />
     <ClInclude Include="include\jamnet\sync\replication\ReplicationEvents.h" />
     <ClInclude Include="include\jamnet\sync\replication\ReplicationTypes.h" />
-    <ClInclude Include="include\jamnet\sync\replication\ReplicationUtils.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ReplicationCodec.h" />
+    <ClInclude Include="include\jamnet\sync\replication\ServerAoiSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ServerInputSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h" />
     <ClInclude Include="include\jamnet\sync\replication\ServerReplicationSystem.h" />
@@ -308,6 +321,7 @@
     <ClCompile Include="src\core\net\NetAddress.cpp" />
     <ClCompile Include="src\core\net\NetworkProfile.cpp" />
     <ClCompile Include="src\core\net\PacketBuilder.cpp" />
+    <ClCompile Include="src\core\net\PacketWireTime.cpp" />
     <ClCompile Include="src\core\net\RPC.cpp" />
     <ClCompile Include="src\core\net\Service.cpp" />
     <ClCompile Include="src\core\net\Session.cpp" />
@@ -333,13 +347,14 @@
     <ClCompile Include="src\sync\networld\NetWorld.cpp" />
     <ClCompile Include="src\sync\networld\ServerNetWorld.cpp" />
     <ClCompile Include="src\sync\physics\ShardJobBridge.cpp" />
-    <ClCompile Include="src\sync\replication\ServerAoiSystem.cpp" />
+    <ClCompile Include="src\sync\replication\BitBuffer.cpp" />
     <ClCompile Include="src\sync\replication\ClientInputSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientReplaySystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientReplicationSystem.cpp" />
     <ClCompile Include="src\sync\replication\ClientSamplingSystem.cpp" />
     <ClCompile Include="src\sync\replication\CorrectionReplayRunner.cpp" />
+    <ClCompile Include="src\sync\replication\ServerAoiSystem.cpp" />
     <ClCompile Include="src\sync\replication\ServerInputSystem.cpp" />
     <ClCompile Include="src\sync\replication\ServerPhysicsSystem.cpp" />
     <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp" />
