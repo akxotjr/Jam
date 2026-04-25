@@ -126,6 +126,9 @@ namespace
 		float goodputPct = 0.0f;
 		float fragEfficiencyPct = 0.0f;
 		float ackPiggybackHitPct = 0.0f;
+		float avgUdpPacketsPerDatagram = 0.0f;
+		float avgUdpBytesPerDatagram = 0.0f;
+		float udpBundleHitPct = 0.0f;
 
 		float outOfOrderPct = 0.0f;
 		float duplicatePct = 0.0f;
@@ -157,7 +160,7 @@ namespace
 	}
 
 	static std::optional<SessionMetricsRow> CaptureSessionRow(
-		const std::shared_ptr<Session>& session,
+		Session* session,
 		uint32 clientInstanceId,
 		uint64 userId,
 		const char* protocolTag)
@@ -165,14 +168,21 @@ namespace
 		if (!session)
 			return std::nullopt;
 
+		const SessionHandle handle = session->GetSessionHandle();
 		auto promise = std::make_shared<std::promise<std::optional<SessionMetricsRow>>>();
 		auto future = promise->get_future();
 
-		session->Post(Job([session, clientInstanceId, userId, protocol = std::string(protocolTag), promise]()
+		session->Post(Job([handle, clientInstanceId, userId, protocol = std::string(protocolTag), promise]()
 			{
 				try
 				{
 					auto& L = CurrentShardLocalChecked();
+					Session* session = FindSessionByHandle(L, handle);
+					if (!session)
+					{
+						promise->set_value(std::nullopt);
+						return;
+					}
 					auto& R = L.registry;
 
 					const entt::entity e = session->GetEntity();
@@ -224,6 +234,9 @@ namespace
 					row.goodputPct = kpiView.goodputPct;
 					row.fragEfficiencyPct = kpiView.fragEfficiencyPct;
 					row.ackPiggybackHitPct = kpiView.ackPiggybackHitPct;
+					row.avgUdpPacketsPerDatagram = kpiView.avgUdpPacketsPerDatagram;
+					row.avgUdpBytesPerDatagram = kpiView.avgUdpBytesPerDatagram;
+					row.udpBundleHitPct = kpiView.udpBundleHitPct;
 
 					row.outOfOrderPct = kpiView.outOfOrderPct;
 					row.duplicatePct = kpiView.duplicatePct;
@@ -249,19 +262,26 @@ namespace
 		return future.get();
 	}
 
-	static bool ResetSessionProfileWindow(const std::shared_ptr<Session>& session)
+	static bool ResetSessionProfileWindow(Session* session)
 	{
 		if (!session)
 			return false;
 
+		const SessionHandle handle = session->GetSessionHandle();
 		auto promise = std::make_shared<std::promise<bool>>();
 		auto future = promise->get_future();
 
-		session->Post(Job([session, promise]()
+		session->Post(Job([handle, promise]()
 			{
 				try
 				{
 					auto& L = CurrentShardLocalChecked();
+					Session* session = FindSessionByHandle(L, handle);
+					if (!session)
+					{
+						promise->set_value(false);
+						return;
+					}
 					auto& R = L.registry;
 
 					const entt::entity e = session->GetEntity();
@@ -373,6 +393,9 @@ namespace
 				double sum_deliveryLatency = 0.0;
 				double sum_recoveryLatency = 0.0;
 				double sum_goodput = 0.0;
+				double sum_avgUdpPacketsPerDatagram = 0.0;
+				double sum_avgUdpBytesPerDatagram = 0.0;
+				double sum_udpBundleHitPct = 0.0;
 				double max_pending = 0.0;
 				double max_rtxPerPacket = 0.0;
 			};
@@ -403,6 +426,9 @@ namespace
 				a.sum_deliveryLatency += row.deliveryLatencyAvg_ms;
 				a.sum_recoveryLatency += row.recoveryLatencyAvg_ms;
 				a.sum_goodput += row.goodputPct;
+				a.sum_avgUdpPacketsPerDatagram += row.avgUdpPacketsPerDatagram;
+				a.sum_avgUdpBytesPerDatagram += row.avgUdpBytesPerDatagram;
+				a.sum_udpBundleHitPct += row.udpBundleHitPct;
 				a.max_pending = std::max(a.max_pending, static_cast<double>(row.pendingReliableNow));
 				a.max_rtxPerPacket = std::max(a.max_rtxPerPacket, static_cast<double>(row.maxRtxPerPacket));
 			}
@@ -411,7 +437,7 @@ namespace
 			if (!summary.is_open())
 				return;
 
-			summary << "key,samples,avg_wireRtt_ms,avg_wireRttSample_ms,avg_pipelineRtt_ms,avg_pipelineRttSample_ms,avg_pipelineQueueTotal_ms,avg_pingClientQueue_ms,avg_pingServerQueue_ms,avg_pongServerProc_ms,avg_pongServerQueue_ms,avg_pongClientQueue_ms,avg_jitter_ms,avg_packetLoss,avg_bandwidthMbps,avg_txPacketsPerSec,avg_rxPacketsPerSec,avg_rtxHitPct,avg_rtxRecoveryPct,avg_deliveryLatency_ms,avg_recoveryLatency_ms,avg_goodputPct,max_pendingReliableNow,max_maxRtxPerPacket\n";
+			summary << "key,samples,avg_wireRtt_ms,avg_wireRttSample_ms,avg_pipelineRtt_ms,avg_pipelineRttSample_ms,avg_pipelineQueueTotal_ms,avg_pingClientQueue_ms,avg_pingServerQueue_ms,avg_pongServerProc_ms,avg_pongServerQueue_ms,avg_pongClientQueue_ms,avg_jitter_ms,avg_packetLoss,avg_bandwidthMbps,avg_txPacketsPerSec,avg_rxPacketsPerSec,avg_rtxHitPct,avg_rtxRecoveryPct,avg_deliveryLatency_ms,avg_recoveryLatency_ms,avg_goodputPct,avg_udpPacketsPerDatagram,avg_udpBytesPerDatagram,avg_udpBundleHitPct,max_pendingReliableNow,max_maxRtxPerPacket\n";
 			for (const auto& [key, a] : table)
 			{
 				const double n = (a.count == 0) ? 1.0 : static_cast<double>(a.count);
@@ -438,6 +464,9 @@ namespace
 					<< (a.sum_deliveryLatency / n) << ","
 					<< (a.sum_recoveryLatency / n) << ","
 					<< (a.sum_goodput / n) << ","
+					<< (a.sum_avgUdpPacketsPerDatagram / n) << ","
+					<< (a.sum_avgUdpBytesPerDatagram / n) << ","
+					<< (a.sum_udpBundleHitPct / n) << ","
 					<< a.max_pending << ","
 					<< a.max_rtxPerPacket << "\n";
 			}
@@ -452,7 +481,7 @@ namespace
 				<< "jitter_ms,packetLoss,recvThroughput_kbps,sendThroughput_kbps,bandwidthMbps,"
 				<< "txPacketsPerSec,rxPacketsPerSec,txBytesPerSec,rxBytesPerSec,"
 				<< "firstSendSuccessPct,rtxHitPct,rtxRecoveryPct,avgRtxPerHitPacket,deliveryLatencyAvg_ms,recoveryLatencyAvg_ms,"
-				<< "goodputPct,fragEfficiencyPct,ackPiggybackHitPct,outOfOrderPct,duplicatePct,"
+				<< "goodputPct,fragEfficiencyPct,ackPiggybackHitPct,avgUdpPacketsPerDatagram,avgUdpBytesPerDatagram,udpBundleHitPct,outOfOrderPct,duplicatePct,"
 				<< "pendingReliableNow,pendingReliablePeek,maxRtxPerPacket,rtxTimeoutPct,rtxGiveupPct\n";
 		}
 
@@ -495,6 +524,9 @@ namespace
 				<< row.goodputPct << ","
 				<< row.fragEfficiencyPct << ","
 				<< row.ackPiggybackHitPct << ","
+				<< row.avgUdpPacketsPerDatagram << ","
+				<< row.avgUdpBytesPerDatagram << ","
+				<< row.udpBundleHitPct << ","
 				<< row.outOfOrderPct << ","
 				<< row.duplicatePct << ","
 				<< row.pendingReliableNow << ","
