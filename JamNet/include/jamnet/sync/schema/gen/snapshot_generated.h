@@ -156,39 +156,46 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) fbCharacterFull128 FLATBUFFERS_FINAL_CLAS
 };
 FLATBUFFERS_STRUCT_END(fbCharacterFull128, 16);
 
-FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) fbCharacterFull160 FLATBUFFERS_FINAL_CLASS {
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) fbCharacterFull160 FLATBUFFERS_FINAL_CLASS {
  private:
-  uint64_t data0_;
-  uint64_t data1_;
+  uint32_t data0_;
+  uint32_t data1_;
   uint32_t data2_;
-  int32_t padding0__;
+  uint32_t data3_;
+  uint32_t data4_;
 
  public:
   fbCharacterFull160()
       : data0_(0),
         data1_(0),
         data2_(0),
-        padding0__(0) {
-    (void)padding0__;
+        data3_(0),
+        data4_(0) {
   }
-  fbCharacterFull160(uint64_t _data0, uint64_t _data1, uint32_t _data2)
+  fbCharacterFull160(uint32_t _data0, uint32_t _data1, uint32_t _data2, uint32_t _data3, uint32_t _data4)
       : data0_(::flatbuffers::EndianScalar(_data0)),
         data1_(::flatbuffers::EndianScalar(_data1)),
         data2_(::flatbuffers::EndianScalar(_data2)),
-        padding0__(0) {
-    (void)padding0__;
+        data3_(::flatbuffers::EndianScalar(_data3)),
+        data4_(::flatbuffers::EndianScalar(_data4)) {
   }
-  uint64_t data0() const {
+  uint32_t data0() const {
     return ::flatbuffers::EndianScalar(data0_);
   }
-  uint64_t data1() const {
+  uint32_t data1() const {
     return ::flatbuffers::EndianScalar(data1_);
   }
   uint32_t data2() const {
     return ::flatbuffers::EndianScalar(data2_);
   }
+  uint32_t data3() const {
+    return ::flatbuffers::EndianScalar(data3_);
+  }
+  uint32_t data4() const {
+    return ::flatbuffers::EndianScalar(data4_);
+  }
 };
-FLATBUFFERS_STRUCT_END(fbCharacterFull160, 24);
+FLATBUFFERS_STRUCT_END(fbCharacterFull160, 20);
 
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) fbCharacterDelta96 FLATBUFFERS_FINAL_CLASS {
  private:
@@ -459,6 +466,7 @@ struct fbActorMetaT : public ::flatbuffers::NativeTable {
   uint64_t prefab_key = 0;
   uint32_t spawn_req_id = 0;
   uint32_t packed_id = 0;
+  uint8_t body_type = 0;
 };
 
 struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -469,7 +477,8 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CONTROLLER_USER_ID = 6,
     VT_PREFAB_KEY = 8,
     VT_SPAWN_REQ_ID = 10,
-    VT_PACKED_ID = 12
+    VT_PACKED_ID = 12,
+    VT_BODY_TYPE = 14
   };
   uint64_t owner_user_id() const {
     return GetField<uint64_t>(VT_OWNER_USER_ID, 0);
@@ -486,6 +495,9 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t packed_id() const {
     return GetField<uint32_t>(VT_PACKED_ID, 0);
   }
+  uint8_t body_type() const {
+    return GetField<uint8_t>(VT_BODY_TYPE, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -494,6 +506,7 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint64_t>(verifier, VT_PREFAB_KEY, 8) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_REQ_ID, 4) &&
            VerifyField<uint32_t>(verifier, VT_PACKED_ID, 4) &&
+           VerifyField<uint8_t>(verifier, VT_BODY_TYPE, 1) &&
            verifier.EndTable();
   }
   fbActorMetaT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -520,6 +533,9 @@ struct fbActorMetaBuilder {
   void add_packed_id(uint32_t packed_id) {
     fbb_.AddElement<uint32_t>(fbActorMeta::VT_PACKED_ID, packed_id, 0);
   }
+  void add_body_type(uint8_t body_type) {
+    fbb_.AddElement<uint8_t>(fbActorMeta::VT_BODY_TYPE, body_type, 0);
+  }
   explicit fbActorMetaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -537,13 +553,15 @@ inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(
     uint64_t controller_user_id = 0,
     uint64_t prefab_key = 0,
     uint32_t spawn_req_id = 0,
-    uint32_t packed_id = 0) {
+    uint32_t packed_id = 0,
+    uint8_t body_type = 0) {
   fbActorMetaBuilder builder_(_fbb);
   builder_.add_prefab_key(prefab_key);
   builder_.add_controller_user_id(controller_user_id);
   builder_.add_owner_user_id(owner_user_id);
   builder_.add_packed_id(packed_id);
   builder_.add_spawn_req_id(spawn_req_id);
+  builder_.add_body_type(body_type);
   return builder_.Finish();
 }
 
@@ -604,7 +622,7 @@ struct fbActorEntity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_BASELINE_REV, 4) &&
            VerifyField<jam::net::fb::fbTransformFull>(verifier, VT_TRANSFORM_FULL, 8) &&
            VerifyField<jam::net::fb::fbTransformDelta>(verifier, VT_TRANSFORM_DELTA, 8) &&
-           VerifyField<jam::net::fb::fbCharacterFull160>(verifier, VT_CHARACTER_FULL, 8) &&
+           VerifyField<jam::net::fb::fbCharacterFull160>(verifier, VT_CHARACTER_FULL, 4) &&
            VerifyField<jam::net::fb::fbCharacterDelta128>(verifier, VT_CHARACTER_DELTA, 8) &&
            VerifyField<jam::net::fb::fbKinematicState>(verifier, VT_KINEMATIC_STATE, 8) &&
            verifier.EndTable();
@@ -832,6 +850,7 @@ inline void fbActorMeta::UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolve
   { auto _e = prefab_key(); _o->prefab_key = _e; }
   { auto _e = spawn_req_id(); _o->spawn_req_id = _e; }
   { auto _e = packed_id(); _o->packed_id = _e; }
+  { auto _e = body_type(); _o->body_type = _e; }
 }
 
 inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -847,13 +866,15 @@ inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatB
   auto _prefab_key = _o->prefab_key;
   auto _spawn_req_id = _o->spawn_req_id;
   auto _packed_id = _o->packed_id;
+  auto _body_type = _o->body_type;
   return jam::net::fb::CreatefbActorMeta(
       _fbb,
       _owner_user_id,
       _controller_user_id,
       _prefab_key,
       _spawn_req_id,
-      _packed_id);
+      _packed_id,
+      _body_type);
 }
 
 inline fbActorEntityT::fbActorEntityT(const fbActorEntityT &o)

@@ -14,6 +14,8 @@ namespace jam::net
 
         void                    SpawnActor(entt::entity e, const px::SpawnDesc& desc) const;
         void                    DespawnActor(entt::entity e) const;
+        const std::vector<entt::entity>&
+                                GetLastActiveEntities() const { return m_lastActiveEntities; }
 
     private:
         void                    ApplyInputs() const;
@@ -36,7 +38,7 @@ namespace jam::net
 
             eType           type     = eType::Spawn;
             entt::entity    e        = entt::null;
-            px::eBodyType   bodyType = px::eBodyType::None;
+            //px::eBodyType   bodyType = px::eBodyType::None;
         };
 
     private:
@@ -50,5 +52,6 @@ namespace jam::net
         uint32                              m_tickBurstBudget   = 4;
 
         mutable std::vector<PendingActorOp> m_pendingActorOps;
+        mutable std::vector<entt::entity>   m_lastActiveEntities;
 	};
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "jamnet/core/net/Session.h"
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 
 namespace jam::net
@@ -12,18 +13,38 @@ namespace jam::net
 		ClientTransportAdapter() = default;
 		~ClientTransportAdapter() override = default;
 
-		void SetTcpSession(std::weak_ptr<Session> session);
-		void SetUdpSession(std::weak_ptr<Session> session);
+		void SetTcpSession(Session* session);
+		void SetUdpSession(Session* session);
 
 		void Send(const TransportInfo& info, Packet packet) override;
 
 		void EnumerateWorldUsers(uint32 worldId, const std::function<void(uint64)>& fn) override {};
 
 	protected:
-		void DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn) override;
+		void DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(Session*)>& fn) override;
 
 	private:
-		std::weak_ptr<Session> m_tcp;
-		std::weak_ptr<Session> m_udp;
+		struct CachedSessionRef
+		{
+			Session*		ptr		= nullptr;
+			SessionHandle	handle	= {};
+
+			void Set(Session* session)
+			{
+				ptr    = session;
+				handle = session ? session->GetSessionHandle() : SessionHandle{};
+			}
+
+			Session* TryGetRaw() const
+			{
+				if (ptr && ptr->MatchesSessionHandle(handle))
+					return ptr;
+				return nullptr;
+			}
+		};
+
+	private:
+		CachedSessionRef m_tcp;
+		CachedSessionRef m_udp;
 	};
 }

@@ -353,7 +353,7 @@ namespace jam::net
 		if (!key.IsValid())
 			return INVALID_WORLD_ID;
 
-		READ_LOCK
+		READ_LOCK_IDX(kWorldLockIdx)
 		return m_worldDirectory.FindWorldId(key);
 	}
 
@@ -362,7 +362,7 @@ namespace jam::net
 		if (!key.IsValid())
 			return INVALID_WORLD_ID;
 
-		WRITE_LOCK
+		WRITE_LOCK_IDX(kWorldLockIdx)
 		return m_worldDirectory.FindOrAddWorld(key, options);
 	}
 
@@ -371,13 +371,13 @@ namespace jam::net
 		if (worldId == INVALID_WORLD_ID)
 			return INVALID_WORLD_KEY;
 
-		READ_LOCK
+		READ_LOCK_IDX(kWorldLockIdx)
 		return m_worldDirectory.FindWorldKey(worldId);
 	}
 
 	ServerNetWorld* ServerNetworkManager::GetWorld(WorldId worldId)
 	{
-		READ_LOCK
+		READ_LOCK_IDX(kWorldLockIdx)
 		auto it = m_worlds.find(worldId);
 		return (it != m_worlds.end()) ? it->second.get() : nullptr;
 	}
@@ -397,7 +397,7 @@ namespace jam::net
 		if (worldId == INVALID_WORLD_ID)
 			return nullptr;
 
-		WRITE_LOCK
+		WRITE_LOCK_IDX(kWorldLockIdx)
 		m_worldDirectory.SetWorldOptions(worldId, options);
 
 		auto& slot = m_worlds[worldId];
@@ -433,7 +433,7 @@ namespace jam::net
 
 		std::shared_ptr<ServerNetWorld> victim;
 		{
-			WRITE_LOCK
+			WRITE_LOCK_IDX(kWorldLockIdx)
 			auto it = m_worlds.find(worldId);
 			if (it == m_worlds.end())
 				return;
@@ -453,26 +453,40 @@ namespace jam::net
 		DestroyWorld(ResolveWorldId(key));
 	}
 
-	void ServerNetworkManager::RegisterTcpSession(uint64 userId, const std::shared_ptr<ServerTcpSession>& tcp)
+	void ServerNetworkManager::RegisterTcpSession(uint64 userId, ServerTcpSession* tcp)
 	{
 		if (!userId || !tcp)
 			return;
 
-		WRITE_LOCK
-		m_tcpSessions[userId] = tcp;
+		WRITE_LOCK_IDX(kSessionLockIdx)
+		m_tcpSessions[userId].Set(tcp);
 
 		JAMNET_LOG_INFO("UserId = {}] TCP Session registered", userId);
 	}
 
-	void ServerNetworkManager::RegisterUdpSession(uint64 userId, const std::shared_ptr<ServerUdpSession>& udp)
+	void ServerNetworkManager::RegisterUdpSession(uint64 userId, ServerUdpSession* udp)
 	{
 		if (!userId || !udp)
 			return;
 
-		WRITE_LOCK
-		m_udpSessions[userId] = udp;
+		WRITE_LOCK_IDX(kSessionLockIdx)
+		m_udpSessions[userId].Set(udp);
 
 		JAMNET_LOG_INFO("UserId = {}] UDP Session registered", userId);
+	}
+
+	void ServerNetworkManager::UnregisterUdpSession(uint64 userId, const ServerUdpSession* udp)
+	{
+		if (!userId || !udp)
+			return;
+
+		WRITE_LOCK_IDX(kSessionLockIdx)
+		auto it = m_udpSessions.find(userId);
+		if (it == m_udpSessions.end() || it->second.TryGet() != udp)
+			return;
+
+		m_udpSessions.erase(it);
+		JAMNET_LOG_INFO("UserId = {}] UDP Session unregistered", userId);
 	}
 
 	void ServerNetworkManager::UnregisterSession(uint64 userId)
@@ -482,10 +496,12 @@ namespace jam::net
 
 		std::vector<WorldId> worldsToNotify;
 		{
-			WRITE_LOCK
+			WRITE_LOCK_IDX(kSessionLockIdx)
 			m_tcpSessions.erase(userId);
 			m_udpSessions.erase(userId);
-
+		}
+		{
+			WRITE_LOCK_IDX(kWorldLockIdx)
 			for (auto& [worldId, members] : m_worldMembers)
 			{
 				if (std::erase(members, userId) > 0)
@@ -504,18 +520,18 @@ namespace jam::net
 		JAMNET_LOG_INFO("UserId = {}] Session unregistered", userId);
 	}
 
-	std::shared_ptr<ServerTcpSession> ServerNetworkManager::FindTcpSession(uint64 userId)
+	ServerTcpSession* ServerNetworkManager::FindTcpSession(uint64 userId)
 	{
-		READ_LOCK
+		READ_LOCK_IDX(kSessionLockIdx)
 		auto it = m_tcpSessions.find(userId);
-		return (it != m_tcpSessions.end()) ? it->second : nullptr;
+		return (it != m_tcpSessions.end()) ? it->second.TryGet() : nullptr;
 	}
 
-	std::shared_ptr<ServerUdpSession> ServerNetworkManager::FindUdpSession(uint64 userId)
+	ServerUdpSession* ServerNetworkManager::FindUdpSession(uint64 userId)
 	{
-		READ_LOCK
+		READ_LOCK_IDX(kSessionLockIdx)
 		auto it = m_udpSessions.find(userId);
-		return (it != m_udpSessions.end()) ? it->second : nullptr;
+		return (it != m_udpSessions.end()) ? it->second.TryGet() : nullptr;
 	}
 
 	void ServerNetworkManager::BroadcastPacket(Packet packet, eProtocolType protocol)
@@ -523,24 +539,27 @@ namespace jam::net
 		if (!packet.IsValid())
 			return;
 
-		READ_LOCK
-
-		if (protocol == eProtocolType::TCP)
+		std::vector<uint64> users;
 		{
-			for (auto& session : m_tcpSessions | std::views::values)
+			READ_LOCK_IDX(kSessionLockIdx)
+
+			if (protocol == eProtocolType::TCP)
 			{
-				if (session && session->IsConnected())
-					session->Send(ClonePacket(packet));
+				users.reserve(m_tcpSessions.size());
+				for (const auto& uid : m_tcpSessions | std::views::keys)
+					users.push_back(uid);
+			}
+			else if (protocol == eProtocolType::UDP)
+			{
+				users.reserve(m_udpSessions.size());
+				for (const auto& uid : m_udpSessions | std::views::keys)
+					users.push_back(uid);
 			}
 		}
 
-		if (protocol == eProtocolType::UDP)
+		for (uint64 uid : users)
 		{
-			for (auto& session : m_udpSessions | std::views::values)
-			{
-				if (session && session->IsConnected())
-					session->Send(ClonePacket(packet));
-			}
+			SendToUser(uid, ClonePacket(packet), protocol);
 		}
 	}
 
@@ -573,7 +592,7 @@ namespace jam::net
 		if (worldId == INVALID_WORLD_ID || userId == 0)
 			return;
 
-		WRITE_LOCK
+		WRITE_LOCK_IDX(kWorldLockIdx)
 		auto& members = m_worldMembers[worldId];
 		if (std::ranges::find(members, userId) == members.end())
 			members.push_back(userId);
@@ -585,7 +604,7 @@ namespace jam::net
 			return;
 
 		{
-			WRITE_LOCK
+			WRITE_LOCK_IDX(kWorldLockIdx)
 			auto it = m_worldMembers.find(worldId);
 			if (it == m_worldMembers.end())
 				return;
@@ -743,7 +762,7 @@ namespace jam::net
 		std::shared_ptr<WorldTransferRecord> record;
 		std::optional<WorldTransferResult> completedResult;
 		{
-			READ_LOCK
+			READ_LOCK_IDX(kTransferLockIdx)
 			if (auto it = m_transfers.find(userId); it != m_transfers.end())
 			{
 				record = it->second;
@@ -774,7 +793,7 @@ namespace jam::net
 		if (worldId == INVALID_WORLD_ID)
 			return 0;
 
-		READ_LOCK
+		READ_LOCK_IDX(kWorldLockIdx)
 		auto it = m_worldMembers.find(worldId);
 		return (it != m_worldMembers.end()) ? static_cast<uint32>(it->second.size()) : 0;
 	}
@@ -784,7 +803,7 @@ namespace jam::net
 		if (worldId == INVALID_WORLD_ID)
 			return {};
 
-		READ_LOCK
+		READ_LOCK_IDX(kWorldLockIdx)
 		return m_worldDirectory.FindWorldOptions(worldId);
 	}
 
@@ -795,7 +814,7 @@ namespace jam::net
 
 		std::vector<uint64> users;
 		{
-			READ_LOCK
+			READ_LOCK_IDX(kSessionLockIdx)
 			users.reserve(m_tcpSessions.size());
 			for (const auto& uid : m_tcpSessions | std::views::keys)
 				users.push_back(uid);
@@ -812,7 +831,7 @@ namespace jam::net
 
 		std::vector<uint64> users;
 		{
-			READ_LOCK
+			READ_LOCK_IDX(kWorldLockIdx)
 			auto it = m_worldMembers.find(worldId);
 			if (it == m_worldMembers.end())
 				return;
@@ -859,7 +878,7 @@ namespace jam::net
 
 		std::shared_ptr<WorldTransferRecord> record;
 		{
-			WRITE_LOCK
+			WRITE_LOCK_IDX(kTransferLockIdx)
 
 			auto it = m_transfers.find(userId);
 			if (it != m_transfers.end())
@@ -897,7 +916,7 @@ namespace jam::net
 	{
 		std::shared_ptr<WorldTransferRecord> record;
 		{
-			READ_LOCK
+			READ_LOCK_IDX(kTransferLockIdx)
 			auto it = m_transfers.find(userId);
 			if (it == m_transfers.end())
 				return;
@@ -913,7 +932,7 @@ namespace jam::net
 	{
 		std::shared_ptr<WorldTransferRecord> record;
 		{
-			WRITE_LOCK
+			WRITE_LOCK_IDX(kTransferLockIdx)
 			auto it = m_transfers.find(userId);
 			if (it == m_transfers.end())
 			{
@@ -1003,22 +1022,15 @@ namespace jam::net
 			return false;
 
 		m_service->SetSessionFactory<ServerTcpSession, ServerUdpSession>();
-		m_service->SetSessionInitCallback([this](const std::shared_ptr<Session>& session)
+		m_service->SetSessionInitCallback([this](Session* session)
 			{
-				if (auto tcp = dynamic_pointer_cast<ServerTcpSession>(session))
+				if (auto tcp = dynamic_cast<ServerTcpSession*>(session))
 				{
 					tcp->SetNetworkManager(this);
-					RPCRegisterRequest<fb::fbTcpBindReq>(tcp, tcp.get(), &ServerTcpSession::OnTcpBindRequest);
 				}
-				else if (auto udp = dynamic_pointer_cast<ServerUdpSession>(session))
+				else if (auto udp = dynamic_cast<ServerUdpSession*>(session))
 				{
 					udp->SetNetworkManager(this);
-					RPCRegisterRequest<fb::fbUdpBindReq>(udp, udp.get(), &ServerUdpSession::OnUdpBindRequest);
-					RPCRegisterRequest<fb::fbRequestWorldAssignmentReq>(udp, udp.get(), &ServerUdpSession::OnRequestWorldAssignmentReq);
-					RPCRegisterRequest<fb::fbSpawnActorReq>(udp, udp.get(), &ServerUdpSession::OnSpawnActorRequest);
-					RPCRegisterRequest<fb::fbDespawnActorReq>(udp, udp.get(), &ServerUdpSession::OnDespawnActorRequest);
-					RPCRegisterRequest<fb::fbPossessActorReq>(udp, udp.get(), &ServerUdpSession::OnPossessActorRequest);
-					RPCRegisterRequest<fb::fbUnpossessActorReq>(udp, udp.get(), &ServerUdpSession::OnUnpossessActorRequest);
 				}
 			});
 

@@ -48,8 +48,7 @@ namespace jam::net
         fbb.Finish(root);
 
         RPCCallOptions opt{ eChannel::TCP_DEFAULT, 3_s };
-        auto self = static_pointer_cast<ClientTcpSession>(shared_from_this());
-        RPCCallAsyncMember<fb::fbTcpBindReq, fb::fbTcpBindRes>(self, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientTcpSession::OnTcpBindResponse);
+        RPCCallAsyncMember<fb::fbTcpBindReq, fb::fbTcpBindRes>(this, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientTcpSession::OnTcpBindResponse);
     }
 
     void ClientTcpSession::OnTcpBindResponse(std::optional<RPCTableRef<fb::fbTcpBindRes>> res)
@@ -77,7 +76,8 @@ namespace jam::net
     {
         JAMNET_LOG_INFO("[Client #{}, UserId = {}] ClientUdpSession connected", m_userId - 1000, m_userId);
 
-        RequestUdpBind();
+        if (m_manager && m_manager->IsTcpBound())
+            RequestUdpBind();
     }
 
     void ClientUdpSession::OnDisconnected()
@@ -122,8 +122,7 @@ namespace jam::net
 
         RPCCallOptions opt{ eChannel::RELIABLE_ORDERED, 3_s };
 
-        auto self = static_pointer_cast<ClientUdpSession>(shared_from_this());
-		RPCCallAsyncMember<fb::fbUdpBindReq, fb::fbUdpBindRes>(self, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnUdpBindResponse);
+		RPCCallAsyncMember<fb::fbUdpBindReq, fb::fbUdpBindRes>(this, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnUdpBindResponse);
     }
 
     void ClientUdpSession::RequestAutoAssignWorld()
@@ -204,7 +203,6 @@ namespace jam::net
 		RPCCallOptions opt{ eChannel::RELIABLE_ORDERED, 10_s };
 		m_pendingWorldAction = static_cast<uint8>(action);
 
-		auto self = static_pointer_cast<ClientUdpSession>(shared_from_this());
-		RPCCallAsyncMember<fb::fbRequestWorldAssignmentReq, fb::fbRequestWorldAssignmentRes>(self, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnRequestWorldAssignmentRes);
+		RPCCallAsyncMember<fb::fbRequestWorldAssignmentReq, fb::fbRequestWorldAssignmentRes>(this, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnRequestWorldAssignmentRes);
 	}
 }

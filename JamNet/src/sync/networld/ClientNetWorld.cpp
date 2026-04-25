@@ -92,7 +92,6 @@ namespace jam::net
 			
 		default: break;
 		}
-
 	}
 
 	void ClientNetWorld::SpawnActor(SpawnParams params)
@@ -382,7 +381,7 @@ namespace jam::net
 	}
 
 
-	entt::entity ClientNetWorld::EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller)
+	entt::entity ClientNetWorld::EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller, px::eBodyType bodyType)
 	{
 		if (auto it = m_netIdToEntity.find(netId); it != m_netIdToEntity.end())
 		{
@@ -400,9 +399,6 @@ namespace jam::net
 		m_world.emplace<NetTeamPartRole>(e);
 		m_world.emplace<OwnershipTag>(e, OwnershipTag{ owner });
 		m_world.emplace<ControlTag>(e, ControlTag{ controller });
-
-
-		const auto bodyType = m_physics ? m_physics->FindBodyType(prefabKey) : px::eBodyType::Rigid;
 		m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
 		if (bodyType == px::eBodyType::Rigid)
 		{

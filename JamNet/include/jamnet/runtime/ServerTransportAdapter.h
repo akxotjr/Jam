@@ -1,6 +1,5 @@
 #pragma once
 
-#include "jamnet/core/executor/Lock.h"
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 
 
@@ -21,14 +20,13 @@ namespace jam::net
 		void					EnumerateWorldUsers(uint32 worldId, const std::function<void(uint64)>& fn) override;
 
 	protected:
-		void					DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn) override;
+		void					DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(Session*)>& fn) override;
 
 	private:
 		Packet					ClonePacket(const Packet& packet) const;
 
 	private:
-		USE_LOCK
-		ServerNetworkManager*	m_networkManager = nullptr;
+		std::atomic<ServerNetworkManager*>	m_networkManager = nullptr;
 	};
 
 }

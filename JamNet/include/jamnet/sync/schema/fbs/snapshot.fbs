@@ -23,9 +23,11 @@ struct fbCharacterFull128
 
 struct fbCharacterFull160
 {
-	data0 : ulong;
-	data1 : ulong;
+	data0 : uint;
+	data1 : uint;
 	data2 : uint;
+	data3 : uint;
+	data4 : uint;
 }
 
 struct fbCharacterDelta96
@@ -83,6 +85,7 @@ table fbActorMeta
 	prefab_key			: ulong = 0;
 	spawn_req_id		: uint  = 0;
 	packed_id			: uint  = 0;	// team(16) / part(8) / role (8)
+	body_type			: ubyte = 0;
 }
 
 

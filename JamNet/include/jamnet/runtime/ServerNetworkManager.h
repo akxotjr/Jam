@@ -11,6 +11,8 @@
 
 #include <jampx/IPhysicsFacade.h>
 
+#include "jamnet/core/net/Session.h"
+
 
 namespace jam::net
 {
@@ -36,6 +38,26 @@ namespace jam::net
 
 	class ServerNetworkManager
 	{
+		template<typename T>
+		struct SessionRefSlot
+		{
+			T*				ptr		= nullptr;
+			SessionHandle	handle	= {};
+
+			void Set(T* session)
+			{
+				ptr = session;
+				handle = session ? session->GetSessionHandle() : SessionHandle{};
+			}
+
+			T* TryGet() const
+			{
+				if (ptr && ptr->MatchesSessionHandle(handle))
+					return ptr;
+				return nullptr;
+			}
+		};
+
 	public:
 		explicit ServerNetworkManager(const ServerConfig& config);
 		~ServerNetworkManager();
@@ -65,12 +87,13 @@ namespace jam::net
 		void								DestroyWorld(WorldId worldId);
 		void								DestroyWorld(const WorldKey& key);
 
-		void								RegisterTcpSession(uint64 userId, const std::shared_ptr<ServerTcpSession>& tcp);
-		void								RegisterUdpSession(uint64 userId, const std::shared_ptr<ServerUdpSession>& udp);
+		void								RegisterTcpSession(uint64 userId, ServerTcpSession* tcp);
+		void								RegisterUdpSession(uint64 userId, ServerUdpSession* udp);
+		void								UnregisterUdpSession(uint64 userId, const ServerUdpSession* udp);
 		void								UnregisterSession(uint64 userId);
 
-		std::shared_ptr<ServerTcpSession>	FindTcpSession(uint64 userId);
-		std::shared_ptr<ServerUdpSession>	FindUdpSession(uint64 userId);
+		ServerTcpSession*					FindTcpSession(uint64 userId);
+		ServerUdpSession*					FindUdpSession(uint64 userId);
 
 		void								BroadcastPacket(Packet packet, eProtocolType protocol);
 		void								SendToUser(uint64 userId, Packet packet, eProtocolType protocol);
@@ -105,7 +128,10 @@ namespace jam::net
 		void									CompleteTransfer(uint64 userId, const WorldTransferResult& result);
 
 	private:
-		USE_LOCK
+		static constexpr int	kWorldLockIdx	 = 0;
+		static constexpr int	kTransferLockIdx = 1;
+		static constexpr int	kSessionLockIdx	 = 2;
+		USE_MANY_LOCKS(3)
 
 		ServerConfig								m_config			= {};
 
@@ -123,7 +149,7 @@ namespace jam::net
 		std::unordered_map<uint64, std::shared_ptr<WorldTransferRecord>>	m_transfers;
 		std::unordered_map<uint64, WorldTransferResult>						m_recentTransferResults;
 
-		std::unordered_map<uint64, std::shared_ptr<ServerTcpSession>>		m_tcpSessions;
-		std::unordered_map<uint64, std::shared_ptr<ServerUdpSession>>		m_udpSessions;
+		std::unordered_map<uint64, SessionRefSlot<ServerTcpSession>>		m_tcpSessions;
+		std::unordered_map<uint64, SessionRefSlot<ServerUdpSession>>		m_udpSessions;
 	};
 }

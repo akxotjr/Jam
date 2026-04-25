@@ -6,14 +6,14 @@
 
 namespace jam::net
 {
-	void ClientTransportAdapter::SetTcpSession(std::weak_ptr<Session> session)
+	void ClientTransportAdapter::SetTcpSession(Session* session)
 	{
-		m_tcp = std::move(session);
+		m_tcp.Set(session);
 	}
 
-	void ClientTransportAdapter::SetUdpSession(std::weak_ptr<Session> session)
+	void ClientTransportAdapter::SetUdpSession(Session* session)
 	{
-		m_udp = std::move(session);
+		m_udp.Set(session);
 	}
 
 	void ClientTransportAdapter::Send(const TransportInfo& info, Packet packet)
@@ -39,27 +39,29 @@ namespace jam::net
 
 		if (IsTcp(view.Channel()))
 		{
-			if (auto tcp = m_tcp.lock()) tcp->Send(packet);
+			if (Session* tcp = m_tcp.TryGetRaw())
+				tcp->Send(packet);
 			return;
 		}
 
-		if (auto udp = m_udp.lock()) udp->Send(packet);
+		if (Session* udp = m_udp.TryGetRaw())
+			udp->Send(packet);
 	}
 
 
 
-	void ClientTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn)
+	void ClientTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(Session*)>& fn)
 	{
 		(void)userId;
 
 		if (protocol == eProtocolType::TCP)
 		{
-			fn(m_tcp); return;
+			fn(m_tcp.TryGetRaw()); return;
 		}
 
 		if (protocol == eProtocolType::UDP)
 		{
-			fn(m_udp); return;
+			fn(m_udp.TryGetRaw()); return;
 		}
 
 		JAMNET_LOG_ERROR_LOC("invalid protocol for RPC call");

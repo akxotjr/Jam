@@ -26,16 +26,6 @@ namespace jam::net
 		uint32									LastAppliedCommandEpoch(uint64 userId) const;
 
 	private:
-		struct AppliedInputLogState
-		{
-			uint32 seq = 0;
-			uint32 flags = 0;
-			uint32 epoch = 0;
-			float yaw = 0.0f;
-			uint8 mode = 0;
-			uint32 tick = 0;
-		};
-
 		void									DrainInputQueue();
 		void									QueuePendingInput(uint64 userId, const InputCmd& cmd);
 		InputCmd								SelectInputForTick(uint64 userId);
@@ -48,8 +38,7 @@ namespace jam::net
 
 		std::unordered_map<uint64, std::deque<InputCmd>>	m_pendingInputs;
 		std::unordered_map<uint64, InputCmd>				m_currentInputs;
-		std::unordered_map<uint64, InputCmd>	m_appliedInputs;
-		std::unordered_map<uint64, AppliedInputLogState>	m_lastAppliedLogs;
+		std::unordered_map<uint64, InputCmd>				m_appliedInputs;
 	};
 }
 

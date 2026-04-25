@@ -2,7 +2,8 @@
 #include "jamnet/sync/replication/ServerReplicationSystem.h"
 
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/ReplicationUtils.h"
+#include "jamnet/sync/replication/ReplicationCodec.h"
+#include "jamnet/sync/replication/ServerPhysicsSystem.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
 
 #include "jamnet/sync/networld/ServerNetWorld.h"
@@ -29,20 +30,37 @@ namespace jam::net
 
 	void ServerReplicationSystem::Init()
 	{
-		m_tickCounter = 0;
+		m_tickCounter	 = 0;
+		m_netWorld = nullptr;
+		if (auto* nw = m_world.ctx().find<ServerNetWorld*>())
+			m_netWorld = (nw && *nw) ? *nw : nullptr;
+		m_inputSys  = m_world.ctx().find<ServerInputSystem>();
+		m_aoiSys	= m_world.ctx().find<ServerAoiSystem>();
+		m_physSys	= m_world.ctx().find<ServerPhysicsSystem>();
 
-		m_entityBaselinePerUser.clear();
-		m_rigidBaselineStatesPerUser.clear();
-		m_characterBaselineStatesPerUser.clear();
-		m_kineBaselineStatesPerUser.clear();
-
-		m_cachedRigidDeltaPerUser.clear();
-		m_cachedCharacterDeltaPerUser.clear();
-
-		m_knownActorsPerUser.clear();
-		m_pendingLifecyclePerUser.clear();
+		m_userStates.clear();
+		m_knownUsersByActor.clear();
 		m_forceLifecycleSyncPerUsers.clear();
-		m_forceFullStateBudgetPerUser.clear();
+		m_sharedRigidStates.clear();
+		m_sharedCharacterStates.clear();
+		m_actorFrameCache.clear();
+		m_actorFrameNetIds.clear();
+		m_usersScratch.clear();
+		m_knownUsersScratch.clear();
+		m_sentThisTickScratch.clear();
+		m_enteredScratch.clear();
+		for (auto& bucket : m_candidateBucketsScratch)
+			bucket.clear();
+		m_orderedCandidatesScratch.clear();
+		m_actorOffsScratch.clear();
+		m_dirtyActorFrameScratch.clear();
+		m_dirtyActorFrameDedup.clear();
+		m_prevActiveActors.clear();
+		m_currentActiveActorsScratch.clear();
+
+		auto frameSeedView = m_world.view<NetId, NetActorBodyType>();
+		for (auto e : frameSeedView)
+			MarkActorFrameDirty(e);
 
 		m_fullCacheTick = 0;
 		m_cachedRigidFull.clear();
@@ -57,10 +75,7 @@ namespace jam::net
 
 	void ServerReplicationSystem::CaptureSnapshot()
 	{
-		auto* nw = m_world.ctx().get<ServerNetWorld*>();
-		if (!nw) return;
-
-		auto* aoi = m_world.ctx().find<ServerAoiSystem>();
+		if (!m_netWorld || !m_aoiSys) return;
 
 		if (m_fullCacheTick != m_tickCounter)
 		{
@@ -69,40 +84,41 @@ namespace jam::net
 			m_cachedCharacterFull.clear();
 		}
 
+		RefreshActorFrameCache();
+
 		const bool periodicFull = ((m_tickCounter % kFullIntervalTicks) == 0);
 		const uint32 tick = m_world.ctx().get<TickCounter>().tick;
 
-		std::vector<uint64> users;
-		nw->GetMembers(users);
-		if (users.empty()) return;
+		m_usersScratch.clear();
+		m_netWorld->GetMembers(m_usersScratch);
+		if (m_usersScratch.empty()) return;
 
-		auto* inputSys = m_world.ctx().find<ServerInputSystem>();
+		auto* inputSys = m_inputSys;
 
-		for (const uint64 user : users)
+		for (const uint64 user : m_usersScratch)
 		{
-			const uint32 ack = inputSys ? inputSys->LastAppliedSeq(user) : 0;
+			auto& userState = m_userStates[user];
+			const uint32 ack		= inputSys ? inputSys->LastAppliedSeq(user) : 0;
 			const uint32 inputEpoch = inputSys ? inputSys->LastAppliedCommandEpoch(user) : 0;
 
-			std::unordered_set<NetId> sentThisTick;
-			sentThisTick.reserve(256);
+			m_sentThisTickScratch.clear();
+			m_sentThisTickScratch.reserve(256);
 
 			bool forceSyncUser = false;
 			if (auto it = m_forceLifecycleSyncPerUsers.find(user); it != m_forceLifecycleSyncPerUsers.end() && it->second > 0)
 				forceSyncUser = true;
 
-			std::unordered_set<uint32> enteredSet;
-			if (aoi)
+			m_enteredScratch.clear();
+
+			if (const UserAoiState* st = m_aoiSys->GetState(user))
 			{
-				if (const UserAoiState* st = aoi->GetState(user))
-				{
-					enteredSet.reserve(st->entered.size());
-					for (const NetId id : st->entered)
-						enteredSet.insert(id.Raw());
-				}
+				m_enteredScratch.reserve(st->entered.size());
+				for (const NetId id : st->entered)
+					m_enteredScratch.insert(id.Raw());
 			}
 
-			QueueLifecycleForVisibleActors(user, aoi, forceSyncUser);
-			EmitPendingLifecyclePackets(*nw, user, tick);
+			QueueLifecycleForVisibleActors(user, forceSyncUser);
+			EmitPendingLifecyclePackets(user, tick);
 
 			if (forceSyncUser)
 			{
@@ -116,56 +132,60 @@ namespace jam::net
 				}
 			}
 
-			std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)> buckets;
-			const auto baseIt = m_entityBaselinePerUser.find(user);
+			for (auto& bucket : m_candidateBucketsScratch)
+				bucket.clear();
+
 			auto addCandidate = [&](entt::entity e, NetId nid)
 			{
-				if (e == entt::null || !m_world.valid(e) || !m_world.all_of<NetActorBodyType>(e))
+				const ActorFrameCache* actorFrame = FindActorFrameCache(nid);
+				if (!actorFrame || !actorFrame->canReplicate || actorFrame->e == entt::null)
 					return;
 
-				if (m_world.all_of<ReplicationStaticTag>(e))
-					return;
+				const auto   knownEpochIt	 = userState.knownFullEpoch.find(nid);
+				const uint32 actorEpoch		 = actorFrame->fullEpoch;
+				const bool   baselineInvalid = ShouldForceFullState(user, nid)
+					|| (knownEpochIt == userState.knownFullEpoch.end())
+					|| (knownEpochIt->second != actorEpoch)
+					|| (actorEpoch == 0);
 
-				const bool baselineInvalid = ShouldForceFullState(user, nid)
-					|| (baseIt == m_entityBaselinePerUser.end())
-					|| (!baseIt->second.contains(nid));
-				const bool enteredNow = enteredSet.contains(nid.Raw());
+				const bool enteredNow = m_enteredScratch.contains(nid.Raw());
 
-				Candidate c{ .e = e, .netId = nid };
+				Candidate c{ .e = actorFrame->e, .netId = nid };
 
 				if (baselineInvalid || enteredNow)
 				{
 					c.useFull = true;
-					buckets[static_cast<size_t>(eBucket::B0_MustSendFull)].push_back(c);
+					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B0_MustSendFull)].push_back(c);
 					return;
 				}
 
 				if (periodicFull)
 				{
 					c.useFull = true;
-					buckets[static_cast<size_t>(eBucket::B0_MustSendFull)].push_back(c);
+					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B0_MustSendFull)].push_back(c);
 					return;
 				}
 
-				if (!m_world.all_of<ReplicationActiveTag>(e))
+				if (!actorFrame->isActive)
 				{
-					buckets[static_cast<size_t>(eBucket::B3_LowPriority)].push_back(c);
+					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B3_LowPriority)].push_back(c);
 					return;
 				}
 
-				const auto body = m_world.get<NetActorBodyType>(e).body;
-				if (body == px::eBodyType::Character)
-					buckets[static_cast<size_t>(eBucket::B1_HighDelta)].push_back(c);
+				if (actorFrame->bodyType == px::eBodyType::Character)
+					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B1_HighDelta)].push_back(c);
 				else
-					buckets[static_cast<size_t>(eBucket::B2_NormalDelta)].push_back(c);
+					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B2_NormalDelta)].push_back(c);
 			};
 
-			if (aoi)
+
+			if (const auto* visibleActors = m_aoiSys->GetVisibleActors(user))
 			{
-				if (const UserAoiState* st = aoi->GetState(user))
+				for (const AoiVisibleActorSlot& slot : *visibleActors)
 				{
-					for (const NetId nid : st->visible)
-						addCandidate(nw->GetEntity(nid), nid);
+					if (!slot.alive || slot.actor == entt::null || !m_world.valid(slot.actor) || !m_world.all_of<NetId>(slot.actor))
+						continue;
+					addCandidate(slot.actor, m_world.get<NetId>(slot.actor));
 				}
 			}
 			else
@@ -178,74 +198,46 @@ namespace jam::net
 				}
 			}
 
-			std::vector<Candidate> ordered;
-			ordered.reserve(buckets[0].size() + buckets[1].size() + buckets[2].size() + buckets[3].size());
+			m_orderedCandidatesScratch.clear();
+			m_orderedCandidatesScratch.reserve(m_candidateBucketsScratch[0].size() + m_candidateBucketsScratch[1].size() + m_candidateBucketsScratch[2].size() + m_candidateBucketsScratch[3].size());
 
 			auto appendAll = [&](eBucket bucket)
 			{
-				auto& src = buckets[static_cast<size_t>(bucket)];
-				ordered.insert(ordered.end(), src.begin(), src.end());
+				auto& src = m_candidateBucketsScratch[static_cast<size_t>(bucket)];
+				m_orderedCandidatesScratch.insert(m_orderedCandidatesScratch.end(), src.begin(), src.end());
 			};
 
 			appendAll(eBucket::B0_MustSendFull);
 			appendAll(eBucket::B1_HighDelta);
 			appendAll(eBucket::B2_NormalDelta);
+			appendAll(eBucket::B3_LowPriority);
 
-			if (ordered.empty())
+			if (m_orderedCandidatesScratch.empty())
 				continue;
 
 			auto estimateActorBytes = [&](const Candidate& c) -> size_t
 			{
-				size_t bytes = 24;
-				const auto body = m_world.get<NetActorBodyType>(c.e).body;
-
-				if (c.useFull)
-				{
-					if (body == px::eBodyType::Character)
-					{
-						bytes += 24;
-					}
-					else
-					{
-						const auto& rs = m_world.get<px::RigidState>(c.e);
-						const bool isKine = (rs.kineType != px::eKineDrivenType::None &&
-							rs.kineType != px::eKineDrivenType::RuntimeDynamic);
-						bytes += isKine ? 32 : 24;
-					}
-				}
-				else
-				{
-					if (body == px::eBodyType::Character)
-					{
-						bytes += 16;
-					}
-					else
-					{
-						const auto& rs = m_world.get<px::RigidState>(c.e);
-						const bool isKine = (rs.kineType != px::eKineDrivenType::RuntimeDynamic);
-						bytes += isKine ? 32 : 16;
-					}
-				}
-
-				return bytes;
+				if (const ActorFrameCache* actorFrame = FindActorFrameCache(c.netId))
+					return c.useFull ? actorFrame->fullSizeEstimate : actorFrame->deltaSizeEstimate;
+				return 0;
 			};
 
 			size_t cursor = 0;
-			while (cursor < ordered.size())
+			while (cursor < m_orderedCandidatesScratch.size())
 			{
 				m_fbb->Clear();
 
-				std::vector<flatbuffers::Offset<fb::fbActorEntity>> offs;
-				offs.reserve(kSnapshotBatch);
+				m_actorOffsScratch.clear();
+				m_actorOffsScratch.reserve(kSnapshotBatch);
 
 				size_t usedPayloadBudget = 0;
 				const size_t beginCursor = cursor;
 
-				for (; cursor < ordered.size(); ++cursor)
+				for (; cursor < m_orderedCandidatesScratch.size(); ++cursor)
 				{
-					const Candidate& c = ordered[cursor];
+					const Candidate& c = m_orderedCandidatesScratch[cursor];
 
-					if (offs.size() >= kSnapshotBatch)
+					if (m_actorOffsScratch.size() >= kSnapshotBatch)
 						break;
 
 					const size_t est = estimateActorBytes(c);
@@ -257,7 +249,7 @@ namespace jam::net
 
 					if ((usedPayloadBudget + est) > kPacketPayloadBudget)
 					{
-						if (!offs.empty())
+						if (!m_actorOffsScratch.empty())
 							break;
 						continue;
 					}
@@ -271,18 +263,18 @@ namespace jam::net
 					if (off.IsNull())
 						continue;
 
-					if (sentThisTick.contains(c.netId))
+					if (m_sentThisTickScratch.contains(c.netId))
 						continue;
 
-					sentThisTick.insert(c.netId);
-					offs.push_back(off);
+					m_sentThisTickScratch.insert(c.netId);
+					m_actorOffsScratch.push_back(off);
 					usedPayloadBudget += est;
 
 					if (c.useFull)
 						MarkFullStateSent(user, c.netId);
 				}
 
-				if (offs.empty())
+				if (m_actorOffsScratch.empty())
 				{
 					if (cursor == beginCursor)
 						++cursor;
@@ -290,24 +282,18 @@ namespace jam::net
 				}
 
 				const auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack, inputEpoch);
-				const auto vec = m_fbb->CreateVector(offs);
-				const auto snap = fb::CreatefbSnapshot(*m_fbb, header, vec);
+				const auto vec	  = m_fbb->CreateVector(m_actorOffsScratch);
+				const auto snap	  = fb::CreatefbSnapshot(*m_fbb, header, vec);
 				m_fbb->Finish(snap, fb::fbSnapshotIdentifier());
 
-				auto buf = PacketBuilder::CreateCustomPacket(
-					CustomPacketId::SNAPSHOT,
-					PacketFlags::NONE,
-					eChannel::UNRELIABLE_SEQUENCED,
-					m_fbb->GetBufferPointer(),
-					m_fbb->GetSize());
-
-				if (!buf.IsValid())
+				auto pkt = PacketBuilder::CreateCustomPacket(CustomPacketId::SNAPSHOT, PacketFlags::NONE, eChannel::UNRELIABLE_SEQUENCED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
+				if (!pkt.IsValid())
 					continue;
 
 				TransportInfo info{};
 				info.method = eTransportMethod::Single;
 				info.userId = user;
-				nw->Send(info, buf);
+				m_netWorld->Send(info, pkt);
 			}
 		}
 	}
@@ -321,6 +307,214 @@ namespace jam::net
 		slot = std::max(slot, budget);
 	}
 
+	const ReplicationUserState* ServerReplicationSystem::FindUserState(uint64 userId) const
+	{
+		if (const auto it = m_userStates.find(userId); it != m_userStates.end())
+			return &it->second;
+		return nullptr;
+	}
+
+	ReplicationUserState* ServerReplicationSystem::FindUserState(uint64 userId)
+	{
+		if (auto it = m_userStates.find(userId); it != m_userStates.end())
+			return &it->second;
+		return nullptr;
+	}
+
+
+	uint32 ServerReplicationSystem::GetActorFullEpoch(entt::entity e, NetId netId)
+	{
+		if (e == entt::null || !m_world.valid(e))
+			return 0;
+
+		const auto* body = m_world.try_get<NetActorBodyType>(e);
+		if (!body)
+			return 0;
+
+		if (body->body == px::eBodyType::Character)
+		{
+			if (const auto it = m_sharedCharacterStates.find(netId); it != m_sharedCharacterStates.end())
+				return it->second.fullEpoch;
+			return 0;
+		}
+
+		if (body->body == px::eBodyType::Rigid)
+		{
+			if (const auto it = m_sharedRigidStates.find(netId); it != m_sharedRigidStates.end())
+				return it->second.fullEpoch;
+			return 0;
+		}
+
+		return 0;
+	}
+
+	void ServerReplicationSystem::RefreshActorFrameCache()
+	{
+		m_currentActiveActorsScratch.clear();
+		if (m_physSys)
+		{
+			for (const entt::entity e : m_physSys->GetLastActiveEntities())
+				m_currentActiveActorsScratch.insert(e);
+		}
+
+		for (const entt::entity e : m_prevActiveActors)
+		{
+			if (!m_currentActiveActorsScratch.contains(e))
+				MarkActorFrameDirty(e);
+		}
+
+		for (const entt::entity e : m_currentActiveActorsScratch)
+			MarkActorFrameDirty(e);
+
+		for (const entt::entity e : m_dirtyActorFrameScratch)
+			UpsertActorFrameCache(e, m_currentActiveActorsScratch.contains(e));
+
+		m_dirtyActorFrameScratch.clear();
+		m_dirtyActorFrameDedup.clear();
+		m_prevActiveActors = m_currentActiveActorsScratch;
+	}
+
+	const ServerReplicationSystem::ActorFrameCache* ServerReplicationSystem::FindActorFrameCache(NetId netId) const
+	{
+		if (const auto it = m_actorFrameCache.find(netId); it != m_actorFrameCache.end())
+			return &it->second;
+		return nullptr;
+	}
+
+	void ServerReplicationSystem::AddKnownUserToActor(NetId netId, uint64 userId)
+	{
+		auto& slots = m_knownUsersByActor[netId];
+		for (KnownUserSlot& slot : slots)
+		{
+			if (slot.alive && slot.userId == userId)
+				return;
+		}
+
+		for (KnownUserSlot& slot : slots)
+		{
+			if (!slot.alive)
+			{
+				slot.userId = userId;
+				slot.alive = true;
+				return;
+			}
+		}
+
+		slots.push_back(KnownUserSlot{ userId, true });
+	}
+
+	void ServerReplicationSystem::RemoveKnownUserFromActor(NetId netId, uint64 userId)
+	{
+		auto it = m_knownUsersByActor.find(netId);
+		if (it == m_knownUsersByActor.end())
+			return;
+
+		for (KnownUserSlot& slot : it->second)
+		{
+			if (slot.alive && slot.userId == userId)
+			{
+				slot.alive = false;
+				break;
+			}
+		}
+
+		CompactKnownUsersIfNeeded(netId);
+	}
+
+	void ServerReplicationSystem::CompactKnownUsersIfNeeded(NetId netId)
+	{
+		auto it = m_knownUsersByActor.find(netId);
+		if (it == m_knownUsersByActor.end())
+			return;
+
+		auto& slots = it->second;
+		const size_t deadCount = std::count_if(slots.begin(), slots.end(), [](const KnownUserSlot& slot)
+		{
+			return !slot.alive;
+		});
+
+		if (deadCount == 0)
+			return;
+
+		if (deadCount != slots.size() && deadCount * 3 < slots.size())
+			return;
+
+		std::erase_if(slots, [](const KnownUserSlot& slot) { return !slot.alive; });
+		if (slots.empty())
+			m_knownUsersByActor.erase(it);
+	}
+
+	void ServerReplicationSystem::MarkActorFrameDirty(entt::entity e)
+	{
+		if (e == entt::null)
+			return;
+
+		if (m_dirtyActorFrameDedup.insert(e).second)
+			m_dirtyActorFrameScratch.push_back(e);
+	}
+
+	void ServerReplicationSystem::UpsertActorFrameCache(entt::entity e, bool isActiveOverride)
+	{
+		const auto prevNetIdIt = m_actorFrameNetIds.find(e);
+		if (e == entt::null || !m_world.valid(e) || !m_world.all_of<NetId, NetActorBodyType>(e))
+		{
+			if (prevNetIdIt != m_actorFrameNetIds.end())
+			{
+				m_actorFrameCache.erase(prevNetIdIt->second);
+				m_actorFrameNetIds.erase(prevNetIdIt);
+			}
+			return;
+		}
+
+		const NetId netId = m_world.get<NetId>(e);
+		const px::eBodyType bodyType = m_world.get<NetActorBodyType>(e).body;
+		if (!netId.IsValid())
+		{
+			if (prevNetIdIt != m_actorFrameNetIds.end())
+			{
+				m_actorFrameCache.erase(prevNetIdIt->second);
+				m_actorFrameNetIds.erase(prevNetIdIt);
+			}
+			return;
+		}
+
+		if (prevNetIdIt != m_actorFrameNetIds.end() && prevNetIdIt->second != netId)
+			m_actorFrameCache.erase(prevNetIdIt->second);
+
+		ActorFrameCache frame{};
+		frame.e = e;
+		frame.netId = netId;
+		frame.fullEpoch = GetActorFullEpoch(e, netId);
+		frame.bodyType = bodyType;
+		frame.isStatic = m_world.all_of<ReplicationStaticTag>(e);
+		frame.isActive = isActiveOverride;
+
+		if (!frame.isStatic)
+		{
+			if (bodyType == px::eBodyType::Character)
+			{
+				frame.canReplicate = m_world.all_of<CharAuthorityState>(e);
+				frame.fullSizeEstimate = 48;
+				frame.deltaSizeEstimate = 40;
+			}
+			else if (bodyType == px::eBodyType::Rigid)
+			{
+				frame.canReplicate = m_world.all_of<RigidAuthorityState>(e);
+				if (frame.canReplicate)
+				{
+					const auto& rs = m_world.get<RigidAuthorityState>(e);
+					frame.isKinematic = (rs.state.kineType != px::eKineDrivenType::None
+						&& rs.state.kineType != px::eKineDrivenType::RuntimeDynamic);
+				}
+				frame.fullSizeEstimate = frame.isKinematic ? 56 : 48;
+				frame.deltaSizeEstimate = frame.isKinematic ? 56 : 40;
+			}
+		}
+
+		m_actorFrameCache[netId] = frame;
+		m_actorFrameNetIds[e] = netId;
+	}
+
 	void ServerReplicationSystem::MarkActorDirty(entt::entity e, bool forceMeta)
 	{
 		if (!m_world.valid(e) || !m_world.all_of<NetId>(e))
@@ -330,28 +524,31 @@ namespace jam::net
 		if (!netId.IsValid())
 			return;
 
-		InvalidateAllUserCaches(netId);
+		MarkActorFrameDirty(e);
 
 		if (!forceMeta)
 			return;
 
-		auto* nw = m_world.ctx().get<ServerNetWorld*>();
+		auto* nw = m_netWorld;
 		if (!nw)
 			return;
 
-		std::vector<uint64> users;
-		nw->GetMembers(users);
-
-		for (const uint64 userId : users)
+		if (auto it = m_knownUsersByActor.find(netId); it != m_knownUsersByActor.end())
 		{
-			if (IsActorKnownToUser(userId, netId))
+			m_knownUsersScratch.clear();
+			m_knownUsersScratch.reserve(it->second.size());
+			for (const KnownUserSlot& slot : it->second)
+			{
+				if (slot.alive)
+					m_knownUsersScratch.push_back(slot.userId);
+			}
+
+			for (const uint64 userId : m_knownUsersScratch)
 				QueueLifecycleMetaForUser(userId, netId);
-			else
-				QueueLifecycleCreateForUser(userId, netId);
 		}
 	}
 
-	void ServerReplicationSystem::OnEnter(uint64 userId)
+	void ServerReplicationSystem::OnUserEnter(uint64 userId)
 	{
 		if (userId == 0)
 			return;
@@ -360,24 +557,19 @@ namespace jam::net
 		ForceLifecycleSyncForUser(userId, 5);
 	}
 
-	void ServerReplicationSystem::OnLeave(uint64 userId)
+	void ServerReplicationSystem::OnUserLeave(uint64 userId)
 	{
 		if (userId == 0)
 			return;
 
-		m_cachedRigidDeltaPerUser.erase(userId);
-		m_cachedCharacterDeltaPerUser.erase(userId);
+		if (auto* userState = FindUserState(userId))
+		{
+			for (const NetId netId : userState->knownActors)
+				RemoveKnownUserFromActor(netId, userId);
+		}
 
-		m_entityBaselinePerUser.erase(userId);
-		m_rigidBaselineStatesPerUser.erase(userId);
-		m_characterBaselineStatesPerUser.erase(userId);
-		m_kineBaselineStatesPerUser.erase(userId);
-
+		m_userStates.erase(userId);
 		m_forceLifecycleSyncPerUsers.erase(userId);
-		m_pendingLifecyclePerUser.erase(userId);
-		m_forceFullStateBudgetPerUser.erase(userId);
-
-		std::erase_if(m_knownActorsPerUser, [userId](const ActorUserKey& key) { return key.userId == userId; });
 	}
 
 	void ServerReplicationSystem::OnActorDestroyed(entt::entity e)
@@ -391,29 +583,49 @@ namespace jam::net
 
 		InvalidateAllUserCaches(netId);
 
-		std::vector<uint64> users;
-		if (auto* nw = m_world.ctx().get<ServerNetWorld*>(); nw)
-			nw->GetMembers(users);
+		if (auto it = m_knownUsersByActor.find(netId); it != m_knownUsersByActor.end())
+		{
+			m_knownUsersScratch.clear();
+			m_knownUsersScratch.reserve(it->second.size());
+			for (const KnownUserSlot& slot : it->second)
+			{
+				if (slot.alive)
+					m_knownUsersScratch.push_back(slot.userId);
+			}
 
-		for (const uint64 userId : users)
-			QueueRemovalForUser(userId, netId, fb::fbRemovalReason_Destroyed);
+			for (const uint64 userId : m_knownUsersScratch)
+				QueueRemovalForUser(userId, netId, fb::fbRemovalReason_Destroyed);
+		}
 
+		ForgetActorForAllUsers(netId);
+		m_actorFrameCache.erase(netId);
+		m_actorFrameNetIds.erase(e);
+		m_prevActiveActors.erase(e);
+		m_currentActiveActorsScratch.erase(e);
+		m_dirtyActorFrameDedup.erase(e);
+		m_sharedRigidStates.erase(netId);
+		m_sharedCharacterStates.erase(netId);
 		m_cachedRigidFull.erase(netId);
 		m_cachedCharacterFull.erase(netId);
 	}
 
 	flatbuffers::Offset<fb::fbActorMeta> ServerReplicationSystem::BuildActorMeta(entt::entity e, uint64 userId)
 	{
-		uint64 owner = 0;
-		uint64 controller = 0;
-		uint64 prefab = 0;
-		uint32 spawnReqId = 0;
-		uint32 packedId = 0;
+		uint64 owner		= 0;
+		uint64 controller	= 0;
+		uint64 prefab		= 0;
+		uint32 spawnReqId	= 0;
+		uint32 packedId		= 0;
+		const auto* body = m_world.try_get<NetActorBodyType>(e);
+		if (!body || body->body == px::eBodyType::None)
+			return 0;
 
-		if (auto* o = m_world.try_get<OwnershipTag>(e)) owner = o->userId;
-		if (auto* c = m_world.try_get<ControlTag>(e)) controller = c->userId;
-		if (auto* p = m_world.try_get<NetPrefabKey>(e)) prefab = p->key.value;
-		if (auto* tpr = m_world.try_get<NetTeamPartRole>(e)) packedId = tpr->Packed();
+		const uint8 bodyType = static_cast<uint8>(body->body);
+
+		if (auto* o   = m_world.try_get<OwnershipTag>(e))		owner		= o->userId;
+		if (auto* c   = m_world.try_get<ControlTag>(e))			controller  = c->userId;
+		if (auto* p   = m_world.try_get<NetPrefabKey>(e))		prefab		= p->key.value;
+		if (auto* tpr = m_world.try_get<NetTeamPartRole>(e))	packedId	= tpr->Packed();
 
 		if (userId != 0 && userId == owner)
 		{
@@ -421,7 +633,7 @@ namespace jam::net
 				spawnReqId = s->requestId;
 		}
 
-		return fb::CreatefbActorMeta(*m_fbb, owner, controller, prefab, spawnReqId, packedId);
+		return fb::CreatefbActorMeta(*m_fbb, owner, controller, prefab, spawnReqId, packedId, bodyType);
 	}
 
 	flatbuffers::Offset<fb::fbLifecycleActor> ServerReplicationSystem::BuildLifecycleActor(const PendingLifecycleEvent& event, entt::entity e, NetId netId, uint64 userId)
@@ -442,13 +654,23 @@ namespace jam::net
 	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildFullActorEntity(entt::entity e, uint64 userId)
 	{
 		const NetId netId = m_world.get<NetId>(e);
-		const auto bodyType = m_world.get<NetActorBodyType>(e).body;
+		(void)userId;
 
-		auto& userEntityBase = m_entityBaselinePerUser[userId];
-
-		if (bodyType == px::eBodyType::Character)
+		if (const auto* cs = m_world.try_get<CharAuthorityState>(e))
 		{
-			auto& cs = m_world.get<px::CharacterState>(e);
+			const auto& state = cs->state;
+			auto& sharedState = m_sharedCharacterStates[netId];
+
+			if (sharedState.fullBuiltTick != m_tickCounter)
+			{
+				++sharedState.fullEpoch;
+				sharedState.fullBuiltTick  = m_tickCounter;
+				sharedState.hasBaseline    = true;
+				sharedState.hasPackedDelta = false;
+				sharedState.baseline.pos   = state.pos;
+				sharedState.baseline.yaw   = state.facingYaw;
+				sharedState.baseline.pitch = state.facingPitch;
+			}
 
 			PackedCharacterFull160 packed{};
 			if (auto it = m_cachedCharacterFull.find(netId); it != m_cachedCharacterFull.end())
@@ -457,181 +679,139 @@ namespace jam::net
 			}
 			else
 			{
-				if (!PackCharacterFull160(cs, packed))
+				if (!PackCharacterFull160(state, packed))
 					return 0;
 				m_cachedCharacterFull.emplace(netId, packed);
 			}
 
+			const fb::fbCharacterFull160 charFull(packed.Word(0), packed.Word(1), packed.Word(2), packed.Word(3), packed.Word(4));
+			const uint32 baselineEpoch = sharedState.fullEpoch;
+
+			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), baselineEpoch, nullptr, nullptr, &charFull, nullptr, nullptr);
+		}
+
+		if (const auto* rs = m_world.try_get<RigidAuthorityState>(e))
+		{
+			const auto& state = rs->state;
+			auto& sharedState = m_sharedRigidStates[netId];
+
+			if (px::IsLocalDrivenKine(state.kineType))
 			{
-				auto& bs = m_characterBaselineStatesPerUser[userId][netId];
-				bs.pos = cs.pos;
-				bs.yaw = cs.facingYaw;
-				bs.pitch = cs.facingPitch;
+				if (sharedState.fullBuiltTick != m_tickCounter)
+				{
+					++sharedState.fullEpoch;
+					sharedState.fullBuiltTick  = m_tickCounter;
+					sharedState.hasPackedDelta = false;
+				}
+
+				uint32 targetNetRaw = NetId::Invalid().Raw();
+				if (state.kineState.targetId != px::INVALID_OBJ_ID)
+				{
+					const entt::entity targetEntity = static_cast<entt::entity>(state.kineState.targetId);
+					if (m_world.valid(targetEntity) && m_world.all_of<NetId>(targetEntity))
+						targetNetRaw = m_world.get<NetId>(targetEntity).Raw();
+				}
+
+				const fb::fbKinematicState kine(state.kineState.startEpoch, state.kineState.phase, state.kineState.t, targetNetRaw, state.kineState.eventMask, static_cast<uint8>(state.kineType));
+				return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), sharedState.fullEpoch, nullptr, nullptr, nullptr, nullptr, &kine);
 			}
 
-			const fb::fbCharacterFull160 charFull(packed.data0, packed.data1, packed.data2);
-			uint32& base = userEntityBase.try_emplace(netId, 0u).first->second;
-			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, nullptr, nullptr, &charFull, nullptr, nullptr);
-		}
-
-		auto& rs = m_world.get<px::RigidState>(e);
-
-		if (rs.kineType != px::eKineDrivenType::None && rs.kineType != px::eKineDrivenType::RuntimeDynamic)
-		{
-			auto& kineBs = m_kineBaselineStatesPerUser[userId][netId];
-			kineBs = rs.kineState;
-
-			uint32 targetNetRaw = NetId::Invalid().Raw();
-			if (rs.kineState.targetId != px::INVALID_OBJ_ID)
+			if (sharedState.fullBuiltTick != m_tickCounter)
 			{
-				const entt::entity targetEntity = static_cast<entt::entity>(rs.kineState.targetId);
-				if (m_world.valid(targetEntity) && m_world.all_of<NetId>(targetEntity))
-					targetNetRaw = m_world.get<NetId>(targetEntity).Raw();
+				++sharedState.fullEpoch;
+				sharedState.fullBuiltTick  = m_tickCounter;
+				sharedState.hasBaseline    = true;
+				sharedState.hasPackedDelta = false;
+				sharedState.baseline.pos   = state.pose.p;
+				sharedState.baseline.rot   = state.pose.q;
 			}
 
-			const fb::fbKinematicState kine(
-				rs.kineState.startEpoch,
-				rs.kineState.phase,
-				rs.kineState.t,
-				targetNetRaw,
-				rs.kineState.eventMask,
-				static_cast<uint8>(rs.kineType));
+			PackedRigidFull192 packed{};
+			if (auto it = m_cachedRigidFull.find(netId); it != m_cachedRigidFull.end())
+			{
+				packed = it->second;
+			}
+			else
+			{
+				if (!PackRigidFull192(state, packed))
+					return 0;
+				m_cachedRigidFull.emplace(netId, packed);
+			}
 
-			uint32& base = userEntityBase.try_emplace(netId, 0u).first->second;
-			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, nullptr, nullptr, nullptr, nullptr, &kine);
+			fb::fbTransformFull rigidFull(packed.Word(0), packed.Word(1), packed.Word(2));
+			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), sharedState.fullEpoch, &rigidFull);
 		}
 
-		PackedRigidFull192 packed{};
-		if (auto it = m_cachedRigidFull.find(netId); it != m_cachedRigidFull.end())
-		{
-			packed = it->second;
-		}
-		else
-		{
-			if (!PackRigidFull192(rs, packed))
-				return 0;
-			m_cachedRigidFull.emplace(netId, packed);
-		}
-
-		{
-			auto& bs = m_rigidBaselineStatesPerUser[userId][netId];
-			bs.pos = rs.pose.p;
-			bs.rot = rs.pose.q;
-		}
-
-		fb::fbTransformFull rigidFull(packed.data0, packed.data1, packed.data2);
-		uint32& base = userEntityBase.try_emplace(netId, 0u).first->second;
-		return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base, &rigidFull);
+		return 0;
 	}
 
 	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildDeltaActorEntity(entt::entity e, uint64 userId)
 	{
 		const NetId netId = m_world.get<NetId>(e);
-		const auto bodyType = m_world.get<NetActorBodyType>(e).body;
+		auto& userState = m_userStates[userId];
 
-		auto& userEntityBase = m_entityBaselinePerUser[userId];
-
-		if (bodyType == px::eBodyType::Character)
+		if (const auto* cs = m_world.try_get<CharAuthorityState>(e))
 		{
-			auto& cs = m_world.get<px::CharacterState>(e);
-
-			auto& userCharBaseline = m_characterBaselineStatesPerUser[userId];
-			auto bs = userCharBaseline.find(netId);
-			if (bs == userCharBaseline.end())
+			const auto& state = cs->state;
+			auto knownEpochIt = userState.knownFullEpoch.find(netId);
+			auto& sharedState = m_sharedCharacterStates[netId];
+			if (knownEpochIt == userState.knownFullEpoch.end() || knownEpochIt->second != sharedState.fullEpoch || !sharedState.hasBaseline)
 				return BuildFullActorEntity(e, userId);
 
-			PackedCharacterDelta128 packedDelta{};
-			if (!PackCharacterDelta128(bs->second.pos, bs->second.yaw, bs->second.pitch, cs, packedDelta))
+			if (!sharedState.hasPackedDelta || sharedState.lastDeltaSourceState != state)
+			{
+				if (!PackCharacterDelta128(sharedState.baseline.pos, sharedState.baseline.yaw, sharedState.baseline.pitch, state, sharedState.packedDelta))
+					return BuildFullActorEntity(e, userId);
+				sharedState.lastDeltaSourceState = state;
+				sharedState.hasPackedDelta = true;
+			}
+
+			const fb::fbCharacterDelta128 charDelta(sharedState.packedDelta.Word(0), sharedState.packedDelta.Word(1));
+			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), sharedState.fullEpoch, nullptr, nullptr, nullptr, &charDelta);
+		}
+		
+		if (auto* rs = m_world.try_get<RigidAuthorityState>(e))
+		{
+			auto& state = rs->state;
+			auto knownEpochIt = userState.knownFullEpoch.find(netId);
+			auto& sharedState = m_sharedRigidStates[netId];
+			if (knownEpochIt == userState.knownFullEpoch.end() || knownEpochIt->second != sharedState.fullEpoch)
 				return BuildFullActorEntity(e, userId);
 
-			auto& userCache = m_cachedCharacterDeltaPerUser[userId];
-			if (auto it = userCache.find(netId); it != userCache.end())
+			if (px::IsLocalDrivenKine(state.kineType))
 			{
-				if (it->second.data0 == packedDelta.data0 && it->second.data1 == packedDelta.data1)
-					return 0;
+				if (state.kineState.startEpoch == 0)
+					state.kineState.startEpoch = m_world.ctx().get<TickCounter>().tick;
+
+				uint32 targetNetRaw = NetId::Invalid().Raw();
+				if (state.kineState.targetId != px::INVALID_OBJ_ID)
+				{
+					const entt::entity targetEntity = static_cast<entt::entity>(state.kineState.targetId);
+					if (m_world.valid(targetEntity) && m_world.all_of<NetId>(targetEntity))
+						targetNetRaw = m_world.get<NetId>(targetEntity).Raw();
+				}
+
+				const fb::fbKinematicState kine(state.kineState.startEpoch, state.kineState.phase, state.kineState.t, targetNetRaw, state.kineState.eventMask, E2U(state.kineType));
+				return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), sharedState.fullEpoch, nullptr, nullptr, nullptr, nullptr, &kine);
 			}
 
-			userCache[netId] = packedDelta;
-
-			const fb::fbCharacterDelta128 charDelta(packedDelta.data0, packedDelta.data1);
-			uint32& base = userEntityBase[netId];
-
-			{
-				auto& newBs = userCharBaseline[netId];
-				newBs.pos = cs.pos;
-				newBs.yaw = cs.facingYaw;
-				newBs.pitch = cs.facingPitch;
-			}
-
-			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, nullptr, nullptr, nullptr, &charDelta);
-		}
-
-		auto& userRigidBaseline = m_rigidBaselineStatesPerUser[userId];
-		auto bs = userRigidBaseline.find(netId);
-		if (bs == userRigidBaseline.end())
-			return BuildFullActorEntity(e, userId);
-
-		auto& rs = m_world.get<px::RigidState>(e);
-
-		if (rs.kineType != px::eKineDrivenType::RuntimeDynamic)
-		{
-			if (rs.kineState.startEpoch == 0)
-				rs.kineState.startEpoch = m_world.ctx().get<TickCounter>().tick;
-
-			auto& userKineBaseline = m_kineBaselineStatesPerUser[userId];
-			auto itBs = userKineBaseline.find(netId);
-			if (itBs == userKineBaseline.end())
+			if (!sharedState.hasBaseline)
 				return BuildFullActorEntity(e, userId);
 
-			if (itBs->second == rs.kineState)
-				return 0;
-
-			itBs->second = rs.kineState;
-
-			uint32& base = userEntityBase[netId];
-
-			uint32 targetNetRaw = NetId::Invalid().Raw();
-			if (rs.kineState.targetId != px::INVALID_OBJ_ID)
+			if (!sharedState.hasPackedDelta || sharedState.lastDeltaSourceState != state)
 			{
-				const entt::entity targetEntity = static_cast<entt::entity>(rs.kineState.targetId);
-				if (m_world.valid(targetEntity) && m_world.all_of<NetId>(targetEntity))
-					targetNetRaw = m_world.get<NetId>(targetEntity).Raw();
+				if (!PackRigidDelta128(sharedState.baseline.pos, sharedState.baseline.rot, state, sharedState.packedDelta))
+					return BuildFullActorEntity(e, userId);
+				sharedState.lastDeltaSourceState = state;
+				sharedState.hasPackedDelta = true;
 			}
 
-			const fb::fbKinematicState kine(
-				rs.kineState.startEpoch,
-				rs.kineState.phase,
-				rs.kineState.t,
-				targetNetRaw,
-				rs.kineState.eventMask,
-				E2U(rs.kineType));
+			const fb::fbTransformDelta rigidDelta(sharedState.packedDelta.Word(0), sharedState.packedDelta.Word(1));
+			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), sharedState.fullEpoch, nullptr, &rigidDelta);
 
-			return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, nullptr, nullptr, nullptr, nullptr, &kine);
 		}
 
-		PackedRigidDelta128 packed{};
-		if (!PackRigidDelta128(bs->second.pos, bs->second.rot, rs, packed))
-			return BuildFullActorEntity(e, userId);
-
-		auto& userCache = m_cachedRigidDeltaPerUser[userId];
-		if (auto it = userCache.find(netId); it != userCache.end())
-		{
-			if (it->second == packed)
-				return 0;
-		}
-
-		userCache[netId] = packed;
-
-		const fb::fbTransformDelta rigidDelta(packed.data0, packed.data1);
-		uint32& base = userEntityBase[netId];
-
-		{
-			auto& newBs = userRigidBaseline[netId];
-			newBs.pos = rs.pose.p;
-			newBs.rot = rs.pose.q;
-		}
-
-		return fb::CreatefbActorEntity(*m_fbb, netId.Raw(), base++, nullptr, &rigidDelta);
+		return 0;
 	}
 
 	void ServerReplicationSystem::QueueLifecycleCreateForUser(uint64 userId, NetId netId)
@@ -639,7 +819,7 @@ namespace jam::net
 		if (userId == 0 || !netId.IsValid())
 			return;
 
-		auto& pending = m_pendingLifecyclePerUser[userId];
+		auto& pending = m_userStates[userId].pendingLifecycle;
 		pending[netId] = PendingLifecycleEvent{ .op = fb::fbLifecycleOp_Create };
 		InvalidateUserCaches(userId, netId);
 	}
@@ -655,7 +835,23 @@ namespace jam::net
 			return;
 		}
 
-		auto& pending = m_pendingLifecyclePerUser[userId];
+		auto& pending = m_userStates[userId].pendingLifecycle;
+		auto it = pending.find(netId);
+		if (it != pending.end())
+		{
+			if (it->second.op == fb::fbLifecycleOp_Create || it->second.op == fb::fbLifecycleOp_Remove)
+				return;
+		}
+
+		pending[netId] = PendingLifecycleEvent{ .op = fb::fbLifecycleOp_Meta };
+	}
+
+	void ServerReplicationSystem::QueueLifecycleMetaForKnownUser(uint64 userId, NetId netId)
+	{
+		if (userId == 0 || !netId.IsValid())
+			return;
+
+		auto& pending = m_userStates[userId].pendingLifecycle;
 		auto it = pending.find(netId);
 		if (it != pending.end())
 		{
@@ -671,7 +867,7 @@ namespace jam::net
 		if (userId == 0 || !netId.IsValid())
 			return;
 
-		auto& pending = m_pendingLifecyclePerUser[userId];
+		auto& pending = m_userStates[userId].pendingLifecycle;
 		if (!IsActorKnownToUser(userId, netId))
 		{
 			pending.erase(netId);
@@ -689,88 +885,85 @@ namespace jam::net
 
 	void ServerReplicationSystem::CancelRemovalForUser(uint64 userId, NetId netId)
 	{
-		auto userIt = m_pendingLifecyclePerUser.find(userId);
-		if (userIt == m_pendingLifecyclePerUser.end())
+		auto* userState = FindUserState(userId);
+		if (!userState)
 			return;
 
-		auto pendingIt = userIt->second.find(netId);
-		if (pendingIt == userIt->second.end())
+		auto pendingIt = userState->pendingLifecycle.find(netId);
+		if (pendingIt == userState->pendingLifecycle.end())
 			return;
 
 		if (pendingIt->second.op == fb::fbLifecycleOp_Remove && pendingIt->second.reason != fb::fbRemovalReason_Destroyed)
 		{
-			userIt->second.erase(pendingIt);
-			if (userIt->second.empty())
-				m_pendingLifecyclePerUser.erase(userIt);
+			userState->pendingLifecycle.erase(pendingIt);
 		}
 	}
 
-	void ServerReplicationSystem::QueueLifecycleForVisibleActors(uint64 userId, const ServerAoiSystem* aoi, bool forceSyncUser)
+	void ServerReplicationSystem::QueueLifecycleForVisibleActors(uint64 userId, bool forceSyncUser)
 	{
 		if (userId == 0)
 			return;
 
-		if (aoi)
+		const ReplicationUserState* userState = FindUserState(userId);
+		const std::unordered_set<NetId>* knownActors = userState ? &userState->knownActors : nullptr;
+
+		auto isKnownActor = [&](NetId id) -> bool
 		{
-			const UserAoiState* state = aoi->GetState(userId);
-			if (!state)
-				return;
+			if (!id.IsValid())
+				return false;
+			return knownActors && knownActors->contains(id);
+		};
 
-			for (const NetId id : state->left)
-				QueueRemovalForUser(userId, id, fb::fbRemovalReason_AoiLeft);
+		if (!m_aoiSys) return;
 
-			for (const NetId id : state->entered)
-			{
-				CancelRemovalForUser(userId, id);
+		const UserAoiState* state = m_aoiSys->GetState(userId);
+		if (!state) return;
 
-				if (IsActorKnownToUser(userId, id))
-					QueueLifecycleMetaForUser(userId, id);
-				else
-					QueueLifecycleCreateForUser(userId, id);
-			}
+		std::unordered_set<uint32> enteredSet;
+		enteredSet.reserve(state->entered.size());
 
-			for (const NetId id : state->visible)
-			{
-				if (!IsActorKnownToUser(userId, id))
-				{
-					QueueLifecycleCreateForUser(userId, id);
-					continue;
-				}
+		for (const NetId id : state->left)
+			QueueRemovalForUser(userId, id, fb::fbRemovalReason_AoiLeft);
 
-				if (forceSyncUser)
-					QueueLifecycleMetaForUser(userId, id);
-			}
-
-			return;
-		}
-
-		auto view = m_world.view<NetId>();
-		for (auto e : view)
+		for (const NetId id : state->entered)
 		{
-			const NetId netId = view.get<NetId>(e);
-			if (!netId.IsValid())
+		   if (!id.IsValid())
 				continue;
 
-			if (!IsActorKnownToUser(userId, netId))
+			enteredSet.insert(id.Raw());
+			CancelRemovalForUser(userId, id);
+
+		 if (isKnownActor(id))
+				QueueLifecycleMetaForKnownUser(userId, id);
+			else
+				QueueLifecycleCreateForUser(userId, id);
+		}
+
+		for (const NetId id : state->visible)
+		{
+			if (!id.IsValid() || enteredSet.contains(id.Raw()))
+				continue;
+
+			if (!isKnownActor(id))
 			{
-				QueueLifecycleCreateForUser(userId, netId);
+				QueueLifecycleCreateForUser(userId, id);
 				continue;
 			}
 
 			if (forceSyncUser)
-				QueueLifecycleMetaForUser(userId, netId);
+			  QueueLifecycleMetaForKnownUser(userId, id);
 		}
 	}
 
-	void ServerReplicationSystem::EmitPendingLifecyclePackets(ServerNetWorld& nw, uint64 userId, uint32 tick)
+	void ServerReplicationSystem::EmitPendingLifecyclePackets(uint64 userId, uint32 tick)
 	{
-		auto userIt = m_pendingLifecyclePerUser.find(userId);
-		if (userIt == m_pendingLifecyclePerUser.end() || userIt->second.empty())
+		auto* userState = FindUserState(userId);
+		if (!userState || userState->pendingLifecycle.empty())
 			return;
 
 		std::vector<std::pair<NetId, PendingLifecycleEvent>> pending;
-		pending.reserve(userIt->second.size());
-		for (const auto& [netId, event] : userIt->second)
+		pending.reserve(userState->pendingLifecycle.size());
+		for (const auto& [netId, event] : userState->pendingLifecycle)
 			pending.emplace_back(netId, event);
 
 		auto estimateEventBytes = [](const PendingLifecycleEvent& event) -> size_t
@@ -778,7 +971,7 @@ namespace jam::net
 			switch (event.op)
 			{
 			case fb::fbLifecycleOp_Create: return 72;
-			case fb::fbLifecycleOp_Meta: return 64;
+			case fb::fbLifecycleOp_Meta:   return 64;
 			case fb::fbLifecycleOp_Remove: return 20;
 			default: return 32;
 			}
@@ -790,7 +983,7 @@ namespace jam::net
 			m_fbb->Clear();
 
 			std::vector<flatbuffers::Offset<fb::fbLifecycleActor>> actorOffs;
-			std::vector<std::pair<NetId, PendingLifecycleEvent>> sentEvents;
+			std::vector<std::pair<NetId, PendingLifecycleEvent>>   sentEvents;
 			actorOffs.reserve(kLifecycleBatch);
 			sentEvents.reserve(kLifecycleBatch);
 
@@ -811,7 +1004,7 @@ namespace jam::net
 				entt::entity e = entt::null;
 				if (event.op != fb::fbLifecycleOp_Remove)
 				{
-					e = nw.GetEntity(netId);
+					e = m_netWorld->GetEntity(netId);
 				}
 
 				const auto off = BuildLifecycleActor(event, e, netId, userId);
@@ -830,20 +1023,14 @@ namespace jam::net
 			const auto batch = fb::CreatefbLifecycleBatch(*m_fbb, tick, vec);
 			m_fbb->Finish(batch, fb::fbLifecycleBatchIdentifier());
 
-			auto buf = PacketBuilder::CreateCustomPacket(
-				CustomPacketId::LIFECYCLE,
-				PacketFlags::NONE,
-				eChannel::RELIABLE_ORDERED,
-				m_fbb->GetBufferPointer(),
-				m_fbb->GetSize());
-
-			if (!buf.IsValid())
+			auto pkt = PacketBuilder::CreateCustomPacket(CustomPacketId::LIFECYCLE, PacketFlags::NONE, eChannel::RELIABLE_ORDERED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
+			if (!pkt.IsValid())
 				continue;
 
 			TransportInfo info{};
 			info.method = eTransportMethod::Single;
 			info.userId = userId;
-			nw.Send(info, buf);
+			m_netWorld->Send(info, pkt);
 
 			CommitPendingLifecycleBatch(userId, sentEvents);
 		}
@@ -851,22 +1038,22 @@ namespace jam::net
 
 	void ServerReplicationSystem::CommitPendingLifecycleBatch(uint64 userId, const std::vector<std::pair<NetId, PendingLifecycleEvent>>& sentEvents)
 	{
-		auto userIt = m_pendingLifecyclePerUser.find(userId);
-		if (userIt == m_pendingLifecyclePerUser.end())
+		auto* userState = FindUserState(userId);
+		if (!userState)
 			return;
 
-		auto* nw = m_world.ctx().get<ServerNetWorld*>();
+		auto* nw = m_netWorld;
 
 		for (const auto& [netId, event] : sentEvents)
 		{
-			auto pendingIt = userIt->second.find(netId);
-			if (pendingIt == userIt->second.end())
+			auto pendingIt = userState->pendingLifecycle.find(netId);
+			if (pendingIt == userState->pendingLifecycle.end())
 				continue;
 
 			if (event.op == fb::fbLifecycleOp_Create)
 			{
 				MarkActorKnownToUser(userId, netId);
-				m_forceFullStateBudgetPerUser[userId][netId] = kCreateFullStateBudget;
+				userState->forceFullStateBudget[netId] = kCreateFullStateBudget;
 
 				const entt::entity e = nw ? nw->GetEntity(netId) : entt::null;
 				if (e != entt::null && m_world.valid(e) && m_world.all_of<OwnershipTag>(e))
@@ -880,100 +1067,32 @@ namespace jam::net
 				ForgetActorForUser(userId, netId);
 			}
 
-			userIt->second.erase(pendingIt);
+			userState->pendingLifecycle.erase(pendingIt);
 		}
-
-		if (userIt->second.empty())
-			m_pendingLifecyclePerUser.erase(userIt);
 	}
 
 	void ServerReplicationSystem::InvalidateUserCaches(uint64 userId, NetId netId)
 	{
-		if (auto it = m_entityBaselinePerUser.find(userId); it != m_entityBaselinePerUser.end())
-		{
-			it->second.erase(netId);
-			if (it->second.empty())
-				m_entityBaselinePerUser.erase(it);
-		}
+		auto* userState = FindUserState(userId);
+		if (!userState)
+			return;
 
-		if (auto it = m_rigidBaselineStatesPerUser.find(userId); it != m_rigidBaselineStatesPerUser.end())
-		{
-			it->second.erase(netId);
-			if (it->second.empty())
-				m_rigidBaselineStatesPerUser.erase(it);
-		}
-
-		if (auto it = m_characterBaselineStatesPerUser.find(userId); it != m_characterBaselineStatesPerUser.end())
-		{
-			it->second.erase(netId);
-			if (it->second.empty())
-				m_characterBaselineStatesPerUser.erase(it);
-		}
-
-		if (auto it = m_kineBaselineStatesPerUser.find(userId); it != m_kineBaselineStatesPerUser.end())
-		{
-			it->second.erase(netId);
-			if (it->second.empty())
-				m_kineBaselineStatesPerUser.erase(it);
-		}
-
-		if (auto it = m_cachedRigidDeltaPerUser.find(userId); it != m_cachedRigidDeltaPerUser.end())
-		{
-			it->second.erase(netId);
-			if (it->second.empty())
-				m_cachedRigidDeltaPerUser.erase(it);
-		}
-
-		if (auto it = m_cachedCharacterDeltaPerUser.find(userId); it != m_cachedCharacterDeltaPerUser.end())
-		{
-			it->second.erase(netId);
-			if (it->second.empty())
-				m_cachedCharacterDeltaPerUser.erase(it);
-		}
+		userState->knownFullEpoch.erase(netId);
 	}
 
 	void ServerReplicationSystem::InvalidateAllUserCaches(NetId netId)
 	{
-		for (auto it = m_entityBaselinePerUser.begin(); it != m_entityBaselinePerUser.end();)
+		if (auto it = m_knownUsersByActor.find(netId); it != m_knownUsersByActor.end())
 		{
-			it->second.erase(netId);
-			if (it->second.empty()) it = m_entityBaselinePerUser.erase(it);
-			else ++it;
-		}
+			for (const KnownUserSlot& slot : it->second)
+			{
+				if (!slot.alive)
+					continue;
 
-		for (auto it = m_rigidBaselineStatesPerUser.begin(); it != m_rigidBaselineStatesPerUser.end();)
-		{
-			it->second.erase(netId);
-			if (it->second.empty()) it = m_rigidBaselineStatesPerUser.erase(it);
-			else ++it;
-		}
-
-		for (auto it = m_characterBaselineStatesPerUser.begin(); it != m_characterBaselineStatesPerUser.end();)
-		{
-			it->second.erase(netId);
-			if (it->second.empty()) it = m_characterBaselineStatesPerUser.erase(it);
-			else ++it;
-		}
-
-		for (auto it = m_kineBaselineStatesPerUser.begin(); it != m_kineBaselineStatesPerUser.end();)
-		{
-			it->second.erase(netId);
-			if (it->second.empty()) it = m_kineBaselineStatesPerUser.erase(it);
-			else ++it;
-		}
-
-		for (auto it = m_cachedRigidDeltaPerUser.begin(); it != m_cachedRigidDeltaPerUser.end();)
-		{
-			it->second.erase(netId);
-			if (it->second.empty()) it = m_cachedRigidDeltaPerUser.erase(it);
-			else ++it;
-		}
-
-		for (auto it = m_cachedCharacterDeltaPerUser.begin(); it != m_cachedCharacterDeltaPerUser.end();)
-		{
-			it->second.erase(netId);
-			if (it->second.empty()) it = m_cachedCharacterDeltaPerUser.erase(it);
-			else ++it;
+				const uint64 userId = slot.userId;
+				if (auto* userState = FindUserState(userId))
+					userState->knownFullEpoch.erase(netId);
+			}
 		}
 	}
 
@@ -982,7 +1101,9 @@ namespace jam::net
 		if (userId == 0 || !netId.IsValid())
 			return false;
 
-		return m_knownActorsPerUser.contains(ActorUserKey{ .userId = userId, .netId = netId.Raw() });
+		if (const auto* userState = FindUserState(userId))
+			return userState->knownActors.contains(netId);
+		return false;
 	}
 
 	void ServerReplicationSystem::MarkActorKnownToUser(uint64 userId, NetId netId)
@@ -990,7 +1111,8 @@ namespace jam::net
 		if (userId == 0 || !netId.IsValid())
 			return;
 
-		m_knownActorsPerUser.insert(ActorUserKey{ .userId = userId, .netId = netId.Raw() });
+		m_userStates[userId].knownActors.insert(netId);
+		AddKnownUserToActor(netId, userId);
 	}
 
 	void ServerReplicationSystem::ForgetActorForUser(uint64 userId, NetId netId)
@@ -998,13 +1120,14 @@ namespace jam::net
 		if (userId == 0 || !netId.IsValid())
 			return;
 
-		m_knownActorsPerUser.erase(ActorUserKey{ .userId = userId, .netId = netId.Raw() });
-		if (auto it = m_forceFullStateBudgetPerUser.find(userId); it != m_forceFullStateBudgetPerUser.end())
-		{
-			it->second.erase(netId);
-			if (it->second.empty())
-				m_forceFullStateBudgetPerUser.erase(it);
-		}
+		auto* userState = FindUserState(userId);
+		if (!userState)
+			return;
+
+		userState->knownActors.erase(netId);
+		userState->knownFullEpoch.erase(netId);
+		userState->forceFullStateBudget.erase(netId);
+		RemoveKnownUserFromActor(netId, userId);
 	}
 
 	void ServerReplicationSystem::ForgetActorForAllUsers(NetId netId)
@@ -1012,14 +1135,13 @@ namespace jam::net
 		if (!netId.IsValid())
 			return;
 
-		const uint32 raw = netId.Raw();
-		std::erase_if(m_knownActorsPerUser, [raw](const ActorUserKey& key) { return key.netId == raw; });
-		for (auto it = m_forceFullStateBudgetPerUser.begin(); it != m_forceFullStateBudgetPerUser.end();)
+		for (auto& userState : m_userStates | std::views::values)
 		{
-			it->second.erase(netId);
-			if (it->second.empty()) it = m_forceFullStateBudgetPerUser.erase(it);
-			else ++it;
+			userState.knownActors.erase(netId);
+			userState.knownFullEpoch.erase(netId);
+			userState.forceFullStateBudget.erase(netId);
 		}
+		m_knownUsersByActor.erase(netId);
 	}
 
 	bool ServerReplicationSystem::ShouldForceFullState(uint64 userId, NetId netId) const
@@ -1027,12 +1149,11 @@ namespace jam::net
 		if (userId == 0 || !netId.IsValid())
 			return false;
 
-		if (auto it = m_forceFullStateBudgetPerUser.find(userId); it != m_forceFullStateBudgetPerUser.end())
+		if (const auto* userState = FindUserState(userId))
 		{
-			if (auto jt = it->second.find(netId); jt != it->second.end())
-				return jt->second > 0;
+			if (auto it = userState->forceFullStateBudget.find(netId); it != userState->forceFullStateBudget.end())
+				return it->second > 0;
 		}
-
 		return false;
 	}
 
@@ -1041,21 +1162,27 @@ namespace jam::net
 		if (userId == 0 || !netId.IsValid())
 			return;
 
-		auto it = m_forceFullStateBudgetPerUser.find(userId);
-		if (it == m_forceFullStateBudgetPerUser.end())
+		auto* userState = FindUserState(userId);
+		if (!userState)
 			return;
 
-		auto jt = it->second.find(netId);
-		if (jt == it->second.end())
+		uint32 actorEpoch = 0;
+		if (const auto it = m_sharedCharacterStates.find(netId); it != m_sharedCharacterStates.end())
+			actorEpoch = it->second.fullEpoch;
+		else if (const auto it = m_sharedRigidStates.find(netId); it != m_sharedRigidStates.end())
+			actorEpoch = it->second.fullEpoch;
+
+		if (actorEpoch != 0)
+			userState->knownFullEpoch[netId] = actorEpoch;
+
+		auto jt = userState->forceFullStateBudget.find(netId);
+		if (jt == userState->forceFullStateBudget.end())
 			return;
 
 		if (jt->second > 0)
 			--jt->second;
 
 		if (jt->second == 0)
-			it->second.erase(jt);
-
-		if (it->second.empty())
-			m_forceFullStateBudgetPerUser.erase(it);
+			userState->forceFullStateBudget.erase(jt);
 	}
 }

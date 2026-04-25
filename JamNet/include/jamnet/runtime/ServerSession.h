@@ -5,10 +5,6 @@
 #include "jamnet/runtime/world/WorldAssignmentTypes.h"
 #include "jamnet/runtime/schema/RPCSchemaIds.h"
 
-//#include "jamnet/sync/schema/gen/actor_control_generated.h"
-//#include "jamnet/sync/schema/gen/actor_spawn_generated.h"
-//#include "jamnet/runtime/schema/gen/binding_handshake_generated.h"
-//#include "jamnet/runtime/schema/gen/world_assignment_generated.h"
 
 namespace jam::net
 {
@@ -22,6 +18,7 @@ namespace jam::net
 		void					OnSend(int32 len) override {}
 		void					OnRecv(BYTE* buffer, int32 len) override {}
 		void					HandleCustomPacket(const PacketHeaderView& view) override;
+		void					OnEntityCreated(entt::registry& R, entt::entity e) override;
 
 	public:
 		void					SetNetworkManager(ServerNetworkManager* manager) { m_manager = manager; }
@@ -43,6 +40,7 @@ namespace jam::net
 		void					OnSend(int32 len) override {}
 		void					OnRecv(BYTE* buffer, int32 len) override {}
 		void					HandleCustomPacket(const PacketHeaderView& view) override;
+		void					OnEntityCreated(entt::registry& R, entt::entity e) override;
 
 	public:
 		void					SetNetworkManager(ServerNetworkManager* manager) { m_manager = manager; }

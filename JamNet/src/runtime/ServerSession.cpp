@@ -4,9 +4,10 @@
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/core/net/PacketBuilder.h"
+#include "jamnet/core/net/RPC.h"
 
 #include "jamnet/sync/networld/ServerNetWorld.h"
-#include "jamnet/sync/replication/ReplicationUtils.h"
+#include "jamnet/sync/replication/ReplicationCodec.h"
 #include "jamnet/sync/transport/CustomPacketHelper.h"
 
 #include "jamnet/runtime/ServerNetworkManager.h"
@@ -181,6 +182,11 @@ namespace jam::net
 		}
 	}
 
+	void ServerTcpSession::OnEntityCreated(entt::registry& R, entt::entity e)
+	{
+		RPCRegisterRequest<fb::fbTcpBindReq>(R, e, this, &ServerTcpSession::OnTcpBindRequest);
+	}
+
 
 	void ServerTcpSession::OnTcpBindRequest(entt::entity e, const fb::fbTcpBindReq& req, uint32 requestId)
 	{
@@ -190,14 +196,14 @@ namespace jam::net
 			return;
 		}
 
-		if (auto existing = m_manager->FindTcpSession(req.user_id()); existing && existing.get() != this)
+		if (auto existing = m_manager->FindTcpSession(req.user_id()); existing && existing != this)
 		{
 			SendTcpBindResponse(e, false, 0, requestId);
 			return;
 		}
 
 		m_userId = req.user_id();
-		m_manager->RegisterTcpSession(m_userId, static_pointer_cast<ServerTcpSession>(shared_from_this()));
+		m_manager->RegisterTcpSession(m_userId, this);
 
 		{
 			auto& L = CurrentShardLocalChecked();
@@ -223,6 +229,9 @@ namespace jam::net
 	void ServerUdpSession::OnDisconnected()
 	{
 		JAMNET_LOG_INFO("[UserId = {}] ServerUdpSession disconnected", m_userId);
+
+		if (m_manager && m_userId != 0)
+			m_manager->UnregisterUdpSession(m_userId, this);
 	}
 
 	void ServerUdpSession::HandleCustomPacket(const PacketHeaderView& view)
@@ -234,6 +243,16 @@ namespace jam::net
 		{
 			world->OnRecvPacket(m_userId, view);
 		}
+	}
+
+	void ServerUdpSession::OnEntityCreated(entt::registry& R, entt::entity e)
+	{
+		RPCRegisterRequest<fb::fbUdpBindReq>(R, e, this, &ServerUdpSession::OnUdpBindRequest);
+		RPCRegisterRequest<fb::fbRequestWorldAssignmentReq>(R, e, this, &ServerUdpSession::OnRequestWorldAssignmentReq);
+		RPCRegisterRequest<fb::fbSpawnActorReq>(R, e, this, &ServerUdpSession::OnSpawnActorRequest);
+		RPCRegisterRequest<fb::fbDespawnActorReq>(R, e, this, &ServerUdpSession::OnDespawnActorRequest);
+		RPCRegisterRequest<fb::fbPossessActorReq>(R, e, this, &ServerUdpSession::OnPossessActorRequest);
+		RPCRegisterRequest<fb::fbUnpossessActorReq>(R, e, this, &ServerUdpSession::OnUnpossessActorRequest);
 	}
 
 	void ServerUdpSession::OnUdpBindRequest(entt::entity e, const fb::fbUdpBindReq& req, uint32 requestId)
@@ -266,7 +285,7 @@ namespace jam::net
 			return;
 		}
 
-		if (auto existing = m_manager->FindUdpSession(req.user_id()); existing && existing.get() != this)
+		if (auto existing = m_manager->FindUdpSession(req.user_id()); existing && existing != this)
 		{
 			JAMNET_LOG_ERROR("UDP Session already exists for userId={}", req.user_id());
 			SendUdpBindResponse(e, false, 0, requestId);
@@ -274,7 +293,7 @@ namespace jam::net
 		}
 
 		m_userId = req.user_id();
-		m_manager->RegisterUdpSession(m_userId, static_pointer_cast<ServerUdpSession>(shared_from_this()));
+		m_manager->RegisterUdpSession(m_userId, this);
 
 		{
 			auto& L = CurrentShardLocalChecked();
@@ -388,7 +407,7 @@ namespace jam::net
 				return;
 			}
 
-			auto self = static_pointer_cast<ServerUdpSession>(shared_from_this());
+			const SessionHandle handle = GetSessionHandle();
 			const uint8 requestAction = res.request_action;
 			const uint8 assignmentAction = res.assignment_action;
 
@@ -402,10 +421,19 @@ namespace jam::net
 			}
 
 			if (!m_manager->TransferWorldAsync(m_worldId, targetWorldId, m_userId,
-				[self, targetWorldId, requestAction, assignmentAction](WorldTransferResult transfer) mutable
+				[handle, targetWorldId, requestAction, assignmentAction](WorldTransferResult transfer) mutable
 				{
-					self->Post(Job([self, targetWorldId, requestAction, assignmentAction, transfer]() mutable
+					const auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
+					if (!shard)
+						return;
+
+					shard->Submit(Job([handle, targetWorldId, requestAction, assignmentAction, transfer]() mutable
 						{
+							auto& L = CurrentShardLocalChecked();
+							auto* self = static_cast<ServerUdpSession*>(FindSessionByHandle(L, handle));
+							if (!self)
+								return;
+
 							if (transfer.Succeeded())
 								self->m_worldId = targetWorldId;
 
@@ -444,14 +472,23 @@ namespace jam::net
 			m_worldId = assignment.worldId;
 		else if (assignment.status == eWorldAssignmentStatus::Waiting)
 		{
-			auto self = static_pointer_cast<ServerUdpSession>(shared_from_this());
+			const SessionHandle handle = GetSessionHandle();
 			const uint8 requestAction = res.request_action;
 			const uint8 assignmentAction = res.assignment_action;
 			if (!m_manager->AttachTransferCallback(m_userId,
-				[self, requestAction, assignmentAction](WorldTransferResult transfer) mutable
+				[handle, requestAction, assignmentAction](WorldTransferResult transfer) mutable
 				{
-					self->Post(Job([self, requestAction, assignmentAction, transfer]() mutable
+					const auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
+					if (!shard)
+						return;
+
+					shard->Submit(Job([handle, requestAction, assignmentAction, transfer]() mutable
 						{
+							auto& L = CurrentShardLocalChecked();
+							auto* self = static_cast<ServerUdpSession*>(FindSessionByHandle(L, handle));
+							if (!self)
+								return;
+
 							if (transfer.Succeeded())
 								self->m_worldId = transfer.targetWorldId;
 
@@ -513,6 +550,7 @@ namespace jam::net
 		params.owner		= (req.owner_user_id() != 0 || req.controller_user_id() != 0) ? userId : 0;
 		params.controller	= (req.controller_user_id() != 0) ? userId : 0;
 		params.targetNetId  = NetId::MakeRaw(req.target_net_id());
+		params.desc.spawnSrc = px::eSpawnSource::Runtime;
 		params.desc.prefab	= key;
 		params.desc.pose    = { .p = { req.pos()->x(), req.pos()->y(), req.pos()->z() }, .q = { req.rot()->x(), req.rot()->y(), req.rot()->z(), req.rot()->w() } };
 		params.desc.team	= static_cast<uint16>(req.team_id());
@@ -550,14 +588,23 @@ namespace jam::net
 			params.desc.overrides = overrides;
 		}
 
-		const auto self = static_pointer_cast<ServerUdpSession>(shared_from_this());
+		const SessionHandle handle = GetSessionHandle();
 		const uint32 reqId		= requestId;
 		const uint32 spawnReqId = req.spawn_req_id();
 
-		nw->SpawnActorAsync(params, [self, reqId, spawnReqId](NetId netId) mutable
+		nw->SpawnActorAsync(params, [handle, reqId, spawnReqId](NetId netId) mutable
 			{
-				self->Post(Job([self, netId, spawnReqId, reqId]() mutable
+				const auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
+				if (!shard)
+					return;
+
+				shard->Submit(Job([handle, netId, spawnReqId, reqId]() mutable
 					{
+						auto& L = CurrentShardLocalChecked();
+						auto* self = static_cast<ServerUdpSession*>(FindSessionByHandle(L, handle));
+						if (!self)
+							return;
+
 						SendSpawnActorResponse(self->GetEntity(), netId.IsValid(), spawnReqId, netId, reqId);
 					}));
 			});

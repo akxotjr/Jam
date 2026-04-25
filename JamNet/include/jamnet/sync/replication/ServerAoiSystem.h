@@ -1,4 +1,5 @@
 #pragma once
+
 #include <jampx/PhysicsTypes.h>
 #include <jampx/IPhysicsFacade.h>
 
@@ -6,39 +7,126 @@
 
 namespace jam::net
 {
+	class ServerNetWorld;
+	class ServerPhysicsSystem;
+
 	enum class eAoiCondition : uint8
 	{
 		AABB_2D,	// XZ-AABB
 		AABB_3D,	// XYZ-AABB
-		CIRCLE,		// XZ-Circle
-		SPHERE		// 3D Sphere
+		Circle,		// XZ-Circle
+		Sphere		// 3D Sphere
 	};
 
-	struct AoiConfig
+	struct AoiCellCoord
 	{
-		eAoiCondition	condition			= eAoiCondition::AABB_2D;
-		uint32			updateTicks			= 3;		// AOI recalculation interval ticks
-	
-		float			gridCellSize		= 50.f;		// Uniform Grid Cell size
-		float			hysteresisOffset	= 10.f;		// leave threshold = enter + hysteresis
+		int32 x = 0;
+		int32 z = 0;
 
-		float			aabbX				= 50.f;	// AABB half-size X 
-		float			aabbY				= 50.f;	// AABB half-size Y (only 3D)
-		float			aabbZ				= 50.f;	// AABB half-size Z
-											  
-		float			radius				= 50.f;	// CIRCLE / SPHERE radius
-
-		bool			enableLos			= false;	// enable LOS inspection
-
-		// LOS Offset Calculation Fomular: pos + up * (halfHeight * offset)
-		
-		float			losEyeOffset		= 0.9f;		// viewer(from) eye offset (+y). from = viewerPos + up * (halfHeight * eyeOffset)
-		float			losHeadOffset		= 0.9f;		// target(to) head offset (+y). to = targetPos + up * (halfHeight * headOffset)
-		float			losChestOffset		= 0.6f;		// target(to) chest offset (+y). to = targetPos + up * (halfHeight * chestOffset)
-		float			losPelvisOffset		= 0.3f;		// (optional) target(to) pelvis offset (+y). to = targetPos + up * (halfHeight * pelvisOffset)
+		bool operator==(const AoiCellCoord&) const noexcept = default;
 	};
 
-	/// @brief Per-User AOI state
+	struct AoiCellCoordHash
+	{
+		size_t operator()(const AoiCellCoord & c) const noexcept
+		{
+			return (static_cast<size_t>(static_cast<uint32>(c.x)) << 32)
+					^ static_cast<size_t>(static_cast<uint32>(c.z));
+		}
+	};
+
+
+	struct AoiCellRect
+	{
+		int32 minX = 0;
+		int32 maxX = -1;
+		int32 minZ = 0;
+		int32 maxZ = -1;
+
+		bool IsEmpty() const noexcept
+		{
+			return minX > maxX || minZ > maxZ;
+		}
+	};
+
+	struct AoiActorCellState
+	{
+		px::Vec3                   lastPos         = px::Vec3::Zero();
+		AoiCellCoord               anchorCell      = {};
+		bool                       initialized     = false;
+	};
+
+	struct AoiUserCellState
+	{
+		px::Vec3                   lastPos        = px::Vec3::Zero();
+		AoiCellCoord               anchorCell     = {};
+		std::vector<AoiCellCoord>  interestCells;
+		bool                       initialized    = false;
+	};
+
+	struct AoiActorSlot
+	{
+		entt::entity                actor   = entt::null;
+		bool                        alive   = false;
+	};
+
+	struct AoiSubscriberSlot
+	{
+		uint64                      userId  = 0;
+		bool                        alive   = false;
+	};
+
+	struct AoiVisibleUserSlot
+	{
+		uint64                      userId  = 0;
+		bool                        alive   = false;
+	};
+
+	struct AoiVisibleActorSlot
+	{
+		entt::entity                actor   = entt::null;
+		bool                        alive   = false;
+	};
+
+	struct AoiPendingVisibility
+	{
+		uint64                      userId  = 0;
+		entt::entity                actor   = entt::null;
+	};
+
+	struct AoiVisibilityKey
+	{
+		uint64       userId = 0;
+		entt::entity actor  = entt::null;
+
+		bool operator==(const AoiVisibilityKey&) const noexcept = default;
+	};
+
+	struct AoiVisibilityKeyHash
+	{
+		size_t operator()(const AoiVisibilityKey& k) const noexcept
+		{
+			const size_t h1 = std::hash<uint64>{}(k.userId);
+			const size_t h2 = std::hash<uint32>{}(static_cast<uint32>(k.actor));
+			return h1 ^ (h2 + 0x9e3779b97f4a7c15ull + (h1 << 6) + (h1 >> 2));
+		}
+	};
+
+	template<typename Entry>
+	using AoiVisibilityMap = std::unordered_map<AoiVisibilityKey, Entry, AoiVisibilityKeyHash>;
+
+	struct AoiLosCacheEntry
+	{
+		uint32  lastTick		= 0;
+		bool    lastVisible		= false;
+	};
+
+	struct AoiVisibleMembershipEntry
+	{
+		size_t	actorUserIndex = 0;
+		size_t	userActorIndex = 0;
+	};
+
 	struct UserAoiState
 	{
 		std::unordered_set<NetId>	visible;		// currently visible set of netIds
@@ -46,48 +134,123 @@ namespace jam::net
 		std::vector<NetId>			left;			// leave netId in this tick
 	};
 
-	/// @brief Server side Area-of-Interest system
+	struct AoiConfig
+	{
+		eAoiCondition   condition             = eAoiCondition::AABB_2D;
+		float           gridCellSize          = 50.0f;      // 
+		float           hysteresisOffset      = 10.0f;
+		float           cellHysteresisOffset  = 5.0f;
+
+		float           aabbX                 = 50.0f;      // AABB half x
+		float           aabbY                 = 50.0f;      // AABB half y (only AABB_3D)
+		float           aabbZ                 = 50.0f;      // AABB half y
+		float           radius                = 50.0f;      // Circle or Sphere radius
+
+		bool            enableLos             = false;      // LOS inspection toggle
+		uint32          losRetestTicks        = 10;
+		float           losEyeOffset          = 0.9f;       // viewer(from) eye    offset (+y)
+		float           losHeadOffset         = 0.9f;       // target(to)   head   offset (+y)
+		float           losChestOffset        = 0.6f;       // target(to)   chest  offset (+y)
+		float           losPelvisOffset       = 0.3f;       // target(to)   pelvis offset (+y). (optional)
+
+		float           compactDeadRatio      = 0.35f;
+		uint32          compactMinDeadCount   = 32;
+	};
+
 	class ServerAoiSystem
 	{
 	public:
 		explicit ServerAoiSystem(entt::registry& world, px::IPhysicsFacade* physics);
 
-		void							Init(const AoiConfig& cfg = {});
-		void							Tick();
+		void                            Init(const AoiConfig& cfg = {});
+		void                            Tick();
 
-		void							OnEnter(uint64 userId);
-		void							OnLeave(uint64 userId);
+		void                            OnUserEnter(uint64 userId);
+		void                            OnUserLeave(uint64 userId);
 
-		bool							IsVisible(uint64 userId, NetId netId) const;
-		const UserAoiState*				GetState(uint64 userId) const;
-		void							SetAlwaysVisible(NetId netId, bool always);
+		void                            OnActorSpawned(entt::entity actor);
+		void                            OnActorDestroyed(entt::entity actor);
 
-		
-
-	private:
-		void							Rebuild();
-		void							RebuildGrid();
-
-		void							GetCandidatesFromGrid(const px::Vec3& userPos, OUT std::vector<entt::entity>& out) const;
-		/// @brief 조건식 검사 (bias=0: enter 임계, bias=hysteresis: leave 임계)
-		bool							TestCondition(const px::Vec3& origin, const px::Vec3& target, float bias) const;
-
-		/// @brief LOS 레이캐스트 (true = 시야 통과)
-		bool							TestLos(const px::Vec3& userPos, const px::Vec3& targetPos) const;
-
-		px::Vec3						GetEntityPosition(entt::entity e) const;
-		px::Vec3						GetUserPosition(uint64 userId) const;
+		bool                            IsVisible(uint64 userId, NetId netId) const;
+		const UserAoiState*             GetState(uint64 userId) const;
+		const std::vector<AoiVisibleActorSlot>* GetVisibleActors(uint64 userId) const;
+		void                            SetAlwaysVisible(NetId netId, bool always);
 
 	private:
-		entt::registry&								m_world;
-		AoiConfig									m_cfg	  = {};
-		px::IPhysicsFacade*							m_physics = nullptr;
+		void                            RefreshContext();
 
-		std::unordered_map<uint64, UserAoiState>				m_states;
-		std::unordered_set<NetId>								m_alwaysVisible;
+		void                            CollectDirtyUsersFromControlledActors();
+		void                            CollectDirtyActorsFromPhysics();
 
-		std::unordered_map<uint64, std::vector<entt::entity>>   m_grid;
+		void                            UpdateDirtyUserSubscriptions();
+		void                            UpdateDirtyActorMembership();
+		void                            ResolvePendingVisibility();
 
-		std::unordered_map<entt::entity, px::Vec3>				m_entityPositions;
+		void                            UpdateUserAnchorAndInterestCells(uint64 userId, const px::Vec3& userPos);
+		void                            UpdateActorAnchorCell(entt::entity actor, const px::Vec3& actorPos);
+
+		void                            OnUserCellsChanged(uint64 userId, std::span<const AoiCellCoord> oldCells, std::span<const AoiCellCoord> newCells);
+		void                            OnActorCellChanged(entt::entity actor, const AoiCellCoord& oldCell, const AoiCellCoord& newCell);
+
+		void                            EvaluateVisibility(uint64 userId, entt::entity actor);
+		bool                            PassesVisibilityTests(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible);
+		bool                            PassesLos(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible);
+
+		px::Vec3                        ResolveActorPosition(entt::entity actor) const;
+		px::Vec3                        ResolveUserPosition(uint64 userId) const;
+
+		AoiCellCoord                    WorldToCell(const px::Vec3& pos) const;
+		bool                            ShouldMoveAnchorCell(const px::Vec3& pos, const AoiCellCoord& currentCell) const;
+		AoiCellRect                     BuildInterestRect(const px::Vec3& origin, float extraBias = 0.0f) const;
+		std::vector<AoiCellCoord>       BuildInterestCells(const px::Vec3& origin) const;
+
+		uint64                          MakeCellKey(const AoiCellCoord& cell) const;
+
+		void                            AddActorToCell(const AoiCellCoord& cell, entt::entity actor);
+		void                            RemoveActorFromCell(const AoiCellCoord& cell, entt::entity actor);
+		void                            AddSubscriberToCell(const AoiCellCoord& cell, uint64 userId);
+		void                            RemoveSubscriberFromCell(const AoiCellCoord& cell, uint64 userId);
+
+		void                            EnqueueVisibilityEval(uint64 userId, entt::entity actor);
+		void                            MarkUserDirty(uint64 userId);
+		void                            MarkActorDirty(entt::entity actor);
+
+		void                            CompactCellActorsIfNeeded(uint64 cellKey);
+		void                            CompactCellSubscribersIfNeeded(uint64 cellKey);
+		void                            CompactVisibleUsersIfNeeded(entt::entity actor);
+		void                            CompactVisibleActorsIfNeeded(uint64 userId);
+		AoiVisibilityKey                MakeVisibilityKey(uint64 userId, entt::entity actor) const;
+
+	private:
+		entt::registry&														m_world;
+		px::IPhysicsFacade*													m_physics             = nullptr;
+		ServerNetWorld*														m_netWorld            = nullptr;
+		ServerPhysicsSystem*												m_serverPhysics       = nullptr;
+		AoiConfig															m_cfg                 = {};
+
+		std::unordered_map<uint64, UserAoiState>							m_states;
+		std::unordered_set<NetId>											m_alwaysVisible;
+
+		std::unordered_map<entt::entity, AoiActorCellState>					m_actorStates;
+		std::unordered_map<uint64, AoiUserCellState>						m_userStates;
+
+		std::unordered_map<uint64, std::vector<AoiActorSlot>>				m_cellActors;
+		std::unordered_map<uint64, std::vector<AoiSubscriberSlot>>			m_cellSubscribers;
+		std::unordered_map<entt::entity, std::vector<AoiVisibleUserSlot>>	m_actorVisibleUsers;
+		std::unordered_map<uint64, std::vector<AoiVisibleActorSlot>>		m_userVisibleActors;
+
+		std::unordered_map<entt::entity, px::Vec3>							m_entityPositions;
+		std::unordered_map<uint64, px::Vec3>								m_userPositions;
+
+		std::vector<uint64>													m_dirtyUsers;
+		std::vector<entt::entity>											m_dirtyActors;
+		std::vector<AoiPendingVisibility>									m_pendingVisibility;
+
+		AoiVisibilityMap<AoiLosCacheEntry>									m_losCache;
+		AoiVisibilityMap<AoiVisibleMembershipEntry>							m_visibleMembership;
+
+		std::unordered_set<uint64>											m_dirtyUserDedup;
+		std::unordered_set<entt::entity>									m_dirtyActorDedup;
+		std::unordered_set<AoiVisibilityKey, AoiVisibilityKeyHash>			m_pendingVisibilityDedup;
 	};
 }

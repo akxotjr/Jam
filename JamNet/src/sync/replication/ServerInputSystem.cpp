@@ -23,15 +23,15 @@ namespace jam::net
 				const entt::entity e = (*nwPtr)->GetEntity(targetNetId);
 				if (e != entt::null && world.valid(e))
 				{
-					if (const auto* cs = world.try_get<px::CharacterState>(e))
+					if (const auto* cs = world.try_get<CharAuthorityState>(e))
 					{
-						outPos = cs->pos;
+						outPos = cs->state.pos;
 						return true;
 					}
 
-					if (const auto* rs = world.try_get<px::RigidState>(e))
+					if (const auto* rs = world.try_get<RigidAuthorityState>(e))
 					{
-						outPos = rs->pose.p;
+						outPos = rs->state.pose.p;
 						return true;
 					}
 				}
@@ -80,13 +80,6 @@ namespace jam::net
 			return resolved;
 		}
 
-		float AbsAngleDelta(float a, float b)
-		{
-			float d = std::fmod(a - b, px::TWO_PI);
-			if (d > px::PI)  d -= px::TWO_PI;
-			if (d < -px::PI) d += px::TWO_PI;
-			return std::abs(d);
-		}
 
 	}
 
@@ -100,7 +93,6 @@ namespace jam::net
 		m_pendingInputs.clear();
 		m_currentInputs.clear();
 		m_appliedInputs.clear();
-		m_lastAppliedLogs.clear();
 	}
 
 	void ServerInputSystem::Tick()
@@ -131,48 +123,15 @@ namespace jam::net
 			auto& input = view.get<px::CharacterInput>(e);
 			input = cmd.input;
 			if (input.moveMode == px::eMoveInputMode::Mouse)
-				input = ResolveMouseMoveInput(m_world, m_world.try_get<px::CharacterState>(e), input);
+			{
+				const px::CharacterState* selfState = nullptr;
+				if (const auto* auth = m_world.try_get<CharAuthorityState>(e))
+					selfState = &auth->state;
+				input = ResolveMouseMoveInput(m_world, selfState, input);
+			}
 
 			cmd.input = input;
 			m_currentInputs[control.userId] = cmd;
-
-			auto& lastLog = m_lastAppliedLogs[control.userId];
-			const bool firstLog = lastLog.tick == 0;
-			const uint32 seqGap = (cmd.seq > lastLog.seq) ? (cmd.seq - lastLog.seq) : 0;
-			const bool seqJumped = !firstLog && seqGap > 1;
-			const bool reusedSeq = !firstLog && cmd.seq == lastLog.seq && serverTick > lastLog.tick;
-			const bool flagsChanged = firstLog || input.inputFlags != lastLog.flags;
-			const bool epochChanged = firstLog || input.commandEpoch != lastLog.epoch;
-			const bool modeChanged = firstLog || E2U(input.moveMode) != lastLog.mode;
-			const bool yawChanged = firstLog || AbsAngleDelta(input.facingYaw, lastLog.yaw) > 0.01f;
-
-			//if (firstLog || seqJumped || reusedSeq || flagsChanged || epochChanged || modeChanged || yawChanged)
-			//{
-			//	JAMNET_LOG_DEBUG(
-			//		"[ServerInputApply] tick={}, userId={}, entity={}, seq={}, prevSeq={}, seqGap={}, reusedSeq={}, flags={}, yaw={}, epoch={}, mode={}, target=({}, {}, {}), targetNetId={}",
-			//		serverTick,
-			//		control.userId,
-			//		static_cast<uint32>(e),
-			//		cmd.seq,
-			//		lastLog.seq,
-			//		seqGap,
-			//		reusedSeq,
-			//		input.inputFlags,
-			//		input.facingYaw,
-			//		input.commandEpoch,
-			//		E2U(input.moveMode),
-			//		input.targetPos.x,
-			//		input.targetPos.y,
-			//		input.targetPos.z,
-			//		input.targetNetId);
-			//}
-
-			lastLog.seq = cmd.seq;
-			lastLog.flags = input.inputFlags;
-			lastLog.epoch = input.commandEpoch;
-			lastLog.yaw = input.facingYaw;
-			lastLog.mode = E2U(input.moveMode);
-			lastLog.tick = serverTick;
 		}
 	}
 
@@ -232,15 +191,6 @@ namespace jam::net
 		const uint32 appliedSeq = LastAppliedSeq(userId);
 		if (cmd.seq <= appliedSeq)
 		{
-			//JAMNET_LOG_DEBUG(
-			//	"[ServerInputDrainDrop] userId={}, droppedSeq={}, appliedSeq={}, reason=already_applied, flags={}, yaw={}, epoch={}, mode={}",
-			//	userId,
-			//	cmd.seq,
-			//	appliedSeq,
-			//	cmd.input.inputFlags,
-			//	cmd.input.facingYaw,
-			//	cmd.input.commandEpoch,
-			//	E2U(cmd.input.moveMode));
 			return;
 		}
 
@@ -250,14 +200,6 @@ namespace jam::net
 		{
 			if (it->seq == cmd.seq)
 			{
-				JAMNET_LOG_DEBUG(
-					"[ServerInputDrainDrop] userId={}, droppedSeq={}, reason=duplicate_pending, flags={}, yaw={}, epoch={}, mode={}",
-					userId,
-					cmd.seq,
-					cmd.input.inputFlags,
-					cmd.input.facingYaw,
-					cmd.input.commandEpoch,
-					E2U(cmd.input.moveMode));
 				return;
 			}
 			if (it->seq > cmd.seq)
@@ -265,52 +207,6 @@ namespace jam::net
 				insertIt = it;
 				break;
 			}
-		}
-
-		const uint32 prevQueuedSeq = pending.empty()
-			? appliedSeq
-			: pending.back().seq;
-		const uint32 seqGap = (prevQueuedSeq == 0 || cmd.seq <= prevQueuedSeq) ? 0 : (cmd.seq - prevQueuedSeq);
-
-		InputCmd prevForLog{};
-		bool hasPrevForLog = false;
-		if (!pending.empty())
-		{
-			prevForLog = pending.back();
-			hasPrevForLog = true;
-		}
-		else if (auto it = m_currentInputs.find(userId); it != m_currentInputs.end())
-		{
-			prevForLog = it->second;
-			hasPrevForLog = true;
-		}
-
-		const bool firstInput = !hasPrevForLog;
-		const bool seqJumped = seqGap > 1;
-		const bool outOfOrder = insertIt != pending.end();
-		const bool flagsChanged = firstInput || cmd.input.inputFlags != prevForLog.input.inputFlags;
-		const bool epochChanged = firstInput || cmd.input.commandEpoch != prevForLog.input.commandEpoch;
-		const bool modeChanged = firstInput || cmd.input.moveMode != prevForLog.input.moveMode;
-		const bool yawChanged = firstInput || AbsAngleDelta(cmd.input.facingYaw, prevForLog.input.facingYaw) > 0.01f;
-
-		if (firstInput || seqJumped || outOfOrder || flagsChanged || epochChanged || modeChanged || yawChanged)
-		{
-			//JAMNET_LOG_DEBUG(
-			//	"[ServerInputDrain] userId={}, prevQueuedSeq={}, newSeq={}, seqGap={}, outOfOrder={}, pendingBefore={}, flags={}, yaw={}, epoch={}, mode={}, target=({}, {}, {}), targetNetId={}",
-			//	userId,
-			//	prevQueuedSeq,
-			//	cmd.seq,
-			//	seqGap,
-			//	outOfOrder,
-			//	pending.size(),
-			//	cmd.input.inputFlags,
-			//	cmd.input.facingYaw,
-			//	cmd.input.commandEpoch,
-			//	E2U(cmd.input.moveMode),
-			//	cmd.input.targetPos.x,
-			//	cmd.input.targetPos.y,
-			//	cmd.input.targetPos.z,
-			//	cmd.input.targetNetId);
 		}
 
 		pending.insert(insertIt, cmd);
@@ -325,11 +221,6 @@ namespace jam::net
 		const uint32 appliedSeq = LastAppliedSeq(userId);
 		while (!pending.empty() && pending.front().seq <= appliedSeq)
 		{
-			JAMNET_LOG_DEBUG(
-				"[ServerInputConsumeDrop] userId={}, droppedSeq={}, appliedSeq={}, reason=stale_pending",
-				userId,
-				pending.front().seq,
-				appliedSeq);
 			pending.pop_front();
 		}
 

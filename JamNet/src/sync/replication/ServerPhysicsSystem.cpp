@@ -1,11 +1,37 @@
 ﻿#include "pch.h"
 #include "jamnet/sync/replication/ServerPhysicsSystem.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
+#include "jamnet/sync/replication/ServerAoiSystem.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
 #include "jamnet/sync/networld/ServerNetWorld.h"
 
 namespace jam::net
 {
+	namespace
+	{
+		bool TryReadValidatedCharacterState(const px::IPhysicsFacade* physics, px::ObjectId objectId, OUT px::CharacterState& outState)
+		{
+			if (!physics->GetCharacterState(objectId, outState))
+				return false;
+
+			const bool finite = outState.IsFinite();
+			JAM_ASSERT(finite && "Physics readback produced non-finite CharacterState");
+			return finite;
+		}
+
+		bool TryReadValidatedRigidState(const px::IPhysicsFacade* physics, px::ObjectId objectId, OUT px::RigidState& outState)
+		{
+			if (!physics->GetRigidState(objectId, outState))
+				return false;
+
+			outState.pose.q.Normalize();
+
+			const bool finite = outState.IsFinite();
+			JAM_ASSERT(finite && "Physics readback produced non-finite RigidState");
+			return finite;
+		}
+	}
+
 	ServerPhysicsSystem::ServerPhysicsSystem(entt::registry& world, px::IPhysicsFacade* physics)
 		: m_world(world), m_physics(physics)
 	{
@@ -13,8 +39,9 @@ namespace jam::net
 
 	void ServerPhysicsSystem::Init()
 	{
-		m_tickDebt = 0;
+		m_tickDebt		   = 0;
 		m_tickFiberRunning = false;
+		m_lastActiveEntities.clear();
 	}
 
 	void ServerPhysicsSystem::Tick()
@@ -42,7 +69,7 @@ namespace jam::net
 				runOneTick();
 			}
 
-			SyncTransforms();
+			SyncTransforms(); // ?
 			return;
 		}
 
@@ -87,38 +114,36 @@ namespace jam::net
 		if (!m_physics->Spawn(oid, desc)) 
 			return;
 
-		const px::eBodyType bodyType = desc.IsCharacter() ? px::eBodyType::Character : px::eBodyType::Rigid;
-		
 		if (m_physics->IsStepPending())
 		{
 			m_pendingActorOps.push_back(PendingActorOp{
 				.type	  = PendingActorOp::eType::Spawn,
 				.e        = e,
-				.bodyType = bodyType
 			});
 			return;
 		}
-		
-		m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
+
 		m_world.emplace<PhysicsSpawnedTag>(e);
 
-		if (bodyType == px::eBodyType::Character)
+		if (auto* cs = m_world.try_get<CharAuthorityState>(e))
 		{
-			auto& cs = m_world.emplace<px::CharacterState>(e);
-			JAM_VERIFY(m_physics->GetCharacterState(oid, cs));
-
-			const uint64 controller = m_world.get<ControlTag>(e).userId;
-			const uint64 owner		= m_world.get<OwnershipTag>(e).userId;
-
-			if (owner && owner == controller)
+			if (!TryReadValidatedCharacterState(m_physics, oid, cs->state))
 			{
-				m_world.emplace<px::CharacterInput>(e);
+				m_world.remove<PhysicsSpawnedTag>(e);
+
+				// todo
+				return;
 			}
 		}
-		else
+		else if (auto* rs = m_world.try_get<RigidAuthorityState>(e))
 		{
-			auto& rs = m_world.emplace<px::RigidState>(e);
-			JAM_VERIFY(m_physics->GetRigidState(oid, rs));
+			if (!TryReadValidatedRigidState(m_physics, oid, rs->state))
+			{
+				m_world.remove<PhysicsSpawnedTag>(e);
+				
+				//todo
+				return;
+			}
 		}
 	}
 
@@ -133,13 +158,9 @@ namespace jam::net
 
 		if (m_physics->IsStepPending())
 		{
-			const px::eBodyType bodyType =
-				m_world.all_of<NetActorBodyType>(e) ? m_world.get<NetActorBodyType>(e).body : px::eBodyType::None;
-
 			m_pendingActorOps.push_back(PendingActorOp{
 				.type	  = PendingActorOp::eType::Despawn,
 				.e		  = e,
-				.bodyType = bodyType
 			});
 			return;
 		}
@@ -189,36 +210,36 @@ namespace jam::net
 		if (!m_physics) return;
 
 		m_world.clear<ReplicationActiveTag>();
+		m_lastActiveEntities.clear();
 
 		// PopActiveList = onAdvance(dynamic) + dirty set(kinematic / character move / setGlobalPose)
 		const auto activeList = m_physics->PopActiveList();
 		if (activeList.empty()) return;
 
+		px::CharacterState csBuf{};
+		px::RigidState	   rsBuf{};
+
 		for (const px::ObjectId id : activeList)
 		{
 			const entt::entity e = static_cast<entt::entity>(id);
-			if (!m_world.valid(e)) continue;
+			if (e == entt::null || !m_world.valid(e)) continue;
 
-			m_world.emplace<ReplicationActiveTag>(e);
-
-			const auto bodyType = m_world.get<NetActorBodyType>(e).body;
-
-			if (bodyType == px::eBodyType::Character)
+			if (auto* cs = m_world.try_get<CharAuthorityState>(e))
 			{
-				px::CharacterState cs{};
-				if (m_physics->GetCharacterState(id, cs))
+				if (TryReadValidatedCharacterState(m_physics, id, csBuf))
 				{
-					if (auto* state = m_world.try_get<px::CharacterState>(e))
-						*state = cs;
+					cs->state = csBuf;
+					m_world.emplace<ReplicationActiveTag>(e);
+					m_lastActiveEntities.push_back(e);
 				}
 			}
-			else
+			else if (auto* rs = m_world.try_get<RigidAuthorityState>(e))
 			{
-				px::RigidState rs{};
-				if (m_physics->GetRigidState(id, rs))
+				if (TryReadValidatedRigidState(m_physics, id, rsBuf))
 				{
-					if (auto* state = m_world.try_get<px::RigidState>(e))
-						*state = rs;
+					rs->state = rsBuf;
+					m_world.emplace<ReplicationActiveTag>(e);
+					m_lastActiveEntities.push_back(e);
 				}
 			}
 		}
@@ -226,8 +247,7 @@ namespace jam::net
 
 	void ServerPhysicsSystem::SyncTransforms() const
 	{
-		if (!m_physics)
-			return;
+		if (!m_physics) return;
 
 		auto view = m_world.view<NetId, NetActorBodyType, PhysicsSpawnedTag>();
 
@@ -239,19 +259,19 @@ namespace jam::net
 			if (bodyType == px::eBodyType::Character)
 			{
 				px::CharacterState cs{};
-				if (m_physics->GetCharacterState(oid, cs))
+				if (TryReadValidatedCharacterState(m_physics, oid, cs))
 				{
-					auto& state = m_world.get<px::CharacterState>(e);
-					state = cs;
+					if (auto* state = m_world.try_get<CharAuthorityState>(e))
+						state->state = cs;
 				}
 			}
 			else
 			{
 				px::RigidState rs{};
-				if (m_physics->GetRigidState(oid, rs))
+				if (TryReadValidatedRigidState(m_physics, oid, rs))
 				{
-					auto& state = m_world.get<px::RigidState>(e);
-					state = rs;
+					if (auto* state = m_world.try_get<RigidAuthorityState>(e))
+						state->state = rs;
 				}
 			}
 		}
@@ -265,40 +285,61 @@ namespace jam::net
 		auto ops = std::move(m_pendingActorOps);
 		m_pendingActorOps.clear();
 
+
+		px::CharacterState	csBuf{};
+		px::RigidState		rsBuf{};
+		auto* aoi = m_world.ctx().find<ServerAoiSystem>();
+
 		for (const auto& op : ops)
 		{
 			if (!m_world.valid(op.e))
 				continue;
 
-			if (op.type == PendingActorOp::eType::Spawn)
+			const px::ObjectId oid = MakeObjectId(op.e);
+			m_world.emplace_or_replace<PhysicsSpawnedTag>(op.e);
+
+			switch (op.type)
 			{
-				const px::ObjectId oid = MakeObjectId(op.e);
-
-				m_world.emplace_or_replace<NetActorBodyType>(op.e, NetActorBodyType{ op.bodyType });
-				m_world.emplace_or_replace<PhysicsSpawnedTag>(op.e);
-
-				if (op.bodyType == px::eBodyType::Character)
+			case PendingActorOp::eType::Spawn:
+			{
+				bool spawned = false;
+				if (auto* cs = m_world.try_get<CharAuthorityState>(op.e))
 				{
-					auto& cs = m_world.emplace_or_replace<px::CharacterState>(op.e);
-					JAM_VERIFY(m_physics->GetCharacterState(oid, cs));
-
-					const uint64 controller = m_world.get<ControlTag>(op.e).userId;
-					const uint64 owner	    = m_world.get<OwnershipTag>(op.e).userId;
-
-					if (owner && owner == controller)
+					if (TryReadValidatedCharacterState(m_physics, oid, csBuf))
 					{
-						m_world.emplace_or_replace<px::CharacterInput>(op.e);
+						cs->state = csBuf;
+						spawned = true;
 					}
+					else
+						m_world.remove<PhysicsSpawnedTag>(op.e);
 				}
-				else if (op.bodyType == px::eBodyType::Rigid)
+				else if (auto* rs = m_world.try_get<RigidAuthorityState>(op.e))
 				{
-					auto& rs = m_world.emplace_or_replace<px::RigidState>(op.e);
-					JAM_VERIFY(m_physics->GetRigidState(oid, rs));
+					if (TryReadValidatedRigidState(m_physics, oid, rsBuf))
+					{
+						rs->state = rsBuf;
+						spawned = true;
+					}
+					else
+						m_world.remove<PhysicsSpawnedTag>(op.e);
 				}
+				else
+				{
+					m_world.remove<PhysicsSpawnedTag>(op.e);
+				}
+
+				if (spawned && aoi)
+					aoi->OnActorSpawned(op.e);
+				
+				break;
 			}
-			else
-			{
-				m_world.erase<PhysicsSpawnedTag>(op.e);
+
+			case PendingActorOp::eType::Despawn:
+				if (aoi)
+					aoi->OnActorDestroyed(op.e);
+				m_world.remove<PhysicsSpawnedTag>(op.e);
+
+				break;
 			}
 		}
 	}

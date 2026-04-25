@@ -61,10 +61,10 @@
 #include "jamnet/sync/replication/NetWorldContext.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
-#include "jamnet/sync/replication/ReplicationUtils.h"
-#include "jamnet/sync/replication/ServerAoiSystem.h"
+#include "jamnet/sync/replication/ReplicationCodec.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
 #include "jamnet/sync/replication/ServerPhysicsSystem.h"
+#include "jamnet/sync/replication/ServerAoiSystem.h"
 #include "jamnet/sync/replication/ServerReplicationSystem.h"
 
 // transport

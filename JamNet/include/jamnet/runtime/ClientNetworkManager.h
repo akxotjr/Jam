@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/NetAddress.h"
 #include "jamnet/sync/replication/ReplicationEvents.h"
 #include "jamnet/runtime/world/WorldAssignmentTypes.h"

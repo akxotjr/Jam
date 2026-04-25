@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/ReplicationUtils.h"
+#include "jamnet/sync/replication/ReplicationCodec.h"
 #include "jamnet/sync/replication/ClientReplicationSystem.h"
 
 #include "jamnet/sync/networld/ClientNetWorld.h"
@@ -19,7 +19,13 @@ namespace jam::net
 		Clear();
 
 		if (auto* nw = m_world.ctx().find<ClientNetWorld*>())
-			m_userId = (*nw) ? (*nw)->GetUserId() : 0;
+			m_netWorld = (nw && *nw) ? *nw : nullptr;
+		m_clientPhysics			= m_world.ctx().find<ClientPhysicsSystem>();
+		m_estimatedServerTick	= m_world.ctx().find<EstimatedServerTick>();
+		m_localActorRef			= m_world.ctx().find<LocalActorRef>();
+		m_reconcileSignal		= m_world.ctx().find<ReconcileSignal>();
+
+		m_userId = m_netWorld ? m_netWorld->GetUserId() : 0;
 	}
 
 	void ClientReplicationSystem::Clear()
@@ -33,12 +39,21 @@ namespace jam::net
 		m_lastServerTick = 0;
 		m_lastInputAck = 0;
 
-		if (auto* est = m_world.ctx().find<EstimatedServerTick>())
-			est->Reset();
+		if (m_estimatedServerTick)
+			m_estimatedServerTick->Reset();
+
+		m_netWorld = nullptr;
+		m_clientPhysics = nullptr;
+		m_estimatedServerTick = nullptr;
+		m_localActorRef = nullptr;
+		m_reconcileSignal = nullptr;
 	}
 
 	void ClientReplicationSystem::Tick()
 	{
+		if (m_clientPhysics == nullptr)
+			m_clientPhysics = m_world.ctx().find<ClientPhysicsSystem>();
+
 		while (!m_pendingLifecycle.empty())
 		{
 			PendingLifecycleBatch pending = std::move(m_pendingLifecycle.front());
@@ -73,8 +88,8 @@ namespace jam::net
 			m_lastServerTick = serverTick;
 			m_lastInputAck   = std::max(m_lastInputAck, inputAck);
 
-			if (auto* est = m_world.ctx().find<EstimatedServerTick>())
-				est->Update(serverTick, pending.recvNs, NOW_NS());
+			if (m_estimatedServerTick)
+				m_estimatedServerTick->Update(serverTick, pending.recvNs, NOW_NS());
 
 			for (const auto& entPtr : snapshot.entities)
 			{
@@ -108,29 +123,26 @@ namespace jam::net
 		if (!netId.IsValid())
 			return;
 
-		auto* ctx = m_world.ctx().find<ClientNetWorld*>();
-		if (!ctx || !*ctx)
+		if (!m_netWorld)
 			return;
-
-		ClientNetWorld* netWorld = *ctx;
 
 		if (actor.op == fb::fbLifecycleOp_Remove)
 		{
 			if (actor.remove_reason == fb::fbRemovalReason_Destroyed)
 			{
-				netWorld->DestroyReplicatedActor(netId);
+				m_netWorld->DestroyReplicatedActor(netId);
 				m_replicas.erase(netId);
 
 				if (m_localNetId == netId)
 				{
-					m_localNetId = NetId::Invalid();
+					m_localNetId  = NetId::Invalid();
 					m_localEntity = entt::null;
 					ClearLocalActorRef();
 				}
 				return;
 			}
 
-			netWorld->SetReplicatedActorDormant(netId);
+			m_netWorld->SetReplicatedActorDormant(netId);
 			return;
 		}
 
@@ -142,15 +154,35 @@ namespace jam::net
 		{
 			if (meta->owner_user_id == m_userId)
 			{
-				entity = netWorld->TryConfirmPendingSpawn(netId, meta->spawn_req_id);
+				entity = m_netWorld->TryConfirmPendingSpawn(netId, meta->spawn_req_id);
 			}
 		}
 
 		if (entity == entt::null || !m_world.valid(entity))
-			entity = netWorld->EnsureReplicatedActor(netId, px::PrefabKey{ meta->prefab_key }, meta->owner_user_id, meta->controller_user_id);
+		{
+			const px::eBodyType bodyType = static_cast<px::eBodyType>(meta->body_type);
+			if (bodyType == px::eBodyType::None)
+				JAM_CRASH("[ProcessLifecycleActor] : NetActorBodyType is None.");
+
+			entity = m_netWorld->EnsureReplicatedActor(netId, px::PrefabKey{ meta->prefab_key }, meta->owner_user_id, meta->controller_user_id, bodyType);
+		}
 
 		if (entity == entt::null || !m_world.valid(entity))
 			return;
+
+		if (!m_world.all_of<NetActorBodyType>(entity))
+		{
+			JAM_CRASH("[ProcessLifecycleActor] : Missing NetActorBodyType on replicated actor");
+			return;
+		}
+
+		const px::eBodyType metaBodyType  = static_cast<px::eBodyType>(meta->body_type);
+		const px::eBodyType actorBodyType = m_world.get<NetActorBodyType>(entity).body;
+		if (actorBodyType != metaBodyType)
+		{
+			JAM_CRASH("[ProcessLifecycleActor] : Lifecycle body type mismatch on replicated actor");
+			return;
+		}
 
 		Replica& replica = GetOrCreateReplica(netId);
 		replica.e = entity;
@@ -158,7 +190,7 @@ namespace jam::net
 
 		const bool wasHidden = m_world.all_of<OutOfAoiTag>(entity) || m_world.all_of<PredictedDespawnTag>(entity);
 		if (wasHidden)
-			netWorld->ReactivateReplicatedActor(netId, replica.isLocal);
+			m_netWorld->ReactivateReplicatedActor(netId, replica.isLocal);
 	}
 
 	void ClientReplicationSystem::ApplyActorMeta(NetId netId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica)
@@ -180,10 +212,10 @@ namespace jam::net
 		const NetId nid = NetId::MakeRaw(ent.net_id);
 		const uint32 baselineRev = ent.baseline_rev;
 
-		const bool hasFull		= (ent.transform_full != nullptr);
+		const bool hasFull		= (ent.transform_full  != nullptr);
 		const bool hasDelta		= (ent.transform_delta != nullptr);
 		const bool hasKine		= (ent.kinematic_state != nullptr);
-		const bool hasCharFull  = (ent.character_full != nullptr);
+		const bool hasCharFull  = (ent.character_full  != nullptr);
 		const bool hasCharDelta = (ent.character_delta != nullptr);
 
 		const entt::entity resolved = ResolveEntityForSnapshot(nid);
@@ -196,28 +228,43 @@ namespace jam::net
 
 		const bool wasHidden = m_world.all_of<OutOfAoiTag>(resolved) || m_world.all_of<PredictedDespawnTag>(resolved);
 		const px::eBodyType snapshotBodyType = (hasCharFull || hasCharDelta) ? px::eBodyType::Character : px::eBodyType::Rigid;
+		const NetActorBodyType* actorBody = nullptr;
 		if (hasFull || hasDelta || hasKine || hasCharFull || hasCharDelta)
-			EnsureSnapshotStateComponents(resolved, snapshotBodyType);
+		{
+			actorBody = m_world.try_get<NetActorBodyType>(resolved);
+			if (!actorBody)
+			{
+				JAM_CRASH("[ProcessEntity] : Missing NetActorBodyType on replicated actor");
+				return;
+			}
+
+			const px::eBodyType actorBodyType = actorBody->body;
+			if (actorBodyType != snapshotBodyType)
+			{
+				JAM_CRASH("[ProcessEntity] : Snapshot body type mismatch on replicated actor");
+				return;
+			}
+		}
 
 		if (hasCharFull)
 		{
-			ApplyCharacterFullSnapshot(serverTick, nid, ent.character_full.get(), baselineRev, replica.isLocal, inputEpoch);
+			ApplyCharacterFullSnapshot(replica, serverTick, ent.character_full.get(), baselineRev, inputEpoch);
 		}
 		else if (hasCharDelta)
 		{
-			ApplyCharacterDeltaSnapshot(serverTick, nid, ent.character_delta.get(), baselineRev, replica.isLocal, inputEpoch);
+			ApplyCharacterDeltaSnapshot(replica, serverTick, ent.character_delta.get(), baselineRev, inputEpoch);
 		}
 		else if (hasKine)
 		{
-			ApplyKinematicStateSnapshot(serverTick, nid, ent.kinematic_state.get(), baselineRev);
+			ApplyKinematicStateSnapshot(replica, serverTick, ent.kinematic_state.get(), baselineRev);
 		}
 		else if (hasFull)
 		{
-			ApplyRigidFullSnapshot(serverTick, nid, ent.transform_full.get(), baselineRev);
+			ApplyRigidFullSnapshot(replica, serverTick, ent.transform_full.get(), baselineRev);
 		}
 		else if (hasDelta)
 		{
-			ApplyRigidDeltaSnapshot(serverTick, nid, ent.transform_delta.get(), baselineRev);
+			ApplyRigidDeltaSnapshot(replica, serverTick, ent.transform_delta.get(), baselineRev);
 		}
 
 		const bool hasResolvedSpawnState =
@@ -235,13 +282,11 @@ namespace jam::net
 		if (m_world.all_of<PhysicsSpawnedTag>(resolved))
 			return;
 
-		if (m_world.all_of<NetActorBodyType, RigidAuthorityState>(resolved))
+		if (actorBody != nullptr && actorBody->body == px::eBodyType::Rigid)
 		{
-			const auto bodyType = m_world.get<NetActorBodyType>(resolved).body;
-			if (bodyType == px::eBodyType::Rigid)
+			if (const auto* auth = m_world.try_get<RigidAuthorityState>(resolved))
 			{
-				const auto& auth = m_world.get<RigidAuthorityState>(resolved).state;
-				if (auth.kineType == px::eKineDrivenType::TargetDerived)
+				if (auth->state.kineType == px::eKineDrivenType::TargetDerived)
 				{
 					const auto* ti = m_world.try_get<TargetInfo>(resolved);
 					if (!ti || ti->targetObjId == px::INVALID_OBJ_ID)
@@ -252,75 +297,33 @@ namespace jam::net
 
 		if (wasHidden)
 		{
-			if (auto* worldPtr = m_world.ctx().find<ClientNetWorld*>(); worldPtr && *worldPtr)
-				(*worldPtr)->ReactivateReplicatedActor(nid, replica.isLocal);
+			if (m_netWorld)
+				m_netWorld->ReactivateReplicatedActor(nid, replica.isLocal);
 		}
 
-		if (auto* phys = m_world.ctx().find<ClientPhysicsSystem>())
-			phys->SpawnActor(resolved, replica.isLocal);
+		if (m_clientPhysics)
+			m_clientPhysics->SpawnActor(resolved, replica.isLocal);
 	}
 
 	entt::entity ClientReplicationSystem::ResolveEntityForSnapshot(NetId netId)
 	{
-		auto* ctx = m_world.ctx().find<ClientNetWorld*>();
-		if (!ctx || !*ctx)
+		if (!m_netWorld)
 			return entt::null;
 
-		return (*ctx)->GetEntity(netId);
+		return m_netWorld->GetEntity(netId);
 	}
 
-	void ClientReplicationSystem::EnsureSnapshotStateComponents(entt::entity entity, px::eBodyType bodyType)
-	{
-		if (entity == entt::null || !m_world.valid(entity))
-			return;
-
-		m_world.emplace_or_replace<NetActorBodyType>(entity, NetActorBodyType{ bodyType });
-
-		if (bodyType == px::eBodyType::Character)
-		{
-			if (!m_world.all_of<CharAuthorityState>(entity))
-				m_world.emplace<CharAuthorityState>(entity);
-			if (!m_world.all_of<CharProxyState>(entity))
-				m_world.emplace<CharProxyState>(entity);
-			if (!m_world.all_of<CharReplayHistory>(entity))
-				m_world.emplace<CharReplayHistory>(entity);
-
-			if (m_world.all_of<RigidAuthorityState>(entity))
-				m_world.remove<RigidAuthorityState>(entity);
-			if (m_world.all_of<RigidProxyState>(entity))
-				m_world.remove<RigidProxyState>(entity);
-			if (m_world.all_of<RigidReplayHistory>(entity))
-				m_world.remove<RigidReplayHistory>(entity);
-			return;
-		}
-
-		if (!m_world.all_of<RigidAuthorityState>(entity))
-			m_world.emplace<RigidAuthorityState>(entity);
-		if (!m_world.all_of<RigidProxyState>(entity))
-			m_world.emplace<RigidProxyState>(entity);
-		if (!m_world.all_of<RigidReplayHistory>(entity))
-			m_world.emplace<RigidReplayHistory>(entity);
-
-		if (m_world.all_of<CharAuthorityState>(entity))
-			m_world.remove<CharAuthorityState>(entity);
-		if (m_world.all_of<CharProxyState>(entity))
-			m_world.remove<CharProxyState>(entity);
-		if (m_world.all_of<CharReplayHistory>(entity))
-			m_world.remove<CharReplayHistory>(entity);
-	}
-
-	void ClientReplicationSystem::ApplyRigidFullSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformFull* tf, uint32 baselineRev)
+	void ClientReplicationSystem::ApplyRigidFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformFull* tf, uint32 baselineRev)
 	{
 		px::RigidState unpacked{};
 		if (!UnpackRigidFull192(tf->data0(), tf->data1(), tf->data2(), unpacked))
 			return;
 
-		Replica& replica = GetOrCreateReplica(netId);
 		replica.lastSeenTick = serverTick;
-		replica.baselineRev = baselineRev;
-		replica.baselinePos = unpacked.pose.p;
-		replica.baselineRot = unpacked.pose.q;
-		replica.hasBaseline = true;
+		replica.baselineRev  = baselineRev;
+		replica.baselinePos  = unpacked.pose.p;
+		replica.baselineRot  = unpacked.pose.q;
+		replica.hasBaseline  = true;
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
@@ -332,9 +335,8 @@ namespace jam::net
 		rs = unpacked;
 	}
 
-	void ClientReplicationSystem::ApplyRigidDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformDelta* tf, uint32 baselineRev)
+	void ClientReplicationSystem::ApplyRigidDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformDelta* tf, uint32 baselineRev)
 	{
-		Replica& replica = GetOrCreateReplica(netId);
 		replica.lastSeenTick = serverTick;
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
@@ -358,20 +360,15 @@ namespace jam::net
 
 		auto& [rs] = m_world.get<RigidAuthorityState>(replica.e);
 		rs = unpacked;
-
-		replica.baselinePos = unpacked.pose.p;
-		replica.baselineRot = unpacked.pose.q;
-		replica.baselineRev = baselineRev + 1;
 	}
 
-	void ClientReplicationSystem::ApplyKinematicStateSnapshot(uint64 serverTick, NetId netId, const fb::fbKinematicState* ks, uint32 baselineRev)
+	void ClientReplicationSystem::ApplyKinematicStateSnapshot(Replica& replica, uint64 serverTick, const fb::fbKinematicState* ks, uint32 baselineRev)
 	{
 		if (!ks) return;
 
-		Replica& replica = GetOrCreateReplica(netId);
 		replica.lastSeenTick = serverTick;
-		replica.baselineRev = baselineRev;
-		replica.hasBaseline = false;
+		replica.baselineRev	 = baselineRev;
+		replica.hasBaseline  = false;
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
 		{
@@ -383,9 +380,9 @@ namespace jam::net
 
 		px::KinematicState kine{};
 		kine.startEpoch = ks->start_epoch();
-		kine.phase = ks->phase();
-		kine.t = ks->t();
-		kine.eventMask = ks->event_mask();
+		kine.phase		= ks->phase();
+		kine.t			= ks->t();
+		kine.eventMask	= ks->event_mask();
 
 		const NetId targetNetId = NetId::MakeRaw(ks->target_id());
 		kine.targetId = px::INVALID_OBJ_ID;
@@ -407,26 +404,25 @@ namespace jam::net
 
 		if (px::IsLocalDrivenKine(kineType))
 		{
-			if (const auto* est = m_world.ctx().find<EstimatedServerTick>(); est && est->valid)
+			if (m_estimatedServerTick && m_estimatedServerTick->valid)
 			{
-				const double dtTick = est->estimatedNowTick - static_cast<double>(serverTick);
+				const double dtTick = m_estimatedServerTick->estimatedNowTick - static_cast<double>(serverTick);
 				if (dtTick > 0.0)
 					kine.t += static_cast<float>(dtTick * static_cast<double>(SIMULATION_TICK_SEC));
 			}
 		}
 
 		auto& [rs] = m_world.get<RigidAuthorityState>(replica.e);
-		rs.kineType = kineType;
+		rs.kineType  = kineType;
 		rs.kineState = kine;
 	}
 
-	void ClientReplicationSystem::ApplyCharacterFullSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterFull160* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch)
+	void ClientReplicationSystem::ApplyCharacterFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterFull160* ch, uint32 baselineRev, uint32 inputEpoch)
 	{
 		px::CharacterState unpacked{};
-		if (!UnpackCharacterFull160(ch->data0(), ch->data1(), ch->data2(), unpacked))
+		if (!UnpackCharacterFull160(ch->data0(), ch->data1(), ch->data2(), ch->data3(), ch->data4(), unpacked))
 			return;
 
-		Replica& replica = GetOrCreateReplica(netId);
 		replica.lastSeenTick	= serverTick;
 		replica.baselineRev		= baselineRev;
 		replica.baselinePos		= unpacked.pos;
@@ -440,12 +436,12 @@ namespace jam::net
 			return;
 		}
 
-		if (isLocal)
+		if (replica.isLocal)
 		{
 			auto& [cs] = m_world.get<CharAuthorityState>(replica.e);
 			cs = unpacked;
 
-			auto& signal = m_world.ctx().get<ReconcileSignal>();
+			auto& signal = *m_reconcileSignal;
 			if (m_lastInputAck > signal.inputAck && inputEpoch >= GetCurrentLocalCommandEpoch())
 			{
 				signal.serverTick = serverTick;
@@ -462,9 +458,8 @@ namespace jam::net
 		cs = unpacked;
 	}
 
-	void ClientReplicationSystem::ApplyCharacterDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterDelta128* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch)
+	void ClientReplicationSystem::ApplyCharacterDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterDelta128* ch, uint32 baselineRev, uint32 inputEpoch)
 	{
-		Replica& replica = GetOrCreateReplica(netId);
 		replica.lastSeenTick = serverTick;
 
 		if (replica.e == entt::null || !m_world.valid(replica.e))
@@ -486,17 +481,12 @@ namespace jam::net
 		if (!UnpackCharacterDelta128(replica.baselinePos, replica.baselineYaw, replica.baselinePitch, ch->data0(), ch->data1(), unpacked))
 			return;
 
-		replica.baselinePos   = unpacked.pos;
-		replica.baselineYaw   = unpacked.facingYaw;
-		replica.baselinePitch = unpacked.facingPitch;
-		replica.baselineRev	  = baselineRev + 1;
-
-		if (isLocal)
+		if (replica.isLocal)
 		{
 			auto& [cs] = m_world.get<CharAuthorityState>(replica.e);
 			cs = unpacked;
 
-			auto& signal = m_world.ctx().get<ReconcileSignal>();
+			auto& signal = *m_reconcileSignal;
 			if (m_lastInputAck > signal.inputAck && inputEpoch >= GetCurrentLocalCommandEpoch())
 			{
 				signal.serverTick = serverTick;
@@ -544,7 +534,7 @@ namespace jam::net
 
 	void ClientReplicationSystem::UpdateUniqueLocalFromMeta(NetId netId, const fb::fbActorMetaT& meta, Replica& replica)
 	{
-		const uint64 owner = meta.owner_user_id;
+		const uint64 owner		= meta.owner_user_id;
 		const uint64 controller = meta.controller_user_id;
 
 		const bool isLocalCandidate = (owner != 0 && owner == m_userId && controller == m_userId);
@@ -609,8 +599,7 @@ namespace jam::net
 
 	void ClientReplicationSystem::ResolveDeferredTargetBindingsAndSpawn()
 	{
-		auto* phys = m_world.ctx().find<ClientPhysicsSystem>();
-		if (!phys) return;
+		if (!m_clientPhysics) return;
 
 		auto view = m_world.view<NetId, NetActorBodyType, RigidAuthorityState, TargetInfo>(entt::exclude<PhysicsSpawnedTag, PredictedDespawnTag>);
 
@@ -639,7 +628,7 @@ namespace jam::net
 
 			const NetId nid = view.get<NetId>(e);
 			Replica& replica = GetOrCreateReplica(nid);
-			phys->SpawnActor(e, replica.isLocal);
+			m_clientPhysics->SpawnActor(e, replica.isLocal);
 		}
 	}
 
@@ -650,11 +639,10 @@ namespace jam::net
 		if (!targetNetId.IsValid())
 			return false;
 
-		auto* nwPtr = m_world.ctx().find<ClientNetWorld*>();
-		if (!nwPtr || !*nwPtr)
+		if (!m_netWorld)
 			return false;
 
-		const entt::entity targetEntity = (*nwPtr)->GetEntity(targetNetId);
+		const entt::entity targetEntity = m_netWorld->GetEntity(targetNetId);
 		if (targetEntity == entt::null || !m_world.valid(targetEntity))
 			return false;
 
@@ -664,24 +652,24 @@ namespace jam::net
 
 	uint32 ClientReplicationSystem::GetCurrentLocalCommandEpoch() const
 	{
-		if (auto* nwPtr = m_world.ctx().find<ClientNetWorld*>(); nwPtr && *nwPtr)
-			return (*nwPtr)->GetLatestLocalCommandEpoch();
+		if (m_netWorld)
+			return m_netWorld->GetLatestLocalCommandEpoch();
 
 		return 0;
 	}
 
 	void ClientReplicationSystem::SetLocalActorRef(NetId netId, entt::entity entity)
 	{
-		if (auto* ref = m_world.ctx().find<LocalActorRef>())
+		if (m_localActorRef)
 		{
-			ref->netId = netId;
-			ref->entity = entity;
+			m_localActorRef->netId  = netId;
+			m_localActorRef->entity = entity;
 		}
 	}
 
 	void ClientReplicationSystem::ClearLocalActorRef()
 	{
-		if (auto* ref = m_world.ctx().find<LocalActorRef>())
-			ref->Clear();
+		if (m_localActorRef)
+			m_localActorRef->Clear();
 	}
 }

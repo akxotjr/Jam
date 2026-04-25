@@ -46,6 +46,7 @@ namespace jam::net
         }
 
         return true;
+		if (m_service->RegisterIocpObject(this) == false)
 	}
 
     void UdpRouter::CloseSocket()

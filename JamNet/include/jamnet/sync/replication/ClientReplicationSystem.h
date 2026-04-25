@@ -5,6 +5,12 @@
 
 namespace jam::net
 {
+    class ClientNetWorld;
+    class ClientPhysicsSystem;
+    struct EstimatedServerTick;
+    struct LocalActorRef;
+    struct ReconcileSignal;
+
     struct Replica
     {
         NetId           netId           = NetId::Invalid();
@@ -59,14 +65,13 @@ namespace jam::net
         void                                ApplyActorMeta(NetId netId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica);
         void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
         entt::entity                        ResolveEntityForSnapshot(NetId netId);
-        void                                EnsureSnapshotStateComponents(entt::entity entity, px::eBodyType bodyType);
         
-		void                                ApplyRigidFullSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformFull* tf, uint32 baselineRev);
-        void                                ApplyRigidDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbTransformDelta* tf, uint32 baselineRev);
-        void                                ApplyKinematicStateSnapshot(uint64 serverTick, NetId netId, const fb::fbKinematicState* ks, uint32 baselineRev);
+		void                                ApplyRigidFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformFull* tf, uint32 baselineRev);
+        void                                ApplyRigidDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformDelta* tf, uint32 baselineRev);
+        void                                ApplyKinematicStateSnapshot(Replica& replica, uint64 serverTick, const fb::fbKinematicState* ks, uint32 baselineRev);
 
-        void                                ApplyCharacterFullSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterFull160* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch);
-        void                                ApplyCharacterDeltaSnapshot(uint64 serverTick, NetId netId, const fb::fbCharacterDelta128* ch, uint32 baselineRev, bool isLocal, uint32 inputEpoch);
+        void                                ApplyCharacterFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterFull160* ch, uint32 baselineRev, uint32 inputEpoch);
+        void                                ApplyCharacterDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterDelta128* ch, uint32 baselineRev, uint32 inputEpoch);
 
 		Replica&                            GetOrCreateReplica(NetId netId, bool* created = nullptr);
         void                                PruneOldReplicas(uint64 serverTick, uint64 forgetAfterTicks = 300);
@@ -80,6 +85,11 @@ namespace jam::net
 
     private:
         entt::registry&                     m_world;
+        ClientNetWorld*                     m_netWorld            = nullptr;
+        ClientPhysicsSystem*                m_clientPhysics       = nullptr;
+        EstimatedServerTick*                m_estimatedServerTick = nullptr;
+        LocalActorRef*                      m_localActorRef       = nullptr;
+        ReconcileSignal*                    m_reconcileSignal     = nullptr;
 
         uint64                              m_userId            = 0;
 

@@ -60,6 +60,7 @@ namespace jam::net
 		if (!m_transport || !m_physics) return;
 
 		m_netIdToEntity.clear();
+		m_userToControlledEntity.clear();
 
 		m_physics->SetJobBridge(m_bridge.get());
 		m_physics->Init();
@@ -102,10 +103,10 @@ namespace jam::net
 					m_members.push_back(userId);
 
 				if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
-					aoi->OnEnter(userId);
+					aoi->OnUserEnter(userId);
 
 				if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
-					repl->OnEnter(userId);
+					repl->OnUserEnter(userId);
 
 				if (onEntered)
 					onEntered();
@@ -120,12 +121,13 @@ namespace jam::net
 		return Post(Job([this, userId, onLeft = std::move(onLeft)]() mutable
 			{
 				std::erase(m_members, userId);
+				m_userToControlledEntity.erase(userId);
 
 				if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
-					aoi->OnLeave(userId);
+					aoi->OnUserLeave(userId);
 
 				if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
-					repl->OnLeave(userId);
+					repl->OnUserLeave(userId);
 
 				if (onLeft)
 					onLeft();
@@ -268,6 +270,16 @@ namespace jam::net
 		return entt::null;
 	}
 
+	entt::entity ServerNetWorld::GetControlledEntity(uint64 userId) const
+	{
+		if (userId == 0)
+			return entt::null;
+
+		if (auto it = m_userToControlledEntity.find(userId); it != m_userToControlledEntity.end())
+			return it->second;
+		return entt::null;
+	}
+
 
 
 	void ServerNetWorld::TickOnShard()
@@ -321,22 +333,30 @@ namespace jam::net
 			for (const auto& inst : instances)
 			{
 				const entt::entity e = static_cast<entt::entity>(inst.objectId);
-				if (!m_world.valid(e)) continue;
+				if (e == entt::null || !m_world.valid(e)) continue;
 
 				const NetId nid = NetId::MakeLevel(inst.levelActorId);
 				if (!nid.IsValid()) continue;
 
-				m_world.emplace_or_replace<NetId>(e, nid);
-				m_world.emplace_or_replace<PhysicsSpawnedTag>(e);
-				m_world.emplace_or_replace<NetActorBodyType>(e, NetActorBodyType{ .body = px::eBodyType::Rigid });
-				m_world.emplace_or_replace<NetPrefabKey>(e, NetPrefabKey{ inst.prefab });
-				m_world.emplace_or_replace<px::RigidState>(e, inst.state);
-				m_world.emplace_or_replace<NewlyCreatedTag>(e);
+				m_world.emplace<NetId>(e, nid);
+				m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ .body = px::eBodyType::Rigid });
+				m_world.emplace<NetTeamPartRole>(e);
+				m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ inst.prefab });
+				m_world.emplace<OwnershipTag>(e);
+				m_world.emplace<ControlTag>(e);
+				m_world.emplace<RigidAuthorityState>(e, inst.state);
+
+				m_world.emplace<NewlyCreatedTag>(e);
+				m_world.emplace<PhysicsSpawnedTag>(e);
+
 
 				if (m_physics->GetMotionType(inst.objectId) == px::eMotionType::Static)
 					m_world.emplace<ReplicationStaticTag>(e);
 
 				m_netIdToEntity[nid] = e;
+
+				if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
+					aoi->OnActorSpawned(e);
 			}
 		}
 	}
@@ -349,25 +369,45 @@ namespace jam::net
 		const entt::entity e = m_world.create();
 
 		const NetId nid = NetId::MakeRuntime(m_netIdGenerator.fetch_add(1, std::memory_order_relaxed));
+		if (!nid.IsValid()) return NetId::Invalid();
+
+		const px::eBodyType body = params.desc.IsRigid() ? px::eBodyType::Rigid : px::eBodyType::Character;
 
 		m_world.emplace<NetId>(e, nid);
-		m_netIdToEntity[nid] = e;
+		m_world.emplace<NetActorBodyType>(e, NetActorBodyType{ body });
+		m_world.emplace<NetTeamPartRole>(e, NetTeamPartRole{ .team = params.desc.team, .part = params.desc.part, .role = params.desc.role });
 		m_world.emplace<NetPrefabKey>(e, NetPrefabKey{ params.desc.prefab });
+		m_world.emplace<OwnershipTag>(e, OwnershipTag{ params.owner });
+		m_world.emplace<ControlTag>(e, ControlTag{ params.controller });
+		
+		if (body == px::eBodyType::Rigid)
+		{
+			m_world.emplace<RigidAuthorityState>(e);
+		}
+		else
+		{
+			m_world.emplace<CharAuthorityState>(e);
+			if (params.owner && params.owner == params.controller)
+				m_world.emplace<px::CharacterInput>(e);
+		}
+
 		m_world.emplace<NewlyCreatedTag>(e);
 		m_world.emplace<NetSpawnRequestId>(e, NetSpawnRequestId{ params.spawnId });
-		m_world.emplace<OwnershipTag>(e, OwnershipTag{params.owner});
-		m_world.emplace<ControlTag>(e, ControlTag{ params.controller });
-		m_world.emplace<NetTeamPartRole>(e, NetTeamPartRole{
-			.team = params.desc.team,
-			.part = params.desc.part,
-			.role = params.desc.role
-		});
+
+
+		m_netIdToEntity[nid] = e;
+		if (params.controller != 0)
+			m_userToControlledEntity[params.controller] = e;
 
 		params.desc.targetId = BindingTarget(m_world, e, params.targetNetId, m_netIdToEntity);
 
 		m_world.ctx().get<ServerPhysicsSystem>().SpawnActor(e, params.desc);
+		if (m_world.all_of<PhysicsSpawnedTag>(e))
+		{
+			if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
+				aoi->OnActorSpawned(e);
+		}
 
-		JAMNET_LOG_DEBUG("[ServerNetWorld::SpawnActorImpl] netId = {}, owner = {}, reqId = {}", nid.Raw(), params.owner, params.spawnId);
 
 		return nid;
 	}
@@ -388,6 +428,18 @@ namespace jam::net
 
 		if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 			repl->OnActorDestroyed(targetEntity);
+		if (auto* aoi = m_world.ctx().find<ServerAoiSystem>())
+			aoi->OnActorDestroyed(targetEntity);
+
+		if (const auto* control = m_world.try_get<ControlTag>(targetEntity))
+		{
+			if (control->userId != 0)
+			{
+				auto it = m_userToControlledEntity.find(control->userId);
+				if (it != m_userToControlledEntity.end() && it->second == targetEntity)
+					m_userToControlledEntity.erase(it);
+			}
+		}
 
 		m_netIdToEntity.erase(netId);
 
@@ -423,22 +475,23 @@ namespace jam::net
 		if (control && control->userId != 0 && control->userId != userId)
 			return false;
 
-		auto controlledView = m_world.view<ControlTag>();
-		for (const entt::entity e : controlledView)
+		const entt::entity prevControlled = GetControlledEntity(userId);
+		if (prevControlled != entt::null && prevControlled != target && m_world.valid(prevControlled) && m_world.all_of<ControlTag>(prevControlled))
 		{
-			auto& controlled = controlledView.get<ControlTag>(e);
-			if (e == target || controlled.userId != userId)
-				continue;
+			auto& controlled = m_world.get<ControlTag>(prevControlled);
+			if (controlled.userId == userId)
+			{
+				controlled.userId = 0;
+				m_world.remove<px::CharacterInput>(prevControlled);
 
-			controlled.userId = 0;
-			m_world.remove<px::CharacterInput>(e);
-
-			if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
-				repl->MarkActorDirty(e, true);
+				if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
+					repl->MarkActorDirty(prevControlled, true);
+			}
 		}
 
 		m_world.emplace_or_replace<ControlTag>(target, ControlTag{ userId });
 		m_world.emplace_or_replace<px::CharacterInput>(target);
+		m_userToControlledEntity[userId] = target;
 
 		if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 			repl->MarkActorDirty(target, true);
@@ -462,6 +515,8 @@ namespace jam::net
 		// 조종 해제
 		controllable.userId = 0;
 		m_world.remove<px::CharacterInput>(targetEntity);
+		if (auto it = m_userToControlledEntity.find(userId); it != m_userToControlledEntity.end() && it->second == targetEntity)
+			m_userToControlledEntity.erase(it);
 
 		if (auto* repl = m_world.ctx().find<ServerReplicationSystem>())
 			repl->MarkActorDirty(targetEntity, true);

@@ -8,18 +8,13 @@ namespace jam::net
 {
 	void ServerTransportAdapter::SetNetworkManager(ServerNetworkManager* networkManager)
 	{
-		WRITE_LOCK;
-		m_networkManager = networkManager;
+		m_networkManager.store(networkManager, std::memory_order_release);
 	}
 
 
 	void ServerTransportAdapter::Send(const TransportInfo& info, Packet packet)
 	{
-		ServerNetworkManager* nm = nullptr;
-		{
-			READ_LOCK
-			nm = m_networkManager;
-		}
+		ServerNetworkManager* nm = m_networkManager.load(std::memory_order_acquire);
 		if (!nm)
 		{
 			JAMNET_LOG_WARN_LOC("ServerTransportAdapter has no ServerNetworkManager");
@@ -86,40 +81,32 @@ namespace jam::net
 		if (!fn || worldId == 0)
 			return;
 
-		ServerNetworkManager* nm = nullptr;
-		{
-			READ_LOCK
-			nm = m_networkManager;
-		}
+		ServerNetworkManager* nm = m_networkManager.load(std::memory_order_acquire);
 		if (!nm) return;
 
 		nm->EnumerateWorldUsers(worldId, fn);
 	}
 
 
-	void ServerTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn)
+	void ServerTransportAdapter::DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(Session*)>& fn)
 	{
 		if (!fn || userId == 0)
 			return;
 
-		ServerNetworkManager* nm = nullptr;
-		{
-			READ_LOCK
-				nm = m_networkManager;
-		}
+		ServerNetworkManager* nm = m_networkManager.load(std::memory_order_acquire);
 		if (!nm) return;
 
 		if (protocol == eProtocolType::TCP)
 		{
-			auto tcp = nm->FindTcpSession(userId);
-			fn(tcp);
+			if (Session* tcp = nm->FindTcpSession(userId))
+				fn(tcp);
 			return;
 		}
 
 		if (protocol == eProtocolType::UDP)
 		{
-			auto udp = nm->FindUdpSession(userId);
-			fn(udp);
+			if (Session* udp = nm->FindUdpSession(userId))
+				fn(udp);
 			return;
 		}
 

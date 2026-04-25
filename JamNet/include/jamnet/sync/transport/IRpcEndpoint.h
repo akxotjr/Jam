@@ -38,9 +38,9 @@ namespace jam::net
 
 			DoRpcCallOnSessionImpl(
 				userId, protocol,
-				[req = std::forward<Req>(req), opt, cb = std::forward<Cb>(cb)](std::weak_ptr<Session> weak) mutable
+				[req = std::forward<Req>(req), opt, cb = std::forward<Cb>(cb)](Session* session) mutable
 				{
-					jam::net::RPCCallAsyncNative<ReqT, ResT>(std::move(weak), std::move(req), opt, std::move(cb));
+					jam::net::RPCCallAsyncNative<ReqT, ResT>(session, std::move(req), opt, std::move(cb));
 				});
 		}
 
@@ -53,14 +53,14 @@ namespace jam::net
 
 			DoRpcCallOnSessionImpl(
 				userId, protocol,
-				[payload, opt, obj, mf](std::weak_ptr<Session> weak) mutable
+				[payload, opt, obj, mf](Session* session) mutable
 				{
-					jam::net::RPCCallAsyncMember<ReqTable, ResTable>(std::move(weak), payload->data(), static_cast<uint32>(payload->size()), opt, obj, mf);
+					jam::net::RPCCallAsyncMember<ReqTable, ResTable>(session, payload->data(), static_cast<uint32>(payload->size()), opt, obj, mf);
 				});
 		}
 
 	protected:
-		virtual void DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(std::weak_ptr<Session>)>& fn) = 0;
+		virtual void DoRpcCallOnSessionImpl(uint64 userId, eProtocolType protocol, const std::function<void(Session*)>& fn) = 0;
 
 	private:
 		template<typename Req, typename Res, typename C>
@@ -71,9 +71,9 @@ namespace jam::net
 
 			DoRpcCallOnSessionImpl(
 				userId, protocol,
-				[req = std::forward<Req>(req), opt, obj, mf](std::weak_ptr<Session> weak) mutable
+				[req = std::forward<Req>(req), opt, obj, mf](Session* session) mutable
 				{
-					jam::net::RPCCallAsyncNativeMember<ReqT, ResT>(std::move(weak), std::move(req), opt, obj, mf);
+					jam::net::RPCCallAsyncNativeMember<ReqT, ResT>(session, std::move(req), opt, obj, mf);
 				});
 		}
 
@@ -85,9 +85,9 @@ namespace jam::net
 
 			DoRpcCallOnSessionImpl(
 				userId, protocol,
-				[req = std::forward<Req>(req), opt, obj, mf](std::weak_ptr<Session> weak) mutable
+				[req = std::forward<Req>(req), opt, obj, mf](Session* session) mutable
 				{
-					jam::net::RPCCallAsyncNativeMember<ReqT, ResT>(std::move(weak), std::move(req), opt, obj, mf);
+					jam::net::RPCCallAsyncNativeMember<ReqT, ResT>(session, std::move(req), opt, obj, mf);
 				});
 		}
 	};

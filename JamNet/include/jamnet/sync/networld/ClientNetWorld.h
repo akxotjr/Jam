@@ -60,7 +60,7 @@ namespace jam::net
 		void								ReactivateReplicatedActor(NetId netId, bool isLocal);
 		void								DestroyReplicatedActor(NetId netId);
 
-		entt::entity						EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller);
+		entt::entity						EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller, px::eBodyType bodyType);
 		entt::entity						TryConfirmPendingSpawn(NetId netId, uint32 spawnReqId);
 	
 

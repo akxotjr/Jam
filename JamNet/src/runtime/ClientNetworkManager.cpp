@@ -39,19 +39,14 @@ namespace jam::net
 
 		if (!StartClientService()) return false;
 
+		m_running.store(true, std::memory_order_release);
+
 		if (!ConnectTcp())
 		{
-			StopClientService();
+			Disconnect();
 			return false;
 		}
 
-		if (!ConnectUdp())
-		{
-			StopClientService();
-			return false;
-		}
-
-		m_running.store(true, std::memory_order_release);
 		InitializeWorldSkeleton();
 		
 		return true;
@@ -59,7 +54,9 @@ namespace jam::net
 
 	void ClientNetworkManager::Disconnect()
 	{
-		if (!m_running.exchange(false, std::memory_order_acq_rel))
+		const bool wasRunning = m_running.exchange(false, std::memory_order_acq_rel);
+		const bool hasLiveState = wasRunning || m_service || m_tcp.TryGet() || m_udp.TryGet() || m_world;
+		if (!hasLiveState)
 			return;
 
 		m_tcpBound.store(false, std::memory_order_release);
@@ -67,6 +64,7 @@ namespace jam::net
 		m_worldAssignmentInFlight.store(false, std::memory_order_release);
 		m_worldRunning.store(false, std::memory_order_release);
 		m_worldId.store(INVALID_WORLD_ID, std::memory_order_release);
+
 		const bool wasReady = m_sessionReady.exchange(false, std::memory_order_acq_rel);
 		{
 			std::scoped_lock lock(m_lastWorldRequestLock);
@@ -79,7 +77,7 @@ namespace jam::net
 			evt.userId = m_userId;
 			evt.tcpBound = false;
 			evt.udpBound = false;
-			evt.ready = false;
+			evt.ready    = false;
 			GLOBAL_EVENTBUS_PUBLISH(evt);
 		}
 
@@ -87,16 +85,16 @@ namespace jam::net
 
 		ResetWorldInstance();
 
-		if (m_udp)
+		if (auto* udp = m_udp.TryGet())
 		{
-			m_udp->Disconnect();
-			m_udp.reset();
+			udp->Disconnect();
+			m_udp.Set(nullptr);
 		}
 
-		if (m_tcp)
+		if (auto* tcp = m_tcp.TryGet())
 		{
-			m_tcp->Disconnect();
-			m_tcp.reset();
+			tcp->Disconnect();
+			m_tcp.Set(nullptr);
 		}
 
 		StopClientService();
@@ -109,12 +107,16 @@ namespace jam::net
 
 	bool ClientNetworkManager::IsTcpConnected() const
 	{
-		return m_tcp && m_tcp->IsConnected();
+		if (auto* tcp = m_tcp.TryGet())
+			return tcp->IsConnected();
+		return false;
 	}
 
 	bool ClientNetworkManager::IsUdpConnected() const
 	{
-		return m_udp && m_udp->IsConnected();
+		if (auto* udp = m_udp.TryGet())
+			return udp->IsConnected();
+		return false;
 	}
 
 	void ClientNetworkManager::SetUserId(uint64 userId)
@@ -209,10 +211,10 @@ namespace jam::net
 		if (!m_service)
 			return false;
 
-		if (m_tcp)
+		if (m_tcp.TryGet())
 			return true;
 
-		auto session = std::static_pointer_cast<ClientTcpSession>(m_service->CreateSession(eProtocolType::TCP));
+		auto* session = static_cast<ClientTcpSession*>(m_service->CreateTcpSession());
 
 		if (!session)
 			return false;
@@ -223,7 +225,7 @@ namespace jam::net
 		if (!session->Connect())
 			return false;
 
-		m_tcp = session;
+		m_tcp.Set(session);
 
 		if (m_transportAdapter) m_transportAdapter->SetTcpSession(session);
 
@@ -235,10 +237,10 @@ namespace jam::net
 		if (!m_service)
 			return false;
 
-		if (m_udp)
+		if (m_udp.TryGet())
 			return true;
 
-		auto session = std::static_pointer_cast<ClientUdpSession>(m_service->CreateSession(eProtocolType::UDP));
+		auto* session = static_cast<ClientUdpSession*>(m_service->CreateUdpSession());
 
 		if (!session)
 			return false;
@@ -249,7 +251,7 @@ namespace jam::net
 		if (!session->Connect())
 			return false;
 
-		m_udp = session;
+		m_udp.Set(session);
 
 		if (m_transportAdapter) m_transportAdapter->SetUdpSession(session);
 
@@ -287,14 +289,15 @@ namespace jam::net
 		if (!m_tcpBound.load(std::memory_order_acquire) || !m_udpBound.load(std::memory_order_acquire))
 			return false;
 
-		if (!m_udp)
+		auto* udp = m_udp.TryGet();
+		if (!udp)
 			return false;
 
 		bool expected = false;
 		if (!m_worldAssignmentInFlight.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
 			return false;
 
-		issueRequest(*m_udp);
+		issueRequest(*udp);
 		return true;
 	}
 
@@ -345,8 +348,16 @@ namespace jam::net
 		evt.userId = m_userId;
 		GLOBAL_EVENTBUS_PUBLISH(evt);
 
+		if (auto* udp = m_udp.TryGet(); udp && udp->IsConnected() && !m_udpBound.load(std::memory_order_acquire))
+			udp->RequestUdpBind();
+
 		UpdateSessionReadyState();
 		PublishBindStateChangedEvent();
+
+		if (!ConnectUdp())
+		{
+			Disconnect();
+		}
 	}
 
 	void ClientNetworkManager::NotifyUdpBound()
@@ -426,8 +437,8 @@ namespace jam::net
 		const bool ready = m_tcpBound.load(std::memory_order_acquire) && m_udpBound.load(std::memory_order_acquire);
 		const bool previous = m_sessionReady.exchange(ready, std::memory_order_acq_rel);
 
-		if (m_tcp) m_tcp->SetReady(ready);
-		if (m_udp) m_udp->SetReady(ready);
+		if (auto* tcp = m_tcp.TryGet()) tcp->SetReady(ready);
+		if (auto* udp = m_udp.TryGet()) udp->SetReady(ready);
 
 		if (previous == ready)
 			return;

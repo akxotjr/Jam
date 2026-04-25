@@ -51,6 +51,7 @@ namespace jam::net
 
 		void								GetMembers(OUT std::vector<uint64>& users) { users = m_members; };
 		entt::entity						GetEntity(NetId netId) const;
+		entt::entity						GetControlledEntity(uint64 userId) const;
 
 
 	private:
@@ -76,5 +77,6 @@ namespace jam::net
 
 		std::vector<uint64>						m_members;
 		std::unordered_map<NetId, entt::entity>	m_netIdToEntity;
+		std::unordered_map<uint64, entt::entity>	m_userToControlledEntity;
 	};
 }
