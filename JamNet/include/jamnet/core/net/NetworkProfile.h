@@ -147,6 +147,11 @@ namespace jam::net::profile
 
 		uint64					ackStandalonePackets		= 0;
 		uint64					ackPiggybackedPackets		= 0;
+		uint64					udpDatagramsSent			= 0;
+		uint64					udpBundledDatagramsSent		= 0;
+		uint64					udpLogicalPacketsSent		= 0;
+		uint64					udpBundledSubPackets		= 0;
+		uint64					udpBundledBytesSent			= 0;
 
 		uint64					windowStart_ns				= 0;
 
@@ -227,6 +232,9 @@ namespace jam::net::profile
 		float				goodputPct			= 0.0f;
 		float				fragEfficiencyPct	= 0.0f;
 		float				ackPiggybackHitPct	= 0.0f;
+		float				avgUdpPacketsPerDatagram = 0.0f;
+		float				avgUdpBytesPerDatagram	 = 0.0f;
+		float				udpBundleHitPct			 = 0.0f;
 
 		float				outOfOrderPct		= 0.0f;
 		float				duplicatePct		= 0.0f;
@@ -276,6 +284,11 @@ namespace jam::net::profile
 
 		uint64				ackStandalonePackets		= 0;
 		uint64				ackPiggybackedPackets		= 0;
+		uint64				udpDatagramsSent			= 0;
+		uint64				udpBundledDatagramsSent		= 0;
+		uint64				udpLogicalPacketsSent		= 0;
+		uint64				udpBundledSubPackets		= 0;
+		uint64				udpBundledBytesSent			= 0;
 
 		uint64				windowStart_ns				= 0;
 

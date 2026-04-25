@@ -438,7 +438,7 @@ namespace jam::net
 		JAM_ASSERT(!buf.IsClosed());
 
 		constexpr uint32 k_align = static_cast<uint32>(alignof(T));
-		constexpr uint32 k_size = static_cast<uint32>(sizeof(T));
+		constexpr uint32 k_size  = static_cast<uint32>(sizeof(T));
 
 		const uint32 alignedTail = static_cast<uint32>(AlignUp(static_cast<size_t>(buf.tail), static_cast<size_t>(k_align)));
 
@@ -460,7 +460,7 @@ namespace jam::net
 		JAM_ASSERT(!buf.IsClosed());
 
 		BYTE* writePtr = buf.Tail();  
-		JAM_ASSERT(buf.TryAppendPayload(bytes));
+		JAM_ASSERT_OR_RETURN_VALUE(buf.TryAppendPayload(bytes), nullptr);
 
 		if (bytes > 0) std::memcpy(writePtr, src, bytes);
 
@@ -473,7 +473,7 @@ namespace jam::net
 		JAM_ASSERT(src != nullptr || bytes == 0);
 		JAM_ASSERT(!buf.IsClosed());
 
-		JAM_ASSERT(buf.TryPrependHeader(bytes));
+		JAM_ASSERT_OR_RETURN_VALUE(buf.TryPrependHeader(bytes), nullptr);
 		BYTE* writePtr = buf.Head();
 
 		if (bytes > 0) std::memcpy(writePtr, src, bytes);

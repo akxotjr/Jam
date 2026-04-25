@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include "jamnet/core/net/IocpEvent.h"
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/TcpRecvAssembler.h"
@@ -39,24 +40,27 @@ namespace jam::net
 		
 		HANDLE							GetHandle() override;
 		void							Dispatch(IocpEvent* iocpEvent, int32 bytes = 0) override;
+		void							OnPendingDispatchDrained() override;
 
 		bool							RegisterConnect();
 		bool							RegisterDisconnect();
 		void							RegisterSend(std::vector<PacketChain>&& chains);
 		void							RegisterRecv();
 
-		void							ProcessConnect();
+		void							ProcessInboundConnect();
+		void							ProcessOutboundConnect();
 		void							ProcessDisconnect();
 		void							ProcessSend(TcpSendEvent* ev, int32 bytes);
-		void							ProcessRecv(const TcpRecvEvent* ev, int32 bytes);
+		void							ProcessRecv(TcpRecvEvent* ev, int32 bytes);
 
 		void							HandleError(int32 errorCode);
+		entt::entity					EnsureSessionEntity();
 
 	private:
 		TcpConnectEvent					m_connectEvent;
 		TcpDisconnectEvent				m_disconnectEvent;
 
 		TcpRecvAssembler				m_recvAssembler;
+		std::atomic<bool>				m_releaseQueued = false;
 	};
 }
-

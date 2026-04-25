@@ -2,11 +2,14 @@
 
 namespace jam::net
 {
+
+
 	class NetAddress
 	{
 	public:
 		NetAddress() = default;
 		NetAddress(SOCKADDR_IN sockAddr);
+		NetAddress(SOCKADDR* sockAddr);
 		NetAddress(const std::string& ip, uint16 port);
 
 		SOCKADDR_IN&		GetSockAddr()		{ return m_sockAddr; }

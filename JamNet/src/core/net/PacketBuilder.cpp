@@ -4,6 +4,37 @@
 
 namespace jam::net
 {
+	namespace
+	{
+		bool ValidatePacketBuild(uint32 visibleSize, const void* payload, uint32 payloadSize)
+		{
+			if (payloadSize != 0 && payload == nullptr)
+			{
+				JAMNET_LOG_ERROR("[PacketBuilder] payload is null. payloadSize={}", payloadSize);
+				return false;
+			}
+
+			if (visibleSize > PacketHeader::MAX_PACKET_SIZE)
+			{
+				JAMNET_LOG_ERROR("[PacketBuilder] packet too large. visibleSize={}, max={}", visibleSize, PacketHeader::MAX_PACKET_SIZE);
+				return false;
+			}
+
+			return true;
+		}
+
+		Packet CreateHeaderOnlyPacket(const PacketHeader& header, uint32 headerSize)
+		{
+			BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Packet));
+			BufferSlice slice = writer.OpenForPayload(headerSize, alignof(PacketHeader));
+
+			WritePayload(slice, &header, headerSize);
+			slice.Close();
+
+			return MakeOwned(slice);
+		}
+	}
+
 	Packet PacketBuilder::CreatePacket(ePacketType type, uint8 id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize, uint16 packetSeq, uint16 orderdSeq, uint8 fragIndex, uint8 fragTotal)
 	{
 		return CreatePacketInternal(E2U(type), id, flags, E2U(channel), payload, payloadSize, packetSeq, orderdSeq, fragIndex, fragTotal);
@@ -42,9 +73,17 @@ namespace jam::net
 
 	Packet PacketBuilder::CreateRpcPacket(const RpcHeader* rpc, const void* payload, uint32 payloadSize, uint8 flags, eChannel ch)
 	{
+		if (!rpc)
+		{
+			JAMNET_LOG_ERROR("[PacketBuilder] rpc header is null");
+			return {};
+		}
+
 		const uint32 headerSize   = PacketHeader::CalcHeaderSize(ch, flags);
 
 		const uint32 visibleSize = headerSize + sizeof(RpcHeader) + payloadSize;
+		if (!ValidatePacketBuild(visibleSize, payload, payloadSize))
+			return {};
 
 		BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Packet));
 		BufferSlice slice = writer.OpenForPacket(sizeof(RpcHeader) + payloadSize, headerSize, alignof(PacketHeader));
@@ -75,11 +114,16 @@ namespace jam::net
 		const uint32   headerSize   = PacketHeader::CalcHeaderSize(channel, flags);
 
 		const uint32 visibleSize = headerSize + payloadSize;
+		if (!ValidatePacketBuild(visibleSize, payload, payloadSize))
+			return {};
+
+		PacketHeader header(type, id, static_cast<uint16>(visibleSize), flags, ch, packetSeq, orderedSeq, fragIndex, fragTotal);
+		if (payloadSize == 0)
+			return CreateHeaderOnlyPacket(header, headerSize);
 
 		BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Packet));
 		BufferSlice slice = writer.OpenForPacket(payloadSize, headerSize, alignof(PacketHeader));
 
-		PacketHeader header(type, id, static_cast<uint16>(visibleSize), flags, ch, packetSeq, orderedSeq, fragIndex, fragTotal);
 		WriteHeader(slice, header, headerSize);
 
 		if (payload && payloadSize != 0)

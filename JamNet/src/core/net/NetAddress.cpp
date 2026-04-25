@@ -7,6 +7,10 @@ namespace jam::net
 	{
 	}
 
+	NetAddress::NetAddress(SOCKADDR* sockAddr) : m_sockAddr(*reinterpret_cast<SOCKADDR_IN*>(sockAddr))
+	{
+	}
+
 	NetAddress::NetAddress(const std::string& ip, uint16 port)
 	{
 		::memset(&m_sockAddr, 0, sizeof(m_sockAddr));

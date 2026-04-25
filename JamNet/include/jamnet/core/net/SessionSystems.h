@@ -15,10 +15,6 @@ namespace jam::net
 	// Bootstrap Systems
 	// ============================================================
 
-	//struct NetworkSystemBootstrappedTag {};
-
-	/// 네트워크 시스템 초기화
-	//void BootstrapNetworkSystems(ShardLocal& L);
 
 	/// 세션 컴포넌트 초기화
 	void BootstrapSessionEntity(ShardLocal& L, entt::entity e, Session* session);

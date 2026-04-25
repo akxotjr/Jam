@@ -5,12 +5,44 @@
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/Service.h"
 #include "jamnet/core/net/SessionSystems.h"
+#include "jamnet/core/net/SocketUtils.h"
+
+#include "jamnet/core/net/TcpSession.h"
+#include "jamnet/core/net/UdpSession.h"
 
 namespace jam::net
 {
-	namespace
+	Session* FindSessionByHandle(ShardLocal& L, const SessionHandle& handle)
 	{
-		const RouteDomain k_sessionRouteDomain = RouteDomain::From("Session");
+		if (!handle.IsValid())
+			return nullptr;
+
+		if (L.sessionState)
+		{
+			auto& tcp = GetTcpSessionTable(L);
+			for (auto& session : tcp | std::views::values)
+			{
+				if (session && session->MatchesSessionHandle(handle))
+					return session.get();
+			}
+		}
+
+		if (L.sessionState)
+		{
+			auto& udp = GetUdpSessionTable(L);
+			for (auto& session : udp | std::views::values)
+			{
+				if (session && session->MatchesSessionHandle(handle))
+					return session.get();
+			}
+		}
+
+		return nullptr;
+	}
+
+	const Session* FindSessionByHandle(const ShardLocal& L, const SessionHandle& handle)
+	{
+		return FindSessionByHandle(const_cast<ShardLocal&>(L), handle);
 	}
 
 	std::atomic<uint64> Session::s_sessionIdGenerator{ 1 };
@@ -20,11 +52,20 @@ namespace jam::net
 		m_sessionId = s_sessionIdGenerator.fetch_add(1, std::memory_order_relaxed);
 	}
 
-	void Session::Init()
+	void Session::Init(const NetAddress& remoteAddr)
 	{
-		m_key = GLOBAL_EXEC.MakeRouteKey(k_sessionRouteDomain, GetSessionId());
-		JAMNET_LOG_DEBUG("[Session::Init()] sessionId= {} protocol= {}", GetSessionId(), m_protocol == eProtocolType::UDP ? "udp" : "tcp");
-		EnsureBound();
+		JAM_ASSERT_OR_RETURN(remoteAddr.IsValid());
+		SetRemoteNetAddress(remoteAddr);
+
+		m_key = IsTcp() ? MakeTcpRouteKey(remoteAddr) : MakeUdpRouteKey(remoteAddr);
+		JAM_ASSERT_OR_RETURN(IsValidRouteKey(m_key));
+
+		m_boundShard = GLOBAL_EXEC.GetShard(m_key);
+		auto shard = m_boundShard.lock();
+		JAM_ASSERT_OR_RETURN(shard);
+
+		m_mailbox = shard->CreateMailbox();
+		JAM_ASSERT_OR_RETURN(m_mailbox);
 	}
 
 	bool Session::IsServerSide() const
@@ -46,6 +87,17 @@ namespace jam::net
 		m_service = service;
 	}
 
+
+	void Session::SetSocket(SOCKET socket)
+	{
+		SocketUtils::Close(m_socket);
+		m_socket = socket;
+	}
+
+	bool Session::MatchesSessionHandle(const SessionHandle& handle) const
+	{
+		return handle.IsValid() && m_sessionId == handle.sessionId && m_key == handle.routeKey;
+	}
 
 	void Session::Post(Job j) const
 	{
@@ -90,8 +142,14 @@ namespace jam::net
 		bool expected = false;
 		if (!m_entityCreating.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
 			return;
-		
-		shard->Submit(Job(Self(), &Session::CreateEntity, eJobPriority::Critical));
+
+		const SessionHandle handle = GetSessionHandle();
+		shard->Submit(Job([handle]()
+			{
+				auto& L = CurrentShardLocalChecked();
+				if (auto* session = FindSessionByHandle(L, handle))
+					session->CreateEntity();
+			}, eJobPriority::Critical));
 	}
 
 	void Session::CreateEntity()
@@ -111,10 +169,38 @@ namespace jam::net
 		const entt::entity e = m_entity;
 
 		BootstrapSessionEntity(L, e, this);
+		OnEntityCreated(R, e);
 
 		m_entityReady.store(true, std::memory_order_release);
 		m_entityCreating.store(false, std::memory_order_release);
 	}
+
+
+
+
+
+
+	uint64 Session::MakeEndpointId(const NetAddress& addr)
+	{
+		const uint64 ip   = addr.GetIpAddressU64();
+		const uint64 port = addr.GetPort();
+
+		uint64 value = ip | (port << 32);
+		value ^= value >> 33;
+		value *= 0xff51afd7ed558ccdULL;
+		value ^= value >> 33;
+		value *= 0xc4ceb9fe1a85ec53ULL;
+		value ^= value >> 33;
+		return value != 0 ? value : 1;
+	}
+
+	RouteKey Session::MakeTcpRouteKey(const NetAddress& remoteAddr)
+	{
+		return GLOBAL_EXEC.MakeRouteKey(kTcpSessionRouteDomain, MakeEndpointId(remoteAddr));
+	}
+
+	RouteKey Session::MakeUdpRouteKey(const NetAddress& remoteAddr)
+	{
+		return GLOBAL_EXEC.MakeRouteKey(kUdpSessionRouteDomain, MakeEndpointId(remoteAddr));
+	}
 }
-
-

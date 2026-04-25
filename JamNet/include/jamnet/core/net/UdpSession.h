@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include "jamnet/core/net/IocpEvent.h"
 #include "jamnet/core/net/Session.h"
 
@@ -33,6 +34,7 @@ namespace jam::net
 	private:
 		HANDLE							GetHandle() override { return HANDLE(); }
 		void							Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
+		void							OnPendingDispatchDrained() override;
 
 	public:
 		void							ProcessRecv(int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns);
@@ -46,10 +48,12 @@ namespace jam::net
 		void							ProcessConnect();
 		void							ProcessDisconnect();
 
+		entt::entity					EnsureSessionEntity();
+
 	private:
 		UdpConnectEvent					m_connectEvent;
 		UdpDisconnectEvent				m_disconnectEvent;
+		std::atomic<bool>				m_releaseQueued{ false };
 	};
 
 } // namespace jam::net
-

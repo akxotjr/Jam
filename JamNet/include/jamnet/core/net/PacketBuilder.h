@@ -25,7 +25,7 @@ namespace jam::net
 			uint32 bits = 0;
 			bits |= (static_cast<uint32>(type	 & MAX_TYPE)	<< TYPE_SHIFT);
 			bits |= (static_cast<uint32>(id		 & MAX_ID)		<< ID_SHIFT);
-			bits |= (static_cast<uint32>(size    & MAX_PACKET_SIZE_FIELD) << SIZE_SHIFT);
+			bits |= (static_cast<uint32>(size    & MAX_PACKET_SIZE) << SIZE_SHIFT);
 			bits |= (static_cast<uint32>(flags   & MAX_FLAGS)	<< FLAGS_SHIFT);
 			bits |= (static_cast<uint32>(channel & MAX_CHANNEL) << CHANNEL_SHIFT);
 			SetFixedBits(bits);
@@ -62,7 +62,7 @@ namespace jam::net
 		void SetSize(uint16 size)
 		{
 			uint32 bits = GetFixedBits();
-			bits = (bits & ~SIZE_MASK) | (static_cast<uint32>(size & MAX_PACKET_SIZE_FIELD) << SIZE_SHIFT);
+			bits = (bits & ~SIZE_MASK) | (static_cast<uint32>(size & MAX_PACKET_SIZE) << SIZE_SHIFT);
 			SetFixedBits(bits);
 		}
 
@@ -105,7 +105,7 @@ namespace jam::net
 
 		bool IsValid() const
 		{
-			return (GetType() <= MAX_TYPE) && (GetId() <= MAX_ID) && (GetSize() <= MAX_PACKET_SIZE_FIELD) && (GetFlags() <= MAX_FLAGS) && (GetChannel() <= MAX_CHANNEL);
+			return (GetType() <= MAX_TYPE) && (GetId() <= MAX_ID) && (GetSize() >= BASE_SIZE) && (GetSize() <= MAX_PACKET_SIZE) && (GetFlags() <= MAX_FLAGS) && (GetChannel() <= MAX_CHANNEL);
 		}
 
 		uint32	GetActualSize() const
@@ -117,6 +117,7 @@ namespace jam::net
 		static constexpr uint32 HALF_SIZE = 5;
 		static constexpr uint32 FULL_SIZE = 7;
 		static constexpr uint32 MAX_WIRE_SIZE = 9;
+		static constexpr uint16 MAX_PACKET_SIZE = 0x7FF;
 
 		static uint32 CalcHeaderSize(eChannel channel, uint8 flags)
 		{
@@ -175,7 +176,6 @@ namespace jam::net
 		static constexpr uint8  MAX_TYPE				= 0x03;   // 2비트
 		static constexpr uint8	MAX_GROUP				= 0x01;
 		static constexpr uint8  MAX_ID					= 0x1F;   // 5비트
-		static constexpr uint16 MAX_PACKET_SIZE_FIELD	= 0x7FF;  // 11비트
 		static constexpr uint8  MAX_FLAGS				= 0x0F;   // 4비트
 		static constexpr uint8  MAX_CHANNEL				= 0x03;   // 2비트
 	};
@@ -226,9 +226,9 @@ namespace jam::net
 			std::memcpy(&view.header, buf, view.headerSize);
 			view.totalSize = view.header.GetSize();
 
-			if (size < view.totalSize || view.totalSize < view.headerSize)
+			if (view.totalSize < view.headerSize || size < view.totalSize)
 			{
-				JAMNET_LOG_CRITICAL("view.headerSize= {}, view.totalSize= {} size= {}", view.headerSize, view.totalSize, size);
+				JAMNET_LOG_WARN("Invalid packet size. headerSize={}, totalSize={}, available={}", view.headerSize, view.totalSize, size);
 				return view;
 			}
 

@@ -16,7 +16,6 @@ namespace jam::net
 		TcpSend,
 		TcpRecv,
 
-
 		UdpConnect,
 		UdpDisconnect,
 		UdpSend,
@@ -24,105 +23,105 @@ namespace jam::net
 	};
 
 
-	class IocpEvent : public OVERLAPPED
+	struct IocpEvent : OVERLAPPED
 	{
-	public:
-		IocpEvent(eEventType type);
-
-		void							Init();
-
-	public:
 		eEventType						m_eventType;
-		std::shared_ptr<IocpObject>		m_owner;
+
+
+		IocpEvent(eEventType type);
+		virtual ~IocpEvent() = default;
+
+		virtual void Init();
 	};
 
 
-	class TcpConnectEvent : public IocpEvent
+	struct TcpConnectEvent final : IocpEvent
 	{
-	public:
 		TcpConnectEvent() : IocpEvent(eEventType::TcpConnect) {}
 	};
 
-	class TcpDisconnectEvent : public IocpEvent
+	struct TcpDisconnectEvent final : IocpEvent
 	{
-	public:
 		TcpDisconnectEvent() : IocpEvent(eEventType::TcpDisconnect) {}
 	};
 
-	class TcpAcceptEvent : public IocpEvent
+	struct TcpAcceptEvent final : IocpEvent
 	{
-	public:
+		static constexpr DWORD			AddrLen			= sizeof(SOCKADDR_IN) + 16;
+		static constexpr DWORD			DataSize		= 0;
+
+
+		SOCKET							acceptSocket	= INVALID_SOCKET;
+		std::array<BYTE, AddrLen * 2>	acceptBuf		= {};
+
+
 		TcpAcceptEvent() : IocpEvent(eEventType::TcpAccept) {}
 
-	public:
-		std::shared_ptr<TcpSession>	session = nullptr;
-
-		// AcceptEx output buffer:
-		// [optional initial data][local addr][remote addr]
-		static constexpr DWORD kAddrLen = sizeof(SOCKADDR_IN) + 16;
-		std::array<BYTE, kAddrLen * 2> acceptBuf = {}; // initialLen=0이면 주소용 2개만 필요
+		void Init() override;
 	};
 
-	class TcpSendEvent : public IocpEvent
+	struct TcpSendEvent final : IocpEvent
 	{
-	public:
+		std::vector<WSABUF>				wsaBufs;			// TCP gather-send
+		std::vector<PacketChain>		chains;
+
+		size_t							curIndex	= 0;	// current WSABUF index
+		ULONG							curOffset	= 0;	// current offset within WSABUF
+		uint32							totalBytes	= 0;
+
+
 		TcpSendEvent() : IocpEvent(eEventType::TcpSend) {}
 
-		std::vector<WSABUF>			wsaBufs;				// TCP gather-send
-		std::vector<PacketChain>	chains;
-
-		size_t						curIndex	= 0;	// current WSABUF index
-		ULONG						curOffset	= 0;	// current offset within WSABUF
-		uint32						totalBytes	= 0;
+		void Init() override;
 	};
 
-	class TcpRecvEvent : public IocpEvent
+	struct TcpRecvEvent final : IocpEvent
 	{
-	public:
-		static constexpr uint32 k_chunkSize = 4096;
+		static constexpr uint32			ChunkSize = 4096;
 
-	public:
+		WSABUF							wsaBuf		= {};
+		std::array<BYTE, ChunkSize>		buffer		= {};
+
+
 		TcpRecvEvent() : IocpEvent(eEventType::TcpRecv) {}
 
-		WSABUF							wsaBuf = {};
-		std::array<BYTE, k_chunkSize>	buffer = {};
+		void Init() override;
 	};
 
 
 
-	class UdpConnectEvent : public IocpEvent
+	struct UdpConnectEvent final : IocpEvent
 	{
-	public:
 		UdpConnectEvent() : IocpEvent(eEventType::UdpConnect) {}
 	};
 
 
-	class UdpDisconnectEvent : public IocpEvent
+	struct UdpDisconnectEvent final : IocpEvent
 	{
-	public:
 		UdpDisconnectEvent() : IocpEvent(eEventType::UdpDisconnect) {}
-
 	};
 
-	class UdpSendEvent : public IocpEvent
+	struct UdpSendEvent final : IocpEvent
 	{
-	public:
-		UdpSendEvent() : IocpEvent(eEventType::UdpSend) {}
-
 		std::vector<WSABUF>			wsaBufs;
 		PacketChain					chain;
 		NetAddress					remoteAddr	= {};
+
+		UdpSendEvent() : IocpEvent(eEventType::UdpSend) {}
+
+		void Init() override;
 	};
 
-	class UdpRecvEvent : public IocpEvent
+	struct UdpRecvEvent final : IocpEvent
 	{
-	public:
-		UdpRecvEvent() : IocpEvent(eEventType::UdpRecv) {}
-
 		WSABUF						wsaBuf			= {};
 		Packet						packet			= {};
 		NetAddress					remoteAddr		= {};
 		int32						remoteAddrLen	= sizeof(SOCKADDR_IN);
 		DWORD						flags			= 0;
+
+		UdpRecvEvent() : IocpEvent(eEventType::UdpRecv) {}
+
+		void Init() override;
 	};
 }

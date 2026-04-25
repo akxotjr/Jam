@@ -141,6 +141,11 @@ namespace jam::net::profile
 
 			snapshot.ackStandalonePackets		= metrics.ackStandalonePackets;
 			snapshot.ackPiggybackedPackets		= metrics.ackPiggybackedPackets;
+			snapshot.udpDatagramsSent			= metrics.udpDatagramsSent;
+			snapshot.udpBundledDatagramsSent	= metrics.udpBundledDatagramsSent;
+			snapshot.udpLogicalPacketsSent		= metrics.udpLogicalPacketsSent;
+			snapshot.udpBundledSubPackets		= metrics.udpBundledSubPackets;
+			snapshot.udpBundledBytesSent		= metrics.udpBundledBytesSent;
 			snapshot.windowStart_ns				= metrics.windowStart_ns;
 
 			snapshot.deliveryLatency = BuildLatencyStatsFromRing(metrics.deliveryLatencySamples_ns, metrics.deliveryLatencyCount);
@@ -206,6 +211,9 @@ namespace jam::net::profile
 			view.goodputPct			 = SafeRatioPct(snapshot.appDeliveredPayloadBytes, snapshot.rxBytes);
 			view.fragEfficiencyPct	 = SafeRatioPct(snapshot.fragOriginalPayloadBytes, snapshot.fragWireBytes);
 			view.ackPiggybackHitPct	 = SafeRatioPct(snapshot.ackPiggybackedPackets, snapshot.ackPiggybackedPackets + snapshot.ackStandalonePackets);
+			view.avgUdpPacketsPerDatagram = SafeRatio(snapshot.udpLogicalPacketsSent, snapshot.udpDatagramsSent);
+			view.avgUdpBytesPerDatagram   = SafeRatio(snapshot.udpBundledBytesSent, snapshot.udpDatagramsSent);
+			view.udpBundleHitPct		  = SafeRatioPct(snapshot.udpBundledDatagramsSent, snapshot.udpDatagramsSent);
 
 			view.outOfOrderPct		 = SafeRatioPct(snapshot.outOfOrderPackets, snapshot.rxPackets);
 			view.duplicatePct		 = SafeRatioPct(snapshot.duplicatePackets, snapshot.rxPackets);

@@ -10,6 +10,7 @@ namespace jam
 	class Job;
 	class ShardExecutor;
 	class Mailbox;
+	struct ShardLocal;
 }
 
 namespace jam::net
@@ -18,7 +19,6 @@ namespace jam::net
 
 	class Service;
 	class PacketBuilder;
-
 
 	enum class eProtocolType : uint8
 	{
@@ -34,16 +34,34 @@ namespace jam::net
 		DISCONNECTED,
 	};
 
+	inline const RouteDomain kTcpSessionRouteDomain = RouteDomain::From("TcpEndpoint");
+	inline const RouteDomain kUdpSessionRouteDomain = RouteDomain::From("UdpEndpoint");
+
+	struct SessionHandle
+	{
+		RouteKey	routeKey	= {};
+		uint64		sessionId	= 0;
+
+		bool IsValid() const
+		{
+			return IsValidRouteKey(routeKey) && sessionId != 0;
+		}
+	};
+
+	class Session;
+	Session*		FindSessionByHandle(ShardLocal& L, const SessionHandle& handle);
+	const Session*	FindSessionByHandle(const ShardLocal& L, const SessionHandle& handle);
 
 	class Session : public IocpObject
 	{
+		friend class Service;
 		friend class UdpRouter;
 
 	public:
 		Session();
 		virtual ~Session() override = default;
 
-		virtual void							Init();
+		virtual void							Init(const NetAddress& remoteAddr);
 
 		virtual bool							Connect() = 0;
 		virtual void							Disconnect() = 0;
@@ -62,36 +80,46 @@ namespace jam::net
 		bool									IsClientSide() const;
 
 		uint64									GetSessionId() const { return m_sessionId; }
+		RouteKey								GetRouteKey() const { return m_key; }
+		SessionHandle							GetSessionHandle() const { return SessionHandle{ m_key, m_sessionId }; }
+		void									SetRouteKey(RouteKey key) { m_key = key; }
 
 		bool									IsConnected() { return m_state.load(std::memory_order_relaxed) == eSessionState::CONNECTED; }
 
 		Service*								GetService() const { return m_service; }
 		void									SetService(Service* service);
 
-		NetAddress&								GetRemoteNetAddress() { return m_remoteAddress; }
+		NetAddress								GetRemoteNetAddress() { return m_remoteAddress; }
 		void									SetRemoteNetAddress(const NetAddress& address) { m_remoteAddress = address; }
-		SOCKET									GetSocket() const { return m_socket; }	// TCP has socket but UDP doesn't
 
-		std::shared_ptr<Session>				Self() { return static_pointer_cast<Session>(shared_from_this()); }
+		SOCKET									GetSocket() const { return m_socket; }	
+		void									SetSocket(SOCKET socket);
+		bool									MatchesSessionHandle(const SessionHandle& handle) const;
 
 		void									Post(Job j) const;
 		void									Submit(Job j) const;
 		void									SubmitAfter(Job j, uint64 delay_ns) const;
 
 		entt::entity							GetEntity() const noexcept { return m_entity; }
+		void									CreateEntity();
 
 		void									SetReady(bool ready) { m_isReady = ready; }
 		bool									IsReady() { return m_isReady; }
+
+
+		static uint64							MakeEndpointId(const NetAddress& addr);
+		static RouteKey							MakeTcpRouteKey(const NetAddress& remoteAddr);
+		static RouteKey							MakeUdpRouteKey(const NetAddress& remoteAddr);
 
 	protected:
 		virtual void							OnConnected() {}
 		virtual void							OnDisconnected() {}
 		virtual void							OnSend(int32 len) {}
 		virtual void							OnRecv(BYTE* buffer, int32 len) {}
+		virtual void							OnEntityCreated(entt::registry& R, entt::entity e) {}
 
 	private:
 		void									EnsureBound();
-		void									CreateEntity();
 
 
 	protected:   

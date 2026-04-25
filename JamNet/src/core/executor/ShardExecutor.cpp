@@ -318,9 +318,11 @@ namespace jam
 		}
 
 		const char* fiberName = opt.name ? opt.name : "Shard.PeriodicFixedRate";
+		auto sharedJob = std::make_shared<Job>(std::move(j));
+		const eJobPriority priority = sharedJob->Priority();
 
 		m_scheduler->PostSpawn(
-			[this, st, j, id]()
+			[this, st, sharedJob, priority, id]()
 			{
 				uint64 next_ns = NOW_NS() + st->initialDelay_ns;
 				const uint64 period_ns = st->period_ns;
@@ -331,7 +333,10 @@ namespace jam
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
-					Submit(j);
+					Submit(Job([sharedJob]()
+						{
+							sharedJob->Execute();
+						}, priority));
 
 					next_ns += period_ns;
 
@@ -340,7 +345,10 @@ namespace jam
 					{
 						if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 							break;
-						Submit(j);
+						Submit(Job([sharedJob]()
+							{
+								sharedJob->Execute();
+							}, priority));
 						next_ns += period_ns;
 					}
 				}
@@ -374,16 +382,21 @@ namespace jam
 		}
 
 		const char* fiberName = opt.name ? opt.name : "Shard.PeriodicFD";
+		auto sharedJob = std::make_shared<Job>(std::move(j));
+		const eJobPriority priority = sharedJob->Priority();
 
 		m_scheduler->PostSpawn(
-			[this, st, j, id]()
+			[this, st, sharedJob, priority, id]()
 			{
 				uint64 next = NOW_NS() + st->initialDelay_ns;
 				m_scheduler->Suspend(st->awaitKey, next);
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
-					Submit(j);
+					Submit(Job([sharedJob]()
+						{
+							sharedJob->Execute();
+						}, priority));
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 

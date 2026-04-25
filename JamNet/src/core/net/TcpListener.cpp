@@ -1,16 +1,25 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/core/net/TcpListener.h"
 
 #include "jamnet/core/net/IocpEvent.h"
+#include "jamnet/core/memory/ObjectPool.h"
 #include "jamnet/core/net/SocketUtils.h"
 #include "jamnet/core/net/TcpSession.h"
 #include "jamnet/core/net/Service.h"
 
 namespace jam::net
 {
-	/*--------------
-		TcpListener
-	---------------*/
+	namespace
+	{
+		void ReleaseAcceptEvent(TcpAcceptEvent* event)
+		{
+			if (!event)
+				return;
+
+			SocketUtils::Close(event->acceptSocket);
+			ObjectPool<TcpAcceptEvent>::Push(event);
+		}
+	}
 
 	TcpListener::~TcpListener()
 	{
@@ -26,7 +35,7 @@ namespace jam::net
 		if (m_socket == INVALID_SOCKET)
 			return false;
 
-		if (m_service->GetIocpCore()->Register(shared_from_this()) == false)
+		if (m_service->RegisterIocpObject(this) == false)
 			return false;
 
 		if (SocketUtils::SetReuseAddress(m_socket, true) == false)
@@ -41,13 +50,9 @@ namespace jam::net
 		if (SocketUtils::Listen(m_socket) == false)
 			return false;
 
-		for (int32 i = 0; i < 4; i++)
+		for (int32 i = 0; i < NumOutstanding; ++i)
 		{
-			auto ev = std::make_unique<TcpAcceptEvent>();
-			ev->m_owner = shared_from_this();
-			RegisterAccept(ev.get());
-
-			m_events.push_back(std::move(ev));
+			RegisterAccept();
 		}
 
 		return true;
@@ -55,6 +60,7 @@ namespace jam::net
 
 	void TcpListener::CloseSocket()
 	{
+		MarkClosing();
 		SocketUtils::Close(m_socket);
 	}
 
@@ -65,56 +71,110 @@ namespace jam::net
 
 	void TcpListener::Dispatch(IocpEvent* iocpEvent, int32 /*numOfBytes*/)
 	{
+		if (!iocpEvent) return;
+
 		JAM_ASSERT(iocpEvent->m_eventType == eEventType::TcpAccept);
 
 		TcpAcceptEvent* acceptEvent = static_cast<TcpAcceptEvent*>(iocpEvent);
+		
+		const DWORD completionStatus = static_cast<DWORD>(iocpEvent->Internal);
+		if (completionStatus != ERROR_SUCCESS)
+		{
+			ReleaseAcceptEvent(acceptEvent);
+			RegisterAccept();
+			return;
+		}
+		
 		ProcessAccept(acceptEvent);
 	}
 
-	void TcpListener::RegisterAccept(TcpAcceptEvent* acceptEvent)
+	void TcpListener::RegisterAccept()
 	{
-		std::shared_ptr<TcpSession> session = static_pointer_cast<TcpSession>(m_service->CreateSession(eProtocolType::TCP));
+		if (m_socket == INVALID_SOCKET || IsClosing())
+			return;
 
-		acceptEvent->Init();
-		acceptEvent->session = session;
+		auto* event = ObjectPool<TcpAcceptEvent>::Pop();
+		event->Init();
 
-		DWORD bytesReceived = 0;
+		if (!TryAddPendingDispatch())
+		{
+			ReleaseAcceptEvent(event);
+			return;
+		}
 
-		BYTE* initialBuf = acceptEvent->acceptBuf.data();
-		const DWORD initialLen = 0; // 초기 payload 수신 안 함
-
-		if (false == SocketUtils::AcceptEx(m_socket, session->GetSocket(), initialBuf, initialLen, TcpAcceptEvent::kAddrLen, TcpAcceptEvent::kAddrLen, OUT &bytesReceived, static_cast<LPOVERLAPPED>(acceptEvent)))
+		if (false == SocketUtils::AcceptEx(
+			m_socket, 
+			event->acceptSocket, 
+			event->acceptBuf.data(), 
+			TcpAcceptEvent::DataSize, 
+			TcpAcceptEvent::AddrLen,
+			TcpAcceptEvent::AddrLen,
+			nullptr, 
+			event))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
-				RegisterAccept(acceptEvent);
+				ReleasePendingDispatch();
+				ReleaseAcceptEvent(event);
+				RegisterAccept();
 			}
 		}
 	}
 
-	void TcpListener::ProcessAccept(TcpAcceptEvent* acceptEvent)
+	void TcpListener::ProcessAccept(TcpAcceptEvent* event)
 	{
-		std::shared_ptr<TcpSession> session = acceptEvent->session;
-
-		// SO_UPDATE_ACCEPT_CONTEXT
-		if (false == SocketUtils::SetUpdateAcceptSocket(session->GetSocket(), m_socket))
+		if (!SocketUtils::GetAcceptExSockaddrs)
 		{
-			RegisterAccept(acceptEvent);
+			ReleaseAcceptEvent(event);
+			RegisterAccept();
 			return;
 		}
 
-		SOCKADDR_IN sockAddress = {};
-		int32 sizeOfSockAddr = sizeof(sockAddress);
-		if (SOCKET_ERROR == ::getpeername(session->GetSocket(), OUT reinterpret_cast<SOCKADDR*>(&sockAddress), &sizeOfSockAddr))
+		SOCKADDR* localSockAddr		= nullptr;
+		int32	  localSockAddrLen	= 0;
+		SOCKADDR* remoteSockAddr	= nullptr;
+		int32	  remoteSockAddrLen = 0;
+
+		SocketUtils::GetAcceptExSockaddrs(
+			event->acceptBuf.data(),
+			TcpAcceptEvent::DataSize,
+			TcpAcceptEvent::AddrLen,
+			TcpAcceptEvent::AddrLen,
+			&localSockAddr,
+			&localSockAddrLen,
+			&remoteSockAddr,
+			&remoteSockAddrLen);
+
+		if (!remoteSockAddr || remoteSockAddrLen < static_cast<int32>(sizeof(SOCKADDR_IN)))
 		{
-			RegisterAccept(acceptEvent);
+			ReleaseAcceptEvent(event);
+			RegisterAccept();
 			return;
 		}
 
-		session->SetRemoteNetAddress(NetAddress(sockAddress));
-		session->ProcessConnect();
+		auto* session = m_service->CreateTcpSession(NetAddress(remoteSockAddr));
+		if (!session)
+		{
+			ReleaseAcceptEvent(event);
+			RegisterAccept();
+			return;
+		}
 
-		RegisterAccept(acceptEvent);
+		if (!SocketUtils::SetUpdateAcceptSocket(event->acceptSocket, m_socket))
+		{
+			ReleaseAcceptEvent(event);
+			RegisterAccept();
+			return;
+		}
+
+		SOCKET acceptedSocket = event->acceptSocket;
+		event->acceptSocket = INVALID_SOCKET;
+
+		session->SetSocket(acceptedSocket);
+		session->ProcessInboundConnect();
+
+		ReleaseAcceptEvent(event);
+		RegisterAccept();
 	}
 }

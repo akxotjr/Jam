@@ -26,8 +26,8 @@ namespace jam::net
 		void					RegisterSend(std::vector<PacketChain>&& chains, const NetAddress& to);
 		void					RegisterRecv();
 
-		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddress);
-		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddress, Packet packet, uint64 ingressRecvTime_ns);
+		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddr);
+		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddr, Packet packet, uint64 ingressRecvTime_ns);
 
 		void					HandleError(int32 errorCode);
 

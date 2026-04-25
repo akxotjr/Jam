@@ -13,6 +13,11 @@
 #include <condition_variable>
 #include <deque>
 
+namespace jam::net
+{
+	struct SessionShardState;
+}
+
 namespace jam
 {
 	struct ShardLocal;
@@ -42,6 +47,7 @@ namespace jam
 	{
 		entt::registry										registry;
 		FiberScheduler*										scheduler = nullptr;
+		std::shared_ptr<net::SessionShardState>				sessionState = nullptr;
 
 		std::vector<std::function<void(entt::registry&)>>	defers;
 

@@ -5,9 +5,10 @@
 
 namespace jam::net
 {
-	LPFN_CONNECTEX		SocketUtils::ConnectEx	  = nullptr;
-	LPFN_DISCONNECTEX	SocketUtils::DisconnectEx = nullptr;
-	LPFN_ACCEPTEX		SocketUtils::AcceptEx	  = nullptr;
+	LPFN_CONNECTEX				SocketUtils::ConnectEx				= nullptr;
+	LPFN_DISCONNECTEX			SocketUtils::DisconnectEx			= nullptr;
+	LPFN_ACCEPTEX				SocketUtils::AcceptEx				= nullptr;
+	LPFN_GETACCEPTEXSOCKADDRS	SocketUtils::GetAcceptExSockaddrs	= nullptr;
 
 	void SocketUtils::Init()
 	{
@@ -15,9 +16,10 @@ namespace jam::net
 		JAM_VERIFY(::WSAStartup(MAKEWORD(2, 2), OUT & wsaData) == 0);
 
 		SOCKET dummySocket = CreateSocket(eProtocolType::TCP);
-		JAM_VERIFY(BindWindowsFunction(dummySocket, WSAID_CONNECTEX, reinterpret_cast<LPVOID*>(&ConnectEx)));
-		JAM_VERIFY(BindWindowsFunction(dummySocket, WSAID_DISCONNECTEX, reinterpret_cast<LPVOID*>(&DisconnectEx)));
-		JAM_VERIFY(BindWindowsFunction(dummySocket, WSAID_ACCEPTEX, reinterpret_cast<LPVOID*>(&AcceptEx)));
+		JAM_VERIFY(BindWindowsFunction(dummySocket, WSAID_CONNECTEX,			reinterpret_cast<LPVOID*>(&ConnectEx)));
+		JAM_VERIFY(BindWindowsFunction(dummySocket, WSAID_DISCONNECTEX,			reinterpret_cast<LPVOID*>(&DisconnectEx)));
+		JAM_VERIFY(BindWindowsFunction(dummySocket, WSAID_ACCEPTEX,				reinterpret_cast<LPVOID*>(&AcceptEx)));
+		JAM_VERIFY(BindWindowsFunction(dummySocket, WSAID_GETACCEPTEXSOCKADDRS, reinterpret_cast<LPVOID*>(&GetAcceptExSockaddrs)));
 		Close(dummySocket);
 	}
 
@@ -75,6 +77,11 @@ namespace jam::net
 	bool SocketUtils::SetUpdateAcceptSocket(SOCKET socket, SOCKET listenSocket)
 	{
 		return SetSockOpt(socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, listenSocket);
+	}
+
+	bool SocketUtils::SetUpdateConnectSocket(SOCKET socket)
+	{
+		return SOCKET_ERROR != ::setsockopt(socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, nullptr, 0);
 	}
 
 	bool SocketUtils::Bind(SOCKET socket, NetAddress netAddr)

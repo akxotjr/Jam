@@ -2,6 +2,7 @@
 #include "jamnet/core/net/TcpSession.h"
 
 #include "jamnet/core/executor/Job.h"
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/memory/ObjectPool.h"
 #include "jamnet/core/net/SocketUtils.h"
 #include "jamnet/core/net/SessionSystems.h"
@@ -23,12 +24,25 @@ namespace jam::net
 
 	bool TcpSession::Connect()
 	{
+		if (!GetService() || !GetService()->RegisterIocpObject(this))
+			return false;
+
 		return RegisterConnect();
 	}
 
 	void TcpSession::Disconnect()
 	{
-		RegisterDisconnect();
+		if (IsClosing())
+			return;
+
+		const bool posted = RegisterDisconnect();
+		MarkClosing();
+		if (!posted)
+		{
+			m_releaseQueued.store(true, std::memory_order_release);
+			if (GetPendingDispatchCount() == 0)
+				OnPendingDispatchDrained();
+		}
 	}
 
 	void TcpSession::Send(Packet packet)
@@ -36,10 +50,15 @@ namespace jam::net
 		if (!packet.IsValid())
 			return;
 
-		auto self = static_pointer_cast<TcpSession>(shared_from_this());
-		Post(Job([self, packet]
+		const SessionHandle handle = GetSessionHandle();
+		Post(Job([handle, packet]
 			{
-				const entt::entity e = self->GetEntity();
+				auto& L = CurrentShardLocalChecked();
+				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
+				if (!self)
+					return;
+
+				const entt::entity e = self->EnsureSessionEntity();
 				if (e == entt::null) return;
 
 				SendPacketToSession(e, packet);
@@ -66,7 +85,7 @@ namespace jam::net
 		switch (iocpEvent->m_eventType)
 		{
 		case eEventType::TcpConnect:
-			ProcessConnect();
+			ProcessOutboundConnect();
 			break;
 
 		case eEventType::TcpDisconnect:
@@ -91,16 +110,18 @@ namespace jam::net
 		if (SocketUtils::BindAnyAddress(m_socket, 0) == false)	   return false;
 
 		m_connectEvent.Init();
-		m_connectEvent.m_owner = shared_from_this();
+		if (!TryAddPendingDispatch())
+			return false;
 
 		DWORD		bytes	 = 0;
 		SOCKADDR_IN sockAddr = GetService()->GetRemoteTcpNetAddress().GetSockAddr();
+
 		if (SOCKET_ERROR == SocketUtils::ConnectEx(m_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &bytes, &m_connectEvent))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
-				m_connectEvent.m_owner = nullptr;
+				ReleasePendingDispatch();
 				return false;
 			}
 		}
@@ -110,14 +131,15 @@ namespace jam::net
 	bool TcpSession::RegisterDisconnect()
 	{
 		m_disconnectEvent.Init();
-		m_disconnectEvent.m_owner = shared_from_this();
+		if (!TryAddPendingDispatch())
+			return false;
 
 		if (false == SocketUtils::DisconnectEx(m_socket, &m_disconnectEvent, TF_REUSE_SOCKET, 0))
 		{
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
-				m_disconnectEvent.m_owner = nullptr;
+				ReleasePendingDispatch();
 				return false;
 			}
 		}
@@ -126,9 +148,11 @@ namespace jam::net
 
 	void TcpSession::RegisterSend(std::vector<PacketChain>&& chains)
 	{
+		if (IsClosing())
+			return;
+
 		auto* ev = ObjectPool<TcpSendEvent>::Pop();
 		ev->Init();
-		ev->m_owner    = shared_from_this();
 		ev->chains     = std::move(chains);
 		ev->curIndex   = 0;
 		ev->curOffset  = 0;
@@ -137,7 +161,7 @@ namespace jam::net
 		size_t partCount = 0;
 		for (const auto& chain : ev->chains)
 			partCount += chain.Count();
-		ev->wsaBufs.reserve(partCount);
+		ev->wsaBufs.reserve(partCount);		// chain 수가 들쭉날쭉한경우 allocate 비용이 발생할수 있음. 고정으로 하는게 좋아보임
 
 		for (auto& chain : ev->chains)
 		{
@@ -162,12 +186,21 @@ namespace jam::net
 			return;
 		}
 
+		if (!TryAddPendingDispatch())
+		{
+			ev->chains.clear();
+			ev->wsaBufs.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
+			return;
+		}
+
 		DWORD sent = 0;
 		if (SOCKET_ERROR == ::WSASend(m_socket, ev->wsaBufs.data(), static_cast<DWORD>(ev->wsaBufs.size()), OUT & sent, 0, ev, nullptr))
 		{
 			const int32 ec = ::WSAGetLastError();
 			if (ec != WSA_IO_PENDING)
 			{
+				ReleasePendingDispatch();
 				HandleError(ec);
 				ev->chains.clear();
 				ev->wsaBufs.clear();
@@ -179,11 +212,18 @@ namespace jam::net
 
 	void TcpSession::RegisterRecv()
 	{
+		if (IsClosing())
+			return;
+
 		auto* ev = ObjectPool<TcpRecvEvent>::Pop();
 		ev->Init();
-		ev->m_owner    = shared_from_this();
-		ev->wsaBuf.buf = reinterpret_cast<char*>(ev->buffer.data());
+		ev->wsaBuf.buf = reinterpret_cast<CHAR*>(ev->buffer.data());
 		ev->wsaBuf.len = static_cast<ULONG>(ev->buffer.size());
+		if (!TryAddPendingDispatch())
+		{
+			ObjectPool<TcpRecvEvent>::Push(ev);
+			return;
+		}
 
 		DWORD bytes = 0;
 		DWORD flags = 0;
@@ -192,6 +232,7 @@ namespace jam::net
 			const int32 errorCode = ::WSAGetLastError();
 			if (errorCode != WSA_IO_PENDING)
 			{
+				ReleasePendingDispatch();
 				HandleError(errorCode);
 				ObjectPool<TcpRecvEvent>::Push(ev);
 			}
@@ -199,37 +240,99 @@ namespace jam::net
 	}
 
 
-	void TcpSession::ProcessConnect()
+	void TcpSession::ProcessInboundConnect()
 	{
-		m_connectEvent.m_owner = nullptr;
+		if (!m_service->RegisterIocpObject(this))
+		{
+			SocketUtils::Close(m_socket);
+			return;
+		}
 
-		GetService()->RegisterTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
+		OnLinkEstablished();
 
-		auto self = static_pointer_cast<TcpSession>(shared_from_this());
+		const SessionHandle handle = GetSessionHandle();
+		Post(Job([handle]
+			{
+				auto& L = CurrentShardLocalChecked();
+				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
+				if (!self)
+					return;
 
-		self->OnLinkEstablished();
-		self->Post(Job(self, &TcpSession::OnConnected, eJobPriority::Control));
+				if (self->EnsureSessionEntity() == entt::null)
+					return;
 
-		RegisterRecv();
+				self->OnConnected();
+			}, eJobPriority::Control));
+
+		if (!IsClosing())
+			RegisterRecv();
+	}
+
+	void TcpSession::ProcessOutboundConnect()
+	{
+		if (!SocketUtils::SetUpdateConnectSocket(m_socket))
+		{
+			JAMNET_LOG_ERROR("SO_UPDATE_CONNEXT_CONTEXT failed. ec= {}", ::WSAGetLastError());
+			Disconnect();
+			return;
+		}
+
+		OnLinkEstablished();
+
+		const SessionHandle handle = GetSessionHandle();
+		Post(Job([handle]()
+			{
+				auto& L = CurrentShardLocalChecked();
+				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
+				if (!self)
+					return;
+
+				if (self->EnsureSessionEntity() == entt::null)
+					return;
+
+				self->OnConnected();
+			}, eJobPriority::Control));
+
+		if (!IsClosing())
+			RegisterRecv();
 	}
 
 	void TcpSession::ProcessDisconnect()
 	{
-		m_disconnectEvent.m_owner = nullptr;
+		OnLinkTerminated();
 
-		auto self = static_pointer_cast<TcpSession>(shared_from_this());
-		self->OnLinkTerminated();
-		self->Post(Job(self, &TcpSession::OnDisconnected, eJobPriority::Control));
+		const SessionHandle handle = GetSessionHandle();
+		Post(Job([handle]()
+			{
+				auto& L = CurrentShardLocalChecked();
+				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
+				if (!self)
+					return;
 
-		GetService()->ReleaseTcpSession(static_pointer_cast<TcpSession>(shared_from_this()));
+				self->OnDisconnected();
+			}, eJobPriority::Control));
+		m_releaseQueued.store(true, std::memory_order_release);
 	}
 
-	void TcpSession::ProcessRecv(const TcpRecvEvent* ev, int32 bytes)
+	void TcpSession::OnPendingDispatchDrained()
+	{
+		if (!m_releaseQueued.exchange(false, std::memory_order_acq_rel))
+			return;
+
+		auto* service = GetService();
+		if (!service)
+			return;
+
+		service->ReleaseTcpSession(this);
+	}
+
+	void TcpSession::ProcessRecv(TcpRecvEvent* ev, int32 bytes)
 	{
 		if (!ev) return;
 
 		if (bytes == 0)
 		{
+			ObjectPool<TcpRecvEvent>::Push(ev);
 			Disconnect();
 			return;
 		}
@@ -237,6 +340,7 @@ namespace jam::net
 		if (!m_recvAssembler.Append(ev->buffer.data(), bytes))
 		{
 			JAMNET_LOG_ERROR("TcpRecvAssembler::Append failed");
+			ObjectPool<TcpRecvEvent>::Push(ev);
 			Disconnect();
 			return;
 		}
@@ -252,14 +356,20 @@ namespace jam::net
 			if (result == TcpRecvAssembler::eAssembleResult::ProtocolError)
 			{
 				JAMNET_LOG_ERROR("Tcp recv protocol error");
+				ObjectPool<TcpRecvEvent>::Push(ev);
 				Disconnect();
 				return;
 			}
 
-			auto self = std::static_pointer_cast<TcpSession>(shared_from_this());
-			self->Post(Job([self, packet = std::move(pkt)]() mutable
+			const SessionHandle handle = GetSessionHandle();
+			Post(Job([handle, packet = std::move(pkt)]() mutable
 				{
-					const entt::entity e = self->GetEntity();
+					auto& L = CurrentShardLocalChecked();
+					auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
+					if (!self)
+						return;
+
+					const entt::entity e = self->EnsureSessionEntity();
 					if (e != entt::null)
 					{
 						ProcessReceivedPacket(e, std::move(packet));
@@ -267,7 +377,9 @@ namespace jam::net
 				}, eJobPriority::Control));
 		}
 
-		RegisterRecv();
+		ObjectPool<TcpRecvEvent>::Push(ev);
+		if (!IsClosing())
+			RegisterRecv();
 	}
 
 
@@ -295,6 +407,14 @@ namespace jam::net
 			remaining = ev->totalBytes - static_cast<uint32>(bytes);
 
 		if (remaining == 0)
+		{
+			ev->chains.clear();
+			ev->wsaBufs.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
+			return;
+		}
+
+		if (IsClosing())
 		{
 			ev->chains.clear();
 			ev->wsaBufs.clear();
@@ -349,12 +469,21 @@ namespace jam::net
 			return;
 		}
 
+		if (!TryAddPendingDispatch())
+		{
+			ev->chains.clear();
+			ev->wsaBufs.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
+			return;
+		}
+
 		DWORD sent = 0;
 		if (SOCKET_ERROR == ::WSASend(m_socket, bufs.data(), static_cast<DWORD>(bufs.size()), OUT & sent, 0, ev, nullptr))
 		{
 			const int32 ec = ::WSAGetLastError();
 			if (ec != WSA_IO_PENDING)
 			{
+				ReleasePendingDispatch();
 				HandleError(ec);
 				ev->chains.clear();
 				ev->wsaBufs.clear();
@@ -375,5 +504,17 @@ namespace jam::net
 			break;
 		default: break;
 		}
+	}
+
+	entt::entity TcpSession::EnsureSessionEntity()
+	{
+		entt::entity e = GetEntity();
+		if (e == entt::null)
+		{
+			CreateEntity();
+			e = GetEntity();
+		}
+
+		return e;
 	}
 }

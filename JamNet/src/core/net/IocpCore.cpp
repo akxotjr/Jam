@@ -4,6 +4,23 @@
 
 namespace jam::net
 {
+	bool IocpObject::TryAddPendingDispatch()
+	{
+		if (m_closing.load(std::memory_order_acquire))
+			return false;
+
+		m_pendingDispatchCount.fetch_add(1, std::memory_order_acq_rel);
+		if (m_closing.load(std::memory_order_acquire))
+		{
+			m_pendingDispatchCount.fetch_sub(1, std::memory_order_acq_rel);
+			return false;
+		}
+
+		return true;
+	}
+
+
+
 
 	IocpCore::IocpCore()
 	{
@@ -17,14 +34,14 @@ namespace jam::net
 			::CloseHandle(m_iocpHandle);
 	}
 
-	bool IocpCore::Register(const std::shared_ptr<IocpObject>& obj)
+	bool IocpCore::Register(IocpObject* obj)
 	{
 		if (!obj) return false;
 		HANDLE h = obj->GetHandle();
 		if (h == INVALID_HANDLE_VALUE)
 			return false;
 
-		if (::CreateIoCompletionPort(h, m_iocpHandle, 0, 0) == nullptr)
+		if (::CreateIoCompletionPort(h, m_iocpHandle, reinterpret_cast<ULONG_PTR>(obj), 0) == nullptr)
 		{
 			DWORD ec = ::GetLastError();
 			std::cout << "[IOCP] Register failed ec=" << ec << "\n";
@@ -35,39 +52,52 @@ namespace jam::net
 
 	bool IocpCore::Dispatch(uint32 timeout_ms)
 	{
-		DWORD	   bytse = 0;
-		ULONG_PTR  key	 = 0;
-		IocpEvent* event = nullptr;
-
-		if (::GetQueuedCompletionStatus(m_iocpHandle, OUT &bytse, OUT &key, OUT reinterpret_cast<LPOVERLAPPED*>(&event), timeout_ms))
+		OVERLAPPED_ENTRY entries[128];
+		ULONG numEntries = 0;
+		const BOOL ok = ::GetQueuedCompletionStatusEx(m_iocpHandle, entries, 128, &numEntries, timeout_ms, FALSE);
+		if (!ok)
 		{
-			if (event == nullptr) return false;
-
-			std::shared_ptr<IocpObject> iocpObject = event->m_owner;
-			iocpObject->Dispatch(event, static_cast<int32>(bytse));
-		}
-		else
-		{
-			switch (const int32 errorCode = ::WSAGetLastError())
-			{
-			case WAIT_TIMEOUT:
+			const DWORD error = ::GetLastError();
+			if (error == WAIT_TIMEOUT && numEntries == 0)
 				return false;
-			default:
-				std::shared_ptr<IocpObject> iocpObject = event->m_owner;
-				iocpObject->Dispatch(event, static_cast<int32>(bytse));
-				break;
-			}
+		}
+
+		for (ULONG i = 0; i < numEntries; ++i)
+		{
+			auto& entry = entries[i];
+
+			IocpObject* iocpObject = reinterpret_cast<IocpObject*>(entry.lpCompletionKey);
+			IocpEvent*  iocpEvent  = static_cast<IocpEvent*>(entry.lpOverlapped);
+			int32		bytes	   = static_cast<int32>(entry.dwNumberOfBytesTransferred);
+
+			if (iocpObject == nullptr || iocpEvent == nullptr)
+				continue;	// wake / empty packet
+
+			iocpObject->Dispatch(iocpEvent, bytes);
+			iocpObject->ReleasePendingDispatch();
+			if (iocpObject->IsClosing() && iocpObject->GetPendingDispatchCount() == 0)
+				iocpObject->OnPendingDispatchDrained();
+		}
+
+		return ok != FALSE || numEntries != 0;
+	}
+
+	bool IocpCore::Post(const IocpObject* obj, IocpEvent* event, int32 bytes)
+	{
+		if (!obj || !event)
+			return false;
+
+		auto* mutableObj = const_cast<IocpObject*>(obj);
+		if (!mutableObj->TryAddPendingDispatch())
+			return false;
+
+		if (::PostQueuedCompletionStatus(m_iocpHandle, static_cast<DWORD>(bytes), reinterpret_cast<ULONG_PTR>(obj), event) == FALSE)
+		{
+			mutableObj->ReleasePendingDispatch();
+			return false;
 		}
 
 		return true;
-	}
-
-	bool IocpCore::Post(IocpEvent* event, int32 bytes)
-	{
-		if (!event)
-			return false;
-
-		return ::PostQueuedCompletionStatus(m_iocpHandle, static_cast<DWORD>(bytes), 0, event) != FALSE;
 	}
 
 	void IocpCore::Wake(uint32 count)

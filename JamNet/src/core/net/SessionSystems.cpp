@@ -25,6 +25,21 @@ namespace jam::net
 			return chain;
 		}
 
+		void AppendChainParts(PacketChain& dst, const PacketChain& src)
+		{
+			dst.Reserve(dst.Count() + src.Count());
+			for (const BufferSlice& part : src.Parts())
+				dst.Add(part);
+		}
+
+		void AppendPacketToChain(PacketChain& dst, const Packet& packet)
+		{
+			if (!packet.IsValid())
+				return;
+
+			dst.Add(packet);
+		}
+		
 		PacketChain BuildPiggybackAckChain(const Packet& packet, const PacketHeaderView& view, const ACK_DATA& ack)
 		{
 			PacketChain chain;
@@ -65,21 +80,24 @@ namespace jam::net
 			if (!R.valid(e)) return;
 
 			auto& info = R.get<SessionInfo>(e);
-			info.state              = SessionInfo::CONNECTED;
-			info.connectedTime_ns   = now_ns;
-			info.lastRecvTime_ns    = now_ns;
-			info.lastSendTime_ns    = now_ns;
+			info.state = SessionInfo::CONNECTED;
+			info.connectedTime_ns = now_ns;
+			info.lastRecvTime_ns = now_ns;
+			info.lastSendTime_ns = now_ns;
 
 			if (auto* ts = R.try_get<TimeSyncState>(e))
 			{
-				ts->lastPingSend_ns     = now_ns;
-				ts->lastPongRecv_ns     = now_ns;
+				ts->lastPingSend_ns = now_ns;
+				ts->lastPongRecv_ns = now_ns;
 				ts->lastT2ServerRecv_ns = now_ns;
 				ts->lastT4ClientRecv_ns = now_ns;
 			}
 
 			if (info.session)
+			{
 				info.session->OnLinkEstablished();
+				JAMNET_LOG_DEBUG("NotifyEstablished entity = {}", static_cast<int32>(e));
+			}
 		}
 
 		void NotifyTerminated(entt::registry& R, const entt::entity e)
@@ -385,30 +403,6 @@ namespace jam::net
 	}
 
 
-
-	// ============================================================
-	//  Bootstrap Systems
-	// ============================================================
-
-	//void BootstrapNetworkSystems(ShardLocal& L)
-	//{
-	//	auto& R = L.registry;
-	//	if (R.ctx().contains<NetworkSystemBootstrappedTag>())
-	//		return;
-
-	//	SystemSessionTimeout(L, 0, 0);
-	//	SystemSessionKeepalive(L, 0, 0);
-	//	SystemRpcTimeout(L, 0, 0);
-	//	SystemTransportFlush(L, 0, 0);
-	//	SystemRetransmit(L, 0, 0);
-	//	SystemFragmentCleanup(L, 0, 0);
-	//	SystemHandshakeTimeout(L, 0, 0);
-	//	SystemNetworkStats(L, 0, 0);
-
-	//	R.ctx().emplace<NetworkSystemBootstrappedTag>();
-
-	//	JAMNET_LOG_INFO("[SessionSystems] Network systems bootstrapped");
-	//}
 
 	void BootstrapSessionEntity(ShardLocal& L, entt::entity e, Session* session)
 	{
@@ -928,6 +922,19 @@ namespace jam::net
 		default: break;
 		}
 
+		if (auto* handshake = R.try_get<HandshakeState>(ctx.e))
+		{
+			if (handshake->state != HandshakeState::CONNECTED)
+			{
+				JAMNET_LOG_TRACE("[Handshake] Drop pre-connected app packet. entity={}, state={}, type={}, id={}",
+					static_cast<uint32>(ctx.e),
+					static_cast<uint32>(handshake->state),
+					static_cast<uint32>(ctx.view.Type()),
+					static_cast<uint32>(ctx.view.Id()));
+				return;
+			}
+		}
+
 		if (!IncomingSequencingProcess(ctx))    return;
 		if (!IncomingReliabilityProcess(ctx))   return;
 		if (!IncomingFragmentationProcess(ctx)) return;
@@ -1088,426 +1095,10 @@ namespace jam::net
 	}
 
 
-
-	//// ============================================================
-	//// Tick Systems
-	//// ============================================================
-
-	//void TickSessionTimeoutEntity(ShardLocal& L, entt::entity entity, uint64 now_ns)
-	//{
-	//	auto& R = L.registry;
-	//	auto* info = R.try_get<SessionInfo>(entity);
-	//	auto* timesync = R.try_get<TimeSyncState>(entity);
-	//	auto* handshake = R.try_get<HandshakeState>(entity);
-	//	if (!info || !timesync || !handshake)
-	//		return;
-
-	//	if (info->state != SessionInfo::CONNECTED) return;
-	//	if (handshake->state != HandshakeState::CONNECTED) return;
-	//	if (!info->session || !info->session->IsReady()) return;
-
-	//	if ((now_ns - info->connectedTime_ns) < 3_s)
-	//		return;
-
-	//	const uint64 keepaliveAliveNs =
-	//		timesync->bIsServerSide ? timesync->lastT2ServerRecv_ns : timesync->lastPongRecv_ns;
-	//	const uint64 lastAliveNs = std::max(keepaliveAliveNs, info->lastRecvTime_ns);
-
-	//	if (now_ns <= lastAliveNs)
-	//		return;
-
-	//	const uint64 delta = now_ns - lastAliveNs;
-	//	if (delta <= SessionInfo::kTimeout_ns)
-	//		return;
-
-	//	info->state = SessionInfo::DISCONNECTING;
-	//	L.defers.emplace_back([entity](entt::registry& rr)
-	//		{
-	//			if (!rr.valid(entity)) return;
-	//			if (auto* si = rr.try_get<SessionInfo>(entity); si && si->session)
-	//				si->session->Disconnect();
-	//		});
-	//}
-
-	//void TickSessionKeepaliveEntity(entt::registry& R, entt::entity entity, uint64 now_ns)
-	//{
-	//	auto* info = R.try_get<SessionInfo>(entity);
-	//	auto* txQueue = R.try_get<TransmissionWaitingQueue>(entity);
-	//	auto* timeSync = R.try_get<TimeSyncState>(entity);
-	//	if (!info || !txQueue || !timeSync)
-	//		return;
-
-	//	if (info->state != SessionInfo::CONNECTED)
-	//		return;
-
-	//	if (!info->session || !info->session->IsReady())
-	//		return;
-
-	//	if (timeSync->bIsServerSide)
-	//		return;
-
-	//	if (!timeSync->ShouldSendPing(now_ns))
-	//		return;
-
-	//	PING_DATA ping{};
-	//	ping.t1Wire_ns = 0;
-	//	ping.t1App_ns = now_ns;
-	//	ping.prev_t3_server_send_ns = timeSync->lastT3ServerSend_ns;
-	//	ping.prev_t4_client_recv_ns = timeSync->lastT4ClientRecv_ns;
-
-	//	txQueue->Enqueue(PacketBuilder::CreatePingPacket(ping), TransmissionWaitingQueue::CONTROL);
-
-	//	timeSync->lastPingSend_ns = now_ns;
-	//	timeSync->lastT1ClientSend_ns = now_ns;
-	//	info->lastSendTime_ns = now_ns;
-	//}
-
-	//void TickRpcTimeoutEntity(entt::registry& R, entt::entity entity, uint64 now_ns)
-	//{
-	//	auto* rpcState = R.try_get<RpcState>(entity);
-	//	if (!rpcState)
-	//		return;
-
-	//	std::vector<uint32> timedOut = rpcState->GetTimedOutRequests(now_ns);
-	//	for (uint32 requestId : timedOut)
-	//	{
-	//		auto awaitState = rpcState->PopRequest(requestId);
-	//		if (awaitState && awaitState->onDone)
-	//			awaitState->onDone(false);
-
-	//		JAMNET_LOG_WARN("[RPC] Request {} timed out", requestId);
-	//	}
-	//}
-
-	//void TickRetransmitEntity(entt::registry& R, entt::entity entity, uint64 now_ns)
-	//{
-	//	auto* reliability = R.try_get<ReliabilityState>(entity);
-	//	auto* txQueue = R.try_get<TransmissionWaitingQueue>(entity);
-	//	auto* info = R.try_get<SessionInfo>(entity);
-	//	if (!reliability || !txQueue || !info)
-	//		return;
-
-	//	auto* metrics = R.try_get<profile::RudpMetrics>(entity);
-
-	//	if (info->state != SessionInfo::CONNECTED)
-	//		return;
-
-	//	auto retransmitList = reliability->GetRetransmitNeeded(now_ns);
-	//	for (uint16 seq : retransmitList)
-	//	{
-	//		auto* pending = reliability->TryGetPending(seq);
-	//		if (!pending || !pending->packet.IsValid())
-	//			continue;
-
-	//		if (pending->retryCount >= MAX_RETRY)
-	//		{
-	//			JAMNET_LOG_ERROR("[Retransmit] Packet seq={} exceeded max retry", seq);
-	//			MarkRetransmitGiveup(metrics, *pending);
-	//			info->state = SessionInfo::DISCONNECTING;
-	//			break;
-	//		}
-
-	//		txQueue->Enqueue(pending->packet, TransmissionWaitingQueue::RETRANSMIT);
-	//		MarkRetransmitScheduled(metrics, *pending, now_ns, true);
-
-	//		JAMNET_LOG_DEBUG("[Retransmit] ch={} seq={}, retry={}", E2U(pending->channel), seq, pending->retryCount);
-	//	}
-	//}
-
-	//void TickFragmentCleanupEntity(entt::registry& R, entt::entity entity, uint64 now_ns)
-	//{
-	//	auto* fragState = R.try_get<FragmentState>(entity);
-	//	if (!fragState)
-	//		return;
-
-	//	fragState->CleanupTimeouts(now_ns);
-
-	//	if (auto* metrics = R.try_get<profile::RudpMetrics>(entity))
-	//		metrics->fragReassemblyTimeoutDrops = fragState->timeoutDrops;
-	//}
-
-	//void TickHandshakeTimeoutEntity(ShardLocal& L, entt::entity entity, uint64 now_ns)
-	//{
-	//	auto& R = L.registry;
-	//	auto* handshake = R.try_get<HandshakeState>(entity);
-	//	auto* info = R.try_get<SessionInfo>(entity);
-	//	auto* txQueue = R.try_get<TransmissionWaitingQueue>(entity);
-	//	if (!handshake || !info || !txQueue)
-	//		return;
-
-	//	if (handshake->state == HandshakeState::CONNECTED)
-	//		return;
-
-	//	if (handshake->state == HandshakeState::TIME_WAIT)
-	//	{
-	//		if (now_ns - handshake->timeWaitStart_ns >= HandshakeState::kHandshakeMSL_ns * 2)
-	//		{
-	//			handshake->state = HandshakeState::DISCONNECTED;
-	//			info->state = SessionInfo::DISCONNECTED;
-	//			handshake->lastHandshakeTime_ns = 0;
-
-	//			L.defers.emplace_back([entity](entt::registry& rr)
-	//				{
-	//					NotifyTerminated(rr, entity);
-	//				});
-
-	//			JAMNET_LOG_INFO("[Handshake] TIME_WAIT finished, session {} closed", static_cast<uint32>(entity));
-	//		}
-	//		return;
-	//	}
-
-	//	if (handshake->lastHandshakeTime_ns == 0)
-	//		return;
-
-	//	if (now_ns - handshake->lastHandshakeTime_ns < HandshakeState::kHandshakeTimeout_ns)
-	//		return;
-
-	//	handshake->retryCount++;
-
-	//	if (handshake->retryCount >= HandshakeState::kMaxRetry)
-	//	{
-	//		handshake->state = HandshakeState::TIME_OUT;
-	//		info->state = SessionInfo::DISCONNECTED;
-	//		handshake->lastHandshakeTime_ns = 0;
-
-	//		L.defers.emplace_back([entity](entt::registry& rr)
-	//			{
-	//				NotifyTerminated(rr, entity);
-	//			});
-
-	//		JAMNET_LOG_ERROR("[Handshake] Timeout, session entity= {} failed", static_cast<uint32>(entity));
-	//		return;
-	//	}
-
-	//	eSystemPacketId resendId{};
-	//	bool shouldResend = true;
-
-	//	switch (handshake->state)
-	//	{
-	//	case HandshakeState::CONNECT_SYN_SENT:
-	//		resendId = eSystemPacketId::CONNECT_SYN;
-	//		break;
-	//	case HandshakeState::CONNECT_SYNACK_SENT:
-	//		resendId = eSystemPacketId::CONNECT_SYNACK;
-	//		break;
-	//	case HandshakeState::DISCONNECT_FIN_SENT:
-	//		resendId = eSystemPacketId::DISCONNECT_FIN;
-	//		break;
-	//	case HandshakeState::DISCONNECT_FINACK_SENT:
-	//	case HandshakeState::CLOSING:
-	//		resendId = eSystemPacketId::DISCONNECT_FINACK;
-	//		break;
-	//	default:
-	//		shouldResend = false;
-	//		break;
-	//	}
-
-	//	if (!shouldResend)
-	//	{
-	//		handshake->lastHandshakeTime_ns = now_ns;
-	//		return;
-	//	}
-
-	//	auto pkt = PacketBuilder::CreateHandshakePacket(resendId);
-	//	if (!pkt.IsValid())
-	//		return;
-
-	//	txQueue->Enqueue(pkt, TransmissionWaitingQueue::CONTROL);
-	//	JAMNET_LOG_WARN("[Handshake] Retry {}/{} resend={}", handshake->retryCount, HandshakeState::kMaxRetry, E2U(resendId));
-
-	//	handshake->lastHandshakeTime_ns = now_ns;
-	//}
-
-	//void TickNetworkStatsEntity(entt::registry& R, entt::entity entity, uint64 interval_ns)
-	//{
-	//	auto* traffic = R.try_get<profile::SessionTotalTraffic>(entity);
-	//	auto* trafficSample = R.try_get<profile::TrafficSampleState>(entity);
-	//	if (!traffic || !trafficSample)
-	//		return;
-
-	//	auto* linkQuality = R.try_get<profile::LinkQualityState>(entity);
-	//	auto* metrics = R.try_get<profile::RudpMetrics>(entity);
-
-	//	profile::AccumulateSystemNetworkStats(*trafficSample, *traffic, linkQuality, metrics, interval_ns);
-	//}
-
-	//void FlushTransportEntity(ShardLocal& L, entt::entity entity, uint64 now_ns)
-	//{
-	//	auto& R = L.registry;
-	//	auto* txQueue = R.try_get<TransmissionWaitingQueue>(entity);
-	//	auto* info = R.try_get<SessionInfo>(entity);
-	//	if (!txQueue || !info)
-	//		return;
-
-	//	if (!info->session)
-	//		return;
-	//	if (txQueue->queue.empty())
-	//		return;
-	//	if (!txQueue->ShouldFlush(now_ns))
-	//		return;
-
-	//	const bool isUdp = info->session->IsUdp();
-	//	auto* congestion = R.try_get<CongestionState>(entity);
-	//	auto* reliabilityState = isUdp ? R.try_get<ReliabilityState>(entity) : nullptr;
-
-	//	if (isUdp && reliabilityState)
-	//	{
-	//		auto& reliability = *reliabilityState;
-
-	//		bool piggybackOK = false;
-	//		if (reliability.ackDirty)
-	//		{
-	//			for (int32 i = static_cast<int32>(txQueue->queue.size()) - 1; i >= 0; --i)
-	//			{
-	//				if (TryPiggybackAck(L, entity, txQueue->queue[i]))
-	//				{
-	//					piggybackOK = true;
-	//					break;
-	//				}
-	//			}
-	//		}
-
-	//		if (!piggybackOK && reliability.ShouldSendAck(now_ns))
-	//		{
-	//			auto pkt = PacketBuilder::CreateAckPacket(ACK_DATA(reliability.pendingAckSeq, reliability.pendingAckBitfield));
-	//			txQueue->Enqueue(pkt, TxPriority::ACK_ONLY);
-	//			reliability.ClearPendingAck();
-	//		}
-	//	}
-
-	//	std::ranges::stable_sort(txQueue->queue, [](const TxPendingPacket& a, const TxPendingPacket& b) {
-	//			return GetPriority(a.priority) < GetPriority(b.priority);
-	//		});
-
-	//	std::vector<PacketChain> batch;
-	//	batch.reserve(txQueue->queue.size());
-
-	//	std::vector<TxPendingPacket> remain;
-	//	remain.reserve(txQueue->queue.size());
-
-	//	auto* traffic = R.try_get<profile::SessionTotalTraffic>(entity);
-
-	//	for (size_t i = 0; i < txQueue->queue.size(); ++i)
-	//	{
-	//		auto& pkt = txQueue->queue[i];
-
-	//		PacketHeaderView v = PacketHeaderView::Parse(pkt.packet->Head(), pkt.packet->Size());
-	//		if (!v.IsValid()) continue;
-
-	//		ReliabilityState::PendingPacket* pending = nullptr;
-	//		if (isUdp && reliabilityState && v.IsReliable())
-	//		{
-	//			pending = reliabilityState->TryGetPending(v.Sequence());
-	//			if (pkt.priority == TxPriority::RETRANSMIT && !pending)
-	//				continue;
-	//		}
-
-	//		const bool bypassCongestion = (pkt.priority <= TxPriority::ACK_ONLY);
-
-	//		if (!bypassCongestion && isUdp && congestion && v.IsReliable() && !congestion->CanSend(pkt.size))
-	//		{
-	//			remain.insert(remain.end(), txQueue->queue.begin() + static_cast<std::ptrdiff_t>(i), txQueue->queue.end());
-	//			break;
-	//		}
-
-	//		const bool hasPiggybackAck = !pkt.wire.Empty();
-	//		batch.push_back(hasPiggybackAck ? std::move(pkt.wire) : MakeSinglePacketChain(pkt.packet));
-
-	//		if (traffic) traffic->OnSend(v.Channel(), pkt.size);
-
-	//		const bool countedReliableOriginal = (pending != nullptr && pkt.priority != TxPriority::RETRANSMIT);
-
-	//		if (auto* m = R.try_get<profile::RudpMetrics>(entity))
-	//		{
-	//			m->txPackets++;
-	//			m->txBytes += pkt.size;
-
-	//			if (countedReliableOriginal)
-	//			{
-	//				m->reliableOriginalPackets++;
-	//				m->reliableOriginalBytes += pkt.size;
-	//			}
-
-	//			if (pkt.priority == TxPriority::RETRANSMIT)
-	//			{
-	//				m->rtxPackets++;
-	//				m->rtxBytes += pkt.size;
-
-	//				if (pending && !pending->hasRetransmitted)
-	//					m->rtxOriginalPackets++;
-	//			}
-
-	//			if (v.Type() == ePacketType::ACK && pkt.priority == TxPriority::ACK_ONLY)
-	//				m->ackStandalonePackets++;
-
-	//			if (hasPiggybackAck || HasFlag(v.Flags(), PacketFlags::PIGGYBACK_ACK))
-	//				m->ackPiggybackedPackets++;
-	//		}
-
-	//		if (pending)
-	//		{
-	//			if (pkt.priority == TxPriority::RETRANSMIT)
-	//			{
-	//				pending->hasRetransmitted = true;
-	//				pending->lastRetransmitTime_ns = now_ns;
-	//			}
-	//			else if (!pending->hasInitialSend)
-	//			{
-	//				pending->hasInitialSend = true;
-	//				pending->sendTime_ns = now_ns;
-	//				pending->lastRetransmitTime_ns = now_ns;
-	//			}
-	//		}
-
-	//		if (!bypassCongestion && isUdp && congestion && v.IsReliable())
-	//			congestion->OnSend(pkt.size);
-	//	}
-
-	//	txQueue->queue = std::move(remain);
-	//	txQueue->bytesQueued = 0;
-	//	for (const auto& p : txQueue->queue) txQueue->bytesQueued += p.size;
-	//	txQueue->flushRequested = !txQueue->queue.empty();
-
-	//	if (batch.empty())
-	//		return;
-
-	//	Session* session = info->session;
-	//	if (session->IsUdp())
-	//	{
-	//		auto* udp = static_cast<UdpSession*>(session);
-	//		udp->RegisterSend(std::move(batch));
-	//	}
-	//	else if (session->IsTcp())
-	//	{
-	//		auto* tcp = static_cast<TcpSession*>(session);
-	//		tcp->RegisterSend(std::move(batch));
-	//	}
-
-	//	txQueue->lastFlushTime_ns = now_ns;
-	//	info->lastSendTime_ns = now_ns;
-	//}
-
-	//void TickNetworkSessionEntity(ShardLocal& L, entt::entity entity, uint64 now_ns, uint64 interval_ns)
-	//{
-	//	auto& R = L.registry;
-
-	//	TickSessionTimeoutEntity(L, entity, now_ns);
-	//	TickSessionKeepaliveEntity(R, entity, now_ns);
-	//	FlushTransportEntity(L, entity, now_ns);
-
-	//	TickRpcTimeoutEntity(R, entity, now_ns);
-	//	TickRetransmitEntity(R, entity, now_ns);
-	//	TickHandshakeTimeoutEntity(L, entity, now_ns);
-	//	FlushTransportEntity(L, entity, now_ns);
-
-	//	TickFragmentCleanupEntity(R, entity, now_ns);
-	//	TickNetworkStatsEntity(R, entity, interval_ns);
-	//}
-
 	void SystemSessionTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
 	{
 		auto& R = L.registry;
-		auto view = R.view<SessionInfo, TimeSyncState, HandshakeState>(); // UDP-only
+		auto view = R.view<SessionInfo, TimeSyncState, HandshakeState>();
 
 		for (auto entity : view)
 		{
@@ -1665,6 +1256,36 @@ namespace jam::net
 			remain.reserve(txQueue.queue.size());
 
 			auto* traffic = R.try_get<profile::SessionTotalTraffic>(entity);
+			auto* metrics = R.try_get<profile::RudpMetrics>(entity);
+			PacketChain currentUdpBundle;
+			uint32 currentUdpBundleBytes = 0;
+			uint32 currentUdpBundlePacketCount = 0;
+			bool hasCurrentUdpBundle = false;
+			bool currentUdpBundleReliable = false;
+
+			auto flushUdpBundle = [&]()
+			{
+				if (!hasCurrentUdpBundle || currentUdpBundle.Empty())
+					return;
+
+				if (metrics)
+				{
+					metrics->udpDatagramsSent++;
+					metrics->udpBundledBytesSent += currentUdpBundleBytes;
+					if (currentUdpBundlePacketCount > 1)
+					{
+						metrics->udpBundledDatagramsSent++;
+						metrics->udpBundledSubPackets += currentUdpBundlePacketCount;
+					}
+				}
+
+				batch.push_back(std::move(currentUdpBundle));
+				currentUdpBundle = {};
+				currentUdpBundleBytes = 0;
+				currentUdpBundlePacketCount = 0;
+				hasCurrentUdpBundle = false;
+				currentUdpBundleReliable = false;
+			};
 
 			for (size_t i = 0; i < txQueue.queue.size(); ++i)
 			{
@@ -1690,37 +1311,84 @@ namespace jam::net
 				}
 
 				const bool hasPiggybackAck = !pkt.wire.Empty();
-				batch.push_back(hasPiggybackAck ? std::move(pkt.wire) : MakeSinglePacketChain(pkt.packet));
+				const uint32 wireSize = hasPiggybackAck ? pkt.wire.TotalSize() : pkt.packet->Size();
+
+				if (metrics && isUdp)
+					metrics->udpLogicalPacketsSent++;
+
+				if (isUdp)
+				{
+					const bool packetReliable = v.IsReliable();
+					if (wireSize > JAMNET_MTU)
+					{
+						flushUdpBundle();
+						if (metrics)
+						{
+							metrics->udpDatagramsSent++;
+							metrics->udpBundledBytesSent += wireSize;
+						}
+						batch.push_back(hasPiggybackAck ? std::move(pkt.wire) : MakeSinglePacketChain(pkt.packet));
+					}
+					else
+					{
+						if (hasCurrentUdpBundle
+							&& (currentUdpBundleReliable != packetReliable
+								|| (currentUdpBundleBytes + wireSize) > JAMNET_MTU))
+						{
+							flushUdpBundle();
+						}
+
+						if (!hasCurrentUdpBundle)
+						{
+							hasCurrentUdpBundle = true;
+							currentUdpBundleReliable = packetReliable;
+							currentUdpBundleBytes = 0;
+							currentUdpBundlePacketCount = 0;
+						}
+
+						if (hasPiggybackAck)
+							AppendChainParts(currentUdpBundle, pkt.wire);
+						else
+							AppendPacketToChain(currentUdpBundle, pkt.packet);
+
+						currentUdpBundleBytes += wireSize;
+						currentUdpBundlePacketCount++;
+					}
+				}
+				else
+				{
+					batch.push_back(hasPiggybackAck ? std::move(pkt.wire) : MakeSinglePacketChain(pkt.packet));
+				}
 
 				if (traffic) traffic->OnSend(v.Channel(), pkt.size);
 
 				const bool countedReliableOriginal = (pending != nullptr && pkt.priority != TxPriority::RETRANSMIT);
 
-				if (auto* m = R.try_get<profile::RudpMetrics>(entity))
+				if (metrics)
 				{
-					m->txPackets++;
-					m->txBytes += pkt.size;
+					metrics->txPackets++;
+					metrics->txBytes += pkt.size;
 
 					if (countedReliableOriginal)
 					{
-						m->reliableOriginalPackets++;
-						m->reliableOriginalBytes += pkt.size;
+						metrics->reliableOriginalPackets++;
+						metrics->reliableOriginalBytes += pkt.size;
 					}
 
 					if (pkt.priority == TxPriority::RETRANSMIT)
 					{
-						m->rtxPackets++;
-						m->rtxBytes += pkt.size;
+						metrics->rtxPackets++;
+						metrics->rtxBytes += pkt.size;
 
 						if (pending && !pending->hasRetransmitted)
-							m->rtxOriginalPackets++;
+							metrics->rtxOriginalPackets++;
 					}
 
 					if (v.Type() == ePacketType::ACK && pkt.priority == TxPriority::ACK_ONLY)
-						m->ackStandalonePackets++;
+						metrics->ackStandalonePackets++;
 
 					if (hasPiggybackAck || HasFlag(v.Flags(), PacketFlags::PIGGYBACK_ACK))
-						m->ackPiggybackedPackets++;
+						metrics->ackPiggybackedPackets++;
 				}
 
 				if (pending)
@@ -1741,6 +1409,9 @@ namespace jam::net
 				if (!bypassCongestion && isUdp && congestion && v.IsReliable())
 					congestion->OnSend(pkt.size);
 			}
+
+			if (isUdp)
+				flushUdpBundle();
 
 			txQueue.queue       = std::move(remain);
 			txQueue.bytesQueued = 0;
@@ -1939,17 +1610,6 @@ namespace jam::net
 		}
 	}
 
-	//void SystemNetworkSessionTick(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
-	//{
-	//	auto& R = L.registry;
-	//	auto view = R.view<SessionInfo>();
-	//	const uint64 interval_ns = (dt_ns > 0) ? dt_ns : 1_s;
-
-	//	for (auto entity : view)
-	//		TickNetworkSessionEntity(L, entity, now_ns, interval_ns);
-	//}
-
-
 
 	// ============================================================
 	// Helper Functions
@@ -2043,7 +1703,6 @@ namespace jam::net
 
 	bool SendPacketToSession(entt::entity e, Packet packet)
 	{
-
 		auto& L = CurrentShardLocalChecked();
 		auto& R = L.registry;
 		if (!R.valid(e))
@@ -2059,6 +1718,7 @@ namespace jam::net
 		}
 
 		PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+
 		if (!view.IsValid())
 		{
 			JAMNET_LOG_WARN_LOC("Invalid Packet View");
@@ -2068,7 +1728,7 @@ namespace jam::net
 		SendContext ctx{
 			.L          = L,
 			.e          = e,
-			.header       = view,
+			.header     = view,
 			.packet     = packet,
 			.priority   = TransmissionWaitingQueue::NORMAL,
 			.now_ns     = NOW_NS(),
@@ -2095,26 +1755,32 @@ namespace jam::net
 			return;
 		}
 
-		PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
-		if (!view.IsValid())
-		{
-			JAMNET_LOG_WARN("[Session] Invalid packet received");
-			return;
-		}
-
 		const uint64 now_ns = NOW_NS();
 		if (ingressRecvTime_ns == 0) ingressRecvTime_ns = now_ns;
+		uint32 offset = 0;
+		while (offset < packet->Size())
+		{
+			const uint32 remaining = packet->Size() - offset;
+			PacketHeaderView view = PacketHeaderView::Parse(packet->Head() + offset, remaining);
+			if (!view.IsValid())
+			{
+				JAMNET_LOG_WARN("[Session] Invalid packet received in datagram. offset={}, remaining={}", offset, remaining);
+				return;
+			}
 
-		RecvContext ctx{
-			.L              = L,
-			.e              = e,
-			.view           = view,
-			.packet         = packet,
-			.now_ns         = now_ns,
-			.ingressTime_ns = ingressRecvTime_ns
-		};
+			Packet subPacket = MakeOwned(packet->SliceVisible(offset, view.TotalSize()));
+			RecvContext ctx{
+				.L              = L,
+				.e              = e,
+				.view           = view,
+				.packet         = subPacket,
+				.now_ns         = now_ns,
+				.ingressTime_ns = ingressRecvTime_ns
+			};
 
-		PipelineIncomingPacket(ctx);
+			PipelineIncomingPacket(ctx);
+			offset += view.TotalSize();
+		}
 	}
 
 	struct NetworkDomainRegisteredTag {};
@@ -2130,25 +1796,25 @@ namespace jam::net
 		group.tickPeriod_ns = tickPeriod_ns;
 
 		// Systems
-        group.systems.emplace_back(SystemSessionTimeout);
-        group.systems.emplace_back(SystemSessionKeepalive);
-        group.systems.emplace_back(SystemRpcTimeout);
-        group.systems.emplace_back(SystemTransportFlush);
-        group.systems.emplace_back(SystemRetransmit);
-        group.systems.emplace_back(SystemFragmentCleanup);
-        group.systems.emplace_back(SystemHandshakeTimeout);
-        group.systems.emplace_back(SystemNetworkStats);
+		group.systems.emplace_back(SystemSessionTimeout);
+		group.systems.emplace_back(SystemSessionKeepalive);
+		group.systems.emplace_back(SystemRpcTimeout);
+		group.systems.emplace_back(SystemTransportFlush);
+		group.systems.emplace_back(SystemRetransmit);
+		group.systems.emplace_back(SystemFragmentCleanup);
+		group.systems.emplace_back(SystemHandshakeTimeout);
+		group.systems.emplace_back(SystemNetworkStats);
 
 		const uint64 now_ns = NOW_NS();
 
-        SystemSessionTimeout(L, now_ns, 0);
-        SystemSessionKeepalive(L, now_ns, 0);
-        SystemRpcTimeout(L, now_ns, 0);
-        SystemTransportFlush(L, now_ns, 0);
-        SystemRetransmit(L, now_ns, 0);
-        SystemFragmentCleanup(L, now_ns, 0);
-        SystemHandshakeTimeout(L, now_ns, 0);
-        SystemNetworkStats(L, now_ns, 0);
+		SystemSessionTimeout(L, now_ns, 0);
+		SystemSessionKeepalive(L, now_ns, 0);
+		SystemRpcTimeout(L, now_ns, 0);
+		SystemTransportFlush(L, now_ns, 0);
+		SystemRetransmit(L, now_ns, 0);
+		SystemFragmentCleanup(L, now_ns, 0);
+		SystemHandshakeTimeout(L, now_ns, 0);
+		SystemNetworkStats(L, now_ns, 0);
 
 		group.entityFilter = [](const entt::registry& R, entt::entity e) {
 				return R.all_of<SessionInfo>(e);

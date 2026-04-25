@@ -9,9 +9,10 @@ namespace jam::net
 	class SocketUtils
 	{
 	public:
-		static LPFN_CONNECTEX		ConnectEx;
-		static LPFN_DISCONNECTEX	DisconnectEx;
-		static LPFN_ACCEPTEX		AcceptEx;
+		static LPFN_CONNECTEX				ConnectEx;
+		static LPFN_DISCONNECTEX			DisconnectEx;
+		static LPFN_ACCEPTEX				AcceptEx;
+		static LPFN_GETACCEPTEXSOCKADDRS	GetAcceptExSockaddrs;
 
 	public:
 		static void					Init();
@@ -26,6 +27,7 @@ namespace jam::net
 		static bool					SetSendBufferSize(SOCKET socket, int32 size);
 		static bool					SetTcpNoDelay(SOCKET socket, bool flag);
 		static bool					SetUpdateAcceptSocket(SOCKET socket, SOCKET listenSocket);
+		static bool					SetUpdateConnectSocket(SOCKET socket);
 
 		static bool					Bind(SOCKET socket, NetAddress netAddr);
 		static bool					BindAnyAddress(SOCKET socket, uint16 port);

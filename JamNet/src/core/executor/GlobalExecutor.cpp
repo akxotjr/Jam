@@ -214,15 +214,20 @@ namespace jam
 		if (!m_directory) return;
 
 		auto& shards = m_directory->Shards();
+		if (shards.empty())
+			return;
+
+		auto sharedJob = std::make_shared<Job>(std::move(j));
+		const eJobPriority priority = sharedJob->Priority();
 		const size_t n = shards.size();
 		for (size_t i = 0; i < n; ++i)
 		{
 			auto& sh = shards[i];
 			if (!sh) continue;
-			if (i + 1 == n)
-				sh->Submit(std::move(j));  
-			else
-				sh->Submit(j);        
+			sh->Submit(Job([sharedJob]()
+				{
+					sharedJob->Execute();
+				}, priority));
 		}
 	}
 
@@ -282,9 +287,11 @@ namespace jam
 		}
 
 		const char* fiberName = opt.name ? opt.name : "GE.PeriodicFixedRate";
+		auto sharedJob = std::make_shared<Job>(std::move(j));
+		const eJobPriority priority = sharedJob->Priority();
 
 		m_scheduler->PostSpawn(
-			[this, st, j, id]
+			[this, st, sharedJob, priority, id]
 			{
 				uint64 next_ns = NOW_NS() + st->initialDelay_ns;
 				const uint64 period_ns = st->period_ns;
@@ -295,7 +302,10 @@ namespace jam
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
-					Submit(j);
+					Submit(Job([sharedJob]()
+						{
+							sharedJob->Execute();
+						}, priority));
 
 					next_ns += period_ns;
 
@@ -304,7 +314,10 @@ namespace jam
 					{
 						if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 							break;
-						Submit(j);
+						Submit(Job([sharedJob]()
+							{
+								sharedJob->Execute();
+							}, priority));
 						next_ns += period_ns;
 					}
 				}
@@ -339,9 +352,11 @@ namespace jam
 		}
 
 		const char* fiberName = opt.name ? opt.name : "GE.PeriodicFD";
+		auto sharedJob = std::make_shared<Job>(std::move(j));
+		const eJobPriority priority = sharedJob->Priority();
 
 		m_scheduler->PostSpawn(
-			[this, st, j, id]()
+			[this, st, sharedJob, priority, id]()
 			{
 				// 초기 지연
 				uint64 next = NOW_NS() + st->initialDelay_ns;
@@ -350,7 +365,10 @@ namespace jam
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
 					// 1) 실행
-					Submit(j);
+					Submit(Job([sharedJob]()
+						{
+							sharedJob->Execute();
+						}, priority));
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
