@@ -1,1 +1,15 @@
-* text=auto eol=lf working-tree-encoding=UTF-8
+* text=auto
+
+*.h text eol=lf working-tree-encoding=UTF-8
+*.hpp text eol=lf working-tree-encoding=UTF-8
+*.hh text eol=lf working-tree-encoding=UTF-8
+*.hxx text eol=lf working-tree-encoding=UTF-8
+*.inl text eol=lf working-tree-encoding=UTF-8
+
+*.c text eol=lf working-tree-encoding=UTF-8
+*.cc text eol=lf working-tree-encoding=UTF-8
+*.cpp text eol=lf working-tree-encoding=UTF-8
+*.cxx text eol=lf working-tree-encoding=UTF-8
+
+*.ixx text eol=lf working-tree-encoding=UTF-8
+*.cppm text eol=lf working-tree-encoding=UTF-8
