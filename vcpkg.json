@@ -1,0 +1,14 @@
+{
+  "name": "jam",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "concurrentqueue",
+    "entt",
+    "flatbuffers",
+    "glm",
+    "mimalloc",
+    "nlohmann-json",
+    "spdlog",
+    "xxhash"
+  ]
+}

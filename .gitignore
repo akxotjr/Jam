@@ -1,0 +1,54 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.VC.db
+*.VC.opendb
+*.opendb
+*.ipch
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.sln.docstates
+*.vcxproj.user
+*.VC.VC.opendb
+Jam.slnLaunch.user
+
+# Build outputs
+bin/
+lib/
+intermediates/
+x64/
+x86/
+[Dd]ebug/
+[Rr]elease/
+[Rr]eleases/
+ipch/
+
+# MSVC artifacts
+*.obj
+*.iobj
+*.ipdb
+*.ilk
+*.pch
+*.pdb
+*.idb
+*.tlog
+*.lastbuildstate
+
+# Logs and runtime output
+logs/
+*.log
+TestApp/profiling/
+TestApp/**/logs/
+TestApp/**/Reports/
+
+# Local tool/runtime config
+imgui.ini
+
+# OS
+.DS_Store
+Thumbs.db
