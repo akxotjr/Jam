@@ -13,9 +13,11 @@
 *.sdf
 *.cachefile
 *.sln.docstates
-*.vcxproj.user
 *.VC.VC.opendb
-Jam.slnLaunch.user
+*.user
+*.slnLaunch
+*.smproj
+*.vcxproj.user
 
 # Build outputs
 bin/
