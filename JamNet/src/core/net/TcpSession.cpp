@@ -7,6 +7,7 @@
 #include "jamnet/core/net/SocketUtils.h"
 #include "jamnet/core/net/SessionSystems.h"
 #include "jamnet/core/net/Service.h"
+#include "jamnet/core/net/WinErrorHandling.h"
 
 namespace jam::net
 {
@@ -35,8 +36,9 @@ namespace jam::net
 		if (IsClosing())
 			return;
 
-		const bool posted = RegisterDisconnect();
 		MarkClosing();
+		const bool posted = RegisterDisconnect();
+
 		if (!posted)
 		{
 			m_releaseQueued.store(true, std::memory_order_release);
@@ -118,8 +120,8 @@ namespace jam::net
 
 		if (SOCKET_ERROR == SocketUtils::ConnectEx(m_socket, reinterpret_cast<SOCKADDR*>(&sockAddr), sizeof(sockAddr), nullptr, 0, &bytes, &m_connectEvent))
 		{
-			const int32 errorCode = ::WSAGetLastError();
-			if (errorCode != WSA_IO_PENDING)
+			const int32 errorCode = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(errorCode))
 			{
 				ReleasePendingDispatch();
 				return false;
@@ -136,8 +138,8 @@ namespace jam::net
 
 		if (false == SocketUtils::DisconnectEx(m_socket, &m_disconnectEvent, TF_REUSE_SOCKET, 0))
 		{
-			const int32 errorCode = ::WSAGetLastError();
-			if (errorCode != WSA_IO_PENDING)
+			const int32 errorCode = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(errorCode))
 			{
 				ReleasePendingDispatch();
 				return false;
@@ -197,8 +199,8 @@ namespace jam::net
 		DWORD sent = 0;
 		if (SOCKET_ERROR == ::WSASend(m_socket, ev->wsaBufs.data(), static_cast<DWORD>(ev->wsaBufs.size()), OUT & sent, 0, ev, nullptr))
 		{
-			const int32 ec = ::WSAGetLastError();
-			if (ec != WSA_IO_PENDING)
+			const int32 ec = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(ec))
 			{
 				ReleasePendingDispatch();
 				HandleError(ec);
@@ -229,8 +231,8 @@ namespace jam::net
 		DWORD flags = 0;
 		if (SOCKET_ERROR == ::WSARecv(m_socket, &ev->wsaBuf, 1, OUT &bytes, OUT &flags, ev, nullptr))
 		{
-			const int32 errorCode = ::WSAGetLastError();
-			if (errorCode != WSA_IO_PENDING)
+			const int32 errorCode = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(errorCode))
 			{
 				ReleasePendingDispatch();
 				HandleError(errorCode);
@@ -272,7 +274,7 @@ namespace jam::net
 	{
 		if (!SocketUtils::SetUpdateConnectSocket(m_socket))
 		{
-			JAMNET_LOG_ERROR("SO_UPDATE_CONNEXT_CONTEXT failed. ec= {}", ::WSAGetLastError());
+			win_error::LogLastWsaError("[TcpSession] SO_UPDATE_CONNECT_CONTEXT");
 			Disconnect();
 			return;
 		}
@@ -480,8 +482,8 @@ namespace jam::net
 		DWORD sent = 0;
 		if (SOCKET_ERROR == ::WSASend(m_socket, bufs.data(), static_cast<DWORD>(bufs.size()), OUT & sent, 0, ev, nullptr))
 		{
-			const int32 ec = ::WSAGetLastError();
-			if (ec != WSA_IO_PENDING)
+			const int32 ec = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(ec))
 			{
 				ReleasePendingDispatch();
 				HandleError(ec);
@@ -495,14 +497,15 @@ namespace jam::net
 
 	void TcpSession::HandleError(int32 errorCode)
 	{
-		JAMNET_LOG_WARN_LOC("[TcpSession] Handle error= {}", errorCode);
 		switch (errorCode)
 		{
 		case WSAECONNRESET:
 		case WSAECONNABORTED:
 			Disconnect();
 			break;
-		default: break;
+		default:
+			win_error::LogWsaError("[TcpSession] socket operation", errorCode);
+			break;
 		}
 	}
 

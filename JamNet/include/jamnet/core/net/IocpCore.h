@@ -36,7 +36,7 @@ namespace jam::net
 
 		bool			Register(IocpObject* obj);
 		bool			Dispatch(uint32 timeout_ms = INFINITE);
-		bool			Post(const IocpObject* obj, IocpEvent* event, int32 bytes = 0);
+		bool			Post(IocpObject* obj, IocpEvent* event, int32 bytes = 0);
 		void			Wake(uint32 count = 1);
 
 	private:

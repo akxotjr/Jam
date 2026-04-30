@@ -1,6 +1,7 @@
 #pragma once
 
 #include "jamnet/core/net/NetAddress.h"
+#include "jamnet/core/net/Session.h"
 
 #include <memory>
 #include <unordered_map>
@@ -38,6 +39,7 @@ namespace jam::net
 
 	using TcpSessionTable		 = std::unordered_map<SessionTableKey, std::unique_ptr<TcpSession>, SessionTableKeyHash>;
 	using UdpSessionTable		 = std::unordered_map<SessionTableKey, std::unique_ptr<UdpSession>, SessionTableKeyHash>;
+	using SessionHandleIndex	 = std::unordered_map<SessionHandle, Session*>;
 	using DetachedTcpSessionList = std::vector<std::unique_ptr<TcpSession>>;
 	using DetachedUdpSessionList = std::vector<std::unique_ptr<UdpSession>>;
 
@@ -45,6 +47,7 @@ namespace jam::net
 	{
 		TcpSessionTable			tcpSessions;
 		UdpSessionTable			udpSessions;
+		SessionHandleIndex		logicalSessionIndex;
 		DetachedTcpSessionList	detachedTcpSessions;
 		DetachedUdpSessionList	detachedUdpSessions;
 

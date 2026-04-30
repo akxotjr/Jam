@@ -14,16 +14,14 @@
 #endif
 
 // platform
-
-#include <windows.h>
-#include <winnt.h>         //  SLIST_ENTRY, SLIST_HEADER
-#include <intrin.h>        //  InterlockedPushEntrySList
 #include <WinSock2.h>
-#include <mswsock.h>
 #include <ws2tcpip.h>
+#include <mswsock.h>
+#include <windows.h>
+#include <intrin.h>
+
 #pragma comment(lib, "Mswsock.lib")
 #pragma comment(lib, "ws2_32.lib")
-
 
 // stl
 

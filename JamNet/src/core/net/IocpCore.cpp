@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "jamnet/core/net/IocpCore.h"
 #include "jamnet/core/net/IocpEvent.h"
+#include "jamnet/core/net/WinErrorHandling.h"
 
 namespace jam::net
 {
@@ -43,8 +44,7 @@ namespace jam::net
 
 		if (::CreateIoCompletionPort(h, m_iocpHandle, reinterpret_cast<ULONG_PTR>(obj), 0) == nullptr)
 		{
-			DWORD ec = ::GetLastError();
-			std::cout << "[IOCP] Register failed ec=" << ec << "\n";
+			win_error::LogLastWinError("[IOCP] Register");
 			return false;
 		}
 		return true;
@@ -57,7 +57,7 @@ namespace jam::net
 		const BOOL ok = ::GetQueuedCompletionStatusEx(m_iocpHandle, entries, 128, &numEntries, timeout_ms, FALSE);
 		if (!ok)
 		{
-			const DWORD error = ::GetLastError();
+			const DWORD error = win_error::GetLastWinError();
 			if (error == WAIT_TIMEOUT && numEntries == 0)
 				return false;
 		}
@@ -82,18 +82,17 @@ namespace jam::net
 		return ok != FALSE || numEntries != 0;
 	}
 
-	bool IocpCore::Post(const IocpObject* obj, IocpEvent* event, int32 bytes)
+	bool IocpCore::Post(IocpObject* obj, IocpEvent* event, int32 bytes)
 	{
 		if (!obj || !event)
 			return false;
 
-		auto* mutableObj = const_cast<IocpObject*>(obj);
-		if (!mutableObj->TryAddPendingDispatch())
+		if (!obj->TryAddPendingDispatch())
 			return false;
 
 		if (::PostQueuedCompletionStatus(m_iocpHandle, static_cast<DWORD>(bytes), reinterpret_cast<ULONG_PTR>(obj), event) == FALSE)
 		{
-			mutableObj->ReleasePendingDispatch();
+			obj->ReleasePendingDispatch();
 			return false;
 		}
 

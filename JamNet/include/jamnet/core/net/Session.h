@@ -19,6 +19,7 @@ namespace jam::net
 
 	class Service;
 	class PacketBuilder;
+	class Session;
 
 	enum class eProtocolType : uint8
 	{
@@ -41,6 +42,11 @@ namespace jam::net
 	{
 		RouteKey	routeKey	= {};
 		uint64		sessionId	= 0;
+
+		bool operator==(const SessionHandle& other) const
+		{
+			return routeKey == other.routeKey && sessionId == other.sessionId;
+		}
 
 		bool IsValid() const
 		{
@@ -149,3 +155,14 @@ namespace jam::net
 		std::atomic<bool>						m_pendingConnect	= false;
 	};
 }
+
+template <>
+struct std::hash<jam::net::SessionHandle>
+{
+	size_t operator()(const jam::net::SessionHandle& handle) const noexcept
+	{
+		const size_t routeHash = std::hash<uint64>()(handle.routeKey.value());
+		const size_t idHash = std::hash<uint64>()(handle.sessionId);
+		return routeHash ^ (idHash + 0x9e3779b97f4a7c15ull + (routeHash << 6) + (routeHash >> 2));
+	}
+};

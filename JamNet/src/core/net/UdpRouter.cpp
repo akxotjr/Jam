@@ -11,7 +11,7 @@
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/UdpSession.h"
 #include "jamnet/core/net/SocketUtils.h"
-#include "jamnet/core/utils/Clock.h"
+#include "jamnet/core/net/WinErrorHandling.h"
 
 #pragma warning(disable : 4996)
 
@@ -152,8 +152,8 @@ namespace jam::net
 
 			if (SOCKET_ERROR == ::WSASendTo(m_socket, ev->wsaBufs.data(), static_cast<DWORD>(ev->wsaBufs.size()), nullptr, 0, ev->remoteAddr.GetSockAddrPtr(), sizeof(SOCKADDR_IN), ev, nullptr))
 			{
-				const int32 ec = ::WSAGetLastError();
-				if (ec != WSA_IO_PENDING)
+				const int32 ec = win_error::GetLastWsaError();
+				if (!win_error::IsIoPending(ec))
 				{
 					ReleasePendingDispatch();
 					HandleError(ec);
@@ -193,8 +193,8 @@ namespace jam::net
 
 		if (SOCKET_ERROR == ::WSARecvFrom(m_socket, &ev->wsaBuf, 1, nullptr, &ev->flags, ev->remoteAddr.GetSockAddrPtr(), OUT &ev->remoteAddrLen, ev, nullptr))
 		{
-			const int32 error = ::WSAGetLastError();
-			if (error != WSA_IO_PENDING)
+			const int32 error = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(error))
 			{
 				ReleasePendingDispatch();
 				HandleError(error);
@@ -255,6 +255,7 @@ namespace jam::net
 
 					if (table.emplace(key, std::move(owner)).second)
 					{
+						L.sessionState->logicalSessionIndex[session->GetSessionHandle()] = session;
 						m_service->m_udpSessionCount.fetch_add(1, std::memory_order_relaxed);
 						m_service->m_sessionCount.fetch_add(1, std::memory_order_relaxed);
 					}
@@ -278,7 +279,7 @@ namespace jam::net
 		case WSAECONNABORTED:
 			break;
 		default:
-			std::cout << "Handle Error : " << errorCode << '\n';
+			win_error::LogWsaError("[UdpRouter] socket operation", errorCode);
 			break; 
 		}
 	}

@@ -6,6 +6,7 @@
 #include "jamnet/core/net/SocketUtils.h"
 #include "jamnet/core/net/TcpSession.h"
 #include "jamnet/core/net/Service.h"
+#include "jamnet/core/net/WinErrorHandling.h"
 
 namespace jam::net
 {
@@ -77,9 +78,11 @@ namespace jam::net
 
 		TcpAcceptEvent* acceptEvent = static_cast<TcpAcceptEvent*>(iocpEvent);
 		
-		const DWORD completionStatus = static_cast<DWORD>(iocpEvent->Internal);
-		if (completionStatus != ERROR_SUCCESS)
+		const ULONG_PTR completionStatus = win_error::GetOverlappedNativeStatus(*iocpEvent);
+		if (!win_error::IsNativeStatusSuccess(completionStatus))
 		{
+			if (!IsClosing())
+				win_error::LogNativeStatus("[TcpListener] Accept completion", completionStatus);
 			ReleaseAcceptEvent(acceptEvent);
 			RegisterAccept();
 			return;
@@ -112,8 +115,8 @@ namespace jam::net
 			nullptr, 
 			event))
 		{
-			const int32 errorCode = ::WSAGetLastError();
-			if (errorCode != WSA_IO_PENDING)
+			const int32 errorCode = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(errorCode))
 			{
 				ReleasePendingDispatch();
 				ReleaseAcceptEvent(event);

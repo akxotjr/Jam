@@ -5,6 +5,7 @@
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/Service.h"
 #include "jamnet/core/net/SessionSystems.h"
+#include "jamnet/core/net/WinErrorHandling.h"
 
 namespace jam::net
 {
@@ -130,7 +131,7 @@ namespace jam::net
 			Disconnect();
 			break;
 		default:
-			JAMNET_LOG_ERROR("WINERROR: ", errorCode);
+			win_error::LogWsaError("[UdpSession] socket operation", errorCode);
 			break;
 		}
 	}

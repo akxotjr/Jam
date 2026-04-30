@@ -240,6 +240,7 @@
     <ClInclude Include="include\jamnet\core\net\TcpSession.h" />
     <ClInclude Include="include\jamnet\core\net\UdpRouter.h" />
     <ClInclude Include="include\jamnet\core\net\UdpSession.h" />
+    <ClInclude Include="include\jamnet\core\net\WinErrorHandling.h" />
     <ClInclude Include="include\jamnet\core\utils\Clock.h" />
     <ClInclude Include="include\jamnet\core\utils\TimeUnits.h" />
     <ClInclude Include="include\jamnet\JamNet.h" />
@@ -333,6 +334,7 @@
     <ClCompile Include="src\core\net\TcpSession.cpp" />
     <ClCompile Include="src\core\net\UdpRouter.cpp" />
     <ClCompile Include="src\core\net\UdpSession.cpp" />
+    <ClCompile Include="src\core\net\WinErrorHandling.cpp" />
     <ClCompile Include="src\core\utils\Clock.cpp" />
     <ClCompile Include="src\runtime\ClientNetworkManager.cpp" />
     <ClCompile Include="src\runtime\ClientSession.cpp" />
