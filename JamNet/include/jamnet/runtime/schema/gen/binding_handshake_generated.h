@@ -35,22 +35,22 @@ struct fbUdpBindResT;
 
 struct fbTcpBindReqT : public ::flatbuffers::NativeTable {
   typedef fbTcpBindReq TableType;
-  uint64_t user_id = 0;
+  uint64_t account_id = 0;
 };
 
 struct fbTcpBindReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbTcpBindReqT NativeTableType;
   typedef fbTcpBindReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_USER_ID = 4
+    VT_ACCOUNT_ID = 4
   };
-  uint64_t user_id() const {
-    return GetField<uint64_t>(VT_USER_ID, 0);
+  uint64_t account_id() const {
+    return GetField<uint64_t>(VT_ACCOUNT_ID, 0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
+           VerifyField<uint64_t>(verifier, VT_ACCOUNT_ID, 8) &&
            verifier.EndTable();
   }
   fbTcpBindReqT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -62,8 +62,8 @@ struct fbTcpBindReqBuilder {
   typedef fbTcpBindReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_user_id(uint64_t user_id) {
-    fbb_.AddElement<uint64_t>(fbTcpBindReq::VT_USER_ID, user_id, 0);
+  void add_account_id(uint64_t account_id) {
+    fbb_.AddElement<uint64_t>(fbTcpBindReq::VT_ACCOUNT_ID, account_id, 0);
   }
   explicit fbTcpBindReqBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -78,9 +78,9 @@ struct fbTcpBindReqBuilder {
 
 inline ::flatbuffers::Offset<fbTcpBindReq> CreatefbTcpBindReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint64_t user_id = 0) {
+    uint64_t account_id = 0) {
   fbTcpBindReqBuilder builder_(_fbb);
-  builder_.add_user_id(user_id);
+  builder_.add_account_id(account_id);
   return builder_.Finish();
 }
 
@@ -89,6 +89,7 @@ inline ::flatbuffers::Offset<fbTcpBindReq> CreatefbTcpBindReq(
 struct fbTcpBindResT : public ::flatbuffers::NativeTable {
   typedef fbTcpBindRes TableType;
   bool success = false;
+  uint64_t account_id = 0;
   uint64_t user_id = 0;
 };
 
@@ -97,10 +98,14 @@ struct fbTcpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbTcpBindResBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_SUCCESS = 4,
-    VT_USER_ID = 6
+    VT_ACCOUNT_ID = 6,
+    VT_USER_ID = 8
   };
   bool success() const {
     return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
+  }
+  uint64_t account_id() const {
+    return GetField<uint64_t>(VT_ACCOUNT_ID, 0);
   }
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
@@ -109,6 +114,7 @@ struct fbTcpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
+           VerifyField<uint64_t>(verifier, VT_ACCOUNT_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            verifier.EndTable();
   }
@@ -123,6 +129,9 @@ struct fbTcpBindResBuilder {
   ::flatbuffers::uoffset_t start_;
   void add_success(bool success) {
     fbb_.AddElement<uint8_t>(fbTcpBindRes::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+  }
+  void add_account_id(uint64_t account_id) {
+    fbb_.AddElement<uint64_t>(fbTcpBindRes::VT_ACCOUNT_ID, account_id, 0);
   }
   void add_user_id(uint64_t user_id) {
     fbb_.AddElement<uint64_t>(fbTcpBindRes::VT_USER_ID, user_id, 0);
@@ -141,9 +150,11 @@ struct fbTcpBindResBuilder {
 inline ::flatbuffers::Offset<fbTcpBindRes> CreatefbTcpBindRes(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     bool success = false,
+    uint64_t account_id = 0,
     uint64_t user_id = 0) {
   fbTcpBindResBuilder builder_(_fbb);
   builder_.add_user_id(user_id);
+  builder_.add_account_id(account_id);
   builder_.add_success(success);
   return builder_.Finish();
 }
@@ -152,6 +163,7 @@ inline ::flatbuffers::Offset<fbTcpBindRes> CreatefbTcpBindRes(
 
 struct fbUdpBindReqT : public ::flatbuffers::NativeTable {
   typedef fbUdpBindReq TableType;
+  uint64_t account_id = 0;
   uint64_t user_id = 0;
 };
 
@@ -159,14 +171,19 @@ struct fbUdpBindReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbUdpBindReqT NativeTableType;
   typedef fbUdpBindReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_USER_ID = 4
+    VT_ACCOUNT_ID = 4,
+    VT_USER_ID = 6
   };
+  uint64_t account_id() const {
+    return GetField<uint64_t>(VT_ACCOUNT_ID, 0);
+  }
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_ACCOUNT_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            verifier.EndTable();
   }
@@ -179,6 +196,9 @@ struct fbUdpBindReqBuilder {
   typedef fbUdpBindReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_account_id(uint64_t account_id) {
+    fbb_.AddElement<uint64_t>(fbUdpBindReq::VT_ACCOUNT_ID, account_id, 0);
+  }
   void add_user_id(uint64_t user_id) {
     fbb_.AddElement<uint64_t>(fbUdpBindReq::VT_USER_ID, user_id, 0);
   }
@@ -195,9 +215,11 @@ struct fbUdpBindReqBuilder {
 
 inline ::flatbuffers::Offset<fbUdpBindReq> CreatefbUdpBindReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t account_id = 0,
     uint64_t user_id = 0) {
   fbUdpBindReqBuilder builder_(_fbb);
   builder_.add_user_id(user_id);
+  builder_.add_account_id(account_id);
   return builder_.Finish();
 }
 
@@ -206,6 +228,7 @@ inline ::flatbuffers::Offset<fbUdpBindReq> CreatefbUdpBindReq(
 struct fbUdpBindResT : public ::flatbuffers::NativeTable {
   typedef fbUdpBindRes TableType;
   bool success = false;
+  uint64_t account_id = 0;
   uint64_t user_id = 0;
 };
 
@@ -214,10 +237,14 @@ struct fbUdpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbUdpBindResBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_SUCCESS = 4,
-    VT_USER_ID = 6
+    VT_ACCOUNT_ID = 6,
+    VT_USER_ID = 8
   };
   bool success() const {
     return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
+  }
+  uint64_t account_id() const {
+    return GetField<uint64_t>(VT_ACCOUNT_ID, 0);
   }
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
@@ -226,6 +253,7 @@ struct fbUdpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
+           VerifyField<uint64_t>(verifier, VT_ACCOUNT_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            verifier.EndTable();
   }
@@ -240,6 +268,9 @@ struct fbUdpBindResBuilder {
   ::flatbuffers::uoffset_t start_;
   void add_success(bool success) {
     fbb_.AddElement<uint8_t>(fbUdpBindRes::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+  }
+  void add_account_id(uint64_t account_id) {
+    fbb_.AddElement<uint64_t>(fbUdpBindRes::VT_ACCOUNT_ID, account_id, 0);
   }
   void add_user_id(uint64_t user_id) {
     fbb_.AddElement<uint64_t>(fbUdpBindRes::VT_USER_ID, user_id, 0);
@@ -258,9 +289,11 @@ struct fbUdpBindResBuilder {
 inline ::flatbuffers::Offset<fbUdpBindRes> CreatefbUdpBindRes(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     bool success = false,
+    uint64_t account_id = 0,
     uint64_t user_id = 0) {
   fbUdpBindResBuilder builder_(_fbb);
   builder_.add_user_id(user_id);
+  builder_.add_account_id(account_id);
   builder_.add_success(success);
   return builder_.Finish();
 }
@@ -276,7 +309,7 @@ inline fbTcpBindReqT *fbTcpBindReq::UnPack(const ::flatbuffers::resolver_functio
 inline void fbTcpBindReq::UnPackTo(fbTcpBindReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = user_id(); _o->user_id = _e; }
+  { auto _e = account_id(); _o->account_id = _e; }
 }
 
 inline ::flatbuffers::Offset<fbTcpBindReq> CreatefbTcpBindReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -287,10 +320,10 @@ inline ::flatbuffers::Offset<fbTcpBindReq> fbTcpBindReq::Pack(::flatbuffers::Fla
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbTcpBindReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _user_id = _o->user_id;
+  auto _account_id = _o->account_id;
   return jam::net::fb::CreatefbTcpBindReq(
       _fbb,
-      _user_id);
+      _account_id);
 }
 
 inline fbTcpBindResT *fbTcpBindRes::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -303,6 +336,7 @@ inline void fbTcpBindRes::UnPackTo(fbTcpBindResT *_o, const ::flatbuffers::resol
   (void)_o;
   (void)_resolver;
   { auto _e = success(); _o->success = _e; }
+  { auto _e = account_id(); _o->account_id = _e; }
   { auto _e = user_id(); _o->user_id = _e; }
 }
 
@@ -315,10 +349,12 @@ inline ::flatbuffers::Offset<fbTcpBindRes> fbTcpBindRes::Pack(::flatbuffers::Fla
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbTcpBindResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _success = _o->success;
+  auto _account_id = _o->account_id;
   auto _user_id = _o->user_id;
   return jam::net::fb::CreatefbTcpBindRes(
       _fbb,
       _success,
+      _account_id,
       _user_id);
 }
 
@@ -331,6 +367,7 @@ inline fbUdpBindReqT *fbUdpBindReq::UnPack(const ::flatbuffers::resolver_functio
 inline void fbUdpBindReq::UnPackTo(fbUdpBindReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = account_id(); _o->account_id = _e; }
   { auto _e = user_id(); _o->user_id = _e; }
 }
 
@@ -342,9 +379,11 @@ inline ::flatbuffers::Offset<fbUdpBindReq> fbUdpBindReq::Pack(::flatbuffers::Fla
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUdpBindReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _account_id = _o->account_id;
   auto _user_id = _o->user_id;
   return jam::net::fb::CreatefbUdpBindReq(
       _fbb,
+      _account_id,
       _user_id);
 }
 
@@ -358,6 +397,7 @@ inline void fbUdpBindRes::UnPackTo(fbUdpBindResT *_o, const ::flatbuffers::resol
   (void)_o;
   (void)_resolver;
   { auto _e = success(); _o->success = _e; }
+  { auto _e = account_id(); _o->account_id = _e; }
   { auto _e = user_id(); _o->user_id = _e; }
 }
 
@@ -370,10 +410,12 @@ inline ::flatbuffers::Offset<fbUdpBindRes> fbUdpBindRes::Pack(::flatbuffers::Fla
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUdpBindResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _success = _o->success;
+  auto _account_id = _o->account_id;
   auto _user_id = _o->user_id;
   return jam::net::fb::CreatefbUdpBindRes(
       _fbb,
       _success,
+      _account_id,
       _user_id);
 }
 

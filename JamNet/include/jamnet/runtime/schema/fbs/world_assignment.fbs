@@ -1,29 +1,58 @@
 namespace jam.net.fb;
 
-enum fbWorldRequestAction : ubyte
+enum fbWorldAction : ubyte
 {
 	AutoAssign  = 0,
 	Join		= 1,
 	Leave		= 2,
-	Transfer	= 3
+	Transfer	= 3,
+	Promote		= 4
 }
 
-table fbRequestWorldAssignmentReq
+enum fbWorldMembershipDeltaOp : ubyte
 {
-	action						: fbWorldRequestAction = AutoAssign;
-	target_world_id				: uint	= 0;
-	target_world_kind			: ubyte = 0;
-	target_world_template_id	: uint  = 0;
-	target_world_instance_id	: ulong = 0;
+	Upsert		= 0,
+	Remove		= 1
 }
 
-table fbRequestWorldAssignmentRes
+table fbWorldMembershipDelta
 {
-	status				: ubyte		= 2;		// ASSIGNED(0), WAITING(1), FAILED(2)
-	request_action		: ubyte		= 0;
-	assignment_action	: ubyte		= 0;
+	op					: fbWorldMembershipDeltaOp = Upsert;
+	key_desc_id			: uint		= 0;
+	key_world_id		: ulong		= 0;	// authoritative NetWorldId
+	kind				: ubyte		= 0;
+	role				: ubyte		= 0;
+	presence			: ubyte		= 0;
+}
+
+table fbWorldRuntimeDelta
+{
+	key_desc_id			: uint		= 0;
+	key_world_id		: ulong		= 0;	// authoritative NetWorldId
+	runtime				: ubyte		= 0;
+}
+
+table fbWorldActionReq
+{
+	action				: fbWorldAction = AutoAssign;
+	src_desc_id			: uint = 0;
+	src_world_id		: ulong = 0;
+	target_desc_id		: uint  = 0;
+	target_world_id	    : ulong = 0;
+}
+
+table fbWorldActionRes
+{
+	status				: ubyte		= 2;		// SUCCEEDED(0), FAILED(2)
 	reason				: ubyte		= 0;
-	world_id			: uint		= 0;
+	request_action		: ubyte		= 0;
+	exec_flags			: ubyte		= 0;
+	src_desc_id			: uint		= 0;
+	src_world_id		: ulong		= 0;
+	target_desc_id		: uint		= 0;
+	target_world_id		: ulong		= 0;
+	membership_deltas	: [fbWorldMembershipDelta];
+	world_runtime_deltas: [fbWorldRuntimeDelta];
 }
 
-root_type fbRequestWorldAssignmentReq;
+root_type fbWorldActionReq;

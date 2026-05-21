@@ -1,73 +1,155 @@
 #include "pch.h"
 #include "jamnet/runtime/world/WorldDirectory.h"
 
+
 namespace jam::net
 {
-	WorldId WorldDirectory::FindWorldId(const WorldKey& key) const
+	namespace
 	{
-		if (!key.IsValid())
-			return INVALID_WORLD_ID;
-
-		auto it = m_worldIdsByKey.find(key);
-		return (it != m_worldIdsByKey.end()) ? it->second : INVALID_WORLD_ID;
-	}
-
-	WorldId WorldDirectory::FindOrAddWorld(const WorldKey& key, const WorldOptions& options)
-	{
-		if (!key.IsValid())
-			return INVALID_WORLD_ID;
-
-		if (const WorldId existing = FindWorldId(key); existing != INVALID_WORLD_ID)
+		void RemoveIndexedWorld(WorldDirectorySnapshot& snapshot, const WorldKey& key)
 		{
-			SetWorldOptions(existing, options);
-			return existing;
+			snapshot.worldsByKey.erase(key);
+			std::erase_if(snapshot.worldsByDesc, [&key](const auto& pair)
+				{
+					return pair.second == key;
+				});
+			std::erase_if(snapshot.worldsByGroup, [&key](const auto& pair)
+				{
+					return pair.second == key;
+				});
 		}
-
-		const WorldId worldId = m_nextWorldId++;
-		m_worldIdsByKey.emplace(key, worldId);
-		m_worldKeysById.emplace(worldId, key);
-		m_worldOptionsById.emplace(worldId, options);
-
-		return worldId;
 	}
 
-	WorldKey WorldDirectory::FindWorldKey(WorldId worldId) const
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return INVALID_WORLD_KEY;
 
-		auto it = m_worldKeysById.find(worldId);
-		return (it != m_worldKeysById.end()) ? it->second : INVALID_WORLD_KEY;
+
+	void WorldDirectory::PublishWorld(const WorldMeta& entry)
+	{
+		if (!entry.IsValid())
+			return;
+
+		m_snapshot.Update([&](WorldDirectorySnapshot& next)
+			{
+				RemoveIndexedWorld(next, entry.key);
+				next.worldsByKey[entry.key] = entry;
+				next.worldsByDesc.emplace(entry.key.descId, entry.key);
+				if (entry.group != kInvalidWorldGroup)
+					next.worldsByGroup.emplace(entry.group, entry.key);
+			});
 	}
 
-	WorldOptions WorldDirectory::FindWorldOptions(WorldId worldId) const
+	void WorldDirectory::RemoveWorld(const WorldKey& key)
 	{
-		if (worldId == INVALID_WORLD_ID)
+		if (!key.IsIssued())
+			return;
+
+		m_snapshot.Update([&](WorldDirectorySnapshot& next)
+			{
+				RemoveIndexedWorld(next, key);
+			});
+	}
+
+	void WorldDirectory::UpdateMemberCount(const WorldKey& key, uint32 memberCount)
+	{
+		if (!key.IsIssued())
+			return;
+
+		m_snapshot.Update([&](WorldDirectorySnapshot& next)
+			{
+				auto it = next.worldsByKey.find(key);
+				if (it != next.worldsByKey.end())
+				{
+					it->second.memberCount = memberCount;
+				}
+			});
+	}
+
+	void WorldDirectory::PublishUserMemberships(const UserMembershipSnapshotEntry& entry)
+	{
+		if (entry.userId == kInvalidUserId)
+			return;
+
+		m_snapshot.Update([&](WorldDirectorySnapshot& next)
+			{
+				next.usersById[entry.userId] = entry;
+			});
+	}
+
+	void WorldDirectory::RemoveUserMemberships(UserId userId)
+	{
+		if (userId == kInvalidUserId)
+			return;
+
+		m_snapshot.Update([&](WorldDirectorySnapshot& next)
+			{
+				next.usersById.erase(userId);
+			});
+	}
+
+	std::optional<WorldMeta> WorldDirectory::FindWorld(const WorldKey& key) const
+	{
+		if (!key.IsIssued())
+			return std::nullopt;
+
+		auto snapshot = m_snapshot.Load();
+		if (!snapshot)
+			return std::nullopt;
+
+		auto it = snapshot->worldsByKey.find(key);
+		return (it != snapshot->worldsByKey.end()) ? std::optional(it->second) : std::nullopt;
+	}
+
+	std::vector<WorldMeta> WorldDirectory::FindWorldsByDesc(uint32 descId) const
+	{
+		if (descId == 0)
 			return {};
 
-		auto it = m_worldOptionsById.find(worldId);
-		return (it != m_worldOptionsById.end()) ? it->second : WorldOptions{};
-	}
+		auto snapshot = m_snapshot.Load();
+		if (!snapshot)
+			return {};
 
-	void WorldDirectory::SetWorldOptions(WorldId worldId, const WorldOptions& options)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return;
-
-		m_worldOptionsById[worldId] = options;
-	}
-
-	void WorldDirectory::RemoveWorld(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return;
-
-		if (auto keyIt = m_worldKeysById.find(worldId); keyIt != m_worldKeysById.end())
+		std::vector<WorldMeta> worlds;
+		const auto [first, last] = snapshot->worldsByDesc.equal_range(descId);
+		for (auto it = first; it != last; ++it)
 		{
-			m_worldIdsByKey.erase(keyIt->second);
-			m_worldKeysById.erase(keyIt);
+			auto worldIt = snapshot->worldsByKey.find(it->second);
+			if (worldIt != snapshot->worldsByKey.end())
+				worlds.push_back(worldIt->second);
 		}
 
-		m_worldOptionsById.erase(worldId);
+		return worlds;
+	}
+
+	std::vector<WorldMeta> WorldDirectory::FindWorldsByGroup(WorldGroup group) const
+	{
+		if (group == kInvalidWorldGroup)
+			return {};
+
+		auto snapshot = m_snapshot.Load();
+		if (!snapshot)
+			return {};
+
+		std::vector<WorldMeta> worlds;
+		const auto [first, last] = snapshot->worldsByGroup.equal_range(group);
+		for (auto it = first; it != last; ++it)
+		{
+			auto worldIt = snapshot->worldsByKey.find(it->second);
+			if (worldIt != snapshot->worldsByKey.end())
+				worlds.push_back(worldIt->second);
+		}
+
+		return worlds;
+	}
+
+	std::optional<UserMembershipSnapshotEntry> WorldDirectory::FindUserMembershipEntry(UserId userId) const
+	{
+		if (userId == kInvalidUserId)
+			return std::nullopt;
+
+		auto snapshot = m_snapshot.Load();
+		if (!snapshot)
+			return std::nullopt;
+
+		auto it = snapshot->usersById.find(userId);
+		return (it != snapshot->usersById.end()) ? std::optional(it->second) : std::nullopt;
 	}
 }

@@ -1,6 +1,11 @@
 #pragma once
 
 #include "jamnet/runtime/world/IWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/WorldDirectory.h"
+#include "jamnet/runtime/world/WorldDescAsset.h"
+
+#include <optional>
+#include <span>
 
 namespace jam::net
 {
@@ -10,10 +15,17 @@ namespace jam::net
 		DefaultWorldAssignmentPolicy() = default;
 		~DefaultWorldAssignmentPolicy() override = default;
 
-		void						Init(ServerNetworkManager* manager) override;
-		WorldAssignmentPolicyResult EvaluateAssignment(const WorldAssignmentPolicyRequest& req) override;
+		WorldActionPlan					PlanAction(const WorldActionRequest& req) override;
+		void							BindWorldDirectory(const WorldDirectory* directory) override { m_directory = directory; }
+		void							BindWorldTemplateAsset(const WorldDescAsset* asset) override { m_asset = asset; }
 
 	private:
-		ServerNetworkManager* m_netManager = nullptr;
+		uint32								ResolveDescId(const WorldActionRequest& req) const;
+		const WorldDesc*					ResolveDesc(const WorldActionRequest& req) const;
+		std::optional<WorldMeta>	SelectWorld(const WorldDesc& desc, std::span<const WorldMeta> candidates) const;
+
+	private:
+		const WorldDirectory*	m_directory = nullptr;
+		const WorldDescAsset*	m_asset		= nullptr;
 	};
 }

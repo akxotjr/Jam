@@ -17,362 +17,794 @@ namespace jam {
 namespace net {
 namespace fb {
 
-struct fbRequestWorldAssignmentReq;
-struct fbRequestWorldAssignmentReqBuilder;
-struct fbRequestWorldAssignmentReqT;
+struct fbWorldMembershipDelta;
+struct fbWorldMembershipDeltaBuilder;
+struct fbWorldMembershipDeltaT;
 
-struct fbRequestWorldAssignmentRes;
-struct fbRequestWorldAssignmentResBuilder;
-struct fbRequestWorldAssignmentResT;
+struct fbWorldRuntimeDelta;
+struct fbWorldRuntimeDeltaBuilder;
+struct fbWorldRuntimeDeltaT;
 
-enum fbWorldRequestAction : uint8_t {
-  fbWorldRequestAction_AutoAssign = 0,
-  fbWorldRequestAction_Join = 1,
-  fbWorldRequestAction_Leave = 2,
-  fbWorldRequestAction_Transfer = 3,
-  fbWorldRequestAction_MIN = fbWorldRequestAction_AutoAssign,
-  fbWorldRequestAction_MAX = fbWorldRequestAction_Transfer
+struct fbWorldActionReq;
+struct fbWorldActionReqBuilder;
+struct fbWorldActionReqT;
+
+struct fbWorldActionRes;
+struct fbWorldActionResBuilder;
+struct fbWorldActionResT;
+
+enum fbWorldAction : uint8_t {
+  fbWorldAction_AutoAssign = 0,
+  fbWorldAction_Join = 1,
+  fbWorldAction_Leave = 2,
+  fbWorldAction_Transfer = 3,
+  fbWorldAction_Promote = 4,
+  fbWorldAction_MIN = fbWorldAction_AutoAssign,
+  fbWorldAction_MAX = fbWorldAction_Promote
 };
 
-inline const fbWorldRequestAction (&EnumValuesfbWorldRequestAction())[4] {
-  static const fbWorldRequestAction values[] = {
-    fbWorldRequestAction_AutoAssign,
-    fbWorldRequestAction_Join,
-    fbWorldRequestAction_Leave,
-    fbWorldRequestAction_Transfer
+inline const fbWorldAction (&EnumValuesfbWorldAction())[5] {
+  static const fbWorldAction values[] = {
+    fbWorldAction_AutoAssign,
+    fbWorldAction_Join,
+    fbWorldAction_Leave,
+    fbWorldAction_Transfer,
+    fbWorldAction_Promote
   };
   return values;
 }
 
-inline const char * const *EnumNamesfbWorldRequestAction() {
-  static const char * const names[5] = {
+inline const char * const *EnumNamesfbWorldAction() {
+  static const char * const names[6] = {
     "AutoAssign",
     "Join",
     "Leave",
     "Transfer",
+    "Promote",
     nullptr
   };
   return names;
 }
 
-inline const char *EnumNamefbWorldRequestAction(fbWorldRequestAction e) {
-  if (::flatbuffers::IsOutRange(e, fbWorldRequestAction_AutoAssign, fbWorldRequestAction_Transfer)) return "";
+inline const char *EnumNamefbWorldAction(fbWorldAction e) {
+  if (::flatbuffers::IsOutRange(e, fbWorldAction_AutoAssign, fbWorldAction_Promote)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesfbWorldRequestAction()[index];
+  return EnumNamesfbWorldAction()[index];
 }
 
-struct fbRequestWorldAssignmentReqT : public ::flatbuffers::NativeTable {
-  typedef fbRequestWorldAssignmentReq TableType;
-  jam::net::fb::fbWorldRequestAction action = jam::net::fb::fbWorldRequestAction_AutoAssign;
-  uint32_t target_world_id = 0;
-  uint8_t target_world_kind = 0;
-  uint32_t target_world_template_id = 0;
-  uint64_t target_world_instance_id = 0;
+enum fbWorldMembershipDeltaOp : uint8_t {
+  fbWorldMembershipDeltaOp_Upsert = 0,
+  fbWorldMembershipDeltaOp_Remove = 1,
+  fbWorldMembershipDeltaOp_MIN = fbWorldMembershipDeltaOp_Upsert,
+  fbWorldMembershipDeltaOp_MAX = fbWorldMembershipDeltaOp_Remove
 };
 
-struct fbRequestWorldAssignmentReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbRequestWorldAssignmentReqT NativeTableType;
-  typedef fbRequestWorldAssignmentReqBuilder Builder;
+inline const fbWorldMembershipDeltaOp (&EnumValuesfbWorldMembershipDeltaOp())[2] {
+  static const fbWorldMembershipDeltaOp values[] = {
+    fbWorldMembershipDeltaOp_Upsert,
+    fbWorldMembershipDeltaOp_Remove
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesfbWorldMembershipDeltaOp() {
+  static const char * const names[3] = {
+    "Upsert",
+    "Remove",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamefbWorldMembershipDeltaOp(fbWorldMembershipDeltaOp e) {
+  if (::flatbuffers::IsOutRange(e, fbWorldMembershipDeltaOp_Upsert, fbWorldMembershipDeltaOp_Remove)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesfbWorldMembershipDeltaOp()[index];
+}
+
+struct fbWorldMembershipDeltaT : public ::flatbuffers::NativeTable {
+  typedef fbWorldMembershipDelta TableType;
+  jam::net::fb::fbWorldMembershipDeltaOp op = jam::net::fb::fbWorldMembershipDeltaOp_Upsert;
+  uint32_t key_desc_id = 0;
+  uint64_t key_world_id = 0;
+  uint8_t kind = 0;
+  uint8_t role = 0;
+  uint8_t presence = 0;
+};
+
+struct fbWorldMembershipDelta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbWorldMembershipDeltaT NativeTableType;
+  typedef fbWorldMembershipDeltaBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OP = 4,
+    VT_KEY_DESC_ID = 6,
+    VT_KEY_WORLD_ID = 8,
+    VT_KIND = 10,
+    VT_ROLE = 12,
+    VT_PRESENCE = 14
+  };
+  jam::net::fb::fbWorldMembershipDeltaOp op() const {
+    return static_cast<jam::net::fb::fbWorldMembershipDeltaOp>(GetField<uint8_t>(VT_OP, 0));
+  }
+  uint32_t key_desc_id() const {
+    return GetField<uint32_t>(VT_KEY_DESC_ID, 0);
+  }
+  uint64_t key_world_id() const {
+    return GetField<uint64_t>(VT_KEY_WORLD_ID, 0);
+  }
+  uint8_t kind() const {
+    return GetField<uint8_t>(VT_KIND, 0);
+  }
+  uint8_t role() const {
+    return GetField<uint8_t>(VT_ROLE, 0);
+  }
+  uint8_t presence() const {
+    return GetField<uint8_t>(VT_PRESENCE, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_OP, 1) &&
+           VerifyField<uint32_t>(verifier, VT_KEY_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_KEY_WORLD_ID, 8) &&
+           VerifyField<uint8_t>(verifier, VT_KIND, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ROLE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_PRESENCE, 1) &&
+           verifier.EndTable();
+  }
+  fbWorldMembershipDeltaT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbWorldMembershipDeltaT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbWorldMembershipDelta> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldMembershipDeltaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct fbWorldMembershipDeltaBuilder {
+  typedef fbWorldMembershipDelta Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_op(jam::net::fb::fbWorldMembershipDeltaOp op) {
+    fbb_.AddElement<uint8_t>(fbWorldMembershipDelta::VT_OP, static_cast<uint8_t>(op), 0);
+  }
+  void add_key_desc_id(uint32_t key_desc_id) {
+    fbb_.AddElement<uint32_t>(fbWorldMembershipDelta::VT_KEY_DESC_ID, key_desc_id, 0);
+  }
+  void add_key_world_id(uint64_t key_world_id) {
+    fbb_.AddElement<uint64_t>(fbWorldMembershipDelta::VT_KEY_WORLD_ID, key_world_id, 0);
+  }
+  void add_kind(uint8_t kind) {
+    fbb_.AddElement<uint8_t>(fbWorldMembershipDelta::VT_KIND, kind, 0);
+  }
+  void add_role(uint8_t role) {
+    fbb_.AddElement<uint8_t>(fbWorldMembershipDelta::VT_ROLE, role, 0);
+  }
+  void add_presence(uint8_t presence) {
+    fbb_.AddElement<uint8_t>(fbWorldMembershipDelta::VT_PRESENCE, presence, 0);
+  }
+  explicit fbWorldMembershipDeltaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<fbWorldMembershipDelta> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<fbWorldMembershipDelta>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<fbWorldMembershipDelta> CreatefbWorldMembershipDelta(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    jam::net::fb::fbWorldMembershipDeltaOp op = jam::net::fb::fbWorldMembershipDeltaOp_Upsert,
+    uint32_t key_desc_id = 0,
+    uint64_t key_world_id = 0,
+    uint8_t kind = 0,
+    uint8_t role = 0,
+    uint8_t presence = 0) {
+  fbWorldMembershipDeltaBuilder builder_(_fbb);
+  builder_.add_key_world_id(key_world_id);
+  builder_.add_key_desc_id(key_desc_id);
+  builder_.add_presence(presence);
+  builder_.add_role(role);
+  builder_.add_kind(kind);
+  builder_.add_op(op);
+  return builder_.Finish();
+}
+
+::flatbuffers::Offset<fbWorldMembershipDelta> CreatefbWorldMembershipDelta(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldMembershipDeltaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct fbWorldRuntimeDeltaT : public ::flatbuffers::NativeTable {
+  typedef fbWorldRuntimeDelta TableType;
+  uint32_t key_desc_id = 0;
+  uint64_t key_world_id = 0;
+  uint8_t runtime = 0;
+};
+
+struct fbWorldRuntimeDelta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbWorldRuntimeDeltaT NativeTableType;
+  typedef fbWorldRuntimeDeltaBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KEY_DESC_ID = 4,
+    VT_KEY_WORLD_ID = 6,
+    VT_RUNTIME = 8
+  };
+  uint32_t key_desc_id() const {
+    return GetField<uint32_t>(VT_KEY_DESC_ID, 0);
+  }
+  uint64_t key_world_id() const {
+    return GetField<uint64_t>(VT_KEY_WORLD_ID, 0);
+  }
+  uint8_t runtime() const {
+    return GetField<uint8_t>(VT_RUNTIME, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_KEY_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_KEY_WORLD_ID, 8) &&
+           VerifyField<uint8_t>(verifier, VT_RUNTIME, 1) &&
+           verifier.EndTable();
+  }
+  fbWorldRuntimeDeltaT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbWorldRuntimeDeltaT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbWorldRuntimeDelta> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldRuntimeDeltaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct fbWorldRuntimeDeltaBuilder {
+  typedef fbWorldRuntimeDelta Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_key_desc_id(uint32_t key_desc_id) {
+    fbb_.AddElement<uint32_t>(fbWorldRuntimeDelta::VT_KEY_DESC_ID, key_desc_id, 0);
+  }
+  void add_key_world_id(uint64_t key_world_id) {
+    fbb_.AddElement<uint64_t>(fbWorldRuntimeDelta::VT_KEY_WORLD_ID, key_world_id, 0);
+  }
+  void add_runtime(uint8_t runtime) {
+    fbb_.AddElement<uint8_t>(fbWorldRuntimeDelta::VT_RUNTIME, runtime, 0);
+  }
+  explicit fbWorldRuntimeDeltaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<fbWorldRuntimeDelta> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<fbWorldRuntimeDelta>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<fbWorldRuntimeDelta> CreatefbWorldRuntimeDelta(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t key_desc_id = 0,
+    uint64_t key_world_id = 0,
+    uint8_t runtime = 0) {
+  fbWorldRuntimeDeltaBuilder builder_(_fbb);
+  builder_.add_key_world_id(key_world_id);
+  builder_.add_key_desc_id(key_desc_id);
+  builder_.add_runtime(runtime);
+  return builder_.Finish();
+}
+
+::flatbuffers::Offset<fbWorldRuntimeDelta> CreatefbWorldRuntimeDelta(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldRuntimeDeltaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct fbWorldActionReqT : public ::flatbuffers::NativeTable {
+  typedef fbWorldActionReq TableType;
+  jam::net::fb::fbWorldAction action = jam::net::fb::fbWorldAction_AutoAssign;
+  uint32_t src_desc_id = 0;
+  uint64_t src_world_id = 0;
+  uint32_t target_desc_id = 0;
+  uint64_t target_world_id = 0;
+};
+
+struct fbWorldActionReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbWorldActionReqT NativeTableType;
+  typedef fbWorldActionReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_ACTION = 4,
-    VT_TARGET_WORLD_ID = 6,
-    VT_TARGET_WORLD_KIND = 8,
-    VT_TARGET_WORLD_TEMPLATE_ID = 10,
-    VT_TARGET_WORLD_INSTANCE_ID = 12
+    VT_SRC_DESC_ID = 6,
+    VT_SRC_WORLD_ID = 8,
+    VT_TARGET_DESC_ID = 10,
+    VT_TARGET_WORLD_ID = 12
   };
-  jam::net::fb::fbWorldRequestAction action() const {
-    return static_cast<jam::net::fb::fbWorldRequestAction>(GetField<uint8_t>(VT_ACTION, 0));
+  jam::net::fb::fbWorldAction action() const {
+    return static_cast<jam::net::fb::fbWorldAction>(GetField<uint8_t>(VT_ACTION, 0));
   }
-  uint32_t target_world_id() const {
-    return GetField<uint32_t>(VT_TARGET_WORLD_ID, 0);
+  uint32_t src_desc_id() const {
+    return GetField<uint32_t>(VT_SRC_DESC_ID, 0);
   }
-  uint8_t target_world_kind() const {
-    return GetField<uint8_t>(VT_TARGET_WORLD_KIND, 0);
+  uint64_t src_world_id() const {
+    return GetField<uint64_t>(VT_SRC_WORLD_ID, 0);
   }
-  uint32_t target_world_template_id() const {
-    return GetField<uint32_t>(VT_TARGET_WORLD_TEMPLATE_ID, 0);
+  uint32_t target_desc_id() const {
+    return GetField<uint32_t>(VT_TARGET_DESC_ID, 0);
   }
-  uint64_t target_world_instance_id() const {
-    return GetField<uint64_t>(VT_TARGET_WORLD_INSTANCE_ID, 0);
+  uint64_t target_world_id() const {
+    return GetField<uint64_t>(VT_TARGET_WORLD_ID, 0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_ACTION, 1) &&
-           VerifyField<uint32_t>(verifier, VT_TARGET_WORLD_ID, 4) &&
-           VerifyField<uint8_t>(verifier, VT_TARGET_WORLD_KIND, 1) &&
-           VerifyField<uint32_t>(verifier, VT_TARGET_WORLD_TEMPLATE_ID, 4) &&
-           VerifyField<uint64_t>(verifier, VT_TARGET_WORLD_INSTANCE_ID, 8) &&
+           VerifyField<uint32_t>(verifier, VT_SRC_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_SRC_WORLD_ID, 8) &&
+           VerifyField<uint32_t>(verifier, VT_TARGET_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_TARGET_WORLD_ID, 8) &&
            verifier.EndTable();
   }
-  fbRequestWorldAssignmentReqT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbRequestWorldAssignmentReqT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbRequestWorldAssignmentReq> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  fbWorldActionReqT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbWorldActionReqT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbWorldActionReq> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct fbRequestWorldAssignmentReqBuilder {
-  typedef fbRequestWorldAssignmentReq Table;
+struct fbWorldActionReqBuilder {
+  typedef fbWorldActionReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_action(jam::net::fb::fbWorldRequestAction action) {
-    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentReq::VT_ACTION, static_cast<uint8_t>(action), 0);
+  void add_action(jam::net::fb::fbWorldAction action) {
+    fbb_.AddElement<uint8_t>(fbWorldActionReq::VT_ACTION, static_cast<uint8_t>(action), 0);
   }
-  void add_target_world_id(uint32_t target_world_id) {
-    fbb_.AddElement<uint32_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_ID, target_world_id, 0);
+  void add_src_desc_id(uint32_t src_desc_id) {
+    fbb_.AddElement<uint32_t>(fbWorldActionReq::VT_SRC_DESC_ID, src_desc_id, 0);
   }
-  void add_target_world_kind(uint8_t target_world_kind) {
-    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_KIND, target_world_kind, 0);
+  void add_src_world_id(uint64_t src_world_id) {
+    fbb_.AddElement<uint64_t>(fbWorldActionReq::VT_SRC_WORLD_ID, src_world_id, 0);
   }
-  void add_target_world_template_id(uint32_t target_world_template_id) {
-    fbb_.AddElement<uint32_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_TEMPLATE_ID, target_world_template_id, 0);
+  void add_target_desc_id(uint32_t target_desc_id) {
+    fbb_.AddElement<uint32_t>(fbWorldActionReq::VT_TARGET_DESC_ID, target_desc_id, 0);
   }
-  void add_target_world_instance_id(uint64_t target_world_instance_id) {
-    fbb_.AddElement<uint64_t>(fbRequestWorldAssignmentReq::VT_TARGET_WORLD_INSTANCE_ID, target_world_instance_id, 0);
+  void add_target_world_id(uint64_t target_world_id) {
+    fbb_.AddElement<uint64_t>(fbWorldActionReq::VT_TARGET_WORLD_ID, target_world_id, 0);
   }
-  explicit fbRequestWorldAssignmentReqBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  explicit fbWorldActionReqBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<fbRequestWorldAssignmentReq> Finish() {
+  ::flatbuffers::Offset<fbWorldActionReq> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbRequestWorldAssignmentReq>(end);
+    auto o = ::flatbuffers::Offset<fbWorldActionReq>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAssignmentReq(
+inline ::flatbuffers::Offset<fbWorldActionReq> CreatefbWorldActionReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    jam::net::fb::fbWorldRequestAction action = jam::net::fb::fbWorldRequestAction_AutoAssign,
-    uint32_t target_world_id = 0,
-    uint8_t target_world_kind = 0,
-    uint32_t target_world_template_id = 0,
-    uint64_t target_world_instance_id = 0) {
-  fbRequestWorldAssignmentReqBuilder builder_(_fbb);
-  builder_.add_target_world_instance_id(target_world_instance_id);
-  builder_.add_target_world_template_id(target_world_template_id);
+    jam::net::fb::fbWorldAction action = jam::net::fb::fbWorldAction_AutoAssign,
+    uint32_t src_desc_id = 0,
+    uint64_t src_world_id = 0,
+    uint32_t target_desc_id = 0,
+    uint64_t target_world_id = 0) {
+  fbWorldActionReqBuilder builder_(_fbb);
   builder_.add_target_world_id(target_world_id);
-  builder_.add_target_world_kind(target_world_kind);
+  builder_.add_src_world_id(src_world_id);
+  builder_.add_target_desc_id(target_desc_id);
+  builder_.add_src_desc_id(src_desc_id);
   builder_.add_action(action);
   return builder_.Finish();
 }
 
-::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAssignmentReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+::flatbuffers::Offset<fbWorldActionReq> CreatefbWorldActionReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct fbRequestWorldAssignmentResT : public ::flatbuffers::NativeTable {
-  typedef fbRequestWorldAssignmentRes TableType;
+struct fbWorldActionResT : public ::flatbuffers::NativeTable {
+  typedef fbWorldActionRes TableType;
   uint8_t status = 2;
-  uint8_t request_action = 0;
-  uint8_t assignment_action = 0;
   uint8_t reason = 0;
-  uint32_t world_id = 0;
+  uint8_t request_action = 0;
+  uint8_t exec_flags = 0;
+  uint32_t src_desc_id = 0;
+  uint64_t src_world_id = 0;
+  uint32_t target_desc_id = 0;
+  uint64_t target_world_id = 0;
+  std::vector<std::unique_ptr<jam::net::fb::fbWorldMembershipDeltaT>> membership_deltas{};
+  std::vector<std::unique_ptr<jam::net::fb::fbWorldRuntimeDeltaT>> world_runtime_deltas{};
+  fbWorldActionResT() = default;
+  fbWorldActionResT(const fbWorldActionResT &o);
+  fbWorldActionResT(fbWorldActionResT&&) FLATBUFFERS_NOEXCEPT = default;
+  fbWorldActionResT &operator=(fbWorldActionResT o) FLATBUFFERS_NOEXCEPT;
 };
 
-struct fbRequestWorldAssignmentRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbRequestWorldAssignmentResT NativeTableType;
-  typedef fbRequestWorldAssignmentResBuilder Builder;
+struct fbWorldActionRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbWorldActionResT NativeTableType;
+  typedef fbWorldActionResBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_STATUS = 4,
-    VT_REQUEST_ACTION = 6,
-    VT_ASSIGNMENT_ACTION = 8,
-    VT_REASON = 10,
-    VT_WORLD_ID = 12
+    VT_REASON = 6,
+    VT_REQUEST_ACTION = 8,
+    VT_EXEC_FLAGS = 10,
+    VT_SRC_DESC_ID = 12,
+    VT_SRC_WORLD_ID = 14,
+    VT_TARGET_DESC_ID = 16,
+    VT_TARGET_WORLD_ID = 18,
+    VT_MEMBERSHIP_DELTAS = 20,
+    VT_WORLD_RUNTIME_DELTAS = 22
   };
   uint8_t status() const {
     return GetField<uint8_t>(VT_STATUS, 2);
   }
-  uint8_t request_action() const {
-    return GetField<uint8_t>(VT_REQUEST_ACTION, 0);
-  }
-  uint8_t assignment_action() const {
-    return GetField<uint8_t>(VT_ASSIGNMENT_ACTION, 0);
-  }
   uint8_t reason() const {
     return GetField<uint8_t>(VT_REASON, 0);
   }
-  uint32_t world_id() const {
-    return GetField<uint32_t>(VT_WORLD_ID, 0);
+  uint8_t request_action() const {
+    return GetField<uint8_t>(VT_REQUEST_ACTION, 0);
+  }
+  uint8_t exec_flags() const {
+    return GetField<uint8_t>(VT_EXEC_FLAGS, 0);
+  }
+  uint32_t src_desc_id() const {
+    return GetField<uint32_t>(VT_SRC_DESC_ID, 0);
+  }
+  uint64_t src_world_id() const {
+    return GetField<uint64_t>(VT_SRC_WORLD_ID, 0);
+  }
+  uint32_t target_desc_id() const {
+    return GetField<uint32_t>(VT_TARGET_DESC_ID, 0);
+  }
+  uint64_t target_world_id() const {
+    return GetField<uint64_t>(VT_TARGET_WORLD_ID, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>> *membership_deltas() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>> *>(VT_MEMBERSHIP_DELTAS);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>> *world_runtime_deltas() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>> *>(VT_WORLD_RUNTIME_DELTAS);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_STATUS, 1) &&
-           VerifyField<uint8_t>(verifier, VT_REQUEST_ACTION, 1) &&
-           VerifyField<uint8_t>(verifier, VT_ASSIGNMENT_ACTION, 1) &&
            VerifyField<uint8_t>(verifier, VT_REASON, 1) &&
-           VerifyField<uint32_t>(verifier, VT_WORLD_ID, 4) &&
+           VerifyField<uint8_t>(verifier, VT_REQUEST_ACTION, 1) &&
+           VerifyField<uint8_t>(verifier, VT_EXEC_FLAGS, 1) &&
+           VerifyField<uint32_t>(verifier, VT_SRC_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_SRC_WORLD_ID, 8) &&
+           VerifyField<uint32_t>(verifier, VT_TARGET_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_TARGET_WORLD_ID, 8) &&
+           VerifyOffset(verifier, VT_MEMBERSHIP_DELTAS) &&
+           verifier.VerifyVector(membership_deltas()) &&
+           verifier.VerifyVectorOfTables(membership_deltas()) &&
+           VerifyOffset(verifier, VT_WORLD_RUNTIME_DELTAS) &&
+           verifier.VerifyVector(world_runtime_deltas()) &&
+           verifier.VerifyVectorOfTables(world_runtime_deltas()) &&
            verifier.EndTable();
   }
-  fbRequestWorldAssignmentResT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbRequestWorldAssignmentResT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbRequestWorldAssignmentRes> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  fbWorldActionResT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbWorldActionResT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbWorldActionRes> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct fbRequestWorldAssignmentResBuilder {
-  typedef fbRequestWorldAssignmentRes Table;
+struct fbWorldActionResBuilder {
+  typedef fbWorldActionRes Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
   void add_status(uint8_t status) {
-    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_STATUS, status, 2);
-  }
-  void add_request_action(uint8_t request_action) {
-    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_REQUEST_ACTION, request_action, 0);
-  }
-  void add_assignment_action(uint8_t assignment_action) {
-    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_ASSIGNMENT_ACTION, assignment_action, 0);
+    fbb_.AddElement<uint8_t>(fbWorldActionRes::VT_STATUS, status, 2);
   }
   void add_reason(uint8_t reason) {
-    fbb_.AddElement<uint8_t>(fbRequestWorldAssignmentRes::VT_REASON, reason, 0);
+    fbb_.AddElement<uint8_t>(fbWorldActionRes::VT_REASON, reason, 0);
   }
-  void add_world_id(uint32_t world_id) {
-    fbb_.AddElement<uint32_t>(fbRequestWorldAssignmentRes::VT_WORLD_ID, world_id, 0);
+  void add_request_action(uint8_t request_action) {
+    fbb_.AddElement<uint8_t>(fbWorldActionRes::VT_REQUEST_ACTION, request_action, 0);
   }
-  explicit fbRequestWorldAssignmentResBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  void add_exec_flags(uint8_t exec_flags) {
+    fbb_.AddElement<uint8_t>(fbWorldActionRes::VT_EXEC_FLAGS, exec_flags, 0);
+  }
+  void add_src_desc_id(uint32_t src_desc_id) {
+    fbb_.AddElement<uint32_t>(fbWorldActionRes::VT_SRC_DESC_ID, src_desc_id, 0);
+  }
+  void add_src_world_id(uint64_t src_world_id) {
+    fbb_.AddElement<uint64_t>(fbWorldActionRes::VT_SRC_WORLD_ID, src_world_id, 0);
+  }
+  void add_target_desc_id(uint32_t target_desc_id) {
+    fbb_.AddElement<uint32_t>(fbWorldActionRes::VT_TARGET_DESC_ID, target_desc_id, 0);
+  }
+  void add_target_world_id(uint64_t target_world_id) {
+    fbb_.AddElement<uint64_t>(fbWorldActionRes::VT_TARGET_WORLD_ID, target_world_id, 0);
+  }
+  void add_membership_deltas(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>>> membership_deltas) {
+    fbb_.AddOffset(fbWorldActionRes::VT_MEMBERSHIP_DELTAS, membership_deltas);
+  }
+  void add_world_runtime_deltas(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>>> world_runtime_deltas) {
+    fbb_.AddOffset(fbWorldActionRes::VT_WORLD_RUNTIME_DELTAS, world_runtime_deltas);
+  }
+  explicit fbWorldActionResBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<fbRequestWorldAssignmentRes> Finish() {
+  ::flatbuffers::Offset<fbWorldActionRes> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbRequestWorldAssignmentRes>(end);
+    auto o = ::flatbuffers::Offset<fbWorldActionRes>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> CreatefbRequestWorldAssignmentRes(
+inline ::flatbuffers::Offset<fbWorldActionRes> CreatefbWorldActionRes(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint8_t status = 2,
-    uint8_t request_action = 0,
-    uint8_t assignment_action = 0,
     uint8_t reason = 0,
-    uint32_t world_id = 0) {
-  fbRequestWorldAssignmentResBuilder builder_(_fbb);
-  builder_.add_world_id(world_id);
-  builder_.add_reason(reason);
-  builder_.add_assignment_action(assignment_action);
+    uint8_t request_action = 0,
+    uint8_t exec_flags = 0,
+    uint32_t src_desc_id = 0,
+    uint64_t src_world_id = 0,
+    uint32_t target_desc_id = 0,
+    uint64_t target_world_id = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>>> membership_deltas = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>>> world_runtime_deltas = 0) {
+  fbWorldActionResBuilder builder_(_fbb);
+  builder_.add_target_world_id(target_world_id);
+  builder_.add_src_world_id(src_world_id);
+  builder_.add_world_runtime_deltas(world_runtime_deltas);
+  builder_.add_membership_deltas(membership_deltas);
+  builder_.add_target_desc_id(target_desc_id);
+  builder_.add_src_desc_id(src_desc_id);
+  builder_.add_exec_flags(exec_flags);
   builder_.add_request_action(request_action);
+  builder_.add_reason(reason);
   builder_.add_status(status);
   return builder_.Finish();
 }
 
-::flatbuffers::Offset<fbRequestWorldAssignmentRes> CreatefbRequestWorldAssignmentRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+inline ::flatbuffers::Offset<fbWorldActionRes> CreatefbWorldActionResDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t status = 2,
+    uint8_t reason = 0,
+    uint8_t request_action = 0,
+    uint8_t exec_flags = 0,
+    uint32_t src_desc_id = 0,
+    uint64_t src_world_id = 0,
+    uint32_t target_desc_id = 0,
+    uint64_t target_world_id = 0,
+    const std::vector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>> *membership_deltas = nullptr,
+    const std::vector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>> *world_runtime_deltas = nullptr) {
+  auto membership_deltas__ = membership_deltas ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>>(*membership_deltas) : 0;
+  auto world_runtime_deltas__ = world_runtime_deltas ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>>(*world_runtime_deltas) : 0;
+  return jam::net::fb::CreatefbWorldActionRes(
+      _fbb,
+      status,
+      reason,
+      request_action,
+      exec_flags,
+      src_desc_id,
+      src_world_id,
+      target_desc_id,
+      target_world_id,
+      membership_deltas__,
+      world_runtime_deltas__);
+}
 
-inline fbRequestWorldAssignmentReqT *fbRequestWorldAssignmentReq::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbRequestWorldAssignmentReqT>(new fbRequestWorldAssignmentReqT());
+::flatbuffers::Offset<fbWorldActionRes> CreatefbWorldActionRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline fbWorldMembershipDeltaT *fbWorldMembershipDelta::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbWorldMembershipDeltaT>(new fbWorldMembershipDeltaT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void fbRequestWorldAssignmentReq::UnPackTo(fbRequestWorldAssignmentReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void fbWorldMembershipDelta::UnPackTo(fbWorldMembershipDeltaT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = op(); _o->op = _e; }
+  { auto _e = key_desc_id(); _o->key_desc_id = _e; }
+  { auto _e = key_world_id(); _o->key_world_id = _e; }
+  { auto _e = kind(); _o->kind = _e; }
+  { auto _e = role(); _o->role = _e; }
+  { auto _e = presence(); _o->presence = _e; }
+}
+
+inline ::flatbuffers::Offset<fbWorldMembershipDelta> CreatefbWorldMembershipDelta(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldMembershipDeltaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbWorldMembershipDelta::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<fbWorldMembershipDelta> fbWorldMembershipDelta::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldMembershipDeltaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbWorldMembershipDeltaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _op = _o->op;
+  auto _key_desc_id = _o->key_desc_id;
+  auto _key_world_id = _o->key_world_id;
+  auto _kind = _o->kind;
+  auto _role = _o->role;
+  auto _presence = _o->presence;
+  return jam::net::fb::CreatefbWorldMembershipDelta(
+      _fbb,
+      _op,
+      _key_desc_id,
+      _key_world_id,
+      _kind,
+      _role,
+      _presence);
+}
+
+inline fbWorldRuntimeDeltaT *fbWorldRuntimeDelta::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbWorldRuntimeDeltaT>(new fbWorldRuntimeDeltaT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void fbWorldRuntimeDelta::UnPackTo(fbWorldRuntimeDeltaT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = key_desc_id(); _o->key_desc_id = _e; }
+  { auto _e = key_world_id(); _o->key_world_id = _e; }
+  { auto _e = runtime(); _o->runtime = _e; }
+}
+
+inline ::flatbuffers::Offset<fbWorldRuntimeDelta> CreatefbWorldRuntimeDelta(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldRuntimeDeltaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbWorldRuntimeDelta::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<fbWorldRuntimeDelta> fbWorldRuntimeDelta::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldRuntimeDeltaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbWorldRuntimeDeltaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _key_desc_id = _o->key_desc_id;
+  auto _key_world_id = _o->key_world_id;
+  auto _runtime = _o->runtime;
+  return jam::net::fb::CreatefbWorldRuntimeDelta(
+      _fbb,
+      _key_desc_id,
+      _key_world_id,
+      _runtime);
+}
+
+inline fbWorldActionReqT *fbWorldActionReq::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbWorldActionReqT>(new fbWorldActionReqT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void fbWorldActionReq::UnPackTo(fbWorldActionReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
   { auto _e = action(); _o->action = _e; }
+  { auto _e = src_desc_id(); _o->src_desc_id = _e; }
+  { auto _e = src_world_id(); _o->src_world_id = _e; }
+  { auto _e = target_desc_id(); _o->target_desc_id = _e; }
   { auto _e = target_world_id(); _o->target_world_id = _e; }
-  { auto _e = target_world_kind(); _o->target_world_kind = _e; }
-  { auto _e = target_world_template_id(); _o->target_world_template_id = _e; }
-  { auto _e = target_world_instance_id(); _o->target_world_instance_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> CreatefbRequestWorldAssignmentReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbRequestWorldAssignmentReq::Pack(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbWorldActionReq> CreatefbWorldActionReq(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionReqT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbWorldActionReq::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentReq> fbRequestWorldAssignmentReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbWorldActionReq> fbWorldActionReq::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionReqT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRequestWorldAssignmentReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbWorldActionReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _action = _o->action;
+  auto _src_desc_id = _o->src_desc_id;
+  auto _src_world_id = _o->src_world_id;
+  auto _target_desc_id = _o->target_desc_id;
   auto _target_world_id = _o->target_world_id;
-  auto _target_world_kind = _o->target_world_kind;
-  auto _target_world_template_id = _o->target_world_template_id;
-  auto _target_world_instance_id = _o->target_world_instance_id;
-  return jam::net::fb::CreatefbRequestWorldAssignmentReq(
+  return jam::net::fb::CreatefbWorldActionReq(
       _fbb,
       _action,
-      _target_world_id,
-      _target_world_kind,
-      _target_world_template_id,
-      _target_world_instance_id);
+      _src_desc_id,
+      _src_world_id,
+      _target_desc_id,
+      _target_world_id);
 }
 
-inline fbRequestWorldAssignmentResT *fbRequestWorldAssignmentRes::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbRequestWorldAssignmentResT>(new fbRequestWorldAssignmentResT());
+inline fbWorldActionResT::fbWorldActionResT(const fbWorldActionResT &o)
+      : status(o.status),
+        reason(o.reason),
+        request_action(o.request_action),
+        exec_flags(o.exec_flags),
+        src_desc_id(o.src_desc_id),
+        src_world_id(o.src_world_id),
+        target_desc_id(o.target_desc_id),
+        target_world_id(o.target_world_id) {
+  membership_deltas.reserve(o.membership_deltas.size());
+  for (const auto &membership_deltas_ : o.membership_deltas) { membership_deltas.emplace_back((membership_deltas_) ? new jam::net::fb::fbWorldMembershipDeltaT(*membership_deltas_) : nullptr); }
+  world_runtime_deltas.reserve(o.world_runtime_deltas.size());
+  for (const auto &world_runtime_deltas_ : o.world_runtime_deltas) { world_runtime_deltas.emplace_back((world_runtime_deltas_) ? new jam::net::fb::fbWorldRuntimeDeltaT(*world_runtime_deltas_) : nullptr); }
+}
+
+inline fbWorldActionResT &fbWorldActionResT::operator=(fbWorldActionResT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(status, o.status);
+  std::swap(reason, o.reason);
+  std::swap(request_action, o.request_action);
+  std::swap(exec_flags, o.exec_flags);
+  std::swap(src_desc_id, o.src_desc_id);
+  std::swap(src_world_id, o.src_world_id);
+  std::swap(target_desc_id, o.target_desc_id);
+  std::swap(target_world_id, o.target_world_id);
+  std::swap(membership_deltas, o.membership_deltas);
+  std::swap(world_runtime_deltas, o.world_runtime_deltas);
+  return *this;
+}
+
+inline fbWorldActionResT *fbWorldActionRes::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbWorldActionResT>(new fbWorldActionResT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void fbRequestWorldAssignmentRes::UnPackTo(fbRequestWorldAssignmentResT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void fbWorldActionRes::UnPackTo(fbWorldActionResT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
   { auto _e = status(); _o->status = _e; }
-  { auto _e = request_action(); _o->request_action = _e; }
-  { auto _e = assignment_action(); _o->assignment_action = _e; }
   { auto _e = reason(); _o->reason = _e; }
-  { auto _e = world_id(); _o->world_id = _e; }
+  { auto _e = request_action(); _o->request_action = _e; }
+  { auto _e = exec_flags(); _o->exec_flags = _e; }
+  { auto _e = src_desc_id(); _o->src_desc_id = _e; }
+  { auto _e = src_world_id(); _o->src_world_id = _e; }
+  { auto _e = target_desc_id(); _o->target_desc_id = _e; }
+  { auto _e = target_world_id(); _o->target_world_id = _e; }
+  { auto _e = membership_deltas(); if (_e) { _o->membership_deltas.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->membership_deltas[_i]) { _e->Get(_i)->UnPackTo(_o->membership_deltas[_i].get(), _resolver); } else { _o->membership_deltas[_i] = std::unique_ptr<jam::net::fb::fbWorldMembershipDeltaT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->membership_deltas.resize(0); } }
+  { auto _e = world_runtime_deltas(); if (_e) { _o->world_runtime_deltas.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->world_runtime_deltas[_i]) { _e->Get(_i)->UnPackTo(_o->world_runtime_deltas[_i].get(), _resolver); } else { _o->world_runtime_deltas[_i] = std::unique_ptr<jam::net::fb::fbWorldRuntimeDeltaT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->world_runtime_deltas.resize(0); } }
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> CreatefbRequestWorldAssignmentRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbRequestWorldAssignmentRes::Pack(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbWorldActionRes> CreatefbWorldActionRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbWorldActionRes::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbRequestWorldAssignmentRes> fbRequestWorldAssignmentRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRequestWorldAssignmentResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbWorldActionRes> fbWorldActionRes::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldActionResT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRequestWorldAssignmentResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbWorldActionResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _status = _o->status;
-  auto _request_action = _o->request_action;
-  auto _assignment_action = _o->assignment_action;
   auto _reason = _o->reason;
-  auto _world_id = _o->world_id;
-  return jam::net::fb::CreatefbRequestWorldAssignmentRes(
+  auto _request_action = _o->request_action;
+  auto _exec_flags = _o->exec_flags;
+  auto _src_desc_id = _o->src_desc_id;
+  auto _src_world_id = _o->src_world_id;
+  auto _target_desc_id = _o->target_desc_id;
+  auto _target_world_id = _o->target_world_id;
+  auto _membership_deltas = _o->membership_deltas.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>> (_o->membership_deltas.size(), [](size_t i, _VectorArgs *__va) { return CreatefbWorldMembershipDelta(*__va->__fbb, __va->__o->membership_deltas[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _world_runtime_deltas = _o->world_runtime_deltas.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>> (_o->world_runtime_deltas.size(), [](size_t i, _VectorArgs *__va) { return CreatefbWorldRuntimeDelta(*__va->__fbb, __va->__o->world_runtime_deltas[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return jam::net::fb::CreatefbWorldActionRes(
       _fbb,
       _status,
-      _request_action,
-      _assignment_action,
       _reason,
-      _world_id);
+      _request_action,
+      _exec_flags,
+      _src_desc_id,
+      _src_world_id,
+      _target_desc_id,
+      _target_world_id,
+      _membership_deltas,
+      _world_runtime_deltas);
 }
 
-inline const jam::net::fb::fbRequestWorldAssignmentReq *GetfbRequestWorldAssignmentReq(const void *buf) {
-  return ::flatbuffers::GetRoot<jam::net::fb::fbRequestWorldAssignmentReq>(buf);
+inline const jam::net::fb::fbWorldActionReq *GetfbWorldActionReq(const void *buf) {
+  return ::flatbuffers::GetRoot<jam::net::fb::fbWorldActionReq>(buf);
 }
 
-inline const jam::net::fb::fbRequestWorldAssignmentReq *GetSizePrefixedfbRequestWorldAssignmentReq(const void *buf) {
-  return ::flatbuffers::GetSizePrefixedRoot<jam::net::fb::fbRequestWorldAssignmentReq>(buf);
+inline const jam::net::fb::fbWorldActionReq *GetSizePrefixedfbWorldActionReq(const void *buf) {
+  return ::flatbuffers::GetSizePrefixedRoot<jam::net::fb::fbWorldActionReq>(buf);
 }
 
 template <bool B = false>
-inline bool VerifyfbRequestWorldAssignmentReqBuffer(
+inline bool VerifyfbWorldActionReqBuffer(
     ::flatbuffers::VerifierTemplate<B> &verifier) {
-  return verifier.template VerifyBuffer<jam::net::fb::fbRequestWorldAssignmentReq>(nullptr);
+  return verifier.template VerifyBuffer<jam::net::fb::fbWorldActionReq>(nullptr);
 }
 
 template <bool B = false>
-inline bool VerifySizePrefixedfbRequestWorldAssignmentReqBuffer(
+inline bool VerifySizePrefixedfbWorldActionReqBuffer(
     ::flatbuffers::VerifierTemplate<B> &verifier) {
-  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbRequestWorldAssignmentReq>(nullptr);
+  return verifier.template VerifySizePrefixedBuffer<jam::net::fb::fbWorldActionReq>(nullptr);
 }
 
-inline void FinishfbRequestWorldAssignmentReqBuffer(
+inline void FinishfbWorldActionReqBuffer(
     ::flatbuffers::FlatBufferBuilder &fbb,
-    ::flatbuffers::Offset<jam::net::fb::fbRequestWorldAssignmentReq> root) {
+    ::flatbuffers::Offset<jam::net::fb::fbWorldActionReq> root) {
   fbb.Finish(root);
 }
 
-inline void FinishSizePrefixedfbRequestWorldAssignmentReqBuffer(
+inline void FinishSizePrefixedfbWorldActionReqBuffer(
     ::flatbuffers::FlatBufferBuilder &fbb,
-    ::flatbuffers::Offset<jam::net::fb::fbRequestWorldAssignmentReq> root) {
+    ::flatbuffers::Offset<jam::net::fb::fbWorldActionReq> root) {
   fbb.FinishSizePrefixed(root);
 }
 
-inline std::unique_ptr<jam::net::fb::fbRequestWorldAssignmentReqT> UnPackfbRequestWorldAssignmentReq(
+inline std::unique_ptr<jam::net::fb::fbWorldActionReqT> UnPackfbWorldActionReq(
     const void *buf,
     const ::flatbuffers::resolver_function_t *res = nullptr) {
-  return std::unique_ptr<jam::net::fb::fbRequestWorldAssignmentReqT>(GetfbRequestWorldAssignmentReq(buf)->UnPack(res));
+  return std::unique_ptr<jam::net::fb::fbWorldActionReqT>(GetfbWorldActionReq(buf)->UnPack(res));
 }
 
-inline std::unique_ptr<jam::net::fb::fbRequestWorldAssignmentReqT> UnPackSizePrefixedfbRequestWorldAssignmentReq(
+inline std::unique_ptr<jam::net::fb::fbWorldActionReqT> UnPackSizePrefixedfbWorldActionReq(
     const void *buf,
     const ::flatbuffers::resolver_function_t *res = nullptr) {
-  return std::unique_ptr<jam::net::fb::fbRequestWorldAssignmentReqT>(GetSizePrefixedfbRequestWorldAssignmentReq(buf)->UnPack(res));
+  return std::unique_ptr<jam::net::fb::fbWorldActionReqT>(GetSizePrefixedfbWorldActionReq(buf)->UnPack(res));
 }
 
 }  // namespace fb
