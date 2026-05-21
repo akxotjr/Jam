@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Header">
@@ -49,9 +49,6 @@
     <Filter Include="sync\schema\fbs">
       <UniqueIdentifier>{a6f8bf54-8227-42aa-abc8-35a519341e41}</UniqueIdentifier>
     </Filter>
-    <Filter Include="sync\networld">
-      <UniqueIdentifier>{1bcc8473-bf68-4ff0-ad96-b804d8ad1186}</UniqueIdentifier>
-    </Filter>
     <Filter Include="runtime\world">
       <UniqueIdentifier>{e7d0d2aa-17ff-4b0f-ae6b-60de80fd176c}</UniqueIdentifier>
     </Filter>
@@ -63,6 +60,18 @@
     </Filter>
     <Filter Include="sync\replication\server system">
       <UniqueIdentifier>{d0260de9-9b39-4168-85f0-0e1e0c133fa7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\net">
+      <UniqueIdentifier>{33f03d8a-e017-45d2-bf95-097a3048afad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sync\world">
+      <UniqueIdentifier>{1bcc8473-bf68-4ff0-ad96-b804d8ad1186}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\user">
+      <UniqueIdentifier>{f8fcb582-0b5a-4988-93cd-1e3497056196}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\client">
+      <UniqueIdentifier>{74b4f3ee-720e-4c55-b1ad-4a7cf850c332}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -198,29 +207,14 @@
     <ClInclude Include="include\jamnet\core\net\UdpSession.h">
       <Filter>core\net</Filter>
     </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\WinErrorHandling.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
     <ClInclude Include="include\jamnet\core\utils\TimeUnits.h">
       <Filter>core\utils</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\utils\Clock.h">
       <Filter>core\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h">
-      <Filter>runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ClientSession.h">
-      <Filter>runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ClientTransportAdapter.h">
-      <Filter>runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h">
-      <Filter>runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ServerSession.h">
-      <Filter>runtime</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ServerTransportAdapter.h">
-      <Filter>runtime</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\schema\gen\snapshot_generated.h">
       <Filter>sync\schema\gen</Filter>
@@ -243,19 +237,16 @@
     <ClInclude Include="include\jamnet\sync\replication\ReplicationCodec.h">
       <Filter>sync\replication</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\networld\ServerNetWorld.h">
-      <Filter>sync\networld</Filter>
+    <ClInclude Include="include\jamnet\sync\networld\ServerPhysicalWorld.h">
+      <Filter>sync\world</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\networld\ClientNetWorld.h">
-      <Filter>sync\networld</Filter>
+    <ClInclude Include="include\jamnet\sync\networld\ServerVirtualWorld.h">
+      <Filter>sync\world</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\networld\NetWorld.h">
-      <Filter>sync\networld</Filter>
+    <ClInclude Include="include\jamnet\sync\networld\ClientPhysicalWorld.h">
+      <Filter>sync\world</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\transport\ITransportEndpoint.h">
-      <Filter>sync\transport</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\transport\IRpcEndpoint.h">
       <Filter>sync\transport</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\schema\gen\physics_type_generated.h">
@@ -270,22 +261,19 @@
     <ClInclude Include="include\jamnet\runtime\world\DefaultWorldAssignmentPolicy.h">
       <Filter>runtime\world</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\WorldAssignmentTypes.h">
+    <ClInclude Include="include\jamnet\runtime\world\WorldActionTypes.h">
       <Filter>runtime\world</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\WorldDirectory.h">
       <Filter>runtime\world</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\IWorldAssignmentService.h">
-      <Filter>runtime\world</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\DefaultWorldAssignmentService.h">
+    <ClInclude Include="include\jamnet\runtime\world\IWorldActionSystem.h">
       <Filter>runtime\world</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\replication\ReplicationEvents.h">
       <Filter>sync\replication</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\NetWorldContext.h">
+    <ClInclude Include="include\jamnet\sync\replication\WorldContext.h">
       <Filter>sync\replication</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\sync\physics\ShardJobBridge.h">
@@ -359,6 +347,84 @@
     </ClInclude>
     <ClInclude Include="include\jamnet\core\net\PacketWireTime.h">
       <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\schema\gen\binding_handshake_generated.h">
+      <Filter>runtime\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\schema\gen\world_assignment_generated.h">
+      <Filter>runtime\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\WorldBase.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\PhysicalWorld.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\VirtualWorld.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h">
+      <Filter>runtime\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ClientSession.h">
+      <Filter>runtime\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h">
+      <Filter>runtime\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ServerSession.h">
+      <Filter>runtime\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\WorldDescAsset.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\UserContext.h">
+      <Filter>runtime\user</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\WorldShardState.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\WorldTransferSubsystem.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ShardInvoke.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\AtomicSnapshot.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\MailboxRef.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\RuntimeId.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ShardOwnedObject.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\ClientWorldActionSystem.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\ServerWorldActionSystem.h">
+      <Filter>runtime\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\sync\networld\ClientVirtualWorld.h">
+      <Filter>sync\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\AppRuntimeEvents.h">
+      <Filter>runtime\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\ClientRuntime.h">
+      <Filter>runtime\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\IClientNetworkController.h">
+      <Filter>runtime\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\IClientNetworkView.h">
+      <Filter>runtime\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\utils\ScopedTimer.h">
+      <Filter>core\utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -467,40 +533,25 @@
     <ClCompile Include="src\core\net\UdpSession.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\net\WinErrorHandling.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
     <ClCompile Include="src\core\utils\Clock.cpp">
       <Filter>core\utils</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\ServerTransportAdapter.cpp">
-      <Filter>runtime</Filter>
+    <ClCompile Include="src\sync\networld\ServerPhysicalWorld.cpp">
+      <Filter>sync\world</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\ClientNetworkManager.cpp">
-      <Filter>runtime</Filter>
+    <ClCompile Include="src\sync\networld\ServerVirtualWorld.cpp">
+      <Filter>sync\world</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\ClientSession.cpp">
-      <Filter>runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ClientTransportAdapter.cpp">
-      <Filter>runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ServerNetworkManager.cpp">
-      <Filter>runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ServerSession.cpp">
-      <Filter>runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\networld\ServerNetWorld.cpp">
-      <Filter>sync\networld</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\networld\ClientNetWorld.cpp">
-      <Filter>sync\networld</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\networld\NetWorld.cpp">
-      <Filter>sync\networld</Filter>
+    <ClCompile Include="src\sync\networld\ClientPhysicalWorld.cpp">
+      <Filter>sync\world</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\DefaultWorldAssignmentPolicy.cpp">
       <Filter>runtime\world</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\DefaultWorldAssignmentService.cpp">
+    <ClCompile Include="src\runtime\world\ServerWorldActionSystem.cpp">
       <Filter>runtime\world</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\WorldDirectory.cpp">
@@ -552,6 +603,54 @@
       <Filter>sync\replication</Filter>
     </ClCompile>
     <ClCompile Include="src\core\net\PacketWireTime.cpp">
+      <Filter>core\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\PhysicalWorld.cpp">
+      <Filter>runtime\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\VirtualWorld.cpp">
+      <Filter>runtime\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\WorldBase.cpp">
+      <Filter>runtime\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ClientNetworkManager.cpp">
+      <Filter>runtime\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ClientSession.cpp">
+      <Filter>runtime\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ServerNetworkManager.cpp">
+      <Filter>runtime\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ServerSession.cpp">
+      <Filter>runtime\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\WorldDescAsset.cpp">
+      <Filter>runtime\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\WorldTransferSubsystem.cpp">
+      <Filter>runtime\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\MailboxRef.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\ClientWorldActionSystem.cpp">
+      <Filter>runtime\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sync\networld\ClientVirtualWorld.cpp">
+      <Filter>sync\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\UserContext.cpp">
+      <Filter>runtime\user</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\ClientRuntime.cpp">
+      <Filter>runtime\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\WorldShardState.cpp">
+      <Filter>runtime\world</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\SessionShardState.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
   </ItemGroup>

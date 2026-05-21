@@ -41,10 +41,10 @@
 
 // -- Sync --
 
-// networld
-#include "jamnet/sync/networld/ClientNetWorld.h"
-#include "jamnet/sync/networld/NetWorld.h"
-#include "jamnet/sync/networld/ServerNetWorld.h"
+// WorldBase
+#include "jamnet/sync/networld/ClientPhysicalWorld.h"
+#include "jamnet/runtime/world/WorldBase.h"
+#include "jamnet/sync/networld/ServerPhysicalWorld.h"
 
 // bridge
 #include "jamnet/sync/physics/ShardJobBridge.h"
@@ -58,8 +58,8 @@
 #include "jamnet/sync/replication/CorrectionReplayRunner.h"
 #include "jamnet/sync/replication/IReplayRunner.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
-#include "jamnet/sync/replication/ReplicationEvents.h"
+#include "jamnet/sync/replication/WorldContext.h"
+#include "jamnet/runtime/AppRuntimeEvents.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
 #include "jamnet/sync/replication/ReplicationCodec.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
@@ -69,7 +69,6 @@
 
 // transport
 #include "jamnet/sync/transport/CustomPacketHelper.h"
-#include "jamnet/sync/transport/IRpcEndpoint.h"
 #include "jamnet/sync/transport/ITransportEndpoint.h"
 
 
@@ -77,16 +76,15 @@
 
 #include "jamnet/runtime/ClientSession.h"
 #include "jamnet/runtime/ClientNetworkManager.h"
+#include "jamnet/runtime/ClientRuntime.h"
 
 #include "jamnet/runtime/ServerSession.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
 
-#include "jamnet/runtime/ClientTransportAdapter.h"
-#include "jamnet/runtime/ServerTransportAdapter.h"
-
 #include "jamnet/runtime/world/DefaultWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/DefaultWorldAssignmentService.h"
+#include "jamnet/runtime/world/ClientWorldActionSystem.h"
+#include "jamnet/runtime/world/ServerWorldActionSystem.h"
 #include "jamnet/runtime/world/IWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/IWorldAssignmentService.h"
-#include "jamnet/runtime/world/WorldAssignmentTypes.h"
+#include "jamnet/runtime/world/IWorldActionSystem.h"
+#include "jamnet/runtime/world/WorldActionTypes.h"
 #include "jamnet/runtime/world/WorldDirectory.h"
