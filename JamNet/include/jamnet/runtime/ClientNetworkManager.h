@@ -2,13 +2,14 @@
 
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/NetAddress.h"
-#include "jamnet/sync/replication/ReplicationEvents.h"
-#include "jamnet/runtime/world/WorldAssignmentTypes.h"
+#include "jamnet/core/executor/MailboxRef.h"
+#include "jamnet/runtime/world/WorldDescAsset.h"
+#include "jamnet/runtime/world/WorldDirectory.h"
+#include "jamnet/sync/networld/ClientPhysicalWorld.h"
+
 
 #include <jampx/IPhysicsFacade.h>
 
-#include <mutex>
-#include <optional>
 
 
 namespace jam::net
@@ -16,18 +17,18 @@ namespace jam::net
 	class ClientService;
 	class ClientTcpSession;
 	class ClientUdpSession;
-	class ClientTransportAdapter;
-	class ClientNetWorld;
+	class ClientWorldActionSystem;
 
 	struct ClientConfig
 	{
+		AccountId		accountId			= kInvalidAccountId;
 		NetAddress      serverTcpAddress    = { "127.0.0.1", 7777 };
 		NetAddress      serverUdpAddress    = { "127.0.0.1", 8888 };
 
 		using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
 		PhysicsFactory  physicsFactory      = nullptr;
 
-		std::string     levelPath;
+		std::string		worldAssetPath;
 		bool            headlessWorld       = false;
 	};
 
@@ -35,29 +36,10 @@ namespace jam::net
 	{
 		friend class ClientTcpSession;
 		friend class ClientUdpSession;
-
-		template<typename T>
-		struct SessionRefSlot
-		{
-			T*            ptr    = nullptr;
-			SessionHandle handle = {};
-
-			void Set(T* session)
-			{
-				ptr = session;
-				handle = session ? session->GetSessionHandle() : SessionHandle{};
-			}
-
-			T* TryGet() const
-			{
-				if (ptr && ptr->MatchesSessionHandle(handle))
-					return ptr;
-				return nullptr;
-			}
-		};
+		friend class ClientWorldActionSystem;
 
 	public:
-		explicit ClientNetworkManager(const ClientConfig& config, uint64 userId);
+		explicit ClientNetworkManager(const ClientConfig& config, AccountId accountId);
 		~ClientNetworkManager();
 
 		bool                                    Connect();
@@ -66,29 +48,23 @@ namespace jam::net
 		bool                                    IsTcpConnected() const;
 		bool                                    IsUdpConnected() const;
 
-		ClientNetWorld*                         GetWorld() { return m_world.get(); }
-		const ClientNetWorld*                   GetWorld() const { return m_world.get(); }
+		ClientTcpSession*                       GetTcpSession() const { return m_tcp.TryGetRaw(); }
+		ClientUdpSession*                       GetUdpSession() const { return m_udp.TryGetRaw(); }
+		ClientWorldActionSystem*				GetWorldActionSystem() const { return m_worldActionSystem.get(); }
 
-		ClientTcpSession*                       GetTcpSession() const { return m_tcp.TryGet(); }
-		ClientUdpSession*                       GetUdpSession() const { return m_udp.TryGet(); }
+		AccountId								GetAccountId() const { return m_accountId; }
+		UserId                                  GetUserId() const { return m_userId.load(std::memory_order_acquire); }
 
-		void                                    SetUserId(uint64 userId);
-		uint64                                  GetUserId() const { return m_userId; }
+		void									RequestWorldAction(eWorldAction action, const WorldKey& src = {}, const WorldKey& target = {});
+		void									RequestSpawnActor(LocalWorldId worldId, const SpawnParams& params);
+		void									RequestDespawnActor(LocalWorldId worldId, NetId netId);
+		void									RequestPossessActor(LocalWorldId worldId, NetId netId);
+		void									RequestUnpossessActor(LocalWorldId worldId, NetId netId);
+		void									PushInput(LocalWorldId worldId, uint32 inputFlags, float pitch, float yaw, uint32 commandEpoch);
+		void									PushInput(LocalWorldId worldId, const px::CharacterInput& input);
+		void									SetLatestClickMoveSeq(LocalWorldId worldId, uint64 requestSeq);
+		void									RequestClickMove(LocalWorldId worldId, const px::Vec3& from, const px::Vec3& dir, float maxRange, uint64 requestSeq, uint32 commandEpoch, float facingYaw);
 
-		bool                                    RequestAutoAssignWorld();
-		bool                                    RequestJoinWorld(const WorldKey& targetWorld);
-		bool                                    RequestLeaveWorld();
-		bool                                    RequestTransferWorld(const WorldKey& targetWorld);
-
-		bool                                    IsTcpBound()             const { return m_tcpBound.load(std::memory_order_acquire); }
-		bool                                    IsUdpBound()             const { return m_udpBound.load(std::memory_order_acquire); }
-		bool                                    IsSessionReady()         const { return m_sessionReady.load(std::memory_order_acquire); }
-		bool                                    IsWorldRequestInFlight() const { return m_worldAssignmentInFlight.load(std::memory_order_acquire); }
-		bool                                    IsWorldRunning()         const { return m_worldRunning.load(std::memory_order_acquire); }
-
-		WorldId                                 GetWorldId() const { return m_worldId.load(std::memory_order_relaxed); }
-		ClientBindState                         GetBindState() const;
-		std::optional<WorldRequestResultEvent>  GetLastWorldRequestResult() const;
 
 	protected:
 		bool                                    StartClientService();
@@ -97,44 +73,31 @@ namespace jam::net
 		bool                                    ConnectTcp();
 		bool                                    ConnectUdp();
 
-		void                                    InitializeWorldSkeleton();
-		void                                    StartWorld(WorldId worldId);
-		void                                    StopWorld();
-
-		// bind 완료 통지 (sessions -> manager)
-		void                                    NotifyTcpBound();
-		void                                    NotifyUdpBound();
-
-		// worldId 결과 통지 (udp session -> manager)
-		void                                    NotifyWorldRequestResult(uint8 status, uint8 requestAction, uint8 assignmentAction, uint8 reason, WorldId worldId);
+		void                                    NotifyTcpBound(UserId userId);
+		void                                    NotifyUdpBound(UserId userId);
 
 	private:
-		void                                    ResetWorldInstance();
-		bool                                    RequestWorldAction(const std::function<void(ClientUdpSession&)>& issueRequest);
-		void                                    PublishBindStateChangedEvent() const;
+		void									SubmitUserContextUpdate(std::function<void(UserContext&)> fn);
+		uint16									ResolveClientUserShardIndex() const;
+
+		void									PublishNetworkStateEvent() const;
 		void                                    UpdateSessionReadyState();
 
 	private:
-		ClientConfig                             m_config                   = {};
+		ClientConfig                            m_config					= {};
+		AccountId								m_accountId					= kInvalidAccountId;
+		std::atomic<UserId>						m_userId					= kInvalidUserId;
 
-		std::shared_ptr<ClientService>           m_service                  = nullptr;
-		SessionRefSlot<ClientTcpSession>         m_tcp                      = {};
-		SessionRefSlot<ClientUdpSession>         m_udp                      = {};
-		std::shared_ptr<ClientTransportAdapter>  m_transportAdapter         = nullptr;
-		std::shared_ptr<ClientNetWorld>          m_world                    = nullptr;
+		std::shared_ptr<ClientService>           m_service					= nullptr;
+		SessionRef<ClientTcpSession>             m_tcp						= {};
+		SessionRef<ClientUdpSession>             m_udp						= {};
+		std::unique_ptr<ClientWorldActionSystem> m_worldActionSystem		= nullptr;
 
-		uint64                                   m_userId                   = 0;
-		std::atomic_bool                         m_running                  = false;
+		std::atomic_bool                        m_running					= false;
 
-		std::atomic_bool                         m_tcpBound                 = false;
-		std::atomic_bool                         m_udpBound                 = false;
-		std::atomic_bool                         m_sessionReady             = false;
-		std::atomic_bool                         m_worldRunning             = false;
-		std::atomic_bool                         m_worldAssignmentInFlight  = false;
-												  
-		std::atomic<WorldId>                     m_worldId                  = INVALID_WORLD_ID;
+		std::atomic_bool                        m_tcpBound					= false;
+		std::atomic_bool                        m_udpBound					= false;
+		std::atomic_bool                        m_sessionReady				= false;
 
-		mutable std::mutex                       m_lastWorldRequestLock;
-		std::optional<WorldRequestResultEvent>   m_lastWorldRequestResult;
 	};
 }

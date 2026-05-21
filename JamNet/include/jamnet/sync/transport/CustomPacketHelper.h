@@ -1,5 +1,11 @@
 #pragma once
 
+#include "jamnet/core/net/PacketBuilder.h"
+#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/sync/schema/gen/input_generated.h"
+#include "jamnet/sync/schema/gen/lifecycle_generated.h"
+#include "jamnet/sync/schema/gen/snapshot_generated.h"
+
 namespace jam::net
 {
 	/// @brief Custom Packet ID 범위 및 프레임워크 예약 ID 정의
@@ -72,4 +78,41 @@ namespace jam::net
 #else
 	inline void ValidateCustomPacketId(uint8, bool) { /* No-op in release */ }
 #endif
+
+	inline NetWorldId ResolveScopedPacketWorldId(const PacketHeaderView& view)
+	{
+		if (!view.IsValid())
+			return kInvalidNetWorldId;
+
+		flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
+		switch (view.Id())
+		{
+		case CustomPacketId::INPUT:
+		{
+			if (!fb::VerifyfbGameInputBuffer(verifier))
+				return kInvalidNetWorldId;
+			if (const auto* input = fb::GetfbGameInput(view.Payload()))
+				return input->world_id();
+			return kInvalidNetWorldId;
+		}
+		case CustomPacketId::SNAPSHOT:
+		{
+			if (!fb::VerifyfbSnapshotBuffer(verifier))
+				return kInvalidNetWorldId;
+			if (const auto* snapshot = fb::GetfbSnapshot(view.Payload()))
+				return snapshot->world_id();
+			return kInvalidNetWorldId;
+		}
+		case CustomPacketId::LIFECYCLE:
+		{
+			if (!fb::VerifyfbLifecycleBatchBuffer(verifier))
+				return kInvalidNetWorldId;
+			if (const auto* lifecycle = fb::GetfbLifecycleBatch(view.Payload()))
+				return lifecycle->world_id();
+			return kInvalidNetWorldId;
+		}
+		default:
+			return kInvalidNetWorldId;
+		}
+	}
 }

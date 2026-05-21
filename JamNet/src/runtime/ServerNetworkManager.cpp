@@ -1,232 +1,24 @@
 #include "pch.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
 
-#include "jamnet/core/executor/ThreadContext.h"
-#include "jamnet/core/executor/FiberCommon.h"
-#include "jamnet/core/executor/Mailbox.h"
-#include "jamnet/core/executor/ShardExecutor.h"
-
 #include "jamnet/core/net/Service.h"
 
-#include "jamnet/sync/networld/ServerNetWorld.h"
+#include "jamnet/sync/networld/ServerPhysicalWorld.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
 #include "jamnet/runtime/ServerSession.h"
-#include "jamnet/runtime/ServerTransportAdapter.h"
-#include "jamnet/runtime/world/DefaultWorldAssignmentService.h"
+#include "jamnet/runtime/world/DefaultWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/ServerWorldActionSystem.h"
 
 
 
 namespace jam::net
 {
-	namespace
-	{
-		Packet ClonePacket(const Packet& packet)
-		{
-			if (!packet.IsValid())
-				return {};
-
-			const uint32 size = packet->Size();
-			BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Clone));
-			BufferSlice slice = writer.OpenForPayload(size, alignof(PacketHeader));
-			WritePayload(slice, packet->Head(), size);
-			slice.Close();
-			return MakeOwned(slice);
-		}
-	}
-
-	struct ServerNetworkManager::WorldTransferRecord
-	{
-		enum class ePhase : uint8
-		{
-			Reserved		= 0,
-			LeavingSource	= 1,
-			SourceLeft		= 2,
-			EnteringTarget	= 3,
-			Completed		= 4,
-			Failed			= 5,
-		};
-
-		WorldId							sourceWorldId	= INVALID_WORLD_ID;
-		WorldId							targetWorldId	= INVALID_WORLD_ID;
-		uint64							userId			= 0;
-		std::atomic<ePhase>				phase			= ePhase::Reserved;
-		std::atomic<bool>				completed		= false;
-		WorldTransferResult				result			= {};
-		std::mutex						callbackMutex;
-		std::vector<std::function<void(WorldTransferResult)>> callbacks;
-
-		void AddCallback(std::function<void(WorldTransferResult)> cb)
-		{
-			if (!cb)
-				return;
-
-			if (completed.load(std::memory_order_acquire))
-			{
-				cb(result);
-				return;
-			}
-
-			std::scoped_lock guard(callbackMutex);
-			if (completed.load(std::memory_order_acquire))
-			{
-				cb(result);
-				return;
-			}
-
-			callbacks.push_back(std::move(cb));
-		}
-
-		void NotifyAndClose(const WorldTransferResult& finalResult)
-		{
-			result = finalResult;
-			completed.store(true, std::memory_order_release);
-
-			std::vector<std::function<void(WorldTransferResult)>> pending;
-			{
-				std::scoped_lock guard(callbackMutex);
-				pending.swap(callbacks);
-			}
-
-			for (auto& cb : pending)
-			{
-				if (cb)
-					cb(result);
-			}
-		}
-	};
-
-	struct WorldTransferAsyncState : public std::enable_shared_from_this<WorldTransferAsyncState>
-	{
-		ServerNetworkManager*				manager			= nullptr;
-		std::shared_ptr<ServerNetworkManager::WorldTransferRecord> record;
-		std::shared_ptr<ServerNetWorld>				sourceWorld;
-		std::shared_ptr<ServerNetWorld>				targetWorld;
-		WorldId										sourceWorldId	= INVALID_WORLD_ID;
-		WorldId										targetWorldId	= INVALID_WORLD_ID;
-		uint64										userId			= 0;
-		std::function<void(WorldTransferResult)>	onDone;
-		std::atomic<bool>							completed		= false;
-
-		void Finish(const WorldTransferResult& result)
-		{
-			if (completed.exchange(true, std::memory_order_acq_rel))
-				return;
-
-			if (record && manager)
-				manager->CompleteTransfer(userId, result);
-			else if (onDone)
-				onDone(result);
-		}
-
-		void FailAndRollback(eWorldTransferReason reason, bool reenterSource = false)
-		{
-			if (manager)
-			{
-				manager->UpdateTransferPhase(userId, static_cast<uint8>(ServerNetworkManager::WorldTransferRecord::ePhase::Failed));
-				manager->RollbackWorldTransferMembership(sourceWorldId, targetWorldId, userId);
-			}
-
-			const WorldTransferResult failedResult
-			{
-				.outcome		= eWorldTransferOutcome::Failed,
-				.reason			= reason,
-				.sourceWorldId	= sourceWorldId,
-				.targetWorldId	= targetWorldId,
-			};
-
-			if (!reenterSource || !sourceWorld)
-			{
-				if (manager)
-					manager->TryDestroyWorldIfEmpty(targetWorldId);
-
-				Finish(failedResult);
-				return;
-			}
-
-			auto self = shared_from_this();
-			if (!sourceWorld->Enter(userId, [self]() mutable
-				{
-					if (self->manager)
-						self->manager->TryDestroyWorldIfEmpty(self->targetWorldId);
-
-					self->Finish(WorldTransferResult
-						{
-							.outcome		= eWorldTransferOutcome::Failed,
-							.reason			= eWorldTransferReason::MailboxClosed,
-							.sourceWorldId	= self->sourceWorldId,
-							.targetWorldId	= self->targetWorldId,
-						});
-				}))
-			{
-				if (manager)
-					manager->TryDestroyWorldIfEmpty(targetWorldId);
-
-				Finish(failedResult);
-			}
-		}
-
-		void BeginTargetEnter()
-		{
-			if (manager)
-				manager->UpdateTransferPhase(userId, static_cast<uint8>(ServerNetworkManager::WorldTransferRecord::ePhase::EnteringTarget));
-
-			auto self = shared_from_this();
-			if (!targetWorld->Enter(userId, [self]() mutable
-				{
-					if (self->manager)
-						self->manager->UpdateTransferPhase(self->userId, static_cast<uint8>(ServerNetworkManager::WorldTransferRecord::ePhase::Completed));
-
-					if (self->manager && self->sourceWorldId != INVALID_WORLD_ID)
-						self->manager->TryDestroyWorldIfEmpty(self->sourceWorldId);
-
-					self->Finish(WorldTransferResult
-						{
-							.outcome		= eWorldTransferOutcome::Succeeded,
-							.reason			= eWorldTransferReason::None,
-							.sourceWorldId	= self->sourceWorldId,
-							.targetWorldId	= self->targetWorldId,
-						});
-				}))
-			{
-				FailAndRollback(eWorldTransferReason::MailboxClosed, sourceWorld != nullptr);
-			}
-		}
-
-		void Begin()
-		{
-			if (!sourceWorld)
-			{
-				BeginTargetEnter();
-				return;
-			}
-
-			if (manager)
-				manager->UpdateTransferPhase(userId, static_cast<uint8>(ServerNetworkManager::WorldTransferRecord::ePhase::LeavingSource));
-
-			auto self = shared_from_this();
-			if (!sourceWorld->Leave(userId, [self]() mutable
-				{
-					if (self->manager)
-						self->manager->UpdateTransferPhase(self->userId, static_cast<uint8>(ServerNetworkManager::WorldTransferRecord::ePhase::SourceLeft));
-
-					self->BeginTargetEnter();
-				}))
-			{
-				FailAndRollback(eWorldTransferReason::MailboxClosed, false);
-			}
-		}
-	};
 
 	ServerNetworkManager::ServerNetworkManager(const ServerConfig& config)
 		: m_config(config)
 	{
-		m_tranportAdapter = std::make_shared<ServerTransportAdapter>();
-
-		if (m_tranportAdapter)
-			m_tranportAdapter->SetNetworkManager(this);
-
-		SetWorldAssignmentService(std::make_unique<DefaultWorldAssignmentService>());
+		m_worldActionSystem = std::make_unique<ServerWorldActionSystem>();
 	}
 
 	ServerNetworkManager::~ServerNetworkManager()
@@ -238,6 +30,8 @@ namespace jam::net
 	{
 		if (m_running.load(std::memory_order_acquire))
 			return true;
+
+		m_worldActionSystem->Init(this);
 
 		if (!StartServerService())
 			return false;
@@ -253,761 +47,210 @@ namespace jam::net
 		if (!m_running.exchange(false, std::memory_order_acq_rel))
 			return;
 
-		std::vector<std::shared_ptr<ServerNetWorld>> victims;
-		std::vector<std::shared_ptr<WorldTransferRecord>> transfers;
+		if (m_worldActionSystem)
+			m_worldActionSystem->Shutdown();
 
 		{
-			WRITE_LOCK
-			victims.reserve(m_worlds.size());
-			for (auto& world : m_worlds | std::views::values)
-			{
-				if (world)
-					victims.push_back(std::move(world));
-			}
-
-			m_tcpSessions.clear();
-			m_udpSessions.clear();
-			m_worldMembers.clear();
-			m_worlds.clear();
-			transfers.reserve(m_transfers.size());
-			for (auto& transfer : m_transfers | std::views::values)
-			{
-				if (transfer)
-					transfers.push_back(std::move(transfer));
-			}
-			m_transfers.clear();
-			m_recentTransferResults.clear();
-			m_worldDirectory = {};
+			WRITE_LOCK_IDX(kSessionLockIdx)
+			m_sessions.clear();
 		}
-
-		for (auto& victim : victims)
-		{
-			if (victim)
-				victim->BeginShutdown(eMailboxCloseMode::Abort);
-		}
-
-		for (auto& transfer : transfers)
-		{
-			if (!transfer)
-				continue;
-
-			transfer->phase.store(WorldTransferRecord::ePhase::Failed, std::memory_order_release);
-			transfer->NotifyAndClose(WorldTransferResult
-				{
-					.outcome		= eWorldTransferOutcome::Failed,
-					.reason			= eWorldTransferReason::Shutdown,
-					.sourceWorldId	= transfer->sourceWorldId,
-					.targetWorldId	= transfer->targetWorldId,
-				});
-		}
-
-		if (m_tranportAdapter)
-			m_tranportAdapter.reset();
 
 		StopServerService();
 
-		if (m_assignmentService)
+		if (m_worldActionSystem)
 		{
-			m_assignmentService->Init(nullptr);
-			m_assignmentService.reset();
+			m_worldActionSystem->Init(nullptr);
+			m_worldActionSystem.reset();
 		}
 
 		JAMNET_LOG_INFO("ServerNetworkManager stopped");
 	}
 
-	void ServerNetworkManager::SetWorldAssignmentService(std::unique_ptr<IWorldAssignmentService> service)
+
+	void ServerNetworkManager::RequestWorldAction(WorldActionRequest req)
 	{
-		if (m_assignmentService)
-			m_assignmentService->Init(nullptr);
-
-		m_assignmentService = std::move(service);
-
-		if (m_assignmentService)
-			m_assignmentService->Init(this);
-	}
-
-	WorldAssignmentResult ServerNetworkManager::RequestWorldAssignment(const WorldAssignmentRequest& req)
-	{
-		if (!m_assignmentService)
-			return {};
-
-		return m_assignmentService->AssignPrincipal(req);
-	}
-
-	void ServerNetworkManager::SetWorldAssignmentPolicy(std::unique_ptr<IWorldAssignmentPolicy> policy)
-	{
-		if (!m_assignmentService)
-			SetWorldAssignmentService(std::make_unique<DefaultWorldAssignmentService>());
-
-		if (m_assignmentService)
-			m_assignmentService->SetWorldAssignmentPolicy(std::move(policy));
-	}
-
-	IWorldAssignmentPolicy* ServerNetworkManager::GetWorldAssignmentPolicy() const
-	{
-		return m_assignmentService ? m_assignmentService->GetWorldAssignmentPolicy() : nullptr;
-	}
-
-	WorldId ServerNetworkManager::ResolveWorldId(const WorldKey& key)
-	{
-		if (!key.IsValid())
-			return INVALID_WORLD_ID;
-
-		READ_LOCK_IDX(kWorldLockIdx)
-		return m_worldDirectory.FindWorldId(key);
-	}
-
-	WorldId ServerNetworkManager::ResolveOrAllocateWorldId(const WorldKey& key, const WorldOptions& options)
-	{
-		if (!key.IsValid())
-			return INVALID_WORLD_ID;
-
-		WRITE_LOCK_IDX(kWorldLockIdx)
-		return m_worldDirectory.FindOrAddWorld(key, options);
-	}
-
-	WorldKey ServerNetworkManager::GetWorldKey(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return INVALID_WORLD_KEY;
-
-		READ_LOCK_IDX(kWorldLockIdx)
-		return m_worldDirectory.FindWorldKey(worldId);
-	}
-
-	ServerNetWorld* ServerNetworkManager::GetWorld(WorldId worldId)
-	{
-		READ_LOCK_IDX(kWorldLockIdx)
-		auto it = m_worlds.find(worldId);
-		return (it != m_worlds.end()) ? it->second.get() : nullptr;
-	}
-
-	ServerNetWorld* ServerNetworkManager::GetWorld(const WorldKey& key)
-	{
-		return GetWorld(ResolveWorldId(key));
-	}
-
-	ServerNetWorld* ServerNetworkManager::GetOrCreateWorld(WorldId worldId)
-	{
-		return GetOrCreateWorld(worldId, GetWorldOptions(worldId));
-	}
-
-	ServerNetWorld* ServerNetworkManager::GetOrCreateWorld(WorldId worldId, const WorldOptions& options)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return nullptr;
-
-		WRITE_LOCK_IDX(kWorldLockIdx)
-		m_worldDirectory.SetWorldOptions(worldId, options);
-
-		auto& slot = m_worlds[worldId];
-		if (!slot)
+		if (!m_worldActionSystem)
 		{
-			slot = std::make_shared<ServerNetWorld>();
-			slot->SetWorldId(worldId);
-			slot->SetTransportAdapter(m_tranportAdapter.get());
-
-			if (m_config.physicsFactory)
-			{
-				if (auto phys = m_config.physicsFactory())
-					slot->SetPhysicsFacade(std::move(phys));
-			}
-
-			slot->SetLevelPath(m_config.levelPath);
-			slot->Init();
-			slot->Tick(SIMULATION_TICK_NS);
-		}
-
-		return slot.get();
-	}
-
-	ServerNetWorld* ServerNetworkManager::GetOrCreateWorld(const WorldKey& key, const WorldOptions& options)
-	{
-		return GetOrCreateWorld(ResolveOrAllocateWorldId(key, options), options);
-	}
-
-	void ServerNetworkManager::DestroyWorld(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
+			if (req.onResponse)
+				req.onResponse({});
 			return;
-
-		std::shared_ptr<ServerNetWorld> victim;
-		{
-			WRITE_LOCK_IDX(kWorldLockIdx)
-			auto it = m_worlds.find(worldId);
-			if (it == m_worlds.end())
-				return;
-
-			victim = std::move(it->second);
-			m_worlds.erase(it);
-			m_worldMembers.erase(worldId);
-			m_worldDirectory.RemoveWorld(worldId);
 		}
 
-		if (victim)
-			victim->BeginShutdown(eMailboxCloseMode::Drain);
+		m_worldActionSystem->Execute(std::move(req));
+	}
+
+	void ServerNetworkManager::CreateWorld(WorldKey key)
+	{
+		if (m_worldActionSystem)
+			m_worldActionSystem->CreateWorld(key);
 	}
 
 	void ServerNetworkManager::DestroyWorld(const WorldKey& key)
 	{
-		DestroyWorld(ResolveWorldId(key));
+		if (m_worldActionSystem)
+			m_worldActionSystem->DestroyWorld(key);
 	}
 
-	void ServerNetworkManager::RegisterTcpSession(uint64 userId, ServerTcpSession* tcp)
+	bool ServerNetworkManager::SubmitWorldJob(const WorldKey& key, std::function<void(WorldBase&)> job)
 	{
-		if (!userId || !tcp)
-			return;
-
-		WRITE_LOCK_IDX(kSessionLockIdx)
-		m_tcpSessions[userId].Set(tcp);
-
-		JAMNET_LOG_INFO("UserId = {}] TCP Session registered", userId);
+		return m_worldActionSystem ? m_worldActionSystem->SubmitWorldJob(key, std::move(job)) : false;
 	}
 
-	void ServerNetworkManager::RegisterUdpSession(uint64 userId, ServerUdpSession* udp)
+	bool ServerNetworkManager::CacheTcpSession(UserId userId, ServerTcpSession* tcp)
 	{
-		if (!userId || !udp)
-			return;
+		if (userId == kInvalidUserId || !tcp)
+			return false;
 
-		WRITE_LOCK_IDX(kSessionLockIdx)
-		m_udpSessions[userId].Set(udp);
-
-		JAMNET_LOG_INFO("UserId = {}] UDP Session registered", userId);
-	}
-
-	void ServerNetworkManager::UnregisterUdpSession(uint64 userId, const ServerUdpSession* udp)
-	{
-		if (!userId || !udp)
-			return;
-
-		WRITE_LOCK_IDX(kSessionLockIdx)
-		auto it = m_udpSessions.find(userId);
-		if (it == m_udpSessions.end() || it->second.TryGet() != udp)
-			return;
-
-		m_udpSessions.erase(it);
-		JAMNET_LOG_INFO("UserId = {}] UDP Session unregistered", userId);
-	}
-
-	void ServerNetworkManager::UnregisterSession(uint64 userId)
-	{
-		if (!userId)
-			return;
-
-		std::vector<WorldId> worldsToNotify;
 		{
-			WRITE_LOCK_IDX(kSessionLockIdx)
-			m_tcpSessions.erase(userId);
-			m_udpSessions.erase(userId);
-		}
-		{
-			WRITE_LOCK_IDX(kWorldLockIdx)
-			for (auto& [worldId, members] : m_worldMembers)
+			WRITE_LOCK_IDX(kSessionLockIdx);
+
+			auto& bundle = m_sessions[userId];
+			if (bundle.HasTcp() && bundle.TryGetTcp() != tcp)
 			{
-				if (std::erase(members, userId) > 0)
-					worldsToNotify.push_back(worldId);
+				JAMNET_LOG_WARN("TCP session is already registered.");
+				return false;
+			}
+
+			bundle.tcp.Set(tcp);
+		}
+
+		if (m_worldActionSystem)
+			m_worldActionSystem->OnSessionBundleChanged(userId);
+
+		return true;
+	}
+
+	bool ServerNetworkManager::CacheUdpSession(UserId userId, ServerUdpSession* udp)
+	{
+		if (userId == kInvalidUserId || !udp)
+			return false;
+
+		{
+			WRITE_LOCK_IDX(kSessionLockIdx);
+
+			if (const auto it = m_sessions.find(userId); it != m_sessions.end())
+			{
+				if (it->second.HasTcp())
+				{
+					if (it->second.HasUdp() && it->second.TryGetUdp() != udp)
+					{
+						JAMNET_LOG_WARN("UDP session is already registered.");
+						return false;
+					}
+
+					it->second.udp.Set(udp);
+				}
+				else
+				{
+					JAMNET_LOG_WARN("registered TCP session is null");
+					return false;
+				}
+			}
+			else
+			{
+				JAMNET_LOG_WARN("TCP session must be registered in the SessionBundle before UDP session is registered.");
+				return false;
 			}
 		}
 
-		for (WorldId worldId : worldsToNotify)
-		{
-			if (auto* world = GetWorld(worldId))
-				world->Leave(userId);
+		if (m_worldActionSystem)
+			m_worldActionSystem->OnSessionBundleChanged(userId);
 
-			TryDestroyWorldIfEmpty(worldId);
-		}
-
-		JAMNET_LOG_INFO("UserId = {}] Session unregistered", userId);
+		return true;
 	}
 
-	ServerTcpSession* ServerNetworkManager::FindTcpSession(uint64 userId)
+	void ServerNetworkManager::ReleaseUdpSession(UserId userId, const ServerUdpSession* udp)
 	{
-		READ_LOCK_IDX(kSessionLockIdx)
-		auto it = m_tcpSessions.find(userId);
-		return (it != m_tcpSessions.end()) ? it->second.TryGet() : nullptr;
-	}
-
-	ServerUdpSession* ServerNetworkManager::FindUdpSession(uint64 userId)
-	{
-		READ_LOCK_IDX(kSessionLockIdx)
-		auto it = m_udpSessions.find(userId);
-		return (it != m_udpSessions.end()) ? it->second.TryGet() : nullptr;
-	}
-
-	void ServerNetworkManager::BroadcastPacket(Packet packet, eProtocolType protocol)
-	{
-		if (!packet.IsValid())
+		if (userId == kInvalidUserId || !udp)
 			return;
 
-		std::vector<uint64> users;
 		{
-			READ_LOCK_IDX(kSessionLockIdx)
-
-			if (protocol == eProtocolType::TCP)
+			WRITE_LOCK_IDX(kSessionLockIdx);
+			if (auto it = m_sessions.find(userId); it != m_sessions.end())
 			{
-				users.reserve(m_tcpSessions.size());
-				for (const auto& uid : m_tcpSessions | std::views::keys)
-					users.push_back(uid);
-			}
-			else if (protocol == eProtocolType::UDP)
-			{
-				users.reserve(m_udpSessions.size());
-				for (const auto& uid : m_udpSessions | std::views::keys)
-					users.push_back(uid);
+				if (it->second.udp.TryGet() == udp)
+					it->second.udp.Set(nullptr);
 			}
 		}
 
-		for (uint64 uid : users)
-		{
-			SendToUser(uid, ClonePacket(packet), protocol);
-		}
+		if (m_worldActionSystem)
+			m_worldActionSystem->OnSessionBundleChanged(userId);
 	}
 
-	void ServerNetworkManager::SendToUser(uint64 userId, Packet packet, eProtocolType protocol)
+	void ServerNetworkManager::ReleaseSession(UserId userId)
 	{
-		if (!packet.IsValid())
-			return;
+		if (userId == kInvalidUserId) return;
+
+		{
+			WRITE_LOCK_IDX(kSessionLockIdx);
+			m_sessions.erase(userId);
+		}
+
+		if (m_worldActionSystem)
+			m_worldActionSystem->OnSessionUnregistered(userId);
+	}
+
+	ServerTcpSession* ServerNetworkManager::FindTcpSession(UserId userId)
+	{
+		READ_LOCK_IDX(kSessionLockIdx);
+
+		const auto it = m_sessions.find(userId);
+		return (it != m_sessions.end()) ? it->second.tcp.TryGet() : nullptr;
+	}
+
+	ServerUdpSession* ServerNetworkManager::FindUdpSession(UserId userId)
+	{
+		READ_LOCK_IDX(kSessionLockIdx);
+
+		const auto it = m_sessions.find(userId);
+		return (it != m_sessions.end()) ? it->second.udp.TryGet() : nullptr;
+	}
+
+	ServerSessionBundle ServerNetworkManager::GetSessionBundle(UserId userId)
+	{
+		READ_LOCK_IDX(kSessionLockIdx);
+
+		const auto it = m_sessions.find(userId);
+		return (it != m_sessions.end()) ? it->second : ServerSessionBundle{};
+	}
+
+	void ServerNetworkManager::Send(UserId userId, Packet packet, eProtocolType protocol)
+	{
+		if (!packet.IsValid()) return;
+
+		Session* session = nullptr;
 
 		if (protocol == eProtocolType::TCP)
 		{
-			if (auto tcp = FindTcpSession(userId))
-			{
-				if (tcp->IsConnected())
-					tcp->Send(packet);
-			}
+			session = FindTcpSession(userId);
+			if (session && session->IsConnected())
+				session->Send(packet);
+			return;
 		}
 
 		if (protocol == eProtocolType::UDP)
 		{
-			if (auto udp = FindUdpSession(userId))
-			{
-				if (udp->IsConnected())
-					udp->Send(packet);
-			}
-		}
-	}
-
-	void ServerNetworkManager::JoinWorld(WorldId worldId, uint64 userId)
-	{
-		if (worldId == INVALID_WORLD_ID || userId == 0)
+			session = FindUdpSession(userId);
+			if (session && session->IsConnected())
+				session->Send(packet);
 			return;
+		}
 
-		WRITE_LOCK_IDX(kWorldLockIdx)
-		auto& members = m_worldMembers[worldId];
-		if (std::ranges::find(members, userId) == members.end())
-			members.push_back(userId);
+		JAMNET_LOG_WARN("Protocol is none");
 	}
 
-	void ServerNetworkManager::LeaveWorld(WorldId worldId, uint64 userId)
+	void ServerNetworkManager::Multicast(const WorldKey& key, Packet packet)
 	{
-		if (worldId == INVALID_WORLD_ID || userId == 0)
-			return;
-
-		{
-			WRITE_LOCK_IDX(kWorldLockIdx)
-			auto it = m_worldMembers.find(worldId);
-			if (it == m_worldMembers.end())
-				return;
-
-			std::erase(it->second, userId);
-			if (!it->second.empty())
-				return;
-
-			m_worldMembers.erase(it);
-		}
-
-		TryDestroyWorldIfEmpty(worldId);
+		if (m_worldActionSystem)
+			m_worldActionSystem->Multicast(key, std::move(packet));
 	}
 
-	bool ServerNetworkManager::TransferWorldAsync(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, std::function<void(WorldTransferResult)> onDone)
+	void ServerNetworkManager::Broadcast(Packet packet)
 	{
-		if (targetWorldId == INVALID_WORLD_ID || userId == 0)
-			return false;
-
-		if (sourceWorldId == targetWorldId)
-		{
-			if (onDone)
-				onDone(WorldTransferResult
-					{
-						.outcome		= eWorldTransferOutcome::Succeeded,
-						.reason			= eWorldTransferReason::AlreadyInTarget,
-						.sourceWorldId	= sourceWorldId,
-						.targetWorldId	= targetWorldId,
-					});
-			return true;
-		}
-
-		const WorldOptions targetOptions = GetWorldOptions(targetWorldId);
-		if (!GetOrCreateWorld(targetWorldId, targetOptions))
-			return false;
-
-		const auto targetWorld = FindWorldShared(targetWorldId);
-		const auto sourceWorld = FindWorldShared(sourceWorldId);
-		if (!targetWorld)
-			return false;
-
-		bool shouldStart = false;
-		[[maybe_unused]] WorldTransferResult immediateResult{};
-		const auto record = BeginOrJoinTransfer(sourceWorldId, targetWorldId, userId, std::move(onDone), shouldStart, immediateResult);
-		if (!record)
-			return false;
-
-		if (!shouldStart)
-			return true;
-
-		if (!ReserveWorldTransferMembership(sourceWorldId, targetWorldId, userId, targetOptions))
-		{
-			CompleteTransfer(userId, WorldTransferResult
-				{
-					.outcome		= eWorldTransferOutcome::Failed,
-					.reason			= eWorldTransferReason::CapacityExceeded,
-					.sourceWorldId	= sourceWorldId,
-					.targetWorldId	= targetWorldId,
-				});
-			return false;
-		}
-
-		auto state = std::make_shared<WorldTransferAsyncState>();
-		state->manager       = this;
-		state->record		 = record;
-		state->sourceWorld   = sourceWorld;
-		state->targetWorld   = targetWorld;
-		state->sourceWorldId = sourceWorldId;
-		state->targetWorldId = targetWorldId;
-		state->userId        = userId;
-		state->Begin();
-		return true;
+		if (m_worldActionSystem)
+			m_worldActionSystem->Broadcast(std::move(packet));
 	}
 
-	WorldTransferResult ServerNetworkManager::TransferWorldAwait(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, uint64 timeout_ns)
-	{
-		auto* shard = CurrentShardLocal();
-		auto* sched = shard ? shard->scheduler : nullptr;
-		if (!sched || sched->Current() == 0)
-			return TransferWorld(sourceWorldId, targetWorldId, userId);
-
-		const FiberAwaitKey awaitKey = m_nextTransferAwaitKey.fetch_add(1, std::memory_order_relaxed);
-		auto result = std::make_shared<WorldTransferResult>(WorldTransferResult
-			{
-				.outcome		= eWorldTransferOutcome::Failed,
-				.reason			= eWorldTransferReason::None,
-				.sourceWorldId	= sourceWorldId,
-				.targetWorldId	= targetWorldId,
-			});
-
-		if (!TransferWorldAsync(sourceWorldId, targetWorldId, userId,
-			[sched, awaitKey, result](WorldTransferResult transferResult) mutable
-			{
-				*result = transferResult;
-				sched->PostResume(awaitKey);
-			}))
-		{
-			return WorldTransferResult
-				{
-					.outcome		= eWorldTransferOutcome::Failed,
-					.reason			= eWorldTransferReason::ConflictingTransfer,
-					.sourceWorldId	= sourceWorldId,
-					.targetWorldId	= targetWorldId,
-				};
-		}
-
-		const uint64 deadline_ns = timeout_ns ? (NOW_NS() + timeout_ns) : 0;
-		if (!sched->Suspend(awaitKey, deadline_ns))
-		{
-			return WorldTransferResult
-				{
-					.outcome		= eWorldTransferOutcome::InDoubt,
-					.reason			= eWorldTransferReason::Timeout,
-					.sourceWorldId	= sourceWorldId,
-					.targetWorldId	= targetWorldId,
-				};
-		}
-
-		return *result;
-	}
-
-	WorldTransferResult ServerNetworkManager::TransferWorld(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId)
-	{
-		auto* shard = CurrentShardLocal();
-		auto* sched = shard ? shard->scheduler : nullptr;
-		if (sched && sched->Current() != 0)
-			return TransferWorldAwait(sourceWorldId, targetWorldId, userId);
-
-		auto done = std::make_shared<std::promise<WorldTransferResult>>();
-		auto future = done->get_future();
-
-		if (!TransferWorldAsync(sourceWorldId, targetWorldId, userId,
-			[done](WorldTransferResult result) mutable
-			{
-				done->set_value(result);
-			}))
-		{
-			return WorldTransferResult
-				{
-					.outcome		= eWorldTransferOutcome::Failed,
-					.reason			= eWorldTransferReason::ConflictingTransfer,
-					.sourceWorldId	= sourceWorldId,
-					.targetWorldId	= targetWorldId,
-				};
-		}
-
-		return future.get();
-	}
-
-	bool ServerNetworkManager::AttachTransferCallback(uint64 userId, std::function<void(WorldTransferResult)> onDone)
-	{
-		if (userId == 0 || !onDone)
-			return false;
-
-		std::shared_ptr<WorldTransferRecord> record;
-		std::optional<WorldTransferResult> completedResult;
-		{
-			READ_LOCK_IDX(kTransferLockIdx)
-			if (auto it = m_transfers.find(userId); it != m_transfers.end())
-			{
-				record = it->second;
-			}
-			else if (auto doneIt = m_recentTransferResults.find(userId); doneIt != m_recentTransferResults.end())
-			{
-				completedResult = doneIt->second;
-			}
-		}
-
-		if (record)
-		{
-			record->AddCallback(std::move(onDone));
-			return true;
-		}
-
-		if (completedResult.has_value())
-		{
-			onDone(*completedResult);
-			return true;
-		}
-
-		return false;
-	}
-
-	uint32 ServerNetworkManager::GetWorldMemberCount(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return 0;
-
-		READ_LOCK_IDX(kWorldLockIdx)
-		auto it = m_worldMembers.find(worldId);
-		return (it != m_worldMembers.end()) ? static_cast<uint32>(it->second.size()) : 0;
-	}
-
-	WorldOptions ServerNetworkManager::GetWorldOptions(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return {};
-
-		READ_LOCK_IDX(kWorldLockIdx)
-		return m_worldDirectory.FindWorldOptions(worldId);
-	}
-
-	void ServerNetworkManager::EnumerateConnectedUsers(const std::function<void(uint64)>& fn)
-	{
-		if (!fn)
-			return;
-
-		std::vector<uint64> users;
-		{
-			READ_LOCK_IDX(kSessionLockIdx)
-			users.reserve(m_tcpSessions.size());
-			for (const auto& uid : m_tcpSessions | std::views::keys)
-				users.push_back(uid);
-		}
-
-		for (uint64 uid : users)
-			fn(uid);
-	}
-
-	void ServerNetworkManager::EnumerateWorldUsers(WorldId worldId, const std::function<void(uint64)>& fn)
-	{
-		if (!fn || worldId == INVALID_WORLD_ID)
-			return;
-
-		std::vector<uint64> users;
-		{
-			READ_LOCK_IDX(kWorldLockIdx)
-			auto it = m_worldMembers.find(worldId);
-			if (it == m_worldMembers.end())
-				return;
-
-			users = it->second;
-		}
-
-		for (uint64 uid : users)
-			fn(uid);
-	}
-
-	void ServerNetworkManager::TryDestroyWorldIfEmpty(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return;
-
-		const uint32 memberCount = GetWorldMemberCount(worldId);
-		if (memberCount != 0)
-			return;
-
-		const WorldOptions options = GetWorldOptions(worldId);
-		if (!options.destroyWhenEmpty || options.persistent)
-			return;
-
-		DestroyWorld(worldId);
-	}
-
-	void ServerNetworkManager::TryDestroyWorldIfEmpty(const WorldKey& key)
-	{
-		TryDestroyWorldIfEmpty(ResolveWorldId(key));
-	}
-
-	std::shared_ptr<ServerNetworkManager::WorldTransferRecord> ServerNetworkManager::BeginOrJoinTransfer(
-		WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, std::function<void(WorldTransferResult)> onDone, bool& shouldStart, WorldTransferResult& immediateResult)
-	{
-		shouldStart = false;
-		immediateResult = WorldTransferResult
-			{
-				.outcome		= eWorldTransferOutcome::Failed,
-				.reason			= eWorldTransferReason::None,
-				.sourceWorldId	= sourceWorldId,
-				.targetWorldId	= targetWorldId,
-			};
-
-		std::shared_ptr<WorldTransferRecord> record;
-		{
-			WRITE_LOCK_IDX(kTransferLockIdx)
-
-			auto it = m_transfers.find(userId);
-			if (it != m_transfers.end())
-			{
-				record = it->second;
-				if (!record || record->completed.load(std::memory_order_acquire))
-				{
-					m_transfers.erase(it);
-					record.reset();
-				}
-				else if (record->sourceWorldId != sourceWorldId || record->targetWorldId != targetWorldId)
-				{
-					immediateResult.reason = eWorldTransferReason::ConflictingTransfer;
-					return nullptr;
-				}
-			}
-
-			if (!record)
-			{
-				record = std::make_shared<WorldTransferRecord>();
-				record->sourceWorldId = sourceWorldId;
-				record->targetWorldId = targetWorldId;
-				record->userId = userId;
-				m_transfers[userId] = record;
-				m_recentTransferResults.erase(userId);
-				shouldStart = true;
-			}
-		}
-
-		record->AddCallback(std::move(onDone));
-		return record;
-	}
-
-	void ServerNetworkManager::UpdateTransferPhase(uint64 userId, uint8 phase)
-	{
-		std::shared_ptr<WorldTransferRecord> record;
-		{
-			READ_LOCK_IDX(kTransferLockIdx)
-			auto it = m_transfers.find(userId);
-			if (it == m_transfers.end())
-				return;
-
-			record = it->second;
-		}
-
-		if (record)
-			record->phase.store(static_cast<WorldTransferRecord::ePhase>(phase), std::memory_order_release);
-	}
-
-	void ServerNetworkManager::CompleteTransfer(uint64 userId, const WorldTransferResult& result)
-	{
-		std::shared_ptr<WorldTransferRecord> record;
-		{
-			WRITE_LOCK_IDX(kTransferLockIdx)
-			auto it = m_transfers.find(userId);
-			if (it == m_transfers.end())
-			{
-				m_recentTransferResults[userId] = result;
-				return;
-			}
-
-			record = it->second;
-			m_transfers.erase(it);
-			m_recentTransferResults[userId] = result;
-		}
-
-		if (!record)
-			return;
-
-		record->phase.store(result.Succeeded() ? WorldTransferRecord::ePhase::Completed : WorldTransferRecord::ePhase::Failed, std::memory_order_release);
-		record->NotifyAndClose(result);
-	}
-
-	std::shared_ptr<ServerNetWorld> ServerNetworkManager::FindWorldShared(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return nullptr;
-
-		READ_LOCK
-		auto it = m_worlds.find(worldId);
-		return (it != m_worlds.end()) ? it->second : nullptr;
-	}
-
-	bool ServerNetworkManager::ReserveWorldTransferMembership(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, const WorldOptions& targetOptions)
-	{
-		WRITE_LOCK
-
-		auto& targetMembers = m_worldMembers[targetWorldId];
-		const bool alreadyInTarget = std::ranges::find(targetMembers, userId) != targetMembers.end();
-
-		if (!alreadyInTarget)
-		{
-			if (targetOptions.capacity != 0 && targetMembers.size() >= targetOptions.capacity)
-				return false;
-
-			targetMembers.push_back(userId);
-		}
-
-		if (sourceWorldId != INVALID_WORLD_ID)
-		{
-			if (auto sourceIt = m_worldMembers.find(sourceWorldId); sourceIt != m_worldMembers.end())
-			{
-				std::erase(sourceIt->second, userId);
-				if (sourceIt->second.empty())
-					m_worldMembers.erase(sourceIt);
-			}
-		}
-
-		return true;
-	}
-
-	void ServerNetworkManager::RollbackWorldTransferMembership(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId)
-	{
-		WRITE_LOCK
-
-		if (auto targetIt = m_worldMembers.find(targetWorldId); targetIt != m_worldMembers.end())
-		{
-			std::erase(targetIt->second, userId);
-			if (targetIt->second.empty())
-				m_worldMembers.erase(targetIt);
-		}
-
-		if (sourceWorldId != INVALID_WORLD_ID)
-		{
-			auto& sourceMembers = m_worldMembers[sourceWorldId];
-			if (std::ranges::find(sourceMembers, userId) == sourceMembers.end())
-				sourceMembers.push_back(userId);
-		}
-	}
 
 	bool ServerNetworkManager::StartServerService()
 	{

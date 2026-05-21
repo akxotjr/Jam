@@ -1,127 +1,57 @@
 #include "pch.h"
 #include "jamnet/runtime/ServerSession.h"
 
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/ShardExecutor.h"
-#include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/core/net/RPC.h"
+#include "jamnet/core/net/Service.h"
+#include "jamnet/core/utils/Clock.h"
 
-#include "jamnet/sync/networld/ServerNetWorld.h"
+#include "jamnet/sync/networld/ServerPhysicalWorld.h"
 #include "jamnet/sync/replication/ReplicationCodec.h"
 #include "jamnet/sync/transport/CustomPacketHelper.h"
-
 #include "jamnet/runtime/ServerNetworkManager.h"
+#include "jamnet/runtime/world/ServerWorldActionSystem.h"
 
 namespace jam::net
 {
 	namespace
 	{
-		uint64 GetCallerPrincipalId(entt::entity sessionEntity)
+
+		uint16 ResolveAccountShardIndex(AccountId accountId)
 		{
-			auto& L = CurrentShardLocalChecked();
-			auto& R = L.registry;
+			if (accountId == kInvalidAccountId)
+				return static_cast<uint16>(kInvalidRouteShard);
 
-			if (!R.valid(sessionEntity))
-				return 0;
+			const RouteKey routeKey = GLOBAL_EXEC.MakeRouteKey(RouteDomain::From("BoundSession"), accountId);
+			if (auto shard = GLOBAL_EXEC.GetShard(routeKey))
+				return static_cast<uint16>(shard->GetIndex());
 
-			const auto* auth = R.try_get<SessionAuth>(sessionEntity);
-			if (!auth || !auth->authenticated)
-				return 0;
-
-			return auth->principalId;
+			return static_cast<uint16>(kInvalidRouteShard);
 		}
 
-		WorldKey BuildTargetWorldKey(const fb::fbRequestWorldAssignmentReq& req)
-		{
-			return WorldKey
-			{
-				.kind		= static_cast<eWorldKind>(req.target_world_kind()),
-				.templateId = req.target_world_template_id(),
-				.instanceId = req.target_world_instance_id(),
-			};
-		}
 
-		struct WorldAssignmentResponse
+		void BuildWorldAssignmentFlatBuffer(flatbuffers::FlatBufferBuilder& fbb, const WorldActionResult& res)
 		{
-			uint8 status = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-			uint8 request_action = 0;
-			uint8 assignment_action = 0;
-			uint8 reason = 0;
-			WorldId world_id = INVALID_WORLD_ID;
-		};
-
-		WorldAssignmentResponse BuildTransferAssignmentRes(
-			uint8 requestAction,
-			uint8 assignmentAction,
-			const WorldTransferResult& transfer)
-		{
-			return WorldAssignmentResponse
-			{
-				.status = static_cast<uint8>(transfer.Succeeded() ? eWorldAssignmentStatus::Assigned : eWorldAssignmentStatus::Failed),
-				.request_action = requestAction,
-				.assignment_action = assignmentAction,
-				.reason = static_cast<uint8>(transfer.reason),
-				.world_id = transfer.Succeeded() ? transfer.targetWorldId : INVALID_WORLD_ID,
-			};
-		}
-
-		void BuildWorldAssignmentFlatBuffer(flatbuffers::FlatBufferBuilder& fbb, const WorldAssignmentResponse& res)
-		{
-			const auto root = fb::CreatefbRequestWorldAssignmentRes(
-				fbb,
-				res.status,
-				res.request_action,
-				res.assignment_action,
-				res.reason,
-				res.world_id);
+			const auto root = res.CreateFb(fbb);
 			fbb.Finish(root);
 		}
 
-		void SendWorldAssignmentResponse(entt::entity e, const WorldAssignmentResponse& res, uint32 requestId)
+		void SendWorldAssignmentResponse(entt::entity e, const WorldActionResult& res, uint32 requestId)
 		{
 			flatbuffers::FlatBufferBuilder fbb(128);
 			BuildWorldAssignmentFlatBuffer(fbb, res);
-			RPCSendResponse<fb::fbRequestWorldAssignmentRes>(e, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), requestId, eChannel::RELIABLE_ORDERED);
+			RPCSendResponse<fb::fbWorldActionRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::RELIABLE_ORDERED);
 		}
 
-		void SendWorldAssignmentNotification(ServerUdpSession& session, const WorldAssignmentResponse& res)
-		{
-			flatbuffers::FlatBufferBuilder fbb(128);
-			BuildWorldAssignmentFlatBuffer(fbb, res);
-
-			auto buf = PacketBuilder::CreateCustomPacket(
-				CustomPacketId::WORLD_ASSIGNMENT,
-				PacketFlags::NONE,
-				eChannel::RELIABLE_ORDERED,
-				fbb.GetBufferPointer(),
-				fbb.GetSize());
-
-			if (buf.IsValid())
-				session.Send(buf);
-		}
-
-		void SendTcpBindResponse(entt::entity e, bool success, uint64 userId, uint32 requestId)
-		{
-			flatbuffers::FlatBufferBuilder fbb(64);
-			const auto root = fb::CreatefbTcpBindRes(fbb, success, userId);
-			fbb.Finish(root);
-			RPCSendResponse<fb::fbTcpBindRes>(e, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), requestId, eChannel::TCP_DEFAULT);
-		}
-
-		void SendUdpBindResponse(entt::entity e, bool success, uint64 userId, uint32 requestId)
-		{
-			flatbuffers::FlatBufferBuilder fbb(64);
-			const auto root = fb::CreatefbUdpBindRes(fbb, success, userId);
-			fbb.Finish(root);
-			RPCSendResponse<fb::fbUdpBindRes>(e, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), requestId, eChannel::RELIABLE_ORDERED);
-		}
 
 		void SendSpawnActorResponse(entt::entity e, bool success, uint64 spawnReqId, NetId netId, uint32 requestId)
 		{
 			flatbuffers::FlatBufferBuilder fbb(64);
 			const auto root = fb::CreatefbSpawnActorRes(fbb, success, spawnReqId, netId.Raw());
 			fbb.Finish(root);
-			RPCSendResponse<fb::fbSpawnActorRes>(e, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), requestId, eChannel::RELIABLE_ORDERED);
+			RPCSendResponse<fb::fbSpawnActorRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::RELIABLE_ORDERED);
 		}
 
 		void SendDespawnActorResponse(entt::entity e, bool success, uint32 requestId)
@@ -129,7 +59,7 @@ namespace jam::net
 			flatbuffers::FlatBufferBuilder fbb(64);
 			const auto root = fb::CreatefbDespawnActorRes(fbb, success);
 			fbb.Finish(root);
-			RPCSendResponse<fb::fbDespawnActorRes>(e, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), requestId, eChannel::RELIABLE_ORDERED);
+			RPCSendResponse<fb::fbDespawnActorRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::RELIABLE_ORDERED);
 		}
 
 		void SendPossessActorResponse(entt::entity e, bool success, NetId netId, uint32 requestId)
@@ -137,7 +67,7 @@ namespace jam::net
 			flatbuffers::FlatBufferBuilder fbb(64);
 			const auto root = fb::CreatefbPossessActorRes(fbb, success, netId.Raw());
 			fbb.Finish(root);
-			RPCSendResponse<fb::fbPossessActorRes>(e, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), requestId, eChannel::RELIABLE_ORDERED);
+			RPCSendResponse<fb::fbPossessActorRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::RELIABLE_ORDERED);
 		}
 
 		void SendUnpossessActorResponse(entt::entity e, bool success, uint32 requestId)
@@ -145,377 +75,306 @@ namespace jam::net
 			flatbuffers::FlatBufferBuilder fbb(64);
 			const auto root = fb::CreatefbUnpossessActorRes(fbb, success);
 			fbb.Finish(root);
-			RPCSendResponse<fb::fbUnpossessActorRes>(e, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), requestId, eChannel::RELIABLE_ORDERED);
+			RPCSendResponse<fb::fbUnpossessActorRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::RELIABLE_ORDERED);
+		}
+
+		WorldKey ResolveJoinedWorldKey(const UserContext& ctx, NetWorldId worldId)
+		{
+			if (worldId == kInvalidNetWorldId)
+				return {};
+
+			for (const WorldMembership& membership : ctx.worlds)
+			{
+				if (membership.key.worldId == worldId)
+					return membership.key;
+			}
+
+			return {};
+		}
+
+		WorldKey ResolveRequestedWorldKey(UserId userId, NetWorldId worldId)
+		{
+			if (userId == kInvalidUserId || worldId == kInvalidNetWorldId)
+				return {};
+
+			auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+			if (const auto* ctx = state.FindUserContext(userId))
+				return ResolveJoinedWorldKey(*ctx, worldId);
+			return {};
 		}
 	}
 
 
-	void ServerTcpSession::OnConnected()
+	void ServerTcpSession::OnLinkEstablished()
 	{
-		JAMNET_LOG_INFO("ServerTcpSession connected", GetRemoteNetAddress().GetIpAddress(), GetRemoteNetAddress().GetPort());
+		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession established. ip: {} | port: {}", 
+			GetAccountId(), 
+			GetUserId(), 
+			GetRemoteNetAddress().GetIpAddress(), 
+			GetRemoteNetAddress().GetPort());
 
-		if (!m_manager)
-		{
-			JAMNET_LOG_ERROR_LOC("NetworkManager not set");
-			Disconnect();
-		}
+		FinalizeEstablishedSession();
+		if (IsClosing())
+			return;
+		BootstrapRPC();
 	}
 
 	void ServerTcpSession::OnDisconnected()
 	{
-		JAMNET_LOG_INFO("[UserId = {}] ServerTcpSession disconnected", m_userId);
+		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession disconnected", GetAccountId(), GetUserId());
 
-		if (m_manager && m_userId != 0)
+		if (m_manager && m_userId != kInvalidUserId)
 		{
-			m_manager->UnregisterSession(m_userId);
+			auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+			if (auto* ctx = state.FindUserContext(m_userId))
+			{
+				if (ctx->tcp == GetSessionId())
+					ctx->tcp = kInvalidSessionId;
+				ctx->udp = kInvalidSessionId;
+				if (ctx->tcp == kInvalidSessionId && ctx->udp == kInvalidSessionId && ctx->worlds.empty())
+					state.FreeUserContext(m_userId);
+			}
+
+			m_manager->ReleaseSession(m_userId);
 		}
 	}
 
-	void ServerTcpSession::HandleCustomPacket(const PacketHeaderView& view)
+	void ServerTcpSession::HandleCustomPacket(Packet packet)
 	{
 		if (!m_manager)
 			return;
 
-		if (auto* world = m_manager->GetWorld(m_worldId))
+		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+
+		const NetWorldId worldId = ResolveScopedPacketWorldId(view);
+		if (worldId == kInvalidNetWorldId || m_userId == kInvalidUserId)
+			return;
+
+		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+		const auto* ctx = state.FindUserContext(m_userId);
+		if (!ctx)
+			return;
+
+		const WorldKey targetWorldKey = ResolveJoinedWorldKey(*ctx, worldId);
+		if (!targetWorldKey.IsIssued())
+			return;
+
+		if (auto* worldActionSystem = m_manager->GetWorldActionSystem())
 		{
-			world->OnRecvPacket(m_userId, view);
+			worldActionSystem->SubmitWorldHostJob(targetWorldKey, [userId = m_userId, packet = std::move(packet)](WorldMembershipHost& host) mutable
+				{
+					host.HandleWorldPacket(userId, std::move(packet));
+				});
 		}
 	}
 
-	void ServerTcpSession::OnEntityCreated(entt::registry& R, entt::entity e)
+	RuntimeId ServerTcpSession::ResolveServerTcpBindUserId(uint64 accountId)
 	{
-		RPCRegisterRequest<fb::fbTcpBindReq>(R, e, this, &ServerTcpSession::OnTcpBindRequest);
+		if (accountId == kInvalidAccountId || !m_manager || !GetService())
+			return kInvalidRuntimeId;
+
+		auto& L = CurrentShardLocalChecked();
+		auto& state = GetOrCreateUserShardState(L);
+		UserContext* ctx = state.FindUserContextByAccount(accountId);
+		if (!ctx)
+			ctx = state.AllocUserContext(accountId);
+		return ctx ? ctx->userId : kInvalidRuntimeId;
 	}
 
-
-	void ServerTcpSession::OnTcpBindRequest(entt::entity e, const fb::fbTcpBindReq& req, uint32 requestId)
+	void ServerTcpSession::FinalizeEstablishedSession()
 	{
-		if (req.user_id() == 0)
+		if (!m_manager || m_accountId == kInvalidAccountId || m_userId == kInvalidUserId || GetSessionId() == kInvalidSessionId)
 		{
-			SendTcpBindResponse(e, false, 0, requestId);
+			Disconnect();
 			return;
 		}
 
-		if (auto existing = m_manager->FindTcpSession(req.user_id()); existing && existing != this)
+		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+		UserContext* ctx = state.FindUserContext(m_userId);
+
+		if (!ctx || ctx->accountId != m_accountId)
 		{
-			SendTcpBindResponse(e, false, 0, requestId);
+			Disconnect();
 			return;
 		}
 
-		m_userId = req.user_id();
-		m_manager->RegisterTcpSession(m_userId, this);
-
+		const SessionId prevTcp = ctx->tcp;
+		ctx->tcp = GetSessionId();
+		if (!m_manager->CacheTcpSession(m_userId, this))
 		{
-			auto& L = CurrentShardLocalChecked();
-			auto& R = L.registry;
-			if (R.valid(e))
-				R.emplace_or_replace<SessionAuth>(e, SessionAuth{ .principalId = m_userId, .authenticated = true });
-		}
-
-		SendTcpBindResponse(e, true, req.user_id(), requestId);
-	}
-
-	void ServerUdpSession::OnConnected()
-	{
-		JAMNET_LOG_INFO("ServerUdpSession connected from {}:{}", GetRemoteNetAddress().GetIpAddress(), GetRemoteNetAddress().GetPort());
-
-		if (!m_manager)
-		{
-			JAMNET_LOG_ERROR_LOC("NetworkManager not set");
+			ctx->tcp = prevTcp;
 			Disconnect();
 		}
 	}
 
-	void ServerUdpSession::OnDisconnected()
+	void ServerTcpSession::BootstrapRPC()
 	{
-		JAMNET_LOG_INFO("[UserId = {}] ServerUdpSession disconnected", m_userId);
-
-		if (m_manager && m_userId != 0)
-			m_manager->UnregisterUdpSession(m_userId, this);
 	}
 
-	void ServerUdpSession::HandleCustomPacket(const PacketHeaderView& view)
+
+
+	void ServerUdpSession::OnLinkEstablished()
+	{
+		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ServerUdpSession established. ip: {} | port: {}",
+			GetAccountId(),
+			GetUserId(),
+			GetRemoteNetAddress().GetIpAddress(),
+			GetRemoteNetAddress().GetPort());
+
+		FinalizeEstablishedSession();
+		if (IsClosing())
+			return;
+		BootstrapRPC();
+	}
+
+	void ServerUdpSession::OnDisconnected()
+	{
+		JAMNET_LOG_INFO("[AccountId= {}, UserId = {}] ServerUdpSession disconnected", GetAccountId(), GetUserId());
+
+		if (m_manager && m_userId != kInvalidUserId)
+		{
+			auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+			if (auto* ctx = state.FindUserContext(m_userId))
+			{
+				if (ctx->udp == GetSessionId())
+					ctx->udp = kInvalidSessionId;
+				if (ctx->tcp == kInvalidSessionId && ctx->udp == kInvalidSessionId && ctx->worlds.empty())
+					state.FreeUserContext(m_userId);
+			}
+
+			m_manager->ReleaseUdpSession(m_userId, this);
+		}
+	}
+
+	void ServerUdpSession::HandleCustomPacket(Packet packet)
 	{
 		if (!m_manager)
 			return;
 
-		if (auto* world = m_manager->GetWorld(m_worldId))
+		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+		if (!view.IsValid())
+			return;
+
+		const NetWorldId worldId = ResolveScopedPacketWorldId(view);
+		if (worldId == kInvalidNetWorldId || m_userId == kInvalidUserId)
+			return;
+
+		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+		const auto* ctx = state.FindUserContext(m_userId);
+		if (!ctx)
+			return;
+
+		const WorldKey targetWorldKey = ResolveJoinedWorldKey(*ctx, worldId);
+		if (!targetWorldKey.IsIssued())
+			return;
+
+		if (auto* worldActionSystem = m_manager->GetWorldActionSystem())
 		{
-			world->OnRecvPacket(m_userId, view);
+			worldActionSystem->SubmitWorldHostJob(targetWorldKey, [userId = m_userId, packet = std::move(packet)](WorldMembershipHost& host) mutable
+				{
+					host.HandleWorldPacket(userId, std::move(packet));
+				});
 		}
 	}
 
-	void ServerUdpSession::OnEntityCreated(entt::registry& R, entt::entity e)
+	bool ServerUdpSession::ValidateServerUdpBindPrincipal(uint64 accountId, RuntimeId userId)
 	{
-		RPCRegisterRequest<fb::fbUdpBindReq>(R, e, this, &ServerUdpSession::OnUdpBindRequest);
-		RPCRegisterRequest<fb::fbRequestWorldAssignmentReq>(R, e, this, &ServerUdpSession::OnRequestWorldAssignmentReq);
+		if (accountId == kInvalidAccountId || userId == kInvalidUserId || !m_manager || !GetService())
+			return false;
+
+		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+		const uint16 accountShardIndex = ResolveAccountShardIndex(accountId);
+		UserContext* ctx = state.FindUserContext(userId);
+		if (!ctx || ctx->accountId != accountId || ctx->tcp == kInvalidSessionId)
+			return false;
+		return GetUserShardIndex(ctx->userId) == accountShardIndex;
+	}
+
+	void ServerUdpSession::FinalizeEstablishedSession()
+	{
+		if (!m_manager || m_accountId == kInvalidAccountId || m_userId == kInvalidUserId || GetSessionId() == kInvalidSessionId)
+		{
+			Disconnect();
+			return;
+		}
+
+		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+		UserContext* ctx = state.FindUserContext(m_userId);
+		if (!ctx || ctx->accountId != m_accountId || ctx->tcp == kInvalidSessionId)
+		{
+			Disconnect();
+			return;
+		}
+
+		const SessionId prevUdp = ctx->udp;
+		ctx->udp = GetSessionId();
+		if (!m_manager->CacheUdpSession(m_userId, this))
+		{
+			ctx->udp = prevUdp;
+			Disconnect();
+			return;
+		}
+	}
+
+	void ServerUdpSession::BootstrapRPC()
+	{
+		auto& R = CurrentShardLocalChecked().registry;
+		const entt::entity e = GetEntity();
+		if (e == entt::null || !R.valid(e))
+			return;
+
+		RPCRegisterRequest<fb::fbWorldActionReq>(R, e, this, &ServerUdpSession::OnWorldActionRequest);
 		RPCRegisterRequest<fb::fbSpawnActorReq>(R, e, this, &ServerUdpSession::OnSpawnActorRequest);
 		RPCRegisterRequest<fb::fbDespawnActorReq>(R, e, this, &ServerUdpSession::OnDespawnActorRequest);
 		RPCRegisterRequest<fb::fbPossessActorReq>(R, e, this, &ServerUdpSession::OnPossessActorRequest);
 		RPCRegisterRequest<fb::fbUnpossessActorReq>(R, e, this, &ServerUdpSession::OnUnpossessActorRequest);
 	}
 
-	void ServerUdpSession::OnUdpBindRequest(entt::entity e, const fb::fbUdpBindReq& req, uint32 requestId)
+
+	void ServerUdpSession::OnWorldActionRequest(entt::entity e, const fb::fbWorldActionReq& req, uint32 requestId)
 	{
-		if (req.user_id() == 0)
-		{
-			SendUdpBindResponse(e, false, 0, requestId);
-			return;
-		}
-
-		if (e != GetEntity())
-		{
-			JAMNET_LOG_ERROR("UdpBind RPC called on wrong entity! Expected={}, Got={}, SessionId={}", static_cast<uint32>(GetEntity()), static_cast<uint32>(e), GetSessionId());
-			SendUdpBindResponse(e, false, 0, requestId);
-			return;
-		}
-
-		if (m_userId != 0 && m_userId != req.user_id())
-		{
-			JAMNET_LOG_ERROR("UDP Session already bound to userId={}, cannot bind to userId={}", m_userId, req.user_id());
-			SendUdpBindResponse(e, false, 0, requestId);
-			return;
-		}
-
-		auto tcp = m_manager->FindTcpSession(req.user_id());
-		if (!tcp || !tcp->IsConnected())
-		{
-			JAMNET_LOG_ERROR("UDP bind rejected for userId={} because TCP bind is missing", req.user_id());
-			SendUdpBindResponse(e, false, 0, requestId);
-			return;
-		}
-
-		if (auto existing = m_manager->FindUdpSession(req.user_id()); existing && existing != this)
-		{
-			JAMNET_LOG_ERROR("UDP Session already exists for userId={}", req.user_id());
-			SendUdpBindResponse(e, false, 0, requestId);
-			return;
-		}
-
-		m_userId = req.user_id();
-		m_manager->RegisterUdpSession(m_userId, this);
-
-		{
-			auto& L = CurrentShardLocalChecked();
-			auto& R = L.registry;
-			if (R.valid(e))
-				R.emplace_or_replace<SessionAuth>(e, SessionAuth{ .principalId = m_userId, .authenticated = true });
-		}
-
-		SendUdpBindResponse(e, true, req.user_id(), requestId);
-	}
-
-	void ServerUdpSession::OnRequestWorldAssignmentReq(entt::entity e, const fb::fbRequestWorldAssignmentReq& req, uint32 requestId)
-	{
-		WorldAssignmentResponse res{};
-		res.request_action    = static_cast<uint8>(req.action());
-		res.assignment_action = static_cast<uint8>(eWorldAssignmentAction::None);
-		res.reason            = static_cast<uint8>(eWorldTransferReason::None);
-
 		if (!m_manager)
 		{
-			res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-			res.world_id = INVALID_WORLD_ID;
-			SendWorldAssignmentResponse(e, res, requestId);
+			const WorldActionRequest parsed = WorldActionRequest::FromFb(req, m_userId);
+			WorldActionResult res
+			{
+				.status	= eWorldActionStatus::Failed,
+				.action = parsed.action,
+				.source = WorldKey{ req.src_desc_id(), req.src_world_id() },
+				.target = WorldKey{ req.target_desc_id(), req.target_world_id() },
+			};
+			SendWorldAssignmentResponse(GetEntity(), res, requestId);
 			return;
 		}
 
-		if (m_userId == 0)
-		{
-			res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-			res.world_id = INVALID_WORLD_ID;
-			SendWorldAssignmentResponse(e, res, requestId);
-			return;
-		}
-
-		if (req.action() == fb::fbWorldRequestAction_Leave)
-		{
-			if (m_worldId != INVALID_WORLD_ID)
+		const SessionId sessionId = GetSessionId();
+		WorldActionRequest actionReq = WorldActionRequest::FromFb(
+			req,
+			m_userId,
+			[e, sessionId, requestId](WorldActionResult result) mutable
 			{
-				if (auto* world = m_manager->GetWorld(m_worldId))
-					world->Leave(m_userId);
+				const auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId));
+				if (!shard) return;
 
-				m_manager->LeaveWorld(m_worldId, m_userId);
-				m_worldId = INVALID_WORLD_ID;
-			}
-
-			res.status   = static_cast<uint8>(eWorldAssignmentStatus::Assigned);
-			res.world_id = INVALID_WORLD_ID;
-			SendWorldAssignmentResponse(e, res, requestId);
-			return;
-		}
-
-		const WorldKey requestedWorld = BuildTargetWorldKey(req);
-		WorldId targetWorldId = req.target_world_id();
-
-		if (req.action() == fb::fbWorldRequestAction_Join || req.action() == fb::fbWorldRequestAction_Transfer)
-		{
-			res.assignment_action = (req.action() == fb::fbWorldRequestAction_Transfer)
-				? static_cast<uint8>(eWorldAssignmentAction::Transfer)
-				: static_cast<uint8>(eWorldAssignmentAction::Join);
-
-			if (targetWorldId == INVALID_WORLD_ID && requestedWorld.IsValid())
-				targetWorldId = m_manager->ResolveOrAllocateWorldId(requestedWorld, {});
-
-			if (targetWorldId == INVALID_WORLD_ID)
-			{
-				res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-				res.reason	 = static_cast<uint8>(eWorldTransferReason::InvalidArgument);
-				res.world_id = INVALID_WORLD_ID;
-				SendWorldAssignmentResponse(e, res, requestId);
-				return;
-			}
-
-			if (m_worldId == INVALID_WORLD_ID)
-			{
-				const WorldOptions targetOptions = m_manager->GetWorldOptions(targetWorldId);
-				if (targetOptions.capacity != 0 && m_manager->GetWorldMemberCount(targetWorldId) >= targetOptions.capacity)
+				shard->Submit(Job([e, sessionId, result, requestId]() mutable
 				{
-					res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-					res.reason	 = static_cast<uint8>(eWorldTransferReason::CapacityExceeded);
-					res.world_id = INVALID_WORLD_ID;
-					SendWorldAssignmentResponse(e, res, requestId);
-					return;
-				}
+					auto& state = GetOrCreateSessionShardState();
+					auto* self = static_cast<ServerUdpSession*>(state.FindSession(sessionId));
+					if (!self) return;
 
-				ServerNetWorld* targetWorld = m_manager->GetOrCreateWorld(targetWorldId, targetOptions);
-				if (!targetWorld)
-				{
-					res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-					res.reason	 = static_cast<uint8>(eWorldTransferReason::TargetUnavailable);
-					res.world_id = INVALID_WORLD_ID;
-					SendWorldAssignmentResponse(e, res, requestId);
-					return;
-				}
+					JAM_ASSERT(e == self->GetEntity());
 
-				m_manager->JoinWorld(targetWorldId, m_userId);
-				if (!targetWorld->Enter(m_userId))
-				{
-					m_manager->LeaveWorld(targetWorldId, m_userId);
-					res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-					res.reason	 = static_cast<uint8>(eWorldTransferReason::MailboxClosed);
-					res.world_id = INVALID_WORLD_ID;
-					SendWorldAssignmentResponse(e, res, requestId);
-					return;
-				}
+					SendWorldAssignmentResponse(self->GetEntity(), result, requestId);
+				}));
+			});
 
-				m_worldId = targetWorldId;
-				res.status   = static_cast<uint8>(eWorldAssignmentStatus::Assigned);
-				res.world_id = m_worldId;
-				
-				SendWorldAssignmentResponse(e, res, requestId);
-				return;
-			}
-
-			const SessionHandle handle = GetSessionHandle();
-			const uint8 requestAction = res.request_action;
-			const uint8 assignmentAction = res.assignment_action;
-
-			if (m_worldId == targetWorldId)
-			{
-				res.status = static_cast<uint8>(eWorldAssignmentStatus::Assigned);
-				res.reason = static_cast<uint8>(eWorldTransferReason::AlreadyInTarget);
-				res.world_id = m_worldId;
-				SendWorldAssignmentResponse(e, res, requestId);
-				return;
-			}
-
-			if (!m_manager->TransferWorldAsync(m_worldId, targetWorldId, m_userId,
-				[handle, targetWorldId, requestAction, assignmentAction](WorldTransferResult transfer) mutable
-				{
-					const auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
-					if (!shard)
-						return;
-
-					shard->Submit(Job([handle, targetWorldId, requestAction, assignmentAction, transfer]() mutable
-						{
-							auto& L = CurrentShardLocalChecked();
-							auto* self = static_cast<ServerUdpSession*>(FindSessionByHandle(L, handle));
-							if (!self)
-								return;
-
-							if (transfer.Succeeded())
-								self->m_worldId = targetWorldId;
-
-							const auto asyncRes = BuildTransferAssignmentRes(requestAction, assignmentAction, transfer);
-							SendWorldAssignmentNotification(*self, asyncRes);
-						}));
-				}))
-			{
-				res.status	 = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-				res.reason	 = static_cast<uint8>(eWorldTransferReason::ConflictingTransfer);
-				res.world_id = INVALID_WORLD_ID;
-				SendWorldAssignmentResponse(e, res, requestId);
-				return;
-			}
-
-			res.status = static_cast<uint8>(eWorldAssignmentStatus::Waiting);
-			res.world_id = INVALID_WORLD_ID;
-			SendWorldAssignmentResponse(e, res, requestId);
-			return;
-		}
-
-		const WorldAssignmentRequest assignmentReq
-		{
-			.principalId	 = m_userId,
-			.currentWorldId = m_worldId,
-			.currentWorld	 = m_manager->GetWorldKey(m_worldId)
-		};
-
-		const WorldAssignmentResult assignment = m_manager->RequestWorldAssignment(assignmentReq);
-
-		res.status	 = static_cast<uint8>(assignment.status);
-		res.assignment_action = static_cast<uint8>(assignment.action);
-		res.world_id = assignment.IsAssigned() ? assignment.worldId : INVALID_WORLD_ID;
-
-		if (assignment.IsAssigned())
-			m_worldId = assignment.worldId;
-		else if (assignment.status == eWorldAssignmentStatus::Waiting)
-		{
-			const SessionHandle handle = GetSessionHandle();
-			const uint8 requestAction = res.request_action;
-			const uint8 assignmentAction = res.assignment_action;
-			if (!m_manager->AttachTransferCallback(m_userId,
-				[handle, requestAction, assignmentAction](WorldTransferResult transfer) mutable
-				{
-					const auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
-					if (!shard)
-						return;
-
-					shard->Submit(Job([handle, requestAction, assignmentAction, transfer]() mutable
-						{
-							auto& L = CurrentShardLocalChecked();
-							auto* self = static_cast<ServerUdpSession*>(FindSessionByHandle(L, handle));
-							if (!self)
-								return;
-
-							if (transfer.Succeeded())
-								self->m_worldId = transfer.targetWorldId;
-
-							const auto asyncRes = BuildTransferAssignmentRes(requestAction, assignmentAction, transfer);
-							SendWorldAssignmentNotification(*self, asyncRes);
-						}));
-				}))
-			{
-				res.status = static_cast<uint8>(eWorldAssignmentStatus::Failed);
-				res.assignment_action = static_cast<uint8>(eWorldAssignmentAction::Reject);
-				res.reason = static_cast<uint8>(eWorldTransferReason::ConflictingTransfer);
-			}
-		}
-
-		SendWorldAssignmentResponse(e, res, requestId);
+		m_manager->RequestWorldAction(std::move(actionReq));
 	}
 
 	void ServerUdpSession::OnSpawnActorRequest(entt::entity e, const fb::fbSpawnActorReq& req, uint32 requestId)
 	{
-		if (!m_manager || m_worldId == INVALID_WORLD_ID)
-		{
-			SendSpawnActorResponse(e, false, req.spawn_req_id(), NetId::Invalid(), requestId);
-			return;
-		}
-
-		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
-		if (!nw)
+		const WorldKey targetWorldKey = ResolveRequestedWorldKey(m_userId, req.world_id());
+		if (!m_manager || !targetWorldKey.IsIssued())
 		{
 			SendSpawnActorResponse(e, false, req.spawn_req_id(), NetId::Invalid(), requestId);
 			return;
@@ -528,8 +387,8 @@ namespace jam::net
 			return;
 		}
 
-		const uint64 userId = GetCallerPrincipalId(e);
-		if (userId == 0)
+		const UserId userId = m_userId;
+		if (userId == kInvalidUserId)
 		{
 			SendSpawnActorResponse(e, false, req.spawn_req_id(), NetId::Invalid(), requestId);
 			return;
@@ -588,97 +447,119 @@ namespace jam::net
 			params.desc.overrides = overrides;
 		}
 
-		const SessionHandle handle = GetSessionHandle();
+		const SessionId sessionId = GetSessionId();
 		const uint32 reqId		= requestId;
 		const uint32 spawnReqId = req.spawn_req_id();
 
-		nw->SpawnActorAsync(params, [handle, reqId, spawnReqId](NetId netId) mutable
+		auto* worldActionSystem = m_manager->GetWorldActionSystem();
+		if (!worldActionSystem || !worldActionSystem->SubmitPhysicalWorldJob(targetWorldKey, [params, sessionId, e, reqId, spawnReqId](ServerPhysicalWorld& physicalWorld) mutable
 			{
-				const auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
-				if (!shard)
-					return;
-
-				shard->Submit(Job([handle, netId, spawnReqId, reqId]() mutable
+				physicalWorld.SpawnActorAsync(params, [sessionId, reqId, spawnReqId](NetId netId) mutable
 					{
-						auto& L = CurrentShardLocalChecked();
-						auto* self = static_cast<ServerUdpSession*>(FindSessionByHandle(L, handle));
-						if (!self)
+						const auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId));
+						if (!shard)
 							return;
 
-						SendSpawnActorResponse(self->GetEntity(), netId.IsValid(), spawnReqId, netId, reqId);
-					}));
-			});
+						shard->Submit(Job([sessionId, netId, spawnReqId, reqId]() mutable
+							{
+								auto& state = GetOrCreateSessionShardState();
+								auto* self = static_cast<ServerUdpSession*>(state.FindSession(sessionId));
+								if (!self)
+									return;
+
+								SendSpawnActorResponse(self->GetEntity(), netId.IsValid(), spawnReqId, netId, reqId);
+							}));
+					});
+			}, [e, reqId, spawnReqId]()
+			{
+				SendSpawnActorResponse(e, false, spawnReqId, NetId::Invalid(), reqId);
+			}))
+		{
+			SendSpawnActorResponse(e, false, req.spawn_req_id(), NetId::Invalid(), requestId);
+		}
 	}
 
 	void ServerUdpSession::OnDespawnActorRequest(entt::entity e, const fb::fbDespawnActorReq& req, uint32 requestId)
 	{
-		if (!m_manager || m_worldId == INVALID_WORLD_ID)
+		const WorldKey targetWorldKey = ResolveRequestedWorldKey(m_userId, req.world_id());
+		if (!m_manager || !targetWorldKey.IsIssued())
 		{
 			SendDespawnActorResponse(e, false, requestId);
 			return;
 		}
 
-		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
-		if (!nw)
-		{
-			SendDespawnActorResponse(e, false, requestId);
-			return;
-		}
-
-		const uint64 userId = GetCallerPrincipalId(e);
+		const UserId userId = m_userId;
 		const NetId  netId = NetId::MakeRaw(req.net_id());
 
-		nw->DespawnActorAsync(netId, userId, [e, requestId](bool ok)
+		auto* worldActionSystem = m_manager->GetWorldActionSystem();
+		if (!worldActionSystem || !worldActionSystem->SubmitPhysicalWorldJob(targetWorldKey, [netId, userId, e, requestId](ServerPhysicalWorld& physicalWorld)
 			{
-				SendDespawnActorResponse(e, ok, requestId);
-			});
+				physicalWorld.DespawnActorAsync(netId, userId, [e, requestId](bool ok)
+					{
+						SendDespawnActorResponse(e, ok, requestId);
+					});
+			}, [e, requestId]()
+			{
+				SendDespawnActorResponse(e, false, requestId);
+			}))
+		{
+			SendDespawnActorResponse(e, false, requestId);
+		}
 	}
 
 	void ServerUdpSession::OnPossessActorRequest(entt::entity e, const fb::fbPossessActorReq& req, uint32 requestId)
 	{
-		if (!m_manager || m_worldId == INVALID_WORLD_ID)
+		const WorldKey targetWorldKey = ResolveRequestedWorldKey(m_userId, req.world_id());
+		if (!m_manager || !targetWorldKey.IsIssued())
 		{
 			SendPossessActorResponse(e, false, NetId::MakeRaw(req.net_id()), requestId);
 			return;
 		}
 
-		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
-		if (!nw)
-		{
-			SendPossessActorResponse(e, false, NetId::MakeRaw(req.net_id()), requestId);
-			return;
-		}
+		const UserId userId = m_userId;
+		const NetId  netId  = NetId::MakeRaw(req.net_id());
 
-		const uint64 userId = GetCallerPrincipalId(e);
-		const NetId  netId = NetId::MakeRaw(req.net_id());
-
-		nw->PossessActorAsync(netId, userId, [e, requestId, netId = req.net_id()](bool ok)
+		auto* worldActionSystem = m_manager->GetWorldActionSystem();
+		if (!worldActionSystem || !worldActionSystem->SubmitPhysicalWorldJob(targetWorldKey, [netId, userId, e, requestId](ServerPhysicalWorld& physicalWorld)
 			{
-				SendPossessActorResponse(e, ok, NetId::MakeRaw(netId), requestId);
-			});
+				physicalWorld.PossessActorAsync(netId, userId, [e, requestId, netId](bool ok)
+					{
+						SendPossessActorResponse(e, ok, netId, requestId);
+					});
+			}, [e, netId, requestId]()
+			{
+				SendPossessActorResponse(e, false, netId, requestId);
+			}))
+		{
+			SendPossessActorResponse(e, false, netId, requestId);
+		}
 	}
 
 	void ServerUdpSession::OnUnpossessActorRequest(entt::entity e, const fb::fbUnpossessActorReq& req, uint32 requestId)
 	{
-		if (!m_manager || m_worldId == INVALID_WORLD_ID)
+		const WorldKey targetWorldKey = ResolveRequestedWorldKey(m_userId, req.world_id());
+		if (!m_manager || !targetWorldKey.IsIssued())
 		{
 			SendUnpossessActorResponse(e, false, requestId);
 			return;
 		}
 
-		ServerNetWorld* nw = m_manager->GetWorld(m_worldId);
-		if (!nw)
-		{
-			SendUnpossessActorResponse(e, false, requestId);
-			return;
-		}
-
-		const uint64 userId = GetCallerPrincipalId(e);
+		const UserId userId = m_userId;
 		const NetId  netId  = NetId::MakeRaw(req.net_id());
 
-		nw->UnpossessActorAsync(netId, userId, [e, requestId](bool ok)
+		auto* worldActionSystem = m_manager->GetWorldActionSystem();
+		if (!worldActionSystem || !worldActionSystem->SubmitPhysicalWorldJob(targetWorldKey, [netId, userId, e, requestId](ServerPhysicalWorld& physicalWorld)
 			{
-				SendUnpossessActorResponse(e, ok, requestId);
-			});
+				physicalWorld.UnpossessActorAsync(netId, userId, [e, requestId](bool ok)
+					{
+						SendUnpossessActorResponse(e, ok, requestId);
+					});
+			}, [e, requestId]()
+			{
+				SendUnpossessActorResponse(e, false, requestId);
+			}))
+		{
+			SendUnpossessActorResponse(e, false, requestId);
+		}
 	}
 }

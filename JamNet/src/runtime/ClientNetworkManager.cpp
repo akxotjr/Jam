@@ -1,28 +1,37 @@
 #include "pch.h"
-
 #include "jamnet/runtime/ClientNetworkManager.h"
 
 #include "jamnet/core/executor/GlobalEventBus.h"
-#include "jamnet/core/executor/Mailbox.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
+#include "jamnet/core/executor/ShardInvoke.h"
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/Service.h"
 
-#include "jamnet/sync/networld/ClientNetWorld.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
+
 #include "jamnet/runtime/ClientSession.h"
-#include "jamnet/runtime/ClientTransportAdapter.h"
+#include "jamnet/runtime/AppRuntimeEvents.h"
+#include "jamnet/runtime/world/ClientWorldActionSystem.h"
 
 namespace jam::net
 {
-	ClientNetworkManager::ClientNetworkManager(const ClientConfig& config, uint64 userId)
-		: m_config(config)
+	namespace
 	{
-		m_transportAdapter  = std::make_shared<ClientTransportAdapter>();
-		SetUserId(userId);
+		inline const RouteDomain kClientPrincipalRouteDomain = RouteDomain::From("ClientPrincipal");
+	}
+
+	ClientNetworkManager::ClientNetworkManager(const ClientConfig& config, AccountId accountId)
+		: m_config(config), m_accountId(accountId)
+	{
+		m_worldActionSystem = std::make_unique<ClientWorldActionSystem>();
+		m_worldActionSystem->Init(this);
 	}
 
 	ClientNetworkManager::~ClientNetworkManager()
 	{
+		if (m_worldActionSystem)
+			m_worldActionSystem->Shutdown();
 		Disconnect();
 	}
 
@@ -31,9 +40,9 @@ namespace jam::net
 		if (m_running.load(std::memory_order_acquire))
 			return true;
 
-		if (m_userId == 0)
+		if (GetAccountId() == kInvalidAccountId)
 		{
-			JAMNET_LOG_ERROR_LOC("UserId is not set");
+			JAMNET_LOG_ERROR_LOC("AccountId is not set");
 			return false;
 		}
 
@@ -47,55 +56,44 @@ namespace jam::net
 			return false;
 		}
 
-		InitializeWorldSkeleton();
-		
+		PublishNetworkStateEvent();
+
 		return true;
 	}
 
 	void ClientNetworkManager::Disconnect()
 	{
 		const bool wasRunning = m_running.exchange(false, std::memory_order_acq_rel);
-		const bool hasLiveState = wasRunning || m_service || m_tcp.TryGet() || m_udp.TryGet() || m_world;
+		const bool hasLiveState = wasRunning || m_service || m_tcp.TryGetRaw() || m_udp.TryGetRaw();
 		if (!hasLiveState)
 			return;
 
 		m_tcpBound.store(false, std::memory_order_release);
 		m_udpBound.store(false, std::memory_order_release);
-		m_worldAssignmentInFlight.store(false, std::memory_order_release);
-		m_worldRunning.store(false, std::memory_order_release);
-		m_worldId.store(INVALID_WORLD_ID, std::memory_order_release);
 
 		const bool wasReady = m_sessionReady.exchange(false, std::memory_order_acq_rel);
-		{
-			std::scoped_lock lock(m_lastWorldRequestLock);
-			m_lastWorldRequestResult.reset();
-		}
 
-		if (wasReady)
-		{
-			ClientSessionReadyEvent evt{};
-			evt.userId = m_userId;
-			evt.tcpBound = false;
-			evt.udpBound = false;
-			evt.ready    = false;
-			GLOBAL_EVENTBUS_PUBLISH(evt);
-		}
+		(void)wasReady;
 
-		PublishBindStateChangedEvent();
-
-		ResetWorldInstance();
-
-		if (auto* udp = m_udp.TryGet())
+		if (auto* udp = m_udp.TryGetRaw())
 		{
 			udp->Disconnect();
 			m_udp.Set(nullptr);
 		}
 
-		if (auto* tcp = m_tcp.TryGet())
+		if (auto* tcp = m_tcp.TryGetRaw())
 		{
 			tcp->Disconnect();
 			m_tcp.Set(nullptr);
 		}
+
+		SubmitUserContextUpdate([](UserContext& ctx)
+			{
+				ctx.tcp = kInvalidSessionId;
+				ctx.udp = kInvalidSessionId;
+			});
+
+		PublishNetworkStateEvent();
 
 		StopClientService();
 	}
@@ -107,72 +105,80 @@ namespace jam::net
 
 	bool ClientNetworkManager::IsTcpConnected() const
 	{
-		if (auto* tcp = m_tcp.TryGet())
+		if (auto* tcp = m_tcp.TryGetRaw())
 			return tcp->IsConnected();
 		return false;
 	}
 
 	bool ClientNetworkManager::IsUdpConnected() const
 	{
-		if (auto* udp = m_udp.TryGet())
+		if (auto* udp = m_udp.TryGetRaw())
 			return udp->IsConnected();
 		return false;
 	}
 
-	void ClientNetworkManager::SetUserId(uint64 userId)
+
+	void ClientNetworkManager::RequestWorldAction(eWorldAction action, const WorldKey& src, const WorldKey& target)
 	{
-		m_userId = userId;
-		if (m_world)
-			m_world->SetUserId(userId);
+		if (!m_worldActionSystem)
+			return;
+
+		WorldActionRequest req{};
+		req.principalId = GetUserId();
+		req.action = action;
+		req.source = src;
+		req.target = target;
+		m_worldActionSystem->Execute(std::move(req));
 	}
 
-	bool ClientNetworkManager::RequestAutoAssignWorld()
+
+	void ClientNetworkManager::RequestSpawnActor(LocalWorldId worldId, const SpawnParams& params)
 	{
-		return RequestWorldAction([](ClientUdpSession& session)
-		{
-			session.RequestAutoAssignWorld();
-		});
+		if (m_worldActionSystem)
+			m_worldActionSystem->RequestSpawnActor(worldId, params);
 	}
 
-	bool ClientNetworkManager::RequestJoinWorld(const WorldKey& targetWorld)
+	void ClientNetworkManager::RequestDespawnActor(LocalWorldId worldId, NetId netId)
 	{
-		return RequestWorldAction([&targetWorld](ClientUdpSession& session)
-		{
-			session.RequestJoinWorld(targetWorld);
-		});
+		if (m_worldActionSystem)
+			m_worldActionSystem->RequestDespawnActor(worldId, netId);
 	}
 
-	bool ClientNetworkManager::RequestLeaveWorld()
+	void ClientNetworkManager::RequestPossessActor(LocalWorldId worldId, NetId netId)
 	{
-		return RequestWorldAction([](ClientUdpSession& session)
-		{
-			session.RequestLeaveWorld();
-		});
+		if (m_worldActionSystem)
+			m_worldActionSystem->RequestPossessActor(worldId, netId);
 	}
 
-	bool ClientNetworkManager::RequestTransferWorld(const WorldKey& targetWorld)
+	void ClientNetworkManager::RequestUnpossessActor(LocalWorldId worldId, NetId netId)
 	{
-		return RequestWorldAction([&targetWorld](ClientUdpSession& session)
-		{
-			session.RequestTransferWorld(targetWorld);
-		});
+		if (m_worldActionSystem)
+			m_worldActionSystem->RequestUnpossessActor(worldId, netId);
 	}
 
-	ClientBindState ClientNetworkManager::GetBindState() const
+	void ClientNetworkManager::PushInput(LocalWorldId worldId, uint32 inputFlags, float pitch, float yaw, uint32 commandEpoch)
 	{
-		ClientBindState state{};
-		state.tcpBound = m_tcpBound.load(std::memory_order_acquire);
-		state.udpBound = m_udpBound.load(std::memory_order_acquire);
-		state.ready	   = m_sessionReady.load(std::memory_order_acquire);
-		return state;
+		if (m_worldActionSystem)
+			m_worldActionSystem->PushInput(worldId, inputFlags, pitch, yaw, commandEpoch);
 	}
 
-	std::optional<WorldRequestResultEvent> ClientNetworkManager::GetLastWorldRequestResult() const
+	void ClientNetworkManager::PushInput(LocalWorldId worldId, const px::CharacterInput& input)
 	{
-		std::scoped_lock lock(m_lastWorldRequestLock);
-		return m_lastWorldRequestResult;
+		if (m_worldActionSystem)
+			m_worldActionSystem->PushInput(worldId, input);
 	}
 
+	void ClientNetworkManager::SetLatestClickMoveSeq(LocalWorldId worldId, uint64 requestSeq)
+	{
+		if (m_worldActionSystem)
+			m_worldActionSystem->SetLatestClickMoveSeq(worldId, requestSeq);
+	}
+
+	void ClientNetworkManager::RequestClickMove(LocalWorldId worldId, const px::Vec3& from, const px::Vec3& dir, float maxRange, uint64 requestSeq, uint32 commandEpoch, float facingYaw)
+	{
+		if (m_worldActionSystem)
+			m_worldActionSystem->RequestClickMove(worldId, from, dir, maxRange, requestSeq, commandEpoch, facingYaw);
+	}
 
 	bool ClientNetworkManager::StartClientService()
 	{
@@ -188,6 +194,19 @@ namespace jam::net
 
 		if (!m_service->SetSessionFactory<ClientTcpSession, ClientUdpSession>())
 			return false;
+
+		m_service->SetSessionInitCallback([this](Session* session)
+			{
+				if (!session)
+					return;
+
+				if (auto* tcp = dynamic_cast<ClientTcpSession*>(session))
+					tcp->SetNetworkManager(this);
+				else if (auto* udp = dynamic_cast<ClientUdpSession*>(session))
+					udp->SetNetworkManager(this);
+
+				session->SetAccountId(GetAccountId());
+			});
 
 		m_service->Init();
 
@@ -211,23 +230,27 @@ namespace jam::net
 		if (!m_service)
 			return false;
 
-		if (m_tcp.TryGet())
+		if (m_tcp.TryGetRaw())
 			return true;
 
-		auto* session = static_cast<ClientTcpSession*>(m_service->CreateTcpSession());
-
-		if (!session)
+		auto sessionOwner = m_service->CreateTcpSession();
+		if (!sessionOwner)
 			return false;
 
-		session->SetNetworkManager(this);
-		session->SetUserId(m_userId);
-		
-		if (!session->Connect())
-			return false;
+		auto* session = static_cast<ClientTcpSession*>(sessionOwner.get());
+		auto service = m_service;
+		session->Submit(Job([service, session = std::move(sessionOwner)]() mutable
+			{
+				auto* raw = static_cast<ClientTcpSession*>(session.get());
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				if (!state.AttachPreboundSession(std::unique_ptr<Session>(std::move(session))))
+					return;
+
+				service->NotifyTcpSessionAttached();
+				raw->Connect();
+			}, eJobPriority::Critical));
 
 		m_tcp.Set(session);
-
-		if (m_transportAdapter) m_transportAdapter->SetTcpSession(session);
 
 		return true;
 	}
@@ -237,198 +260,70 @@ namespace jam::net
 		if (!m_service)
 			return false;
 
-		if (m_udp.TryGet())
+		if (m_udp.TryGetRaw())
 			return true;
 
-		auto* session = static_cast<ClientUdpSession*>(m_service->CreateUdpSession());
-
-		if (!session)
+		auto sessionOwner = m_service->CreateUdpSession();
+		if (!sessionOwner)
 			return false;
 
-		session->SetNetworkManager(this);
-		session->SetUserId(m_userId);
+		auto* session = static_cast<ClientUdpSession*>(sessionOwner.get());
+		session->SetUserId(m_userId.load(std::memory_order_relaxed));
 
-		if (!session->Connect())
-			return false;
+		auto service = m_service;
+		session->Submit(Job([service, session = std::move(sessionOwner)]() mutable
+			{
+				auto* raw = static_cast<ClientUdpSession*>(session.get());
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				const uint64 endpointId = raw->GetEndpointId();
+				const RouteKey routeKey = raw->GetRouteKey();
+				if (!state.AttachPreboundSession(std::unique_ptr<Session>(std::move(session))))
+					return;
+
+				service->NotifyUdpSessionAttached(endpointId, routeKey);
+				raw->Connect();
+			}, eJobPriority::Critical));
 
 		m_udp.Set(session);
 
-		if (m_transportAdapter) m_transportAdapter->SetUdpSession(session);
-
 		return true;
 	}
 
-	void ClientNetworkManager::InitializeWorldSkeleton()
+	void ClientNetworkManager::NotifyTcpBound(UserId userId)
 	{
-		if (!m_world)
-			m_world = std::make_shared<ClientNetWorld>();
-
-		m_world->SetUserId(m_userId);
-
-		if (m_transportAdapter)
-			m_world->SetTransportSystem(m_transportAdapter);
-
-		m_world->SetHeadless(m_config.headlessWorld);
-
-		if (!m_config.headlessWorld && m_config.physicsFactory)
-		{
-			if (auto phys = m_config.physicsFactory())
-				m_world->SetPhysicsFacade(std::move(phys));
-		}
-
-		m_world->SetLevelPath(m_config.levelPath);
-
-		m_world->Init();
-	}
-
-	bool ClientNetworkManager::RequestWorldAction(const std::function<void(ClientUdpSession&)>& issueRequest)
-	{
-		if (!m_running.load(std::memory_order_acquire))
-			return false;
-
-		if (!m_tcpBound.load(std::memory_order_acquire) || !m_udpBound.load(std::memory_order_acquire))
-			return false;
-
-		auto* udp = m_udp.TryGet();
-		if (!udp)
-			return false;
-
-		bool expected = false;
-		if (!m_worldAssignmentInFlight.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
-			return false;
-
-		issueRequest(*udp);
-		return true;
-	}
-
-	void ClientNetworkManager::StartWorld(WorldId worldId)
-	{
-		if (worldId == INVALID_WORLD_ID)
-			return;
-
-		bool expected = false;
-		if (!m_worldRunning.compare_exchange_strong(expected, true, std::memory_order_acquire))
-			return;
-
-		if (!m_world)
-			InitializeWorldSkeleton();
-
-		if (!m_world)
-		{
-			m_worldRunning.store(false, std::memory_order_release);
-			return;
-		}
-
-		m_world->SetWorldId(worldId);
-		m_world->Tick(SIMULATION_TICK_NS);
-	}
-
-	void ClientNetworkManager::StopWorld()
-	{
-		m_worldRunning.store(false, std::memory_order_release);
-		m_worldId.store(INVALID_WORLD_ID, std::memory_order_release);
-
-		ResetWorldInstance();
-	}
-
-	void ClientNetworkManager::ResetWorldInstance()
-	{
-		auto world = std::move(m_world);
-		if (!world)
-			return;
-
-		world->BeginShutdown(eMailboxCloseMode::Abort);
-	}
-
-	void ClientNetworkManager::NotifyTcpBound()
-	{
+		m_tcp.Refresh();
 		m_tcpBound.store(true, std::memory_order_release);
-
-		ClientTcpBoundEvent evt{};
-		evt.userId = m_userId;
-		GLOBAL_EVENTBUS_PUBLISH(evt);
-
-		if (auto* udp = m_udp.TryGet(); udp && udp->IsConnected() && !m_udpBound.load(std::memory_order_acquire))
-			udp->RequestUdpBind();
+		m_userId.store(userId, std::memory_order_relaxed);
 
 		UpdateSessionReadyState();
-		PublishBindStateChangedEvent();
 
 		if (!ConnectUdp())
-		{
 			Disconnect();
-		}
 	}
 
-	void ClientNetworkManager::NotifyUdpBound()
+	void ClientNetworkManager::NotifyUdpBound(UserId userId)
 	{
+		if (m_userId.load(std::memory_order_relaxed) != userId)
+			return;
+
+		m_udp.Refresh();
 		m_udpBound.store(true, std::memory_order_release);
 
-		ClientUdpBoundEvent evt{};
-		evt.userId = m_userId;
-		GLOBAL_EVENTBUS_PUBLISH(evt);
-
 		UpdateSessionReadyState();
-		PublishBindStateChangedEvent();
 	}
 
-	void ClientNetworkManager::NotifyWorldRequestResult(uint8 status, uint8 requestAction, uint8 assignmentAction, uint8 reason, WorldId worldId)
+
+
+
+
+	void ClientNetworkManager::PublishNetworkStateEvent() const
 	{
-		WorldRequestResultEvent requestEvt{};
-		requestEvt.userId			 = m_userId;
-		requestEvt.status			 = ToWorldAssignmentStatus(status);
-		requestEvt.requestAction	 = ToWorldRequestAction(requestAction);
-		requestEvt.assignmentAction  = ToWorldAssignmentAction(assignmentAction);
-		requestEvt.reason			 = ToWorldTransferReason(reason);
-		requestEvt.worldId			 = worldId;
-		{
-			std::scoped_lock lock(m_lastWorldRequestLock);
-			m_lastWorldRequestResult = requestEvt;
-		}
-		GLOBAL_EVENTBUS_PUBLISH(requestEvt);
-
-		if (requestEvt.IsWaiting())
-		{
-			m_worldAssignmentInFlight.store(true, std::memory_order_release);
-			return;
-		}
-
-		m_worldAssignmentInFlight.store(false, std::memory_order_release);
-
-		if (!requestEvt.IsAssigned())
-			return;
-
-		if (requestEvt.requestAction == eWorldRequestAction::Leave)
-		{
-			StopWorld();
-			return;
-		}
-
-		const WorldId currentWorldId = m_worldId.load(std::memory_order_acquire);
-		if (worldId == INVALID_WORLD_ID)
-		{
-			if (currentWorldId != INVALID_WORLD_ID)
-				StopWorld();
-			return;
-		}
-
-		if (currentWorldId != INVALID_WORLD_ID && currentWorldId != worldId)
-			StopWorld();
-
-		m_worldId.store(worldId, std::memory_order_release);
-		StartWorld(worldId);
-
-		WorldAssignmentSucceededEvent evt{};
-		evt.userId	= m_userId;
-		evt.worldId = worldId;
-		GLOBAL_EVENTBUS_PUBLISH(evt);
-	}
-
-	void ClientNetworkManager::PublishBindStateChangedEvent() const
-	{
-		ClientBindStateChangedEvent evt{};
-		evt.userId = m_userId;
-		evt.state  = GetBindState();
+		NetworkStateEvent evt{};
+		evt.accountId = GetAccountId();
+		evt.userId = GetUserId();
+		evt.state.phase = m_running.load(std::memory_order_acquire)
+			? (m_sessionReady.load(std::memory_order_acquire) ? eNetworkPhase::Ready : eNetworkPhase::Connecting)
+			: eNetworkPhase::Disconnected;
 		GLOBAL_EVENTBUS_PUBLISH(evt);
 	}
 
@@ -437,17 +332,56 @@ namespace jam::net
 		const bool ready = m_tcpBound.load(std::memory_order_acquire) && m_udpBound.load(std::memory_order_acquire);
 		const bool previous = m_sessionReady.exchange(ready, std::memory_order_acq_rel);
 
-		if (auto* tcp = m_tcp.TryGet()) tcp->SetReady(ready);
-		if (auto* udp = m_udp.TryGet()) udp->SetReady(ready);
+		if (auto* tcp = m_tcp.TryGetRaw()) tcp->SetReady(ready);
+		if (auto* udp = m_udp.TryGetRaw()) udp->SetReady(ready);
 
 		if (previous == ready)
 			return;
 
-		ClientSessionReadyEvent evt{};
-		evt.userId	 = m_userId;
-		evt.tcpBound = m_tcpBound.load(std::memory_order_acquire);
-		evt.udpBound = m_udpBound.load(std::memory_order_acquire);
-		evt.ready	 = ready;
-		GLOBAL_EVENTBUS_PUBLISH(evt);
+		PublishNetworkStateEvent();
 	}
+
+	void ClientNetworkManager::SubmitUserContextUpdate(std::function<void(UserContext&)> fn)
+	{
+		if (!fn || m_accountId == kInvalidAccountId)
+			return;
+
+		const uint16 shardIndex = ResolveClientUserShardIndex();
+		auto shard = GLOBAL_EXEC.GetShardFromIndex(shardIndex);
+		if (!shard)
+			return;
+
+		auto invoke = [accountId = m_accountId, fn = std::move(fn)](ShardLocal& local) mutable
+			{
+				auto& state = GetOrCreateUserShardState(local);
+				if (auto* ctx = state.EnsureUserContext(accountId))
+					fn(*ctx);
+			};
+
+		if (auto* local = CurrentShardLocal(); local && local->shardIndex == shardIndex)
+		{
+			invoke(*local);
+			return;
+		}
+
+		shard->Submit(Job([invoke = std::move(invoke)]() mutable
+			{
+				invoke(CurrentShardLocalChecked());
+			}, eJobPriority::Control));
+	}
+
+
+
+	uint16 ClientNetworkManager::ResolveClientUserShardIndex() const
+	{
+		if (m_accountId == kInvalidAccountId)
+			return static_cast<uint16>(kInvalidRouteShard);
+
+		const RouteKey routeKey = GLOBAL_EXEC.MakeRouteKey(kClientPrincipalRouteDomain, m_accountId);
+		if (auto shard = GLOBAL_EXEC.GetShard(routeKey))
+			return static_cast<uint16>(shard->GetIndex());
+
+		return static_cast<uint16>(kInvalidRouteShard);
+	}
+
 }

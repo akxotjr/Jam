@@ -1,208 +1,232 @@
 #include "pch.h"
 #include "jamnet/runtime/ClientSession.h"
 
+
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/RPCAPI.h"
 #include "jamnet/runtime/ClientNetworkManager.h"
+#include "jamnet/runtime/world/ClientWorldActionSystem.h"
+#include "jamnet/sync/networld/ClientPhysicalWorld.h"
 
-#include "jamnet/sync/networld/ClientNetWorld.h"
 #include "jamnet/sync/transport/CustomPacketHelper.h"
 
 namespace jam::net
 {
-
-
-
-	void ClientTcpSession::OnConnected()
+	namespace
 	{
-		JAMNET_LOG_INFO("[Client #{}, UserId = {}] ClientTcpSession connected", m_userId - 1000, m_userId);
+		fb::fbWorldAction ToFb(eWorldAction action)
+		{
+			if (action == eWorldAction::AutoAssign)	return fb::fbWorldAction_AutoAssign;
+			if (action == eWorldAction::Join)		return fb::fbWorldAction_Join;
+			if (action == eWorldAction::Leave)		return fb::fbWorldAction_Leave;
+			if (action == eWorldAction::Transfer)	return fb::fbWorldAction_Transfer;
+			if (action == eWorldAction::Promote)	return fb::fbWorldAction_Promote;
 
-		RequestTcpBind();
+			return fb::fbWorldAction_MAX;
+		}
+
+		WorldActionResult ParseWorldActionResult(const fb::fbWorldActionRes& table)
+		{
+			WorldActionResult result
+			{
+				.status    = static_cast<eWorldActionStatus>(table.status()),
+				.reason    = static_cast<eWorldActionReason>(table.reason()),
+				.action    = static_cast<eWorldAction>(table.request_action()),
+				.execFlags = WorldActionExecFlags(table.exec_flags()),
+				.source    = WorldKey{ table.src_desc_id(), table.src_world_id() },
+				.target    = WorldKey{ table.target_desc_id(), table.target_world_id() },
+			};
+			if (const auto* deltas = table.membership_deltas())
+			{
+				result.membershipDeltas.reserve(deltas->size());
+				for (const fb::fbWorldMembershipDelta* delta : *deltas)
+				{
+					if (!delta)
+						continue;
+
+					result.membershipDeltas.push_back(WorldMembershipDelta
+						{
+							.op = delta->op() == fb::fbWorldMembershipDeltaOp_Remove
+								? eWorldMembershipDeltaOp::Remove
+								: eWorldMembershipDeltaOp::Upsert,
+							.membership =
+							{
+								.key		  = WorldKey{ delta->key_desc_id(), delta->key_world_id() },
+								.localWorldId = kInvalidLocalWorldId, // Resolved locally from NetWorldId.
+								.kind		  = static_cast<eWorldKind>(delta->kind()),
+								.role		  = static_cast<eWorldRole>(delta->role()),
+								.presence	  = static_cast<eWorldMembershipPresence>(delta->presence()),
+							},
+						});
+					}
+			}
+			if (const auto* worldRuntimeDeltas = table.world_runtime_deltas())
+			{
+				result.worldRuntimeDeltas.reserve(worldRuntimeDeltas->size());
+				for (const fb::fbWorldRuntimeDelta* delta : *worldRuntimeDeltas)
+				{
+					if (!delta)
+						continue;
+
+					result.worldRuntimeDeltas.push_back(WorldRuntimeDelta
+						{
+							.key     = WorldKey{ delta->key_desc_id(), delta->key_world_id() },
+							.runtime = static_cast<ePhysicalWorldRuntimeState>(delta->runtime()),
+						});
+				}
+			}
+			return result;
+		}
+
+
+	} // anonymous namespace
+
+
+
+	void ClientTcpSession::OnLinkEstablished()
+	{
+		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientTcpSession established. ip: {} | port: {}",
+			GetAccountId(),
+			GetUserId(),
+			GetRemoteNetAddress().GetIpAddress(),
+			GetRemoteNetAddress().GetPort());
+
+		auto& L		= CurrentShardLocalChecked();
+		auto& state = GetOrCreateUserShardState(L);
+		auto* ctx	= state.EnsureUserContext(m_accountId);
+		if (!ctx) return;
+
+		ctx->userId = GetUserId();
+		ctx->tcp    = GetSessionId();
+
+		if (m_manager)
+			m_manager->NotifyTcpBound(GetUserId());
 	}
 
 	void ClientTcpSession::OnDisconnected()
 	{
-		JAMNET_LOG_INFO("[Client #{}, UserId = {}] ClientTcpSession disconnected", m_userId - 1000, m_userId);
+		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientTcpSession disconnected", GetAccountId(), GetUserId());
 	}
 
-	void ClientTcpSession::HandleCustomPacket(const PacketHeaderView& view)
+	void ClientTcpSession::HandleCustomPacket(Packet packet)
 	{
-		if (!m_manager)
+		auto view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+		const NetWorldId worldId = ResolveScopedPacketWorldId(view);
+		if (worldId == kInvalidNetWorldId)
 			return;
 
-		if (auto* world = m_manager->GetWorld())
-		{
-			world->OnRecvPacket(view);
-		}
-	}
-
-	void ClientTcpSession::RequestTcpBind()
-	{
-		if (m_userId == 0)
-		{
-			JAMNET_LOG_ERROR_LOC("UserId is not set before TCP bind");
-			return;
-		}
-
-		flatbuffers::FlatBufferBuilder fbb(64);
-		const auto root = fb::CreatefbTcpBindReq(fbb, m_userId);
-		fbb.Finish(root);
-
-		RPCCallOptions opt{ eChannel::TCP_DEFAULT, 3_s };
-		RPCCallAsyncMember<fb::fbTcpBindReq, fb::fbTcpBindRes>(this, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientTcpSession::OnTcpBindResponse);
-	}
-
-	void ClientTcpSession::OnTcpBindResponse(std::optional<RPCTableRef<fb::fbTcpBindRes>> res)
-	{
-		if (!res.has_value())
-		{
-			JAMNET_LOG_ERROR_LOC("TCP Bind RPC timeout or connection lost");
-			return;
-		}
-		if (!(*res)->success() || m_userId != (*res)->user_id())
-		{
-			JAMNET_LOG_ERROR_LOC("TCP Bind RPC failed on server");
-			return;
-		}
-
-		if (m_manager) m_manager->NotifyTcpBound();
+		if (auto* worldActionSystem = m_manager ? m_manager->GetWorldActionSystem() : nullptr)
+			worldActionSystem->DispatchWorldPacket(worldId, std::move(packet));
 	}
 
 
 
 
 
-
-	void ClientUdpSession::OnConnected()
+	void ClientUdpSession::OnLinkEstablished()
 	{
-		JAMNET_LOG_INFO("[Client #{}, UserId = {}] ClientUdpSession connected", m_userId - 1000, m_userId);
+		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientUdpSession established. ip: {} | port: {}",
+			GetAccountId(),
+			GetUserId(),
+			GetRemoteNetAddress().GetIpAddress(),
+			GetRemoteNetAddress().GetPort());
 
-		if (m_manager && m_manager->IsTcpBound())
-			RequestUdpBind();
+		auto& L     = CurrentShardLocalChecked();
+		auto& state = GetOrCreateUserShardState(L);
+		auto* ctx   = state.FindUserContext(m_userId);
+		if (!ctx) return;
+		ctx->udp = GetSessionId();
+
+		if (m_manager)
+			m_manager->NotifyUdpBound(GetUserId());
 	}
 
 	void ClientUdpSession::OnDisconnected()
 	{
-		JAMNET_LOG_INFO("[Client #{}, UserId = {}] ClientUdpSession disconnected", m_userId - 1000, m_userId);
+		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientUdpSession disconnected", GetAccountId(), GetUserId());
 	}
 
-	void ClientUdpSession::HandleCustomPacket(const PacketHeaderView& view)
+	void ClientUdpSession::HandleCustomPacket(Packet packet)
 	{
 		if (!m_manager)
+			return;
+
+		auto view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+		if (!view.IsValid())
 			return;
 
 		if (view.Id() == CustomPacketId::WORLD_ASSIGNMENT)
 		{
 			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			auto* table = flatbuffers::GetRoot<fb::fbRequestWorldAssignmentRes>(view.Payload());
+			auto* table = flatbuffers::GetRoot<fb::fbWorldActionRes>(view.Payload());
 			if (!table || !table->Verify(verifier))
 				return;
 
-			m_worldId = table->world_id();
-			m_manager->NotifyWorldRequestResult(table->status(), table->request_action(), table->assignment_action(), table->reason(), m_worldId);
+			if (auto* worldActionSystem = m_manager->GetWorldActionSystem())
+				worldActionSystem->ApplyWorldActionResult(ParseWorldActionResult(*table));
 			return;
 		}
 
-		if (auto* world = m_manager->GetWorld())
+		const NetWorldId worldId = ResolveScopedPacketWorldId(view);
+		if (worldId == kInvalidNetWorldId)
 		{
-			world->OnRecvPacket(view);
+			if (view.Id() == CustomPacketId::SNAPSHOT || view.Id() == CustomPacketId::LIFECYCLE)
+			{
+				JAMNET_LOG_WARN(
+					"[ClientUdpSession] Invalid scoped world id. account={} user={} packetId={} payloadSize={}",
+					GetAccountId(),
+					GetUserId(),
+					static_cast<uint32>(view.Id()),
+					view.PayloadSize());
+			}
+			return;
 		}
+
+		if (auto* worldActionSystem = m_manager->GetWorldActionSystem())
+			worldActionSystem->DispatchWorldPacket(worldId, std::move(packet));
 	}
 
-	void ClientUdpSession::RequestUdpBind()
+	void ClientUdpSession::RequestWorldAction(const WorldActionRequest& req)
 	{
-		if (m_userId == 0)
-		{
-			JAMNET_LOG_ERROR_LOC("UserId is not set before UDP bind");
+		if (!m_manager)
 			return;
-		}
 
-		flatbuffers::FlatBufferBuilder fbb(64);
-		const auto root = fb::CreatefbUdpBindReq(fbb, m_userId);
+		const fb::fbWorldAction fbAction = ToFb(req.action);
+		if (fbAction == fb::fbWorldAction_MAX) return;
+
+		flatbuffers::FlatBufferBuilder fbb(128);
+
+		const auto root = fb::CreatefbWorldActionReq(
+			fbb,
+			fbAction,
+			req.source.descId,
+			req.source.worldId,
+			req.target.descId,
+			req.target.worldId);
 		fbb.Finish(root);
 
-		RPCCallOptions opt{ eChannel::RELIABLE_ORDERED, 3_s };
+		RPCCallOptions opt{ eChannel::RELIABLE_ORDERED, 10_s };
 
-		RPCCallAsyncMember<fb::fbUdpBindReq, fb::fbUdpBindRes>(this, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnUdpBindResponse);
+		RPCCallAsyncMember<fb::fbWorldActionReq, fb::fbWorldActionRes>(this, fbb.GetBufferPointer(), fbb.GetSize(), opt, this, &ClientUdpSession::OnWorldActionResponse);
 	}
 
-	void ClientUdpSession::RequestAutoAssignWorld()
-	{
-		RequestWorldAction(fb::fbWorldRequestAction_AutoAssign);
-	}
-
-	void ClientUdpSession::RequestJoinWorld(const WorldKey& targetWorld)
-	{
-		RequestWorldAction(fb::fbWorldRequestAction_Join, targetWorld);
-	}
-
-	void ClientUdpSession::RequestLeaveWorld()
-	{
-		RequestWorldAction(fb::fbWorldRequestAction_Leave);
-	}
-
-	void ClientUdpSession::RequestTransferWorld(const WorldKey& targetWorld)
-	{
-		RequestWorldAction(fb::fbWorldRequestAction_Transfer, targetWorld);
-	}
-
-	void ClientUdpSession::OnUdpBindResponse(std::optional<RPCTableRef<fb::fbUdpBindRes>> res)
-	{
-		if (!res.has_value())
-		{
-			JAMNET_LOG_ERROR_LOC("UDP Bind RPC timeout or connection lost");
-			return;
-		}
-		if (!(*res)->success())
-		{
-			JAMNET_LOG_ERROR_LOC("UDP Bind RPC failed on server");
-			return;
-		}
-		if (m_userId != (*res)->user_id())
-		{
-			JAMNET_LOG_ERROR_LOC("UDP Bind RPC userId mismatch");
-			return;
-		}
-
-		if (m_manager) m_manager->NotifyUdpBound();
-	}
-
-
-	void ClientUdpSession::OnRequestWorldAssignmentRes(std::optional<RPCTableRef<fb::fbRequestWorldAssignmentRes>> res)
+	void ClientUdpSession::OnWorldActionResponse(std::optional<RPCTableRef<fb::fbWorldActionRes>> res)
 	{
 		if (!res.has_value())
 		{
 			JAMNET_LOG_ERROR("Request world assignment RPC: timeout or connection lost");
-			if (m_manager)
-				m_manager->NotifyWorldRequestResult(
-					static_cast<uint8>(eWorldAssignmentStatus::Failed),
-					m_pendingWorldAction,
-					static_cast<uint8>(eWorldAssignmentAction::None),
-					static_cast<uint8>(eWorldTransferReason::Timeout),
-					INVALID_WORLD_ID);
 			return;
 		}
 
-		m_worldId = (*res)->world_id();
+		if (!m_manager)
+			return;
 
-		if (m_manager)
-			m_manager->NotifyWorldRequestResult((*res)->status(), (*res)->request_action(), (*res)->assignment_action(), (*res)->reason(), m_worldId);
-	}
+		auto* worldActionSystem = m_manager->GetWorldActionSystem();
+		if (!worldActionSystem)
+			return;
 
-	void ClientUdpSession::RequestWorldAction(fb::fbWorldRequestAction action, const WorldKey& targetWorld)
-	{
-		flatbuffers::FlatBufferBuilder fbb(128);
-		const auto root = fb::CreatefbRequestWorldAssignmentReq(
-			fbb,
-			action,
-			INVALID_WORLD_ID,
-			static_cast<uint8>(targetWorld.kind),
-			targetWorld.templateId,
-			targetWorld.instanceId);
-		fbb.Finish(root);
-
-		RPCCallOptions opt{ eChannel::RELIABLE_ORDERED, 10_s };
-		m_pendingWorldAction = static_cast<uint8>(action);
-
-		RPCCallAsyncMember<fb::fbRequestWorldAssignmentReq, fb::fbRequestWorldAssignmentRes>(this, fbb.GetBufferPointer(), static_cast<uint32>(fbb.GetSize()), opt, this, &ClientUdpSession::OnRequestWorldAssignmentRes);
+		WorldActionResult result = ParseWorldActionResult(**res);
+		if (result.Succeeded() && result.action == eWorldAction::Leave)
+			worldActionSystem->ApplyWorldActionResult(result);
 	}
 }

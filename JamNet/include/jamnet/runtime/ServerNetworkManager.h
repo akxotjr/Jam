@@ -1,18 +1,18 @@
 #pragma once
 
 #include "jamnet/core/executor/Lock.h"
-
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/NetAddress.h"
-
-#include "jamnet/runtime/world/IWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/WorldAssignmentTypes.h"
-#include "jamnet/runtime/world/WorldDirectory.h"
+#include "jamnet/core/net/Session.h"
+#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/WorldDescAsset.h"
+#include "jamnet/runtime/ServerSession.h"
+#include "jamnet/runtime/UserContext.h"
 
 #include <jampx/IPhysicsFacade.h>
 
-#include "jamnet/core/net/Session.h"
-
+#include <memory>
+#include <string>
 
 namespace jam::net
 {
@@ -20,43 +20,29 @@ namespace jam::net
 	class ServerService;
 	class ServerTcpSession;
 	class ServerUdpSession;
-	class ServerTransportAdapter;
-	class ServerNetWorld;
-	class IWorldAssignmentService;
+	class ServerWorldActionSystem;
+	class WorldBase;
+
+	using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
+	using PhysicsFactoryProvider = std::function<std::unique_ptr<px::IPhysicsFacade>(const std::string& profile)>;
+	using LevelPathResolver = std::function<std::string(const std::string& levelKey)>;
+
 
 	struct ServerConfig
 	{
-		NetAddress	tcpAddress		= { "127.0.0.1", 7777 };
-		NetAddress	udpAddress		= { "127.0.0.1", 8888 };
-		uint32		maxConnections  = 1000;
+		NetAddress				tcpAddress		= { "127.0.0.1", 7777 };
+		NetAddress				udpAddress		= { "127.0.0.1", 8888 };
+		uint32					maxConnections  = 1000;
 
-		using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
-		PhysicsFactory physicsFactory = nullptr;
+		PhysicsFactory			physicsFactory	= nullptr;
+		PhysicsFactoryProvider	physicsFactoryProvider = nullptr;
 
-		std::string levelPath;
+		std::string				worldAssetPath;
 	};
 
 	class ServerNetworkManager
 	{
-		template<typename T>
-		struct SessionRefSlot
-		{
-			T*				ptr		= nullptr;
-			SessionHandle	handle	= {};
-
-			void Set(T* session)
-			{
-				ptr = session;
-				handle = session ? session->GetSessionHandle() : SessionHandle{};
-			}
-
-			T* TryGet() const
-			{
-				if (ptr && ptr->MatchesSessionHandle(handle))
-					return ptr;
-				return nullptr;
-			}
-		};
+		friend class ServerWorldActionSystem;
 
 	public:
 		explicit ServerNetworkManager(const ServerConfig& config);
@@ -66,90 +52,47 @@ namespace jam::net
 		void								Stop();
 		bool								IsRunning() const { return m_running.load(std::memory_order_acquire); };
 
-		void								SetWorldAssignmentService(std::unique_ptr<IWorldAssignmentService> service);
-		IWorldAssignmentService*			GetWorldAssignmentService() const { return m_assignmentService.get(); }
-		WorldAssignmentResult				RequestWorldAssignment(const WorldAssignmentRequest& req);
-
-		void								SetWorldAssignmentPolicy(std::unique_ptr<IWorldAssignmentPolicy> policy);
-		IWorldAssignmentPolicy*				GetWorldAssignmentPolicy() const;
+		ServerWorldActionSystem*			GetWorldActionSystem() const { return m_worldActionSystem.get(); }
+		void								RequestWorldAction(WorldActionRequest req);
 
 		std::shared_ptr<ServerService>		GetService() const { return m_service; }
 
-		WorldId								ResolveWorldId(const WorldKey& key);
-		WorldId								ResolveOrAllocateWorldId(const WorldKey& key, const WorldOptions& options);
-		WorldKey							GetWorldKey(WorldId worldId);
+		PhysicsFactory						GetPhysicsFacotry() const { return m_config.physicsFactory; }
+		PhysicsFactoryProvider				GetPhysicsFacotryProvider() const { return m_config.physicsFactoryProvider; }
 
-		ServerNetWorld*						GetWorld(WorldId worldId);
-		ServerNetWorld*						GetWorld(const WorldKey& key);
-		ServerNetWorld*						GetOrCreateWorld(WorldId worldId);
-		ServerNetWorld*						GetOrCreateWorld(WorldId worldId, const WorldOptions& options);
-		ServerNetWorld*						GetOrCreateWorld(const WorldKey& key, const WorldOptions& options);
-		void								DestroyWorld(WorldId worldId);
+		void								CreateWorld(WorldKey key);
 		void								DestroyWorld(const WorldKey& key);
 
-		void								RegisterTcpSession(uint64 userId, ServerTcpSession* tcp);
-		void								RegisterUdpSession(uint64 userId, ServerUdpSession* udp);
-		void								UnregisterUdpSession(uint64 userId, const ServerUdpSession* udp);
-		void								UnregisterSession(uint64 userId);
+		bool								SubmitWorldJob(const WorldKey& key, std::function<void(WorldBase&)> job);
 
-		ServerTcpSession*					FindTcpSession(uint64 userId);
-		ServerUdpSession*					FindUdpSession(uint64 userId);
+		bool								CacheTcpSession(UserId userId, ServerTcpSession* tcp);
+		bool								CacheUdpSession(UserId userId, ServerUdpSession* udp);
+		void								ReleaseUdpSession(UserId userId, const ServerUdpSession* udp);
+		void								ReleaseSession(UserId userId);
+		ServerSessionBundle					GetSessionBundle(UserId userId);
 
-		void								BroadcastPacket(Packet packet, eProtocolType protocol);
-		void								SendToUser(uint64 userId, Packet packet, eProtocolType protocol);
+		ServerTcpSession*					FindTcpSession(UserId userId);
+		ServerUdpSession*					FindUdpSession(UserId userId);
 
-		void								JoinWorld(WorldId worldId, uint64 userId);
-		void								LeaveWorld(WorldId worldId, uint64 userId);
-		bool								TransferWorldAsync(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, std::function<void(WorldTransferResult)> onDone);
-		WorldTransferResult					TransferWorldAwait(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, uint64 timeout_ns = 0);
-		WorldTransferResult					TransferWorld(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId);
-		bool								AttachTransferCallback(uint64 userId, std::function<void(WorldTransferResult)> onDone);
-
-		uint32								GetWorldMemberCount(WorldId worldId);
-		WorldOptions						GetWorldOptions(WorldId worldId);
-
-		void								EnumerateConnectedUsers(const std::function<void(uint64)>& fn);
-		void								EnumerateWorldUsers(WorldId worldId, const std::function<void(uint64)>& fn);
-		void								TryDestroyWorldIfEmpty(WorldId worldId);
-		void								TryDestroyWorldIfEmpty(const WorldKey& key);
-		WorldOptions						GetWorldOptions(const WorldKey& key) { return GetWorldOptions(ResolveWorldId(key)); }
+		void								Send(UserId userId, Packet packet, eProtocolType protocol);
+		void								Multicast(const WorldKey& key, Packet packet);
+		void								Broadcast(Packet packet);
 
 	private:
-		friend struct						WorldTransferAsyncState;
-		struct								WorldTransferRecord;
-
-		bool									StartServerService();
-		void									StopServerService();
-		std::shared_ptr<ServerNetWorld>			FindWorldShared(WorldId worldId);
-		bool									ReserveWorldTransferMembership(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, const WorldOptions& targetOptions);
-		void									RollbackWorldTransferMembership(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId);
-		std::shared_ptr<WorldTransferRecord>	BeginOrJoinTransfer(WorldId sourceWorldId, WorldId targetWorldId, uint64 userId, std::function<void(WorldTransferResult)> onDone, bool& shouldStart, WorldTransferResult& immediateResult);
-		void									UpdateTransferPhase(uint64 userId, uint8 phase);
-		void									CompleteTransfer(uint64 userId, const WorldTransferResult& result);
+		bool								StartServerService();
+		void								StopServerService();
 
 	private:
-		static constexpr int	kWorldLockIdx	 = 0;
-		static constexpr int	kTransferLockIdx = 1;
-		static constexpr int	kSessionLockIdx	 = 2;
-		USE_MANY_LOCKS(3)
+		static constexpr int	kSessionLockIdx	 = 1;
+		USE_MANY_LOCKS(2)
 
-		ServerConfig								m_config			= {};
+		ServerConfig										m_config			= {};
 
-		std::shared_ptr<ServerService>				m_service			= nullptr;
-		std::shared_ptr<ServerTransportAdapter>		m_tranportAdapter	= nullptr;
+		std::shared_ptr<ServerService>						m_service			= nullptr;
+		std::unique_ptr<ServerWorldActionSystem>			m_worldActionSystem	= nullptr;
 
-		std::unique_ptr<IWorldAssignmentService>    m_assignmentService	= nullptr;
-		WorldDirectory								m_worldDirectory;
+		std::atomic<bool>									m_running			= false;
 
-		std::atomic<bool>							m_running			= false;
-
-		std::unordered_map<WorldId, std::shared_ptr<ServerNetWorld>>		m_worlds;
-		std::unordered_map<WorldId, std::vector<uint64>>					m_worldMembers;
-		std::atomic<uint64>													m_nextTransferAwaitKey = 1;
-		std::unordered_map<uint64, std::shared_ptr<WorldTransferRecord>>	m_transfers;
-		std::unordered_map<uint64, WorldTransferResult>						m_recentTransferResults;
-
-		std::unordered_map<uint64, SessionRefSlot<ServerTcpSession>>		m_tcpSessions;
-		std::unordered_map<uint64, SessionRefSlot<ServerUdpSession>>		m_udpSessions;
+		std::unordered_map<UserId, ServerSessionBundle>		m_sessions;		// UserId : SessionRefBundle
 	};
 }
