@@ -83,7 +83,7 @@
         "word2": 0,
         "word3": 0
       },
-      "half_extents": [ 100.0, 0.2, 100.0 ]
+      "half_extents": [ 1000.0, 0.2, 1000.0 ]
     },
     "shape_map": {
       "type": "triangle_mesh",

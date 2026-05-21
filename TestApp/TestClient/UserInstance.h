@@ -8,7 +8,7 @@
 
 using namespace std;
 
-struct ActorSnapshot
+struct ActorFrameSample
 {
 	uint32                          tick = 0;
 	optional<px::RigidState>        rigid = nullopt;
@@ -33,7 +33,8 @@ struct ActorRenderingData
 
 	px::ObjectId            oid					= px::INVALID_OBJ_ID;
 	bool                    isLocal				= false;
-	deque<ActorSnapshot>    snapshots;
+	bool                    hidden				= false;
+	deque<ActorFrameSample> snapshots;
 
 	px::Vec3                smoothedPos			= px::Vec3::Zero();
 	px::Quat                smoothedRot			= px::Quat::Identity();
@@ -48,7 +49,7 @@ struct ActorRenderingData
 class UserInstance : public ClientInstance
 {
 public:
-	UserInstance(uint32 instanceId, uint64 userId);
+	UserInstance(uint32 instanceId, uint64 accountId);
 	~UserInstance() override = default;
 
 	void                    Update(float deltaTime) override;
@@ -57,11 +58,9 @@ public:
 protected:
 	void                    UpdateInput(float deltaTime) override;
 	void                    OnSpawnRequested(SpawnKind kind, uint32 spawnReqId) override;
-	void                    OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt) override;
-	void                    OnActorSpawned(const net::RenderActorSpawnedEvent& evt) override;
-	void                    OnActorDespawned(const net::RenderActorDespawnedEvent& evt) override;
+	void                    OnMainWorldChanged(net::LocalWorldId previousWorldId, net::LocalWorldId currentWorldId) override;
+	void                    OnActorLifecycle(const net::ActorLifecycleEvent& evt) override;
 	void                    OnClickMoveResolved(const net::ClickMoveResolvedEvent& evt) override;
-	void                    OnRenderSamples(const net::RenderSamplesEvent& evt) override;
 
 private:
 	void                    ProcessControlInput();
@@ -69,11 +68,9 @@ private:
 	void                    HandleGroundPick(GLFWwindow* window);
 	bool                    TryGetLocalActorPosition(OUT px::Vec3& outPos) const;
 	bool                    ApplyClickMoveControl();
-
-
-
-	void                    CreateRenderingLevelData(const net::RenderLevelSpawnedEvent& evt);
-	ActorRenderingData*     EnsureRenderingActorData(const net::RenderActorSpawnedEvent& evt);
+	void                    ConsumeActorSnapshots();
+	ActorRenderingData*     EnsureRenderingActorData(const net::ActorLifecycleEvent& evt);
+	void                    ResetRenderingActorTemporalState(ActorRenderingData& data);
 
 	void                    BuildRenderFrames();
 	void                    UpdateCamera();
@@ -98,6 +95,8 @@ private:
 	unordered_map<px::ObjectId, ActorRenderingData> m_actorRenderData;
 	uint32											m_currentRenderTick		= 0;
 	uint32											m_latestServerTick		= 0;
+	uint64											m_lastSnapshotSequence	= 0;
+	net::LocalWorldId								m_snapshotWorldId		= net::kInvalidLocalWorldId;
 	float											m_tickAccumulator		= 0.0f;
 
 	bool											m_mouseInitialized		= false;
@@ -119,7 +118,7 @@ private:
 	uint64											m_lastControlNs			= 0;
 	float											m_estControlSpeed		= 0.0f;
 													
-	float											m_topDownHeight			= 50.0f;
+	float											m_topDownHeight			= 80.0f;
 	float											m_topDownBackOffset		= 12.0f;
 													
 	float											m_lastActorY			= 0.0f;

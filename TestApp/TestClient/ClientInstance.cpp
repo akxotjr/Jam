@@ -1,131 +1,80 @@
 #include "pch.h"
 #include "ClientInstance.h"
 
-#include "jamnet/sync/networld/ClientNetWorld.h"
+#include "jamnet/runtime/ClientSession.h"
+#include "jamnet/sync/networld/ClientPhysicalWorld.h"
 #include "jampx/PhysicsFacade.h"
 
-ClientInstance::ClientInstance(uint32 instanceId, uint64 userId, ClientInstanceConfig config)
-	: m_instanceId(instanceId), m_userId(userId), m_config(config)
+ClientInstance::ClientInstance(uint32 instanceId, uint64 accountId, ClientInstanceConfig config)
+	: m_instanceId(instanceId), m_accountId(accountId), m_config(config)
 {
-	m_subSessionReady = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::ClientSessionReadyEvent,
-		[this](const jam::net::ClientSessionReadyEvent& evt) { HandleSessionReady(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-	m_subWorldRequestResult = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::WorldRequestResultEvent,
-		[this](const jam::net::WorldRequestResultEvent& evt) { HandleWorldRequestResult(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-	m_subWorldAssignmentSucceeded = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::WorldAssignmentSucceededEvent,
-		[this](const jam::net::WorldAssignmentSucceededEvent& evt) { HandleWorldAssignmentSucceeded(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-	m_subLevelSpawned = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::RenderLevelSpawnedEvent,
-		[this](const jam::net::RenderLevelSpawnedEvent& evt) { HandleLevelSpawned(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-	m_subActorSpawned = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::RenderActorSpawnedEvent,
-		[this](const jam::net::RenderActorSpawnedEvent& evt) { HandleActorSpawned(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-	m_subActorDespawned = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::RenderActorDespawnedEvent,
-		[this](const jam::net::RenderActorDespawnedEvent& evt) { HandleActorDespawned(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-	m_subClickMoveResolved = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::ClickMoveResolvedEvent,
-		[this](const jam::net::ClickMoveResolvedEvent& evt) { HandleClickMoveResolved(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-	m_subRenderSamples = GLOBAL_EVENTBUS_SUBSCRIBE(
-		jam::net::RenderSamplesEvent,
-		[this](const jam::net::RenderSamplesEvent& evt) { HandleRenderSamples(evt); },
-		jam::SubscribeOptions{ jam::eDispatchPolicy::MainExecutor }
-	);
-
-
 	JAMNET_LOG_INFO("[Client #{}] Created", m_instanceId);
 }
 
 ClientInstance::~ClientInstance()
 {
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subLevelSpawned.type, m_subLevelSpawned.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subActorSpawned.type, m_subActorSpawned.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subActorDespawned.type, m_subActorDespawned.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subClickMoveResolved.type, m_subClickMoveResolved.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subRenderSamples.type, m_subRenderSamples.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subSessionReady.type, m_subSessionReady.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subWorldRequestResult.type, m_subWorldRequestResult.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subWorldAssignmentSucceeded.type, m_subWorldAssignmentSucceeded.id);
-
 	Disconnect();
 	JAMNET_LOG_INFO("[Client #{}] Destroyed", m_instanceId);
 }
 
 bool ClientInstance::Connect(const string& serverIp, uint16 tcpPort, uint16 udpPort)
 {
-	if (m_networkManager)
+	if (m_runtime)
 	{
 		JAMNET_LOG_WARN("[Client #{}] Already connected", m_instanceId);
 		return true;
 	}
 
 	net::ClientConfig config{};
+	config.accountId		= m_accountId;
 	config.serverTcpAddress = net::NetAddress(serverIp, tcpPort);
 	config.serverUdpAddress = net::NetAddress(serverIp, udpPort);
-	config.headlessWorld	= m_config.headlessNetWorld;
+	config.headlessWorld	= m_config.headlessPhysicalWorld;
 	if (!config.headlessWorld)
 		config.physicsFactory = [] { return std::make_unique<jam::px::PhysicsFacade>(); };
-	config.levelPath		= "C://Users//akxotjr//GameWorkSpace//Jam//TestApp//Contents//test_level1.json";
+	config.worldAssetPath	= "C://Users//akxotjr//GameWorkSpace//Jam-dev//TestApp//Contents//world_templates.json";
 
-	m_networkManager = std::make_unique<net::ClientNetworkManager>(config, m_userId);
+	m_runtime = std::make_unique<net::ClientRuntime>(config);
+	RegisterRuntimeSubscriptions();
 
-	if (!m_networkManager->Connect())
+	if (!m_runtime->Connect())
 	{
 		JAMNET_LOG_ERROR("[Client #{}] Failed to try connecting to server", m_instanceId);
-		m_networkManager.reset();
+		UnregisterRuntimeSubscriptions();
+		m_runtime.reset();
 		return false;
 	}
 
-	JAMNET_LOG_INFO("[Client #{}] success to try connecting to server (userId= {})", m_instanceId, m_userId);
+	//JAMNET_LOG_INFO("[Client #{}] success to try connecting to server (accountId= {})", m_instanceId, m_accountId);
 	return true;
 }
 
 void ClientInstance::Disconnect()
 {
-	if (!m_networkManager)
+	if (!m_runtime)
 		return;
 
-	m_networkManager->Disconnect();
-	m_networkManager.reset();
+	UnregisterRuntimeSubscriptions();
+	m_runtime->Disconnect();
+	m_runtime.reset();
 
 	m_pendingPlayerSpawnReqIds.clear();
 	m_localObjectId = px::INVALID_OBJ_ID;
-	m_assignedWorldId = net::INVALID_WORLD_ID;
+	m_mainWorld = net::kInvalidLocalWorldId;
+	m_auxiliaryWorlds.clear();
+	m_autoAssignRequested = false;
 
 	JAMNET_LOG_INFO("[Client #{}] Disconnected", m_instanceId);
 }
 
 bool ClientInstance::IsConnected() const
 {
-	return m_networkManager && m_networkManager->IsConnected();
+	return m_runtime && m_runtime->GetNetworkState().phase != net::eNetworkPhase::Disconnected;
 }
 
 void ClientInstance::Update(float deltaTime)
 {
-	if (!m_networkManager)
+	if (!m_runtime)
 		return;
 
 	UpdateInput(deltaTime);
@@ -141,11 +90,7 @@ void ClientInstance::SpawnActor()
 
 void ClientInstance::SpawnPlayer()
 {
-	if (!m_networkManager) return;
-
-	auto* world = m_networkManager->GetWorld();
-	if (!world) return;
-
+	if (!m_runtime) return;
 
 	px::Vec3 pos;
 	if (m_type == eClientType::User)
@@ -168,34 +113,35 @@ void ClientInstance::SpawnPlayer()
 
 	m_pendingPlayerSpawnReqIds.insert(charParams.spawnId);
 	OnSpawnRequested(SpawnKind::Player, charParams.spawnId);
-	world->SpawnActor(charParams);
+
+	m_runtime->RequestSpawnActor(charParams);
 }
 
 void ClientInstance::SpawnPlayerDrone()
 {
-	if (!m_networkManager) return;
+	//if (!m_networkManager) return;
 
-	auto* world = m_networkManager->GetWorld();
-	if (!world) return;
+	//auto* world = m_networkManager->GetWorld();
+	//if (!world) return;
 
-	net::SpawnParams droneParams{};
-	droneParams.spawnId			= m_nextSpawnReqId++;
-	droneParams.owned			= true;
-	droneParams.controlled		= false;
-	droneParams.targetObjectId	= m_localObjectId;
+	//net::SpawnParams droneParams{};
+	//droneParams.spawnId			= m_nextSpawnReqId++;
+	//droneParams.owned			= true;
+	//droneParams.controlled		= false;
+	//droneParams.targetObjectId	= m_localObjectId;
 
-	droneParams.desc.prefab		= px::MakePrefabKey("OrbitDrone");
-	droneParams.desc.spawnSrc	= px::eSpawnSource::Runtime;
-	droneParams.desc.pose		= {};
-	droneParams.desc.overrides	= px::RigidSpawnOverrides{};
+	//droneParams.desc.prefab		= px::MakePrefabKey("OrbitDrone");
+	//droneParams.desc.spawnSrc	= px::eSpawnSource::Runtime;
+	//droneParams.desc.pose		= {};
+	//droneParams.desc.overrides	= px::RigidSpawnOverrides{};
 
-	OnSpawnRequested(SpawnKind::PlayerDrone, droneParams.spawnId);
-	world->SpawnActor(droneParams);
+	//OnSpawnRequested(SpawnKind::PlayerDrone, droneParams.spawnId);
+	//world->SpawnActor(droneParams);
 }
 
 void ClientInstance::SpawnBullet(const px::Vec3& muzzlePos, const px::Vec3& shootDir)
 {
-	if (!m_networkManager) return;
+	/*if (!m_networkManager) return;
 
 	auto* world = m_networkManager->GetWorld();
 	if (!world) return;
@@ -228,7 +174,7 @@ void ClientInstance::SpawnBullet(const px::Vec3& muzzlePos, const px::Vec3& shoo
 	};
 
 	OnSpawnRequested(SpawnKind::Bullet, bulletParams.spawnId);
-	world->SpawnActor(bulletParams);
+	world->SpawnActor(bulletParams);*/
 }
 
 void ClientInstance::DespawnActor()
@@ -245,142 +191,130 @@ void ClientInstance::UnpossessActor()
 
 void ClientInstance::ControlCharacter(uint32 inputFlags, float pitch, float yaw, uint32 commandEpoch)
 {
-	if (!m_networkManager) return;
+	if (!m_runtime) return;
 
-	auto* world = m_networkManager->GetWorld();
-	if (!world) return;
-
-	world->PushInput(inputFlags, yaw, pitch, commandEpoch);
+	m_runtime->PushInput(inputFlags, pitch, yaw, commandEpoch);
 }
 
-void ClientInstance::HandleSessionReady(const net::ClientSessionReadyEvent& evt)
+void ClientInstance::RegisterRuntimeSubscriptions()
 {
-	if (evt.userId != m_userId)
+	if (!m_runtime)
 		return;
 
-	if (!evt.ready)
-		return;
-
-	if (!m_networkManager)
-		return;
-
-	if (m_networkManager->GetWorldId() != net::INVALID_WORLD_ID)
-		return;
-
-	if (m_networkManager->IsWorldRequestInFlight())
-		return;
-
-	if (!m_networkManager->RequestAutoAssignWorld())
-	{
-		JAMNET_LOG_WARN("[Client #{}] Failed to request auto world assignment after session ready", m_instanceId);
-	}
+	const jam::SubscribeOptions opt{ jam::eDispatchPolicy::MainExecutor };
+	m_subNetworkState = m_runtime->SubscribeNetworkState(
+		[this](const net::NetworkStateEvent& evt) { HandleNetworkState(evt); }, opt);
+	m_subWorldMembership = m_runtime->SubscribeWorldMembership(
+		[this](const net::WorldMembershipEvent& evt) { HandleWorldMembership(evt); }, opt);
+	m_subActorLifecycle = m_runtime->SubscribeActorLifecycle(
+		[this](const net::ActorLifecycleEvent& evt) { HandleActorLifecycle(evt); }, opt);
+	m_subClickMoveResolved = m_runtime->SubscribeClickMoveResolved(
+		[this](const net::ClickMoveResolvedEvent& evt) { HandleClickMoveResolved(evt); }, opt);
 }
 
-void ClientInstance::HandleWorldRequestResult(const net::WorldRequestResultEvent& evt)
+void ClientInstance::UnregisterRuntimeSubscriptions()
 {
-	if (evt.userId != m_userId)
-		return;
-
-	if (evt.status == net::eWorldAssignmentStatus::Failed)
-	{
-		JAMNET_LOG_WARN(
-			"[Client #{}] World request failed: requestAction={}, assignmentAction={}, reason={}, worldId={}",
-			m_instanceId,
-			static_cast<uint32>(evt.requestAction),
-			static_cast<uint32>(evt.assignmentAction),
-			static_cast<uint32>(evt.reason),
-			evt.worldId);
-		return;
-	}
-
-	if (evt.status == net::eWorldAssignmentStatus::Waiting)
-	{
-		JAMNET_LOG_WARN(
-			"[Client #{}] World request in-doubt/waiting: requestAction={}, assignmentAction={}, reason={}, worldId={}",
-			m_instanceId,
-			static_cast<uint32>(evt.requestAction),
-			static_cast<uint32>(evt.assignmentAction),
-			static_cast<uint32>(evt.reason),
-			evt.worldId);
-	}
-
-	if (evt.status == net::eWorldAssignmentStatus::Assigned && (evt.requestAction == net::eWorldRequestAction::Leave || evt.worldId == net::INVALID_WORLD_ID))
-	{
-		m_pendingPlayerSpawnReqIds.clear();
-		m_localObjectId   = px::INVALID_OBJ_ID;
-		m_assignedWorldId = net::INVALID_WORLD_ID;
-	}
+	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subNetworkState.type, m_subNetworkState.id);
+	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subWorldMembership.type, m_subWorldMembership.id);
+	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subActorLifecycle.type, m_subActorLifecycle.id);
+	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subClickMoveResolved.type, m_subClickMoveResolved.id);
+	m_subNetworkState = {};
+	m_subWorldMembership = {};
+	m_subActorLifecycle = {};
+	m_subClickMoveResolved = {};
 }
 
-void ClientInstance::HandleWorldAssignmentSucceeded(const net::WorldAssignmentSucceededEvent& evt)
+void ClientInstance::HandleNetworkState(const net::NetworkStateEvent& evt)
 {
-	if (evt.userId != m_userId)
-		return;
-
-	if (!m_networkManager || evt.worldId == net::INVALID_WORLD_ID)
-		return;
-
-	if (m_assignedWorldId != evt.worldId)
+	if (evt.state.phase != net::eNetworkPhase::Ready)
 	{
+		m_autoAssignRequested = false;
+		return;
+	}
+
+	if (!m_config.autoAssignOnReady || m_autoAssignRequested || !m_runtime)
+		return;
+
+	if (!m_runtime->GetWorldMemberships().empty())
+		return;
+
+	const net::WorldKey targetKey{ .descId = m_config.autoAssignTemplateId };
+	if (!targetKey.IsValid())
+		return;
+
+	m_autoAssignRequested = true;
+	m_runtime->RequestWorldAction(net::eWorldAction::AutoAssign, {}, targetKey);
+	//JAMNET_LOG_INFO("[Client #{}] Requested auto world assignment: templateId={}", m_instanceId, targetKey.descId);
+}
+
+void ClientInstance::HandleWorldMembership(const net::WorldMembershipEvent& evt)
+{
+	if (!m_runtime)
+		return;
+
+	m_auxiliaryWorlds.clear();
+	for (const net::WorldMembershipView& membership : m_runtime->GetWorldMemberships())
+	{
+		if (membership.role == net::eWorldRole::Auxiliary && membership.localWorldId != net::kInvalidLocalWorldId)
+			m_auxiliaryWorlds.push_back(membership.localWorldId);
+	}
+
+	const auto mainMembership = m_runtime->GetMainWorldMembership();
+	const net::LocalWorldId nextMainWorld = mainMembership.has_value()
+		? mainMembership->localWorldId
+		: net::kInvalidLocalWorldId;
+	const bool mainWorldChanged = nextMainWorld != m_mainWorld;
+
+	if (mainWorldChanged)
+	{
+		const net::LocalWorldId previousWorld = m_mainWorld;
 		m_pendingPlayerSpawnReqIds.clear();
 		m_localObjectId = px::INVALID_OBJ_ID;
-		m_assignedWorldId = evt.worldId;
+		m_mainWorld = nextMainWorld;
+		OnMainWorldChanged(previousWorld, nextMainWorld);
 	}
-	else if (m_localObjectId != px::INVALID_OBJ_ID || !m_pendingPlayerSpawnReqIds.empty())
+
+	if (evt.change == net::eWorldMembershipChange::Left && nextMainWorld == net::kInvalidLocalWorldId)
+		return;
+
+	if (nextMainWorld == net::kInvalidLocalWorldId)
+		return;
+
+	const bool eventTouchesMainWorld = evt.membership.localWorldId == nextMainWorld
+		|| (mainMembership.has_value() && evt.membership.key == mainMembership->key);
+	if (!mainWorldChanged && !eventTouchesMainWorld)
+		return;
+
+	m_autoAssignRequested = false;
+	if (m_localObjectId != px::INVALID_OBJ_ID || !m_pendingPlayerSpawnReqIds.empty())
 	{
-		JAMNET_LOG_DEBUG("[Client #{}] Skip SpawnPlayer on duplicate world assignment success: worldId={}", m_instanceId, evt.worldId);
+		//JAMNET_LOG_DEBUG("[Client #{}] Skip SpawnPlayer on duplicate main-world membership update: localWorldId={}", m_instanceId, nextMainWorld);
 		return;
 	}
 
-	JAMNET_LOG_INFO("[Client #{}] World assignment succeeded: worldId={}", m_instanceId, evt.worldId);
+	//JAMNET_LOG_INFO("[Client #{}] Main world ready: localWorldId={}", m_instanceId, nextMainWorld);
 	SpawnPlayer();
 }
 
-void ClientInstance::HandleLevelSpawned(const net::RenderLevelSpawnedEvent& evt)
+void ClientInstance::HandleActorLifecycle(const net::ActorLifecycleEvent& evt)
 {
-	if (evt.userId != m_userId)
-		return;
-
-	OnLevelSpawned(evt);
-}
-
-void ClientInstance::HandleActorSpawned(const net::RenderActorSpawnedEvent& evt)
-{
-	if (evt.userId != m_userId)
-		return;
-
-	if (m_pendingPlayerSpawnReqIds.erase(evt.spawnReqId) > 0 && evt.isLocal)
+	if (evt.reason == net::eActorLifecycleReason::Spawned && m_pendingPlayerSpawnReqIds.erase(evt.spawnReqId) > 0 && evt.isLocal)
 	{
 		m_localObjectId = evt.objectId;
 		//SpawnPlayerDrone();
 	}
 
-	OnActorSpawned(evt);
-}
-
-void ClientInstance::HandleActorDespawned(const net::RenderActorDespawnedEvent& evt)
-{
-	if (evt.userId != m_userId)
-		return;
-
-	if (evt.objectId == m_localObjectId)
+	if ((evt.reason == net::eActorLifecycleReason::Despawned
+		|| evt.reason == net::eActorLifecycleReason::PredictedDespawn)
+		&& evt.objectId == m_localObjectId)
+	{
 		m_localObjectId = px::INVALID_OBJ_ID;
+	}
 
-	OnActorDespawned(evt);
+	OnActorLifecycle(evt);
 }
 
 void ClientInstance::HandleClickMoveResolved(const net::ClickMoveResolvedEvent& evt)
 {
-	if (evt.userId != m_userId)
-		return;
-
 	OnClickMoveResolved(evt);
-}
-
-void ClientInstance::HandleRenderSamples(const net::RenderSamplesEvent& evt)
-{
-	if (evt.userId != m_userId)
-		return;
-
-	OnRenderSamples(evt);
 }

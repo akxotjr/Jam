@@ -31,7 +31,7 @@ struct TestConfig
 	string serverIp     = "127.0.0.1";
 	uint16 tcpPort      = 7777;
 	uint16 udpPort      = 8888;
-	bool botHeadlessNetWorld = true;
+	bool botHeadlessPhysicalWorld = true;
 	float metricsWarmupSec = 8.0f;
 };
 
@@ -85,7 +85,7 @@ struct ScopedTimerResolution
 
 namespace
 {
-	struct SessionMetricsRow
+	/*struct SessionMetricsRow
 	{
 		uint64 captureEpochMs = 0;
 
@@ -542,7 +542,7 @@ namespace
 		std::filesystem::path m_summaryPath;
 		std::ofstream m_csv;
 		std::vector<SessionMetricsRow> m_rows;
-	};
+	};*/
 }
 
 static void Run(const TestConfig& config)
@@ -560,12 +560,12 @@ static void Run(const TestConfig& config)
 	std::vector<std::unique_ptr<ClientInstance>> clients;
 
 	uint32 instanceId = 0;
-	uint64 userId     = 1000;
+	uint64 accountId  = 1000;
 
 	// User 클라이언트 생성 및 연결 (렌더링 포함)
-	for (uint32 i = 0; i < config.numUsers; ++i, ++instanceId, ++userId)
+	for (uint32 i = 0; i < config.numUsers; ++i, ++instanceId, ++accountId)
 	{
-		auto client = std::make_unique<UserInstance>(instanceId, userId);
+		auto client = std::make_unique<UserInstance>(instanceId, accountId);
 
 		if (client->Connect(config.serverIp, config.tcpPort, config.udpPort))
 		{
@@ -585,11 +585,11 @@ static void Run(const TestConfig& config)
 	}
 
 	// Bot 클라이언트 생성 및 연결 (렌더링 없음)
-	for (uint32 i = 0; i < config.numBots; ++i, ++instanceId, ++userId)
+	for (uint32 i = 0; i < config.numBots; ++i, ++instanceId, ++accountId)
 	{
 		BotTrafficConfig botConfig{};
-		botConfig.headlessNetWorld = config.botHeadlessNetWorld;
-		auto client = std::make_unique<BotInstance>(instanceId, userId, botConfig);
+		botConfig.headlessPhysicalWorld = config.botHeadlessPhysicalWorld;
+		auto client = std::make_unique<BotInstance>(instanceId, accountId, botConfig);
 
 		if (client->Connect(config.serverIp, config.tcpPort, config.udpPort))
 		{
@@ -601,7 +601,7 @@ static void Run(const TestConfig& config)
 			JAMNET_LOG_ERROR("Failed to connect bot #{}", i);
 		}
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	}
 
 	constexpr double targetFPS  = 144.0;
@@ -610,12 +610,12 @@ static void Run(const TestConfig& config)
 
 	ScopedTimerResolution timerResGuard{};
 
-	SessionCsvReporter reporter{};
-	const float warmupSec = std::max(0.0f, config.metricsWarmupSec);
-	const auto warmupDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(warmupSec));
-	const auto warmupEnd = std::chrono::steady_clock::now() + warmupDuration;
-	bool metricsWindowActive = (warmupSec <= 0.0f);
-	auto nextDump = std::chrono::steady_clock::now() + 1s;
+	//SessionCsvReporter reporter{};
+	//const float warmupSec = std::max(0.0f, config.metricsWarmupSec);
+	//const auto warmupDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(warmupSec));
+	//const auto warmupEnd = std::chrono::steady_clock::now() + warmupDuration;
+	//bool metricsWindowActive = (warmupSec <= 0.0f);
+	//auto nextDump = std::chrono::steady_clock::now() + 1s;
 	auto prevFrameStart = std::chrono::steady_clock::now();
 
 	while (!renderer.ShouldClose())
@@ -641,19 +641,18 @@ static void Run(const TestConfig& config)
 		}
 
 		const auto now = std::chrono::steady_clock::now();
-		if (!metricsWindowActive && now >= warmupEnd)
-		{
-			const uint32 resetCount = ResetSessionProfileWindows(clients);
-			JAMNET_LOG_INFO("[TestClient] Metrics warmup finished. Reset {} UDP session profile windows after {:.2f}s", resetCount, warmupSec);
-			metricsWindowActive = true;
-			nextDump = now + 1s;
-		}
+		//if (!metricsWindowActive && now >= warmupEnd)
+		//{
+		//	const uint32 resetCount = ResetSessionProfileWindows(clients);
+		//	metricsWindowActive = true;
+		//	nextDump = now + 1s;
+		//}
 
-		if (metricsWindowActive && now >= nextDump)
-		{
-			reporter.DumpOnce(clients);
-			nextDump += 1s;
-		}
+		//if (metricsWindowActive && now >= nextDump)
+		//{
+		//	reporter.DumpOnce(clients);
+		//	nextDump += 1s;
+		//}
 
 		double reqMs=0, actMs=0, spinMs=0;
 		PreciseFrameSleep(frameStart, targetSpan, sleepGuard, reqMs, actMs, spinMs);
@@ -695,7 +694,7 @@ int main()
 		int botHeadless = 1;
 		std::cout << "Headless bot net worlds? (1=yes, 0=no): ";
 		std::cin >> botHeadless;
-		testConfig.botHeadlessNetWorld = (botHeadless != 0);
+		testConfig.botHeadlessPhysicalWorld = (botHeadless != 0);
 	}
 
 	std::cout << "Metrics warmup seconds: ";

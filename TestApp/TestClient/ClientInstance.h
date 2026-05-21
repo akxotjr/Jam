@@ -1,7 +1,7 @@
 #pragma once
 
-#include "jamnet/runtime/ClientNetworkManager.h"
-#include "jamnet/sync/replication/ReplicationEvents.h"
+#include "jamnet/runtime/ClientRuntime.h"
+#include "jamnet/runtime/AppRuntimeEvents.h"
 
 #include "jampx/PhysicsTypes.h"
 
@@ -10,7 +10,9 @@ using namespace jam;
 
 struct ClientInstanceConfig
 {
-	bool	headlessNetWorld = false;
+	bool	headlessPhysicalWorld = false;
+	bool	autoAssignOnReady = true;
+	uint32	autoAssignTemplateId = 1;
 };
 
 enum class eClientType
@@ -23,7 +25,7 @@ enum class eClientType
 class ClientInstance
 {
 public:
-	explicit ClientInstance(uint32 instanceId, uint64 userId, ClientInstanceConfig config = {});
+	explicit ClientInstance(uint32 instanceId, uint64 accountId, ClientInstanceConfig config = {});
 	virtual ~ClientInstance();
 
 	bool                                Connect(const string& serverIp, uint16 tcpPort, uint16 udpPort);
@@ -47,9 +49,10 @@ public:
 	void                                SetWindowIndex(uint32 index) { m_windowIndex = index; }
 
 	uint32                              GetInstanceId() const { return m_instanceId; }
-	uint64                              GetUserId() const { return m_userId; }
+	uint64                              GetAccountId() const { return m_accountId; }
+	uint64                              GetUserId() const { return m_runtime ? m_runtime->GetUserId() : 0; }
 
-	net::ClientNetworkManager*          GetNetworkManager() const { return m_networkManager.get(); }
+	net::ClientRuntime*                 GetRuntime() const { return m_runtime.get(); }
 
 protected:
 	enum class SpawnKind : uint8
@@ -61,14 +64,13 @@ protected:
 
 	virtual void                        UpdateInput(float deltaTime) = 0;
 	virtual void                        OnSpawnRequested(SpawnKind kind, uint32 spawnReqId) {}
-	virtual void                        OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt) {}
-	virtual void                        OnActorSpawned(const net::RenderActorSpawnedEvent& evt) {}
-	virtual void                        OnActorDespawned(const net::RenderActorDespawnedEvent& evt) {}
+	virtual void                        OnMainWorldChanged(net::LocalWorldId previousWorldId, net::LocalWorldId currentWorldId) {}
+	virtual void                        OnActorLifecycle(const net::ActorLifecycleEvent& evt) {}
 	virtual void                        OnClickMoveResolved(const net::ClickMoveResolvedEvent& evt) {}
-	virtual void                        OnRenderSamples(const net::RenderSamplesEvent& evt) {}
 
 	uint32                              GetWindowIndex() const { return m_windowIndex; }
 	px::ObjectId                        GetLocalObjectId() const { return m_localObjectId; }
+	net::LocalWorldId					GetMainWorldId() const { return m_mainWorld; }
 
 protected:
 	float                               m_yaw = 0.0f;
@@ -76,35 +78,33 @@ protected:
 	eClientType							m_type;
 
 private:
-	void                                HandleSessionReady(const net::ClientSessionReadyEvent& evt);
-	void                                HandleWorldRequestResult(const net::WorldRequestResultEvent& evt);
-	void                                HandleWorldAssignmentSucceeded(const net::WorldAssignmentSucceededEvent& evt);
-	void                                HandleLevelSpawned(const net::RenderLevelSpawnedEvent& evt);
-	void                                HandleActorSpawned(const net::RenderActorSpawnedEvent& evt);
-	void                                HandleActorDespawned(const net::RenderActorDespawnedEvent& evt);
+	void                                RegisterRuntimeSubscriptions();
+	void                                UnregisterRuntimeSubscriptions();
+	void                                HandleNetworkState(const net::NetworkStateEvent& evt);
+	void                                HandleWorldMembership(const net::WorldMembershipEvent& evt);
+	void                                HandleActorLifecycle(const net::ActorLifecycleEvent& evt);
 	void                                HandleClickMoveResolved(const net::ClickMoveResolvedEvent& evt);
-	void                                HandleRenderSamples(const net::RenderSamplesEvent& evt);
 
 private:
 	uint32									m_instanceId	= 0;
-	uint64									m_userId		= 0;
+	uint64									m_accountId		= 0;
 	uint32									m_windowIndex	= 0;
 	ClientInstanceConfig					m_config		= {};
 
-	unique_ptr<net::ClientNetworkManager>	m_networkManager = nullptr;
+	unique_ptr<net::ClientRuntime>			m_runtime = nullptr;
 
 	uint32									m_nextSpawnReqId = 1;
 	unordered_set<uint32>					m_pendingPlayerSpawnReqIds;
 
-	GlobalEventBus::Subscription			m_subLevelSpawned;
-	GlobalEventBus::Subscription			m_subActorSpawned;
-	GlobalEventBus::Subscription			m_subActorDespawned;
+	GlobalEventBus::Subscription			m_subNetworkState;
+	GlobalEventBus::Subscription			m_subWorldMembership;
+	GlobalEventBus::Subscription			m_subActorLifecycle;
 	GlobalEventBus::Subscription			m_subClickMoveResolved;
-	GlobalEventBus::Subscription			m_subRenderSamples;
-	GlobalEventBus::Subscription			m_subSessionReady;
-	GlobalEventBus::Subscription			m_subWorldRequestResult;
-	GlobalEventBus::Subscription			m_subWorldAssignmentSucceeded;
 
-	px::ObjectId							m_localObjectId = px::INVALID_OBJ_ID;
-	net::WorldId							m_assignedWorldId = net::INVALID_WORLD_ID;
+	px::ObjectId							m_localObjectId   = px::INVALID_OBJ_ID;
+
+	net::LocalWorldId					m_mainWorld		  = net::kInvalidLocalWorldId;
+	std::vector<net::LocalWorldId>		m_auxiliaryWorlds;
+
+	bool									m_autoAssignRequested = false;
 };

@@ -3,8 +3,8 @@
 
 #include <cmath>
 
-BotInstance::BotInstance(uint32 instanceId, uint64 userId, BotTrafficConfig config)
-	: ClientInstance(instanceId, userId, ClientInstanceConfig{ .headlessNetWorld = config.headlessNetWorld })
+BotInstance::BotInstance(uint32 instanceId, uint64 accountId, BotTrafficConfig config)
+	: ClientInstance(instanceId, accountId, ClientInstanceConfig{ .headlessPhysicalWorld = config.headlessPhysicalWorld })
 	, m_cfg(config)
 {
 	m_type = eClientType::Bot;
@@ -12,7 +12,12 @@ BotInstance::BotInstance(uint32 instanceId, uint64 userId, BotTrafficConfig conf
 
 void BotInstance::UpdateInput(float deltaTime)
 {
-	if (GetLocalObjectId() == px::INVALID_OBJ_ID)
+	if (m_cfg.headlessPhysicalWorld)
+	{
+		if (GetMainWorldId() == net::kInvalidLocalWorldId)
+			return;
+	}
+	else if (GetLocalObjectId() == px::INVALID_OBJ_ID)
 		return;
 
 	const float clampedDelta = std::clamp(deltaTime, 0.0f, 0.25f);
@@ -20,8 +25,8 @@ void BotInstance::UpdateInput(float deltaTime)
 	m_botElapsedSec   += clampedDelta;
 	m_botActionAccSec += deltaTime;
 
-	// ClientInputSystem latches a buf "current" input sample per world tick.
-	// Compute the bot command from absolute patrol phase and publish one sample here.
+	// Input is polled from the bot update/render cadence and the latest sample is
+	// latched by the 30 Hz send path, matching ClientInputSystem semantics.
 	constexpr float k_sideSec		 = 2.2f;
 	constexpr float k_turnSec		 = 0.35f;
 	constexpr float turnStart		 = k_sideSec - k_turnSec;

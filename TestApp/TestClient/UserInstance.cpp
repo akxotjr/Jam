@@ -5,20 +5,21 @@
 #include <cmath>
 #include <ranges>
 
-#include "jamnet/sync/networld/ClientNetWorld.h"
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
 
 namespace
 {
-	const char* LifecycleReasonName(net::eRenderActorLifecycleReason reason)
+	
+
+	const char* LifecycleReasonName(net::eActorLifecycleReason reason)
 	{
 		switch (reason)
 		{
-		case net::eRenderActorLifecycleReason::Created: return "CREATE";
-		case net::eRenderActorLifecycleReason::AoiEntered: return "AOI_ENTER";
-		case net::eRenderActorLifecycleReason::AoiLeft: return "AOI_LEAVE";
-		case net::eRenderActorLifecycleReason::Destroyed: return "DESTROY";
-		case net::eRenderActorLifecycleReason::PredictedDespawn: return "PREDICTED_DESPAWN";
+		case net::eActorLifecycleReason::Spawned: return "SPAWN";
+		case net::eActorLifecycleReason::AoiEntered: return "AOI_ENTER";
+		case net::eActorLifecycleReason::AoiLeft: return "AOI_LEAVE";
+		case net::eActorLifecycleReason::Despawned: return "DESPAWN";
+		case net::eActorLifecycleReason::PredictedDespawn: return "PREDICTED_DESPAWN";
 		default: return "UNKNOWN";
 		}
 	}
@@ -66,8 +67,8 @@ namespace
 	}
 }
 
-UserInstance::UserInstance(uint32 instanceId, uint64 userId)
-	: ClientInstance(instanceId, userId)
+UserInstance::UserInstance(uint32 instanceId, uint64 accountId)
+	: ClientInstance(instanceId, accountId)
 {
 	m_type = eClientType::User;
 }
@@ -76,7 +77,7 @@ void UserInstance::Update(float deltaTime)
 {
 	ClientInstance::Update(deltaTime);
 
-	if (!GetNetworkManager())
+	if (!GetRuntime())
 		return;
 
 	static constexpr float TICK_INTERVAL = 1.0f / 60.0f;
@@ -87,12 +88,13 @@ void UserInstance::Update(float deltaTime)
 		m_tickAccumulator -= TICK_INTERVAL;
 	}
 
+	ConsumeActorSnapshots();
 	CleanupOldSnapshots(m_latestServerTick);
 }
 
 void UserInstance::Render()
 {
-	if (!GetNetworkManager() || GetWindowIndex() >= MAX_WINDOWS)
+	if (!GetRuntime() || GetWindowIndex() >= MAX_WINDOWS)
 		return;
 
 	auto& renderer = Renderer::Instance();
@@ -148,94 +150,109 @@ void UserInstance::OnSpawnRequested(SpawnKind kind, uint32 spawnReqId)
 	m_pendingSpawnToRenderData.emplace(spawnReqId, std::move(data));
 }
 
-void UserInstance::OnLevelSpawned(const net::RenderLevelSpawnedEvent& evt)
+void UserInstance::OnMainWorldChanged(net::LocalWorldId previousWorldId, net::LocalWorldId currentWorldId)
 {
-	CreateRenderingLevelData(evt);
+	(void)previousWorldId;
+	(void)currentWorldId;
+
+	const bool initialMainWorldJoin =
+		previousWorldId == net::kInvalidLocalWorldId &&
+		currentWorldId != net::kInvalidLocalWorldId;
+
+	if (!initialMainWorldJoin)
+	{
+		m_actorRenderData.clear();
+		m_pendingSpawnToRenderData.clear();
+	}
+
+	m_currentRenderTick = 0;
+	m_latestServerTick = 0;
+	m_lastSnapshotSequence = 0;
+	m_snapshotWorldId = net::kInvalidLocalWorldId;
+	m_tickAccumulator = 0.0f;
 }
 
-void UserInstance::OnActorSpawned(const net::RenderActorSpawnedEvent& evt)
+void UserInstance::OnActorLifecycle(const net::ActorLifecycleEvent& evt)
 {
-	if (auto it = m_pendingSpawnToRenderData.find(evt.spawnReqId); it != m_pendingSpawnToRenderData.end())
+	switch (evt.reason)
 	{
-		ActorRenderingData data = it->second;
-		m_pendingSpawnToRenderData.erase(it);
+	case net::eActorLifecycleReason::Spawned:
+	case net::eActorLifecycleReason::AoiEntered:
+	{
+		if (auto it = m_pendingSpawnToRenderData.find(evt.spawnReqId); it != m_pendingSpawnToRenderData.end())
+		{
+			ActorRenderingData data = it->second;
+			m_pendingSpawnToRenderData.erase(it);
 
-		data.ensured = true;
-		data.oid = evt.objectId;
-		data.isLocal = evt.isLocal;
+			data.ensured = true;
+			data.pendingSpawnReqId = 0;
+			data.oid = evt.objectId;
+			data.isLocal = evt.isLocal;
+			data.hidden = false;
+			ResetRenderingActorTemporalState(data);
+
+			JAMNET_LOG_INFO(
+				"[AOI][ClientUser] {} user={} netId={} objectId={} local={} spawnReq={}",
+				LifecycleReasonName(evt.reason),
+				GetUserId(),
+				evt.netId.Raw(),
+				data.oid,
+				data.isLocal ? "yes" : "no",
+				evt.spawnReqId);
+
+			m_actorRenderData.emplace(evt.objectId, std::move(data));
+			return;
+		}
+
+		ActorRenderingData* data = EnsureRenderingActorData(evt);
+		if (!data)
+			return;
+
+		data->ensured = true;
+		data->pendingSpawnReqId = 0;
+		data->isLocal = evt.isLocal;
+		data->hidden = false;
+		if (evt.reason == net::eActorLifecycleReason::AoiEntered)
+			ResetRenderingActorTemporalState(*data);
 
 		JAMNET_LOG_INFO(
 			"[AOI][ClientUser] {} user={} netId={} objectId={} local={} spawnReq={}",
 			LifecycleReasonName(evt.reason),
 			GetUserId(),
-			evt.netId,
-			data.oid,
-			data.isLocal ? "yes" : "no",
+			evt.netId.Raw(),
+			data->oid,
+			data->isLocal ? "yes" : "no",
 			evt.spawnReqId);
-
-		m_actorRenderData.emplace(evt.objectId, std::move(data));
 		return;
 	}
 
-	ActorRenderingData* data = EnsureRenderingActorData(evt);
-	if (!data) return;
+	case net::eActorLifecycleReason::Despawned:
+		m_actorRenderData.erase(evt.objectId);
+		JAMNET_LOG_INFO(
+			"[AOI][ClientUser] {} user={} netId={} objectId={}",
+			LifecycleReasonName(evt.reason),
+			GetUserId(),
+			evt.netId.Raw(),
+			evt.objectId);
+		return;
 
-	data->ensured = true;
-	data->pendingSpawnReqId = 0;
-	data->isLocal = evt.isLocal;
-
-	JAMNET_LOG_INFO(
-		"[AOI][ClientUser] {} user={} netId={} objectId={} local={} spawnReq={}",
-		LifecycleReasonName(evt.reason),
-		GetUserId(),
-		evt.netId,
-		data->oid,
-		data->isLocal ? "yes" : "no",
-		evt.spawnReqId);
-}
-
-void UserInstance::OnActorDespawned(const net::RenderActorDespawnedEvent& evt)
-{
-	m_actorRenderData.erase(evt.objectId);
-
-	JAMNET_LOG_INFO(
-		"[AOI][ClientUser] {} user={} netId={} objectId={}",
-		LifecycleReasonName(evt.reason),
-		GetUserId(),
-		evt.netId,
-		evt.objectId);
-}
-
-void UserInstance::OnRenderSamples(const net::RenderSamplesEvent& evt)
-{
-	m_latestServerTick = std::max(evt.tick, m_latestServerTick);
-
-	for (const auto& actor : evt.actors)
-	{
-		ActorRenderingData* data = GetRenderingActorData(actor.objectId);
-		if (!data) continue;
-
-		data->isLocal = actor.isLocal;
-
-		ActorSnapshot snapshot;
-		snapshot.tick = evt.tick;
-		snapshot.character = actor.cs;
-		snapshot.characterRaw = actor.csRaw;
-		snapshot.rigid = actor.rs;
-
-		if (!data->snapshots.empty() && data->snapshots.back().tick == evt.tick)
+	case net::eActorLifecycleReason::AoiLeft:
+	case net::eActorLifecycleReason::PredictedDespawn:
+		if (ActorRenderingData* data = GetRenderingActorData(evt.objectId))
 		{
-			data->snapshots.back() = snapshot;
+			data->hidden = true;
+			ResetRenderingActorTemporalState(*data);
 		}
-		else
-		{
-			data->snapshots.push_back(snapshot);
+		JAMNET_LOG_INFO(
+			"[AOI][ClientUser] {} user={} netId={} objectId={}",
+			LifecycleReasonName(evt.reason),
+			GetUserId(),
+			evt.netId.Raw(),
+			evt.objectId);
+		return;
 
-			if (data->snapshots.size() > MAX_SNAPSHOT_BUFFER)
-			{
-				data->snapshots.pop_front();
-			}
-		}
+	default:
+		return;
 	}
 }
 
@@ -282,11 +299,8 @@ void UserInstance::ProcessControlInput()
 		m_hasMoveTarget = false;
 		m_followMoveActive = false;
 		++m_clickPickSeq;
-		if (auto* netMgr = GetNetworkManager())
-		{
-			if (auto* world = netMgr->GetWorld())
-				world->SetLatestClickMoveSeq(m_clickPickSeq);
-		}
+		if (auto* runtime = GetRuntime())
+			runtime->SetLatestClickMoveSeq(m_clickPickSeq);
 		m_pitch = 0.0f;
 		ControlCharacter(inputFlags, m_pitch, m_yaw, m_controlEpoch);
 		return;
@@ -345,7 +359,8 @@ void UserInstance::HandleShoot(GLFWwindow* window)
 
 void UserInstance::HandleGroundPick(GLFWwindow* window)
 {
-	if (!window) return;
+	if (!window)
+		return;
 
 	const bool rightMouseDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
 	const bool triggerPick = rightMouseDown && !m_prevRightMouseDown;
@@ -363,17 +378,16 @@ void UserInstance::HandleGroundPick(GLFWwindow* window)
 	if (!Renderer::Instance().ScreenPointToWorldRay(GetWindowIndex(), mouseX, mouseY, rayOrigin, rayDir))
 		return;
 
-	auto* netMgr = GetNetworkManager();
-	if (!netMgr) return;
-	auto* world = netMgr->GetWorld();
-	if (!world) return;
+	auto* runtime = GetRuntime();
+	if (!runtime)
+		return;
 
 	const px::Vec3 from(rayOrigin.x, rayOrigin.y, rayOrigin.z);
 	const px::Vec3 dir(rayDir.x, rayDir.y, rayDir.z);
 	const uint64 pickSeq = ++m_clickPickSeq;
 	++m_controlEpoch;
 	m_prevMovementInputActive = false;
-	world->RequestClickMove(from, dir, m_clickMoveRange, pickSeq, m_controlEpoch, m_yaw);
+	runtime->RequestClickMove(from, dir, m_clickMoveRange, pickSeq, m_controlEpoch, m_yaw);
 }
 
 void UserInstance::OnClickMoveResolved(const net::ClickMoveResolvedEvent& evt)
@@ -453,16 +467,14 @@ bool UserInstance::ApplyClickMoveControl()
 	{
 		m_hasMoveTarget = false;
 		m_followMoveActive = false;
-		if (auto* netMgr = GetNetworkManager())
+		if (auto* runtime = GetRuntime())
 		{
-			if (auto* world = netMgr->GetWorld())
-			{
-				px::CharacterInput stop{};
-				stop.commandEpoch = m_controlEpoch;
-				stop.moveMode = px::eMoveInputMode::Keyboard;
-				stop.facingYaw = m_yaw;
-				world->PushInput(stop);
-			}
+			px::CharacterInput stop{};
+			stop.commandEpoch = m_controlEpoch;
+			stop.moveMode = px::eMoveInputMode::Keyboard;
+			stop.mouseMoveKind = px::eMouseMoveKind::ToPosition;
+			stop.facingYaw = m_yaw;
+			runtime->PushInput(stop);
 		}
 		return true;
 	}
@@ -472,40 +484,7 @@ bool UserInstance::ApplyClickMoveControl()
 	return true;
 }
 
-void UserInstance::CreateRenderingLevelData(const net::RenderLevelSpawnedEvent& evt)
-{
-	for (const auto& [objectId, prefab] : evt.instances)
-	{
-		auto [it, inserted] = m_actorRenderData.try_emplace(objectId, ActorRenderingData{});
-		ActorRenderingData& data = it->second;
-		data.oid = objectId;
-
-		if (inserted)
-		{
-			const auto* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(prefab);
-			if (!def || !def->IsRigid()) continue;
-
-			const auto& rigidBody = std::get<px::RigidBodyDef>(def->body);
-			const auto& shapeDef  = PHYSICS_PREFAB_REGISTRY.GetShapeDef(rigidBody.shapes[0]);
-
-			if (shapeDef.IsMeshGeometry()) continue;
-
-			data.ensured			= true;
-			data.pendingSpawnReqId	= 0;
-			data.isLocal			= false;
-			data.shape				= shapeDef.type;
-			data.boxHalfExtents	    = px::ToPx(shapeDef.halfExtents);
-			data.capsuleRadius		= shapeDef.radius;
-			data.capsuleHalfHeight	= shapeDef.halfHeight;
-			data.sphereRadius		= shapeDef.radius;
-			data.color				= ResolveColor(def->actorType, def->bodyType, def->motionType);
-
-			data.isFloor			= def->name == "Floor";
-		}
-	}
-}
-
-ActorRenderingData* UserInstance::EnsureRenderingActorData(const net::RenderActorSpawnedEvent& evt)
+ActorRenderingData* UserInstance::EnsureRenderingActorData(const net::ActorLifecycleEvent& evt)
 {
 	auto [it, inserted] = m_actorRenderData.try_emplace(evt.objectId, ActorRenderingData{});
 	ActorRenderingData& data = it->second;
@@ -520,14 +499,16 @@ ActorRenderingData* UserInstance::EnsureRenderingActorData(const net::RenderActo
 		{
 			const auto& rigidBody = std::get<px::RigidBodyDef>(def->body);
 			const auto& shapeDef = PHYSICS_PREFAB_REGISTRY.GetShapeDef(rigidBody.shapes[0]);
+			if (shapeDef.IsMeshGeometry())
+				return nullptr;
 
 			data.shape				= shapeDef.type;
 			data.boxHalfExtents		= px::ToPx(shapeDef.halfExtents);
 			data.capsuleRadius		= shapeDef.radius;
 			data.capsuleHalfHeight	= shapeDef.halfHeight;
 			data.sphereRadius		= shapeDef.radius;
-
-			data.color = ResolveColor(def->actorType, def->bodyType, def->motionType);
+			data.color				= ResolveColor(def->actorType, def->bodyType, def->motionType);
+			data.isFloor			= def->name == "Floor";
 		}
 		else
 		{
@@ -543,6 +524,17 @@ ActorRenderingData* UserInstance::EnsureRenderingActorData(const net::RenderActo
 	}
 
 	return &data;
+}
+
+void UserInstance::ResetRenderingActorTemporalState(ActorRenderingData& data)
+{
+	data.snapshots.clear();
+	data.hasSmoothed	   = false;
+	data.renderFrameCached = false;
+	data.cachedRenderPos   = px::Vec3::Zero();
+	data.cachedRenderRot   = px::Quat::Identity();
+	data.smoothedPos	   = px::Vec3::Zero();
+	data.smoothedRot	   = px::Quat::Identity();
 }
 
 void UserInstance::BuildRenderFrames()
@@ -589,7 +581,7 @@ void UserInstance::UpdateCamera()
 		return;
 	}
 
-	m_cameraPos		= glm::vec3(0, 24, -12);
+	m_cameraPos		= glm::vec3(0, 48, -12);
 	m_cameraTarget	= glm::vec3(0, 0, 0);
 }
 
@@ -599,8 +591,8 @@ void UserInstance::RenderClickMoveMarker()
 		return;
 
 	const glm::vec3 center(m_moveTarget.x, m_moveTarget.y + 0.05f, m_moveTarget.z);
-	const glm::vec4 color(1.0f, 0.9f, 0.1f, 1.0f);
-	const float markerHalf = 0.35f;
+	constexpr glm::vec4 color(1.0f, 0.9f, 0.1f, 1.0f);
+	constexpr float		markerHalf = 0.35f;
 
 	Renderer::Instance().DrawRay(
 		center + glm::vec3(-markerHalf, 0.0f, 0.0f),
@@ -620,13 +612,25 @@ void UserInstance::RenderActors()
 {
 	for (auto& data : m_actorRenderData | views::values)
 	{
-		if (!data.ensured || !data.renderFrameCached)
+		if (!data.ensured || data.hidden || !data.renderFrameCached)
 			continue;
 
 		glm::vec3 position(data.cachedRenderPos.x, data.cachedRenderPos.y, data.cachedRenderPos.z);
 		glm::vec3 rotation = QuatToEuler(data.cachedRenderRot);
 
-		switch (data.shape)
+		if (data.isLocal)
+		{
+			glm::vec3 aoiPosition     = position;
+			glm::vec3 aoiEnteredScale = glm::vec3(60.f, 0.12f, 60.0f);
+			glm::vec4 aoiEnteredColor = glm::vec4(0.0f, 1.0f, 0.0f, 0.3f);
+			glm::vec3 aoiLeftScale	  = glm::vec3(80.f, 0.08f, 80.f);
+			glm::vec4 aoiLeftColor	  = glm::vec4(1.0f, 1.0f, 0.0f, 0.3f);
+
+			Renderer::Instance().DrawBox(aoiPosition, glm::vec3(0.0f), aoiLeftScale, aoiLeftColor);
+			Renderer::Instance().DrawBox(aoiPosition, glm::vec3(0.0f), aoiEnteredScale, aoiEnteredColor);;
+		}
+
+		switch (data.shape)  
 		{
 		case px::eShapeType::Box:
 		{
@@ -730,7 +734,7 @@ void UserInstance::InterpolateActorTransform(const ActorRenderingData& data, flo
 		return;
 	}
 
-	auto GetPosAndRot = [&](const ActorSnapshot* snapshot, px::Vec3& p, px::Quat& q)
+	auto GetPosAndRot = [&](const ActorFrameSample* snapshot, px::Vec3& p, px::Quat& q)
 		{
 			if (snapshot->character.has_value())
 			{
@@ -752,8 +756,8 @@ void UserInstance::InterpolateActorTransform(const ActorRenderingData& data, flo
 		return;
 	}
 
-	const ActorSnapshot* prevSnapshot = nullptr;
-	const ActorSnapshot* nextSnapshot = nullptr;
+	const ActorFrameSample* prevSnapshot = nullptr;
+	const ActorFrameSample* nextSnapshot = nullptr;
 
 	for (const auto& snapshot : data.snapshots)
 	{
@@ -826,5 +830,58 @@ void UserInstance::CleanupOldSnapshots(uint32 currentTick)
 				break;
 			}
 		}
+	}
+}
+void UserInstance::ConsumeActorSnapshots()
+{
+	auto* runtime = GetRuntime();
+	if (!runtime)
+		return;
+
+	const net::LocalWorldId localWorldId = runtime->GetMainLocalWorldId();
+	if (localWorldId == net::kInvalidLocalWorldId)
+	{
+		m_lastSnapshotSequence = 0;
+		m_snapshotWorldId = net::kInvalidLocalWorldId;
+		return;
+	}
+
+	const net::ActorPresentationFrameView frame = runtime->GetActorPresentationFrame(localWorldId);
+	if (frame.sequence == 0)
+		return;
+
+	if (m_snapshotWorldId != localWorldId)
+	{
+		m_snapshotWorldId = localWorldId;
+		m_lastSnapshotSequence = 0;
+	}
+
+	if (frame.sequence == m_lastSnapshotSequence)
+		return;
+
+	m_lastSnapshotSequence = frame.sequence;
+	m_latestServerTick = std::max(frame.tick, m_latestServerTick);
+
+	for (const net::ActorPresentationState& actor : frame.actors)
+	{
+		ActorRenderingData* data = GetRenderingActorData(actor.objectId);
+		if (!data)
+			continue;
+
+		data->isLocal = actor.isLocal;
+
+		ActorFrameSample snapshot;
+		snapshot.tick		  = frame.tick;
+		snapshot.character	  = actor.cs;
+		snapshot.characterRaw = actor.csRaw;
+		snapshot.rigid        = actor.rs;
+
+		if (!data->snapshots.empty() && data->snapshots.back().tick == frame.tick)
+			data->snapshots.back() = snapshot;
+		else
+			data->snapshots.push_back(snapshot);
+
+		if (data->snapshots.size() > MAX_SNAPSHOT_BUFFER)
+			data->snapshots.pop_front();
 	}
 }
