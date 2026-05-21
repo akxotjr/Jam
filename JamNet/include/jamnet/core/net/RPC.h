@@ -77,7 +77,7 @@ namespace jam::net
 	struct RPCCallOptions
 	{
 		eChannel    channel    = eChannel::RELIABLE_ORDERED;
-		uint64          timeout_ns = 0;
+		uint64      timeout_ns = 0;
 	};
 
 	struct EntityRPCKey

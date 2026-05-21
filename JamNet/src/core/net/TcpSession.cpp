@@ -1,16 +1,51 @@
 #include "pch.h"
 #include "jamnet/core/net/TcpSession.h"
 
+#include "jambase/EnumUtils.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/Job.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/memory/ObjectPool.h"
 #include "jamnet/core/net/SocketUtils.h"
 #include "jamnet/core/net/SessionSystems.h"
 #include "jamnet/core/net/Service.h"
+#include "jamnet/core/utils/Clock.h"
 #include "jamnet/core/net/WinErrorHandling.h"
+
+#include <limits>
 
 namespace jam::net
 {
+
+	namespace
+	{
+		inline constexpr uint64 kClientBindRetryDelayNs = 1000_ms;
+		inline const RouteDomain kBoundSessionRouteDomain = RouteDomain::From("BoundSession");
+
+		RouteKey MakeBoundSessionRouteKey(uint64 accountId)
+		{
+			return GLOBAL_EXEC.MakeRouteKey(kBoundSessionRouteDomain, accountId);
+		}
+
+		void SendTcpBindResponse(Session& session, bool success, uint64 accountId, RuntimeId userId)
+		{
+			const TCP_BIND_RES_DATA res{ .accountId = accountId, .userId = userId, .success = static_cast<uint8>(success ? 1 : 0) };
+			auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_RES, PacketFlags::NONE, eChannel::TCP_DEFAULT, &res, sizeof(res));
+			session.Send(pkt);
+		}
+
+		bool IsTcpBindPacket(const PacketHeaderView& view)
+		{
+			if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
+				return false;
+
+			const auto id = ToEnum<eSystemPacketId>(view.Id());
+			return id == eSystemPacketId::TCP_BIND_REQ || id == eSystemPacketId::TCP_BIND_RES;
+		}
+
+	}
+
+
 	TcpSession::TcpSession() 
 		: m_recvAssembler(GetNetBufferPool(eNetBufferPoolKind::TcpIo))
 	{
@@ -52,29 +87,27 @@ namespace jam::net
 		if (!packet.IsValid())
 			return;
 
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle, packet]
-			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
-				if (!self)
-					return;
+		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+		if (view.IsValid() && view.TotalSize() == packet->Size() && view.Type() == ePacketType::SYSTEM
+			&& (IsTcpBindPacket(view) || GetEntity() == entt::null || !CanCreateSessionEntity()))
+		{
+			SendImmediatePacket(packet);
+			return;
+		}
 
-				const entt::entity e = self->EnsureSessionEntity();
+		const EndpointHandle endpointHandle = GetEndpointHandle();
+		const SessionId sessionId = GetSessionId();
+		Post(Job([endpointHandle, sessionId, packet]
+			{
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				auto* self = static_cast<TcpSession*>(state.FindSessionAny(sessionId, endpointHandle));
+				if (!self) return;
+
+				const entt::entity e = self->GetEntity();
 				if (e == entt::null) return;
 
 				SendPacketToSession(e, packet);
 			}));
-	}
-
-	void TcpSession::OnLinkEstablished()
-	{
-		m_state.store(eSessionState::CONNECTED, std::memory_order_relaxed);
-	}
-
-	void TcpSession::OnLinkTerminated()
-	{
-		m_state.store(eSessionState::DISCONNECTED, std::memory_order_relaxed);
 	}
 
 	HANDLE TcpSession::GetHandle()
@@ -250,21 +283,7 @@ namespace jam::net
 			return;
 		}
 
-		OnLinkEstablished();
-
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle]
-			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
-				if (!self)
-					return;
-
-				if (self->EnsureSessionEntity() == entt::null)
-					return;
-
-				self->OnConnected();
-			}, eJobPriority::Control));
+		SetSessionState(eSessionState::Connected);
 
 		if (!IsClosing())
 			RegisterRecv();
@@ -279,37 +298,26 @@ namespace jam::net
 			return;
 		}
 
-		OnLinkEstablished();
-
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle]()
-			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
-				if (!self)
-					return;
-
-				if (self->EnsureSessionEntity() == entt::null)
-					return;
-
-				self->OnConnected();
-			}, eJobPriority::Control));
+		SetSessionState(eSessionState::Connected);
 
 		if (!IsClosing())
 			RegisterRecv();
+
+		TrySessionBinding();
 	}
 
 	void TcpSession::ProcessDisconnect()
 	{
-		OnLinkTerminated();
+		SetSessionState(eSessionState::Disconnected);
+		m_clientBind.active = false;
+		++m_clientBind.timerToken;
+		NotifyLinkTerminatedIfEstablished();
 
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle]()
+		Post(Job([sessionId = GetSessionId()]
 			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
-				if (!self)
-					return;
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				auto* self  = static_cast<TcpSession*>(state.FindSession(sessionId));
+				if (!self) return;
 
 				self->OnDisconnected();
 			}, eJobPriority::Control));
@@ -363,19 +371,24 @@ namespace jam::net
 				return;
 			}
 
-			const SessionHandle handle = GetSessionHandle();
-			Post(Job([handle, packet = std::move(pkt)]() mutable
+			const EndpointHandle endpointHandle = GetEndpointHandle();
+			const SessionId sessionId = GetSessionId();
+			Post(Job([endpointHandle, sessionId, packet = std::move(pkt)]() mutable
 				{
-					auto& L = CurrentShardLocalChecked();
-					auto* self = static_cast<TcpSession*>(FindSessionByHandle(L, handle));
-					if (!self)
-						return;
+					auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+					auto* self = static_cast<TcpSession*>(state.FindSessionAny(sessionId, endpointHandle));
+					if (!self) return;
 
-					const entt::entity e = self->EnsureSessionEntity();
-					if (e != entt::null)
+					PacketHeaderView directView = PacketHeaderView::Parse(packet->Head(), packet->Size());
+					if (directView.IsValid() && directView.TotalSize() == packet->Size() && directView.Type() == ePacketType::SYSTEM)
 					{
-						ProcessReceivedPacket(e, std::move(packet));
+						self->ProcessSystemPacket(std::move(packet), directView, 0_ns);
+						return;
 					}
+
+					const entt::entity e = self->GetEntity();
+					if (e != entt::null)
+						ProcessReceivedPacket(e, std::move(packet));
 				}, eJobPriority::Control));
 		}
 
@@ -385,7 +398,6 @@ namespace jam::net
 	}
 
 
-	//	부분전송 지원- 남은 구간을 재등록, 다 보냈으면 정리. 
 	void TcpSession::ProcessSend(TcpSendEvent* ev,  int32 bytes)
 	{
 		if (!ev) return;
@@ -400,10 +412,6 @@ namespace jam::net
 			return;
 		}
 
-		// 상위 통지(이번 완료 바이트)
-		OnSend(bytes);
-
-		// 남은 바이트 계산
 		uint32 remaining = 0;
 		if (bytes < static_cast<int32>(ev->totalBytes))
 			remaining = ev->totalBytes - static_cast<uint32>(bytes);
@@ -424,7 +432,6 @@ namespace jam::net
 			return;
 		}
 
-		// curIndex/curOffset 갱신
 		uint32 advance = static_cast<uint32>(bytes);
 		size_t idx	   = ev->curIndex;
 		ULONG  off	   = ev->curOffset;
@@ -449,7 +456,6 @@ namespace jam::net
 		ev->curOffset  = off;
 		ev->totalBytes = remaining;
 
-		// 다음 WSABUF 배열 구성(첫 요소 offset 적용)
 		std::vector<WSABUF> bufs;
 		if (ev->curIndex < ev->wsaBufs.size())
 		{
@@ -509,15 +515,208 @@ namespace jam::net
 		}
 	}
 
-	entt::entity TcpSession::EnsureSessionEntity()
+	void TcpSession::ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns)
 	{
-		entt::entity e = GetEntity();
-		if (e == entt::null)
+		if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
+			return;
+
+		if (IsPreBindPhase())
 		{
-			CreateEntity();
-			e = GetEntity();
+			HandlePreBindSystemPacket(view);
+			return;
 		}
 
-		return e;
+		if (IsServerSide() && ToEnum<eSystemPacketId>(view.Id()) == eSystemPacketId::TCP_BIND_REQ)
+		{
+			HandlePreBindSystemPacket(view);
+			return;
+		}
+
+		if (const entt::entity e = GetEntity(); e != entt::null)
+		{
+			auto& L = CurrentShardLocalChecked();
+			RecvContext ctx{
+				.L				= L,
+				.e				= e,
+				.view			= view,
+				.packet			= std::move(packet),
+				.now_ns			= NOW_NS(),
+				.ingressTime_ns = ingressRecvTime_ns
+			};
+
+			HandlePostBindSystemPacket(ctx);
+		}
+	}
+
+	void TcpSession::HandlePreBindSystemPacket(const PacketHeaderView& view)
+	{
+		switch (ToEnum<eSystemPacketId>(view.Id()))
+		{
+		case eSystemPacketId::TCP_BIND_RES:
+			if (!IsClientSide())
+				return;
+			if (view.PayloadSize() < sizeof(TCP_BIND_RES_DATA))
+				return;
+			if (m_clientBind.bound)
+				return;
+
+			if (const auto* res = reinterpret_cast<const TCP_BIND_RES_DATA*>(view.Payload());
+				res && res->accountId == m_accountId)
+			{
+				m_clientBind.active = false;
+				++m_clientBind.timerToken;
+				if (!res->success || res->userId == 0)
+				{
+					m_clientBind.active = false;
+					m_clientBind.bound  = false;
+					JAMNET_LOG_ERROR("[TcpSession] TCP bind failed or timed out. accountId={}", m_accountId);
+					Disconnect();
+					return;
+				}
+
+				m_userId = res->userId;
+				m_clientBind.bound = true;
+				IssueSessionId();
+				if (GetSessionId() == kInvalidSessionId)
+				{
+					JAMNET_LOG_ERROR("[TcpSession] Failed to issue bound session id. accountId={}, userId={}", m_accountId, m_userId);
+					m_clientBind.active = false;
+					m_clientBind.bound  = false;
+					Disconnect();
+					return;
+				}
+			}
+			break;
+
+		case eSystemPacketId::TCP_BIND_REQ:
+			if (!IsServerSide())
+				return;
+			if (view.PayloadSize() < sizeof(TCP_BIND_REQ_DATA))
+				return;
+			if (const auto* req = reinterpret_cast<const TCP_BIND_REQ_DATA*>(view.Payload()); !req || req->accountId == 0)
+			{
+				SendTcpBindResponse(*this, false, req ? req->accountId : 0, kInvalidRuntimeId);
+				return;
+			}
+			else
+			{
+				if (GetSessionId() != kInvalidSessionId)
+				{
+					const bool sameAccount = (m_accountId == req->accountId && m_userId != kInvalidRuntimeId);
+					SendTcpBindResponse(*this, sameAccount, req->accountId, sameAccount ? m_userId : kInvalidRuntimeId);
+					return;
+				}
+				if (!TryBeginServerBind())
+					return;
+
+				const RouteKey boundRouteKey = MakeBoundSessionRouteKey(req->accountId);
+				const auto targetShard = GLOBAL_EXEC.GetShard(boundRouteKey);
+				if (!targetShard || targetShard->GetIndex() > std::numeric_limits<uint16>::max())
+				{
+					EndServerBind();
+					SendTcpBindResponse(*this, false, req->accountId, kInvalidRuntimeId);
+					return;
+				}
+
+				const uint64 endpointId = GetEndpointId();
+				Rehome(boundRouteKey, [this, accountId = req->accountId, endpointId, boundRouteKey](bool rehomeOk) mutable
+					{
+						if (!rehomeOk || GetEndpointId() != endpointId || GetRouteKey() != boundRouteKey)
+						{
+							EndServerBind();
+							SendTcpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
+
+						const RuntimeId userId = ResolveServerTcpBindUserId(accountId);
+						if (userId == kInvalidRuntimeId)
+						{
+							EndServerBind();
+							SendTcpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
+
+						SetAccountId(accountId);
+						SetUserId(userId);
+						IssueSessionId();
+
+						if (GetSessionId() == kInvalidSessionId || IsClosing())
+						{
+							EndServerBind();
+							SendTcpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
+
+						EndServerBind();
+						SendTcpBindResponse(*this, true, accountId, m_userId);
+					});
+			}
+			break;
+
+		default: break;
+		}
+	}
+
+	void TcpSession::TrySessionBinding()
+	{
+		if (!IsClientSide() || !IsConnected())
+			return;
+		if (m_clientBind.active || m_clientBind.bound)
+			return;
+		if (m_accountId == 0)
+			return;
+
+		m_clientBind.active = true;
+		m_clientBind.bound = false;
+		m_clientBind.retryCount = 0;
+		SetSessionState(eSessionState::Binding);
+		const TCP_BIND_REQ_DATA req{ .accountId = m_accountId };
+		auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_REQ, PacketFlags::NONE, eChannel::TCP_DEFAULT, &req, sizeof(req));
+		Send(pkt);
+		ScheduleSessionBindingRetry();
+	}
+
+	void TcpSession::ScheduleSessionBindingRetry()
+	{
+		const uint32 token = ++m_clientBind.timerToken;
+		const EndpointHandle endpointHandle = GetEndpointHandle();
+		SubmitAfter(Job([endpointHandle, token]()
+			{
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				auto* self = static_cast<TcpSession*>(state.FindPreboundSession(endpointHandle));
+				if (!self)
+					return;
+				if (!self->m_clientBind.active || self->m_clientBind.bound || self->m_clientBind.timerToken != token)
+					return;
+				if (self->m_clientBind.retryCount >= HandshakeState::MaxRetry)
+				{
+					self->m_clientBind.active = false;
+					self->m_clientBind.bound = false;
+					JAMNET_LOG_ERROR("[TcpSession] TCP bind failed or timed out. accountId={}", self->m_accountId);
+					self->Disconnect();
+					return;
+				}
+
+				self->m_clientBind.retryCount++;
+				const TCP_BIND_REQ_DATA req{ .accountId = self->m_accountId };
+				auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_REQ, PacketFlags::NONE, eChannel::TCP_DEFAULT, &req, sizeof(req));
+				self->Send(pkt);
+				self->ScheduleSessionBindingRetry();
+			}, eJobPriority::Control), kClientBindRetryDelayNs);
+	}
+
+
+
+	void TcpSession::SendImmediatePacket(Packet packet)
+	{
+		if (!packet.IsValid())
+			return;
+
+		PacketChain chain;
+		chain.Add(packet);
+
+		std::vector<PacketChain> chains;
+		chains.push_back(std::move(chain));
+		RegisterSend(std::move(chains));
 	}
 }

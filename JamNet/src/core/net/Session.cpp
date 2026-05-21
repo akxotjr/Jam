@@ -7,86 +7,48 @@
 #include "jamnet/core/net/SessionSystems.h"
 #include "jamnet/core/net/SocketUtils.h"
 
-#include "jamnet/core/net/TcpSession.h"
-#include "jamnet/core/net/UdpSession.h"
-
 namespace jam::net
 {
-	Session* FindSessionByHandle(ShardLocal& L, const SessionHandle& handle)
+	namespace
 	{
-		if (!handle.IsValid())
-			return nullptr;
+		inline const RouteDomain kClientPrincipalRouteDomain = RouteDomain::From("ClientPrincipal");
 
-		if (L.sessionState)
+		RouteKey MakeClientPrincipalRouteKey(uint64 accountId)
 		{
-			auto& tcp = GetTcpSessionTable(L);
-			for (auto& session : tcp | std::views::values)
-			{
-				if (session && session->MatchesSessionHandle(handle))
-					return session.get();
-			}
+			return GLOBAL_EXEC.MakeRouteKey(kClientPrincipalRouteDomain, accountId);
 		}
 
-		if (L.sessionState)
-		{
-			auto& udp = GetUdpSessionTable(L);
-			for (auto& session : udp | std::views::values)
-			{
-				if (session && session->MatchesSessionHandle(handle))
-					return session.get();
-			}
-		}
-
-		return nullptr;
 	}
 
-	const Session* FindSessionByHandle(const ShardLocal& L, const SessionHandle& handle)
-	{
-		return FindSessionByHandle(const_cast<ShardLocal&>(L), handle);
-	}
-
-	std::atomic<uint64> Session::s_sessionIdGenerator{ 1 };
-
-	Session::Session()
-	{
-		m_sessionId = s_sessionIdGenerator.fetch_add(1, std::memory_order_relaxed);
-	}
 
 	void Session::Init(const NetAddress& remoteAddr)
 	{
-		JAM_ASSERT_OR_RETURN(remoteAddr.IsValid());
+		if (!remoteAddr.IsValid())
+			return;
 		SetRemoteNetAddress(remoteAddr);
+		m_endpointId = MakeEndpointId(remoteAddr);
 
-		m_key = IsTcp() ? MakeTcpRouteKey(remoteAddr) : MakeUdpRouteKey(remoteAddr);
-		JAM_ASSERT_OR_RETURN(IsValidRouteKey(m_key));
+		if (IsClientSide() && m_accountId != 0)
+			m_key = MakeClientPrincipalRouteKey(m_accountId);
+		else
+			m_key = IsTcp() ? MakeTcpRouteKey(remoteAddr) : MakeUdpRouteKey(remoteAddr);
 
-		m_boundShard = GLOBAL_EXEC.GetShard(m_key);
-		auto shard = m_boundShard.lock();
-		JAM_ASSERT_OR_RETURN(shard);
+		if (!IsValidRouteKey(m_key))
+			return;
 
-		m_mailbox = shard->CreateMailbox();
-		JAM_ASSERT_OR_RETURN(m_mailbox);
+		const auto shard = GLOBAL_EXEC.GetShard(m_key);
+		if (!shard) return;
+
+		m_shard = shard;
 	}
 
-	bool Session::IsServerSide() const
+	bool Session::BeginClose(eMailboxCloseMode mode, std::function<void()> onClosed)
 	{
-		if (m_service)
-			return m_service->GetServiceType() == eServiceType::SERVER;
-		return false;
+		(void)mode;
+		m_onShardOwnedClosed = std::move(onClosed);
+		Disconnect();
+		return true;
 	}
-
-	bool Session::IsClientSide() const
-	{
-		if (m_service)
-			return m_service->GetServiceType() == eServiceType::CLIENT;
-		return false;
-	}
-
-	void Session::SetService(Service* service)
-	{
-		m_service = service;
-	}
-
 
 	void Session::SetSocket(SOCKET socket)
 	{
@@ -94,85 +56,224 @@ namespace jam::net
 		m_socket = socket;
 	}
 
-	bool Session::MatchesSessionHandle(const SessionHandle& handle) const
+	bool Session::MatchesEndpointHandle(const EndpointHandle& handle) const
 	{
-		return handle.IsValid() && m_sessionId == handle.sessionId && m_key == handle.routeKey;
+		return handle.IsValid() && m_endpointId == handle.endpointId && m_key == handle.routeKey;
 	}
 
 	void Session::Post(Job j) const
 	{
 		if (m_closed.load(std::memory_order_acquire))
+		{
+			JAMNET_LOG_WARN("[Session::Post] account id= {} mailbox is already closed", m_accountId);
 			return;
+		}
+		// Pre-bind sessions do not own a mailbox yet. Route these jobs through
+		// the owning shard so connect/bind/rehome work before sessionId issuance.
+		if (m_sessionId == kInvalidSessionId)
+		{
+			if (auto shard = m_shard.lock())
+			{
+				shard->Submit(std::move(j));
+				return;
+			}
+		}
 
-		const_cast<Session*>(this)->EnsureBound();
-
-		if (m_mailbox)
-			m_mailbox->Post(std::move(j));
+		if (!m_mailboxRef.TryPost(std::move(j)))
+		{
+			JAMNET_LOG_WARN("[Session::Post] failed trying post job");
+		}
 	}
 
 	void Session::Submit(Job j) const
 	{
-		if (auto shard = m_boundShard.lock())
+		if (auto shard = m_shard.lock())
 			shard->Submit(std::move(j));
 	}
 
 	void Session::SubmitAfter(Job j, uint64 delay_ns) const
 	{
-		if (auto shard = m_boundShard.lock())
+		if (auto shard = m_shard.lock())
 			shard->SubmitAfter(std::move(j), delay_ns);
 	}
 
-
-
-
-
-
-	void Session::EnsureBound()
+	void Session::Rehome(RouteKey newRouteKey, std::function<void(bool)> onDone)
 	{
-		if (!m_boundShard.expired() && m_entityReady.load(std::memory_order_acquire))
+		auto* service = GetService();
+		if (!service || !IsValidRouteKey(newRouteKey))
+		{
+			if (onDone) onDone(false);
 			return;
+		}
 
-		auto shard = GLOBAL_EXEC.GetShard(m_key);
-		if (!shard) return;
-		if (m_boundShard.expired()) m_boundShard = shard;
-		if (!m_mailbox) m_mailbox = shard->CreateMailbox();
-
-		if (m_entityReady.load(std::memory_order_acquire)) return;
-
-		bool expected = false;
-		if (!m_entityCreating.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+		const EndpointHandle oldHandle = GetEndpointHandle();
+		if (!oldHandle.IsValid())
+		{
+			if (onDone) onDone(false);
 			return;
+		}
 
-		const SessionHandle handle = GetSessionHandle();
-		shard->Submit(Job([handle]()
+		if (oldHandle.routeKey == newRouteKey)
+		{
+			if (onDone) onDone(true);
+			return;
+		}
+
+		auto targetShard = GLOBAL_EXEC.GetShard(newRouteKey);
+		if (!targetShard)
+		{
+			if (onDone) onDone(false);
+			return;
+		}
+
+		const EndpointHandle endpointHandle = GetEndpointHandle();
+
+		Submit(Job([this, endpointHandle, newRouteKey, targetShard, onDone = std::move(onDone)]() mutable
 			{
-				auto& L = CurrentShardLocalChecked();
-				if (auto* session = FindSessionByHandle(L, handle))
-					session->CreateEntity();
+				auto& oldLocal = CurrentShardLocalChecked();
+
+				auto& oldTable = GetPreboundSessionTable(oldLocal);
+				auto it = oldTable.find(endpointHandle);
+				if (it == oldTable.end() || it->second.get() != this)
+				{
+					if (onDone)
+						onDone(false);
+					return;
+				}
+				std::unique_ptr<Session> moved = std::move(it->second);
+				oldTable.erase(it);
+
+				if (m_entity != entt::null)
+				{
+					if (oldLocal.registry.valid(m_entity))
+						oldLocal.registry.destroy(m_entity);
+					m_entity = entt::null;
+				}
+
+				m_key	= newRouteKey;
+				m_shard	= targetShard;
+				const EndpointHandle newHandle{ newRouteKey, endpointHandle.endpointId };
+				const bool movedIsUdp = moved && moved->IsUdp();
+				targetShard->Submit(Job([newHandle, newRouteKey, movedIsUdp, owner = std::move(moved), onDone = std::move(onDone)]() mutable
+					{
+						auto& newLocal = CurrentShardLocalChecked();
+						auto& newTable = GetPreboundSessionTable(newLocal);
+						Service* const service = owner ? owner->GetService() : nullptr;
+						const bool ok = owner && newTable.emplace(newHandle, std::move(owner)).second;
+
+						if (ok && movedIsUdp)
+						{
+							if (service && service->m_udpRouter)
+								service->m_udpRouter->RegisterIngressPrebindRoute(newHandle.endpointId, newRouteKey);
+						}
+
+						if (onDone) onDone(ok);
+					}, eJobPriority::Critical));
 			}, eJobPriority::Critical));
 	}
 
 	void Session::CreateEntity()
 	{
-		if (m_entityReady.load(std::memory_order_acquire))
+		if (m_entity != entt::null)
+			return;
+
+		auto& L = CurrentShardLocalChecked();
+		m_entity = L.registry.create();
+
+		BootstrapSessionEntity(L, m_entity, this);
+		NotifyLinkEstablishedIfReady();
+	}
+
+	bool Session::TryBeginServerBind()
+	{
+		if (m_sessionId != kInvalidSessionId || m_state.load(std::memory_order_relaxed) == eSessionState::Binding)
+			return false;
+
+		SetSessionState(eSessionState::Binding);
+		return true;
+	}
+
+	void Session::EndServerBind()
+	{
+		if (m_sessionId == kInvalidSessionId && m_state.load(std::memory_order_relaxed) == eSessionState::Binding)
+			SetSessionState(eSessionState::Connected);
+	}
+
+	void Session::NotifyLinkEstablishedIfReady()
+	{
+		if (m_linkEstablishedNotified)
+			return;
+		if (m_sessionId == kInvalidSessionId || m_entity == entt::null)
+			return;
+
+		SetSessionState(eSessionState::Ready);
+		m_linkEstablishedNotified = true;
+		OnLinkEstablished();
+	}
+
+	void Session::NotifyLinkTerminatedIfEstablished()
+	{
+		if (!m_linkEstablishedNotified)
+			return;
+
+		m_linkEstablishedNotified = false;
+		if (m_sessionId != kInvalidSessionId)
+			SetSessionState(eSessionState::Bound);
+		OnLinkTerminated();
+	}
+
+	void Session::FinalizeShardOwnedClose()
+	{
+		m_closed.store(true, std::memory_order_release);
+
+		if (m_onShardOwnedClosed)
 		{
-			m_entityCreating.store(false, std::memory_order_release);
+			auto onClosed = std::move(m_onShardOwnedClosed);
+			m_onShardOwnedClosed = {};
+			onClosed();
+		}
+	}
+
+	void Session::IssueSessionId()
+	{
+		if (m_sessionId != kInvalidSessionId || m_userId == kInvalidRuntimeId)
+			return;
+
+		auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+		m_sessionId = state.AllocSessionId();
+		if (m_sessionId == kInvalidSessionId)
+			return;
+
+		auto owner = state.DetachPreboundSession(GetEndpointHandle());
+		if (!owner)
+		{
+			state.FreeSessionId(m_sessionId);
+			m_sessionId = kInvalidSessionId;
 			return;
 		}
 
-		auto& L = CurrentShardLocalChecked();
-		auto& R = L.registry;
+		if (!state.PromotePreboundSession(m_sessionId, owner))
+		{
+			state.AttachPreboundSession(std::move(owner));
+			state.FreeSessionId(m_sessionId);
+			m_sessionId = kInvalidSessionId;
+			return;
+		}
 
-		if (m_entity == entt::null)
-			m_entity = R.create();
+		if (auto shard = m_shard.lock())
+			m_mailboxRef = shard->CreateMailboxRef(m_sessionId);
 
-		const entt::entity e = m_entity;
+		if (IsUdp())
+		{
+			if (auto* service = GetService(); service && service->m_udpRouter)
+				service->m_udpRouter->PromoteIngressToBound(m_endpointId, m_sessionId);
+		}
 
-		BootstrapSessionEntity(L, e, this);
-		OnEntityCreated(R, e);
+		SetSessionState(eSessionState::Bound);
+		if (GetEntity() == entt::null)
+			CreateEntity();
 
-		m_entityReady.store(true, std::memory_order_release);
-		m_entityCreating.store(false, std::memory_order_release);
+		NotifyLinkEstablishedIfReady();
 	}
 
 

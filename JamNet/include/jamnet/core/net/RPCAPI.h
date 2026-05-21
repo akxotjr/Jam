@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SessionShardState.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
@@ -9,31 +10,28 @@
 namespace jam::net
 {
 	template<typename Fn>
-	static void RunOnSessionJob(Session* session, Fn&& fn)
+	static bool RunOnSessionJob(Session* session, Fn&& fn)
 	{
 		using FnT = std::decay_t<Fn>;
 
 		if (!session)
-			return;
+			return false;
 
-		SessionHandle handle = session->GetSessionHandle();
-		if (!handle.IsValid())
-			return;
+		const SessionId sessionId = session->GetSessionId();
+		if (sessionId == kInvalidSessionId)
+			return false;
 
 		auto fnsp = std::make_shared<FnT>(std::forward<Fn>(fn));
-		auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
+		auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId));
 		if (!shard)
-			return;
+			return false;
 
-		shard->Submit(Job([handle, fnsp]() mutable
+		shard->Submit(Job([sessionId, fnsp]() mutable
 			{
-				auto& L = CurrentShardLocalChecked();
-				Session* session = FindSessionByHandle(L, handle);
+				auto& state = GetOrCreateSessionShardState();
+				Session* session = state.FindSession(sessionId);
 				if (!session)
 					return;
-
-				if (session->GetEntity() == entt::null)
-					session->CreateEntity();
 
 				const auto e = session->GetEntity();
 				if (e == entt::null)
@@ -41,16 +39,18 @@ namespace jam::net
 
 				(*fnsp)(e);
 			}));
+
+		return true;
 	}
 
 	template<typename Fn>
-	static void RunOnSessionJob(std::weak_ptr<Session> weak, Fn&& fn)
+	static bool RunOnSessionJob(std::weak_ptr<Session> weak, Fn&& fn)
 	{
 		auto s = weak.lock();
 		if (!s)
-			return;
+			return false;
 
-		RunOnSessionJob(s.get(), std::forward<Fn>(fn));
+		return RunOnSessionJob(s.get(), std::forward<Fn>(fn));
 	}
 
 	template<typename T>
@@ -212,8 +212,8 @@ namespace jam::net
 			return;
 		}
 
-		SessionHandle handle = session->GetSessionHandle();
-		if (!handle.IsValid())
+		const SessionId sessionId = session->GetSessionId();
+		if (sessionId == kInvalidSessionId)
 		{
 			onNull();
 			return;
@@ -221,17 +221,18 @@ namespace jam::net
 
 		auto fnsp		= std::make_shared<FnT>(std::forward<Fn>(fn));
 		auto onNullsp	= std::make_shared<OnNullT>(std::forward<OnNull>(onNull));
-		auto shard = GLOBAL_EXEC.GetShard(handle.routeKey);
+		auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId));
 		if (!shard)
 		{
 			(*onNullsp)();
 			return;
 		}
 
-		shard->Submit(Job([handle, fnsp, onNullsp]() mutable
+		shard->Submit(Job([sessionId, fnsp, onNullsp]() mutable
 			{
 				auto& L = CurrentShardLocalChecked();
-				Session* session = FindSessionByHandle(L, handle);
+				auto& state = GetOrCreateSessionShardState(L);
+				Session* session = state.FindSession(sessionId);
 				if (!session)
 				{
 					(*onNullsp)();
@@ -244,9 +245,6 @@ namespace jam::net
 					(*onNullsp)();
 					return;
 				}
-
-				if (session->GetEntity() == entt::null)
-					session->CreateEntity();
 
 				const auto e = session->GetEntity();
 				if (e == entt::null)

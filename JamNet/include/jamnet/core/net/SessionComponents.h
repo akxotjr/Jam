@@ -12,32 +12,18 @@ namespace jam::net
 	class Session;
 
 
-	// ============================================================
-	// Configuration Constants
-	// ============================================================
-
-	constexpr uint8		MAX_RETRY						= 5;
-	constexpr uint64	RETRANSMIT_INTERVAL_NS			= 40_ms;
-	constexpr uint64	RETRANSMIT_TIMEOUT_NS			= 200_ms;
-	constexpr uint32	ACK_TRACK_SIZE					= 1024;
-	constexpr uint32	ACK_WINDOW_SIZE					= 32;
-	constexpr uint64	DELAY_PIGGYBACK_ACK_TIMEOUT_NS  = 200_ms;
-	constexpr uint64	NACK_THROTTLE_INTERVAL_NS		= 2_ms;
-
-	constexpr uint64	REASSEMBLY_TIMEOUT_NS = 10_s;
-
-	static bool SeqGreater(uint16 a, uint16 b)
+	inline bool SeqGreater(uint16 a, uint16 b)
 	{
 		return static_cast<int16>(a - b) > 0;
 	}
 
-	static uint16 SeqDistance(uint16 newer, uint16 older)
+	inline uint16 SeqDistance(uint16 newer, uint16 older)
 	{
 		// newer - older (mod 2^16)
 		return static_cast<uint16>(newer - older);
 	}
 
-	static bool SeqInWindow(uint16 base, uint16 seq, uint16 window)
+	inline bool SeqInWindow(uint16 base, uint16 seq, uint16 window)
 	{
 		// base부터 앞으로 window 범위 안인지 (wrap 고려)
 		// 예: base=100, window=32 -> [100, 131] 범위
@@ -50,11 +36,7 @@ namespace jam::net
 
 	struct SessionInfo
 	{
-		Session*					session				= nullptr;
-									
-		uint64						connectedTime_ns	= 0_ns;
-		uint64						lastRecvTime_ns		= 0_ns;
-		uint64						lastSendTime_ns		= 0_ns;
+		static constexpr uint64		Timeout_ns = 30_s;
 
 		enum State : uint8
 		{
@@ -63,9 +45,13 @@ namespace jam::net
 			DISCONNECTING	= 2,
 			DISCONNECTED	= 3
 		};
+
+		Session*					session				= nullptr;
+		uint64						connectedTime_ns	= 0_ns;
+		uint64						lastRecvTime_ns		= 0_ns;
+		uint64						lastSendTime_ns		= 0_ns;
 		State						state				= DISCONNECTED;
 
-		static constexpr uint64		kTimeout_ns			= 30_s;
 
 		static SessionInfo			FromSession(Session* session, uint64 now_ns);
 	};
@@ -74,12 +60,6 @@ namespace jam::net
 	// ============================================================
 	//  Session Auth (Principal Claim)
 	// ============================================================
-
-	struct SessionAuth
-	{
-		uint64	principalId		= 0;
-		bool	authenticated	= false;
-	};
 
 	// ============================================================
 	// Channel State Components
@@ -128,6 +108,8 @@ namespace jam::net
 	/// 순서 보장 상태 - RELIABLE_ORDERED만 사용
 	struct OrderState
 	{
+		static constexpr uint32	MaxRecvBufferSize = 256;
+
 		struct OrderedPacket
 		{
 			uint16							orderedSeq	= 0;
@@ -138,7 +120,6 @@ namespace jam::net
 
 		std::map<uint16, OrderedPacket>		pendings;
 
-		static constexpr uint32		kMaxRecvBufferSize = 256;
 
 		bool						StoreRecvPacket(uint16 orderedSeq, uint16 span, Packet packet, uint64 now_ns);
 		std::vector<OrderedPacket>	PopOrderedPackets(OUT uint16& expectedSeq);
@@ -147,6 +128,13 @@ namespace jam::net
 	/// 신뢰성 상태 - RELIABLE_ORDERED, RELIABLE_UNORDERED 2개만 사용
 	struct ReliabilityState
 	{
+		static constexpr uint32 MaxRetry					= 5;
+		static constexpr uint64 RetransmitTimout_ns			= 200_ms;
+		static constexpr uint32 AckTrackSize				= 1024;
+		static constexpr uint32 AckWindowSize				= 32;
+		static constexpr uint64 DelayPiggybackAckTimeout_ns = 200_ms;
+		static constexpr uint64	NackThrottleInterval_ns		= 2_ms;
+
 		struct PendingPacket
 		{
 			uint16							seq						= 0;
@@ -167,7 +155,7 @@ namespace jam::net
 		// 전역 ACK 수신 상태 (peer 전체)
 		uint16                              latestRecvSeq			= 0;		// 가장 최신으로 관측한 수신 seq
 		uint16                              lastAckedSeq			= 0;		// 내가 상대에게 반영한 최신 ack
-		std::bitset<ACK_TRACK_SIZE>         ackTrack;							// latestRecvSeq 기준 과거 수신 상태
+		std::bitset<AckTrackSize>			ackTrack;							// latestRecvSeq 기준 과거 수신 상태
 
 		bool                                ackDirty				= false;
 		uint16                              pendingAckSeq			= 0;
@@ -177,7 +165,6 @@ namespace jam::net
 		// ordered gap 탐지 / NACK 보조
 		std::unordered_set<uint16>          sentNackSeqs;
 		uint64                              lastNackTime_ns			= 0;
-
 
 		bool							StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns);
 		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns) const;
@@ -202,6 +189,11 @@ namespace jam::net
 
 	struct FragmentState
 	{
+		static constexpr uint16				MaxFragmentSize			= JAMNET_MTU;
+		static constexpr uint16				MaxFragmentPayloadSize	= MaxFragmentSize - PacketHeader::MAX_WIRE_SIZE - sizeof(ACK_DATA);
+		static constexpr uint8				MaxFragments			= UINT8_MAX;
+		static constexpr uint64				Timeout_ns				= 5_s;
+
 		struct Reassembly
 		{
 			uint16							fragmentId		= 0;
@@ -231,13 +223,9 @@ namespace jam::net
 		std::unordered_map<uint16, Reassembly>	reassemblies;
 		uint64									timeoutDrops = 0;
 
-		static constexpr uint16					kMaxFragmentSize		= JAMNET_MTU;
-		static constexpr uint16					kMaxFragmentPayloadSize = kMaxFragmentSize - PacketHeader::MAX_WIRE_SIZE - sizeof(ACK_DATA);
-		static constexpr uint8					kMaxFragments			= UINT8_MAX;
-
-		bool								AddFragment(uint16 fragmentId, uint8 totalFragments, uint8 index, const BYTE* data, uint32 size, uint64 now_ns);
-		std::optional<std::vector<BYTE>>	PopCompleted(uint16 fragmentId);
-		void								CleanupTimeouts(uint64 now_ns);
+		bool									AddFragment(uint16 fragmentId, uint8 totalFragments, uint8 index, const BYTE* data, uint32 size, uint64 now_ns);
+		std::optional<std::vector<BYTE>>		PopCompleted(uint16 fragmentId);
+		void									CleanupTimeouts(uint64 now_ns);
 	};
 
 	// ============================================================
@@ -270,40 +258,58 @@ namespace jam::net
 
 	struct TimeSyncState
 	{
-		int64					offset_ns			= 0;
-		double					drift_ppm			= 0.0;
-
-		uint64					lastPingSend_ns		= 0;
-		uint64					lastPongRecv_ns		= 0;
-
-		uint64					lastSampleClient_ns = 0;
-		uint64					lastSampleServer_ns = 0;
-
-		uint64					lastT1ClientSend_ns = 0;
-		uint64					lastT2ServerRecv_ns = 0;
-		uint64					lastT3ServerSend_ns = 0;
-		uint64					lastT4ClientRecv_ns = 0;
-
-		static constexpr uint8	WIN = 32;
-		std::array<uint64, WIN>	rwnd{};
-		std::array<int64, WIN>	ownd{};
-		uint8					winCount = 0;
-		uint8					winHead = 0;
-		uint64					minRtt_ns = UINT64_MAX;
-
-		bool					bIsServerSide = false;
-		bool					bIsStabilized = false;
-		uint64					currentPingInterval_ns = kPingIntervalInitial_ns;
+		static constexpr uint64 PingIntervalInitial_ns	= 250_ms;
+		static constexpr uint64 PingIntervalStable_ns	= 2_s;
+		static constexpr uint8  StabilizationThreshold	= 20;
+		static constexpr uint8	Window					= 32;
 
 
-		static constexpr uint64 kPingIntervalInitial_ns = 250_ms;
-		static constexpr uint64 kPingIntervalStable_ns  = 2_s;
-		static constexpr uint8  kStabilizationThreshold = 20;
+		int64						offset_ns				= 0;
+		double						drift_ppm				= 0.0;
 
-		void					ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4);
-		int64					GetServerTime(uint64 clientTime_ns) const;
-		bool					ShouldSendPing(uint64 now_ns) const;
+		uint64						lastPingSend_ns			= 0;
+		uint64						lastPongRecv_ns			= 0;
+
+		uint64						lastSampleClient_ns		= 0;
+		uint64						lastSampleServer_ns		= 0;
+
+		uint64						lastT1ClientSend_ns		= 0;
+		uint64						lastT2ServerRecv_ns		= 0;
+		uint64						lastT3ServerSend_ns		= 0;
+		uint64						lastT4ClientRecv_ns		= 0;
+
+		std::array<uint64, Window>	rwnd					= {};
+		std::array<int64, Window>	ownd					= {};
+		uint8						winCount				= 0;
+		uint8						winHead					= 0;
+		uint64						minRtt_ns				= UINT64_MAX;
+
+		bool						bIsServerSide			= false;
+		bool						bIsStabilized			= false;
+		uint64						currentPingInterval_ns	= PingIntervalInitial_ns;
+
+
+		void						ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4);
+		int64						GetServerTime(uint64 clientTime_ns) const;
+		bool						ShouldSendPing(uint64 now_ns) const;
 	};
+
+	struct BindingState
+	{
+		static constexpr uint64 Timeout_ns	= 2_s;
+		static constexpr uint64 MaxRetry	= 5;
+
+		enum State : uint8
+		{
+			
+		};
+
+		bool	active		= false;
+		bool	bound		= false;
+		uint8	retryCount	= 0;
+		uint32	timerToken	= 0;
+	};
+
 
 	// ============================================================
 	// Handshake State
@@ -311,6 +317,10 @@ namespace jam::net
 
 	struct HandshakeState
 	{
+		static constexpr uint64		Timeout_ns = 2_s;
+		static constexpr uint64		MSL_ns	   = 12_s;
+		static constexpr uint8		MaxRetry   = 5;
+
 		enum State : uint8
 		{
 			DISCONNECTED				= 0,
@@ -334,14 +344,11 @@ namespace jam::net
 			TIME_OUT					= 14,
 			ERROR_STATE					= 15,
 		};
+
 		State						state				 = DISCONNECTED;
-		uint64						lastHandshakeTime_ns = 0;
+		uint64						lastTime_ns = 0;
 		uint8						retryCount			 = 0;
 		uint64						timeWaitStart_ns	 = 0_ns;
-
-		static constexpr uint64		kHandshakeTimeout_ns = 2_s;
-		static constexpr uint64		kHandshakeMSL_ns	 = 12_s;
-		static constexpr uint8		kMaxRetry			 = 5;
 	};
 
 	// ============================================================
@@ -356,6 +363,7 @@ namespace jam::net
 			CONGESTION_AVOIDANCE = 1,
 			FAST_RECOVERY		 = 2,
 		};
+
 		State		state		  = SLOW_START;
 		uint32		cwnd		  = 4   * JAMNET_MTU;
 		uint32		ssthresh	  = 32  * JAMNET_MTU;
@@ -379,6 +387,10 @@ namespace jam::net
 
 	struct TransmissionWaitingQueue
 	{
+		static constexpr uint32		MaxTransportBatch = 32;
+		static constexpr uint64		FlushInterval_ns  = 1_ms;
+		static constexpr uint64		ImmediateCtrl_ns  = 0_ns;
+
 		enum Priority : uint8
 		{
 			CONTROL		= 0,
@@ -399,11 +411,6 @@ namespace jam::net
 		uint64							lastFlushTime_ns = 0;
 		uint64							bytesQueued		 = 0;
 		bool							flushRequested	 = false;
-
-
-		static constexpr uint32		kMaxTransportBatch			= 32;
-		static constexpr uint64		kTransportFlushInterval_ns  = 1_ms;
-		static constexpr uint64		kTransportImmediateCtrl_ns  = 0_ns;
 
 		void						Enqueue(Packet packet, Priority priority);
 		bool						ShouldFlush(uint64 now_ns) const;

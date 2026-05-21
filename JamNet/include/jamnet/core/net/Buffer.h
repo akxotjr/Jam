@@ -1,5 +1,7 @@
 #pragma once
 #include <jambase/CacheLine.h>
+#include <array>
+#include <atomic>
 
 namespace jam::net
 {
@@ -15,6 +17,7 @@ namespace jam::net
 
 		static constexpr uint32 k_blockSize    = 16 * 1024;
 		static constexpr uint32 k_invalidIndex = UINT32_MAX;
+		static constexpr uint32 k_maxSliceStates = k_blockSize;
 
 	public:
 
@@ -45,18 +48,21 @@ namespace jam::net
 		bool							IsSliceClosed(uint32 sliceStateIndex) const;
 		void							SetSliceClosed(uint32 sliceStateIndex, bool closed);
 
-		std::atomic<uint32>											m_refCount	 = 1;
-		BufferPool*													m_owner		 = nullptr;
-		alignas(std::max_align_t) std::array<BYTE, k_blockSize>		m_storage	 = {};
+		std::atomic<uint32>					m_refCount	 = 1;
+		BufferPool*							m_owner		 = nullptr;
+
+		alignas(std::max_align_t) 
+		std::array<BYTE, k_blockSize>		m_storage	 = {};
 													 
-		uint32														m_used		 = 0;
-		bool														m_open		 = false;
+		uint32								m_used		 = 0;
+		bool								m_open		 = false;
 
 		// pool bookkeeping
-		uint32														m_poolIndex  = k_invalidIndex;
-		bool														m_inFreeList = false;
+		uint32								m_poolIndex  = k_invalidIndex;
+		bool								m_inFreeList = false;
 
-		std::vector<uint8>											m_sliceClosedStates;
+		std::atomic<uint32>					m_nextSliceStateIndex = 0;
+		std::array<std::atomic<uint8>, k_maxSliceStates> m_sliceClosedStates = {};
 	};
 
 

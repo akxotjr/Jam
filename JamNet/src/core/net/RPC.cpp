@@ -1,3 +1,4 @@
+
 #include "pch.h"
 #include "jamnet/core/net/RPC.h"
 #include "jamnet/core/net/PacketBuilder.h"
@@ -56,7 +57,7 @@ namespace jam::net
 			{
 				if (auto st = rpcState->PopRequest(requestId))
 				{
-					if (st->onPayload) st->onPayload(body, bodyLen, packet);
+					if (st->onPayload) st->onPayload(body, bodyLen, std::move(packet));
 					if (st->onDone)    st->onDone(true);
 					return;
 				}

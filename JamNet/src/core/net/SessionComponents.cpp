@@ -15,7 +15,7 @@ namespace jam::net
 		comp.connectedTime_ns	= now_ns;
 		comp.lastRecvTime_ns	= now_ns;
 		comp.lastSendTime_ns	= now_ns;
-		comp.state				= State::CONNECTING;
+		comp.state				= State::CONNECTED;
 
 		return comp;
 	}
@@ -86,7 +86,7 @@ namespace jam::net
 	{
 		for (auto it = reassemblies.begin(); it != reassemblies.end(); )
 		{
-			if (now_ns - it->second.lastRecvTime_ns > REASSEMBLY_TIMEOUT_NS)
+			if (now_ns - it->second.lastRecvTime_ns > Timeout_ns)
 			{
 				timeoutDrops++;
 				it = reassemblies.erase(it);
@@ -103,7 +103,7 @@ namespace jam::net
 
 	bool OrderState::StoreRecvPacket(uint16 orderedSeq, uint16 span, ::jam::net::Packet packet, uint64 now_ns)
 	{
-		if (pendings.size() >= kMaxRecvBufferSize)
+		if (pendings.size() >= MaxRecvBufferSize)
 			return false;
 
 		if (pendings.contains(orderedSeq))
@@ -170,10 +170,10 @@ namespace jam::net
 			if (!pkt.hasInitialSend)
 				continue;
 
-			if (pkt.retryCount >= MAX_RETRY)
+			if (pkt.retryCount >= MaxRetry)
 				continue;
 
-			if (now_ns - pkt.lastRetransmitTime_ns >= RETRANSMIT_TIMEOUT_NS)
+			if (now_ns - pkt.lastRetransmitTime_ns >= RetransmitTimout_ns)
 				out.push_back(seq);
 		}
 		return out;
@@ -224,7 +224,7 @@ namespace jam::net
 		{
 			const uint16 advance = SeqDistance(seq, latestRecvSeq);
 
-			if (advance >= ACK_TRACK_SIZE)
+			if (advance >= AckTrackSize)
 				ackTrack.reset();
 			else
 				ackTrack <<= advance;
@@ -235,7 +235,7 @@ namespace jam::net
 		else
 		{
 			const uint16 dist = SeqDistance(latestRecvSeq, seq);
-			if (dist < ACK_TRACK_SIZE)
+			if (dist < AckTrackSize)
 				ackTrack.set(dist);
 		}
 
@@ -276,7 +276,7 @@ namespace jam::net
 
 		ackOne(ackSeq);
 
-		for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
+		for (uint16 i = 1; i <= AckWindowSize; ++i)
 		{
 			if (ackBitfield & (1u << (i - 1)))
 				ackOne(static_cast<uint16>(ackSeq - i));
@@ -289,7 +289,7 @@ namespace jam::net
 	bool ReliabilityState::ShouldSendAck(uint64 now_ns) const
 	{
 		if (!ackDirty) return false;
-		return (now_ns - firstPendingAckTime_ns) >= DELAY_PIGGYBACK_ACK_TIMEOUT_NS;
+		return (now_ns - firstPendingAckTime_ns) >= DelayPiggybackAckTimeout_ns;
 	}
 
 	void ReliabilityState::ClearPendingAck()
@@ -305,12 +305,12 @@ namespace jam::net
 		uint32 bitfield = 0;
 		const uint16 base = pendingAckSeq;
 
-		for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
+		for (uint16 i = 1; i <= AckWindowSize; ++i)
 		{
 			const uint16 seq = static_cast<uint16>(base - i);
 			const uint16 dist = SeqDistance(base, seq);
 
-			if (dist == 0 || dist > ACK_TRACK_SIZE)
+			if (dist == 0 || dist > AckTrackSize)
 				continue;
 
 			if (ackTrack.test(dist))
@@ -328,7 +328,7 @@ namespace jam::net
 		// seq가 base 기준 과거에 있어야만 의미가 있음.
 		const uint16 base = pendingAckSeq;
 
-		for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
+		for (uint16 i = 1; i <= AckWindowSize; ++i)
 		{
 			const uint16 seq = static_cast<uint16>(expectedSeq + i);
 
@@ -338,7 +338,7 @@ namespace jam::net
 
 			// base 기준으로 seq가 과거로 ACK_TRACK_SIZE 안에 들어오는지 확인
 			const uint16 dist = SeqDistance(base, seq);
-			if (dist == 0 || dist > ACK_TRACK_SIZE)
+			if (dist == 0 || dist > AckTrackSize)
 			{
 				// ackTrack으로 판정 불가능한 영역(너무 옛날/동일) -> 여기서는 NACK 대상으로 취급하지 않음
 				continue;
@@ -414,14 +414,14 @@ namespace jam::net
 
 		rwnd[winHead] = rtt;
 		ownd[winHead] = offset_ns;
-		winHead = (winHead + 1) % WIN;
-		if (winCount < WIN)
+		winHead = (winHead + 1) % Window;
+		if (winCount < Window)
 			winCount++;
 
-		if (!bIsStabilized && winCount >= kStabilizationThreshold)
+		if (!bIsStabilized && winCount >= StabilizationThreshold)
 		{
 			bIsStabilized = true;
-			currentPingInterval_ns = kPingIntervalStable_ns;
+			currentPingInterval_ns = PingIntervalStable_ns;
 		}
 	}
 
@@ -505,9 +505,9 @@ namespace jam::net
 			return false;
 		if (flushRequested)
 			return true;
-		if (queue.size() >= kMaxTransportBatch)
+		if (queue.size() >= MaxTransportBatch)
 			return true;
-		if (now_ns - lastFlushTime_ns >= kTransportFlushInterval_ns)
+		if (now_ns - lastFlushTime_ns >= FlushInterval_ns)
 			return true;
 		for (const auto& pkt : queue)
 		{

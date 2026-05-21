@@ -52,10 +52,10 @@ namespace jam::net
    bool IncomingFragmentationProcess(RecvContext& ctx);
    bool IncomingNetstatProcess(RecvContext& ctx);
    
-   void HandleSystemPacket(RecvContext& ctx);
+   bool HandlePostBindSystemPacket(RecvContext& ctx);
    void HandleAckPacket(RecvContext& ctx);
 
-
+   
 	// Main Pipeline Orchestrator
 
 	/// **메인 수신 파이프라인**
@@ -138,6 +138,6 @@ namespace jam::net
 	// ============================================================
 
 	/// 네트워크 도메인 시스템 등록 (NETWORK domain)
-	void RegisterNetworkDomain(ShardLocal& L, uint64 tickPeriod_ns = 1'000'000_ns);
+	void RegisterNetworkDomain(ShardLocal& L, uint64 tickPeriod_ns = 1_ms);
 
 } // namespace jam::net

@@ -17,6 +17,44 @@
 
 namespace jam::net
 {
+	size_t UdpRouter::StartIngressIndex(uint64 endpointId)
+	{
+		return static_cast<size_t>((endpointId * 11400714819323198485ull) & (INGRESS_TABLE_CAPACITY - 1));
+	}
+
+	void UdpRouter::UpsertIngressRoute(uint64 endpointId, UdpIngressRouteKind kind, uint64 value)
+	{
+		if (endpointId == kEmptyIngressKey || endpointId == kTombstoneIngressKey)
+			return;
+
+		size_t idx = StartIngressIndex(endpointId);
+		for (size_t probe = 0; probe < INGRESS_TABLE_CAPACITY; ++probe, idx = (idx + 1) & (INGRESS_TABLE_CAPACITY - 1))
+		{
+			auto& slot = m_ingressRoutes[idx];
+			uint64 key = slot.key.load(std::memory_order_acquire);
+			if (key == endpointId)
+			{
+				slot.value.store(value, std::memory_order_release);
+				slot.kind.store(static_cast<uint8>(kind), std::memory_order_release);
+				return;
+			}
+
+			if (key == kEmptyIngressKey || key == kTombstoneIngressKey)
+			{
+				uint64 expected = key;
+				if (!slot.key.compare_exchange_strong(expected, endpointId, std::memory_order_acq_rel))
+				{
+					--probe;
+					continue;
+				}
+
+				slot.value.store(value, std::memory_order_release);
+				slot.kind.store(static_cast<uint8>(kind), std::memory_order_release);
+				return;
+			}
+		}
+	}
+
 	bool UdpRouter::Start(Service* service)
 	{
 		m_service = service;
@@ -206,45 +244,76 @@ namespace jam::net
 
 	void UdpRouter::ProcessSend(int32 numOfBytes, const NetAddress& remoteAddr)
 	{
-		if (numOfBytes == 0 || !m_service) return;
-
-		const RouteKey routeKey = Session::MakeUdpRouteKey(remoteAddr);
-		const auto shard = GLOBAL_EXEC.GetShard(routeKey);
-		if (!shard) return;
-
-		shard->Submit(Job([this, remoteAddr, numOfBytes]() mutable
-			{
-				auto& L = CurrentShardLocalChecked();
-				auto& table = GetUdpSessionTable(L);
-				const SessionTableKey key{ m_socket, remoteAddr };
-
-				if (auto it = table.find(key); it != table.end())
-				{
-					it->second->OnSend(numOfBytes);
-				}
-			}));
+		if (numOfBytes == 0)
+		{
+			JAMNET_LOG_WARN_LOC("[ip= {}, port= {}] num of bytes is 0", remoteAddr.GetIpAddress(), remoteAddr.GetPort());
+		}
 	}
 
 	void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddr, Packet packet, uint64 ingressRecvTime_ns)
 	{
 		if (numOfBytes == 0 || !m_service) return;
 
-		const RouteKey routeKey = Session::MakeUdpRouteKey(remoteAddr);
+		const uint64 endpointId = Session::MakeEndpointId(remoteAddr);
+		UdpIngressRoute ingressRoute = {};
+		RouteKey routeKey = Session::MakeUdpRouteKey(remoteAddr);
+		if (TryGetIngressRoute(endpointId, ingressRoute))
+		{
+			if (ingressRoute.kind == UdpIngressRouteKind::PrebindRoute && IsValidRouteKey(ingressRoute.routeKey))
+				routeKey = ingressRoute.routeKey;
+			else if (ingressRoute.kind == UdpIngressRouteKind::BoundSession && ingressRoute.sessionId != kInvalidSessionId)
+			{
+				//if (ingressRoute.sessionId == 281479271677953)
+				//	JAMNET_LOG_DEBUG("[UdpRouter::ProcessRecv] sessionId= {} receive packet", 281479271677953);
+
+				const uint16 targetShardIndex = GetRuntimeShardIndex(ingressRoute.sessionId);
+				if (const auto boundShard = GLOBAL_EXEC.GetShardFromIndex(targetShardIndex))
+				{
+					boundShard->Submit(Job([numOfBytes, ingressRecvTime_ns, endpointId, targetShardIndex, sessionId = ingressRoute.sessionId, pkt = std::move(packet)]() mutable
+						{
+							auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+							if (auto* forwarded = static_cast<UdpSession*>(state.FindSession(sessionId)))
+							{
+								//if (sessionId == 281479271677953)
+								//	JAMNET_LOG_DEBUG("[UdpRouter::ProcessRecv] sessionId= {} forward packet", 281479271677953);
+								forwarded->ProcessRecv(numOfBytes, std::move(pkt), ingressRecvTime_ns);
+							}
+							else
+							{
+								JAMNET_LOG_WARN(
+									"[UdpRouter] Bound UDP session lookup failed. endpointId={} sessionId={} targetShard={} localShard={}",
+									endpointId,
+									sessionId,
+									targetShardIndex,
+									CurrentShardLocalChecked().shardIndex);
+							}
+						}, eJobPriority::Control));
+				}
+				else
+				{
+					JAMNET_LOG_WARN(
+						"[UdpRouter] Bound UDP shard resolve failed. endpointId={} sessionId={} targetShard={}",
+						endpointId,
+						ingressRoute.sessionId,
+						targetShardIndex);
+				}
+				return;
+			}
+		}
+
 		const auto shard = GLOBAL_EXEC.GetShard(routeKey);
 		if (!shard) return;
 
-		shard->Submit(Job([this, remoteAddr, numOfBytes, pkt = std::move(packet), ingressRecvTime_ns]() mutable
+		shard->Submit(Job([this, routeKey, remoteAddr, endpointId, numOfBytes, pkt = std::move(packet), ingressRecvTime_ns]() mutable
 			{
-				auto& L     = CurrentShardLocalChecked();
-				auto& table = GetUdpSessionTable(L);
-				const SessionTableKey key{ m_socket, remoteAddr };
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				const EndpointHandle handle{ routeKey, endpointId };
 
 				UdpSession* session = nullptr;
-				if (auto it = table.find(key); it != table.end())
-				{
-					session = it->second.get();
-				}
-				else
+				if (auto* found = static_cast<UdpSession*>(state.FindPreboundSession(handle)))
+					session = found;
+
+				if (!session)
 				{
 					if (m_service->GetServiceType() != eServiceType::SERVER)
 						return;
@@ -253,9 +322,8 @@ namespace jam::net
 					if (!owner) return;
 					session = owner.get();
 
-					if (table.emplace(key, std::move(owner)).second)
+					if (state.AttachPreboundSession(std::move(owner)))
 					{
-						L.sessionState->logicalSessionIndex[session->GetSessionHandle()] = session;
 						m_service->m_udpSessionCount.fetch_add(1, std::memory_order_relaxed);
 						m_service->m_sessionCount.fetch_add(1, std::memory_order_relaxed);
 					}
@@ -282,5 +350,78 @@ namespace jam::net
 			win_error::LogWsaError("[UdpRouter] socket operation", errorCode);
 			break; 
 		}
+	}
+
+	void UdpRouter::RegisterIngressPrebindRoute(uint64 endpointId, RouteKey ownerRouteKey)
+	{
+		if (!IsValidRouteKey(ownerRouteKey))
+		{
+			ClearIngressRoute(endpointId);
+			return;
+		}
+
+		UpsertIngressRoute(endpointId, UdpIngressRouteKind::PrebindRoute, ownerRouteKey.value());
+	}
+
+	void UdpRouter::PromoteIngressToBound(uint64 endpointId, SessionId sessionId)
+	{
+		if (sessionId == kInvalidSessionId)
+		{
+			ClearIngressRoute(endpointId);
+			return;
+		}
+
+		UpsertIngressRoute(endpointId, UdpIngressRouteKind::BoundSession, static_cast<uint64>(sessionId));
+	}
+
+	void UdpRouter::ClearIngressRoute(uint64 endpointId)
+	{
+		if (endpointId == kEmptyIngressKey || endpointId == kTombstoneIngressKey)
+			return;
+
+		size_t idx = StartIngressIndex(endpointId);
+		for (size_t probe = 0; probe < INGRESS_TABLE_CAPACITY; ++probe, idx = (idx + 1) & (INGRESS_TABLE_CAPACITY - 1))
+		{
+			auto& slot = m_ingressRoutes[idx];
+			const uint64 key = slot.key.load(std::memory_order_acquire);
+			if (key == kEmptyIngressKey)
+				return;
+			if (key != endpointId)
+				continue;
+
+			slot.kind.store(static_cast<uint8>(UdpIngressRouteKind::None), std::memory_order_release);
+			slot.value.store(0, std::memory_order_release);
+			slot.key.store(kTombstoneIngressKey, std::memory_order_release);
+			return;
+		}
+	}
+
+	bool UdpRouter::TryGetIngressRoute(uint64 endpointId, UdpIngressRoute& out) const
+	{
+		if (endpointId == kEmptyIngressKey || endpointId == kTombstoneIngressKey)
+			return false;
+
+		size_t idx = StartIngressIndex(endpointId);
+		for (size_t probe = 0; probe < INGRESS_TABLE_CAPACITY; ++probe, idx = (idx + 1) & (INGRESS_TABLE_CAPACITY - 1))
+		{
+			const auto& slot = m_ingressRoutes[idx];
+			const uint64 key = slot.key.load(std::memory_order_acquire);
+			if (key == kEmptyIngressKey)
+				return false;
+			if (key != endpointId)
+				continue;
+
+			const auto kind = static_cast<UdpIngressRouteKind>(slot.kind.load(std::memory_order_acquire));
+			if (kind == UdpIngressRouteKind::None)
+				return false;
+
+			const uint64 value = slot.value.load(std::memory_order_acquire);
+			out.kind      = kind;
+			out.routeKey  = (kind == UdpIngressRouteKind::PrebindRoute) ? RouteKey(value) : RouteKey{};
+			out.sessionId = (kind == UdpIngressRouteKind::BoundSession) ? static_cast<SessionId>(value) : kInvalidSessionId;
+			return true;
+		}
+
+		return false;
 	}
 }

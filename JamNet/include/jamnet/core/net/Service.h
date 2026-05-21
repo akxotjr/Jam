@@ -36,15 +36,6 @@ namespace jam::net
 		uint32								maxUdpSessionCount = 1;
 	};
 
-	/*inline*/ TcpSessionTable& GetTcpSessionTable(ShardLocal& L);
-
-	/*inline*/ UdpSessionTable& GetUdpSessionTable(ShardLocal& L);
-
-	/*inline*/ DetachedTcpSessionList& GetDetachedTcpSessions(ShardLocal& L);
-
-	/*inline */DetachedUdpSessionList& GetDetachedUdpSessions(ShardLocal& L);
-	
-
 
 	class Service
 	{
@@ -56,6 +47,7 @@ namespace jam::net
 
 		friend class TcpSession;
 		friend class UdpSession;
+		friend class Session;
 		friend class TcpListener;
 		friend class UdpRouter;
 
@@ -77,13 +69,14 @@ namespace jam::net
 		bool								SetSessionFactory();
 		void								SetSessionInitCallback(const SessionInitCallback& callback) { m_sessionInitCallback = callback; }
 
-		TcpSession*							CreateTcpSession(const NetAddress& remoteAddr);
-		UdpSession*							CreateUdpSession(const NetAddress& remoteAddr);
-		TcpSession*							CreateTcpSession();		// using internal remote tcp address
-		UdpSession*							CreateUdpSession();		// using internal remote udp address
+		std::unique_ptr<TcpSession>			CreateTcpSession(const NetAddress& remoteAddr);
+		std::unique_ptr<UdpSession>			CreateUdpSession(const NetAddress& remoteAddr);
+		std::unique_ptr<TcpSession>			CreateTcpSession();		// using internal remote tcp address
+		std::unique_ptr<UdpSession>			CreateUdpSession();		// using internal remote udp address
+		void								NotifyTcpSessionAttached();
+		void								NotifyUdpSessionAttached(uint64 endpointId, RouteKey routeKey);
 
 		void								ReleaseTcpSession(TcpSession* session);
-
 		void								ReleaseUdpSession(UdpSession* session);
 
 		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount.load(std::memory_order_relaxed); }
@@ -111,9 +104,6 @@ namespace jam::net
 		bool								RegisterIocpObject(IocpObject* object);
 		std::unique_ptr<TcpSession>			MakeTcpSession(const NetAddress& remoteAddr);
 		std::unique_ptr<UdpSession>			MakeUdpSession(const NetAddress& remoteAddr);
-		void								AdoptTcpSession(std::unique_ptr<TcpSession> session);
-		void								AdoptUdpSession(std::unique_ptr<UdpSession> session);
-		void								TryFinalizeDetachedSessions(ShardLocal& L);
 
 
 	protected:
@@ -138,7 +128,7 @@ namespace jam::net
 		std::atomic<bool>									m_running				= false;
 		uint64												m_lastUpdateTime_ns		= 0_ns;
 
-		void*												m_userData = nullptr;
+		void*												m_userData				= nullptr;
 	};
 
 

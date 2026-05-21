@@ -1,57 +1,43 @@
 #pragma once
 
-#include "jamnet/core/net/NetAddress.h"
-#include "jamnet/core/net/Session.h"
+#include "jamnet/core/executor/ShardOwnedObject.h"
+#include "jamnet/core/net/TcpSession.h"
 
 #include <memory>
 #include <unordered_map>
-#include <vector>
+
+namespace jam
+{
+	struct ShardLocal;
+}
 
 namespace jam::net
 {
-	class TcpSession;
-	class UdpSession;
-
-	struct SessionTableKey
-	{
-		SOCKET		localSocket = INVALID_SOCKET;
-		NetAddress	remoteAddr = {};
-
-		bool operator==(const SessionTableKey& other) const
-		{
-			return localSocket == other.localSocket && remoteAddr == other.remoteAddr;
-		}
-	};
-
-	struct SessionTableKeyHash
-	{
-		size_t operator()(const SessionTableKey& key) const noexcept
-		{
-			const size_t socketHash =
-				std::hash<uintptr_t>()(static_cast<uintptr_t>(key.localSocket));
-
-			const size_t addrHash =
-				std::hash<NetAddress>()(key.remoteAddr);
-
-			return socketHash ^ (addrHash << 1);
-		}
-	};
-
-	using TcpSessionTable		 = std::unordered_map<SessionTableKey, std::unique_ptr<TcpSession>, SessionTableKeyHash>;
-	using UdpSessionTable		 = std::unordered_map<SessionTableKey, std::unique_ptr<UdpSession>, SessionTableKeyHash>;
-	using SessionHandleIndex	 = std::unordered_map<SessionHandle, Session*>;
-	using DetachedTcpSessionList = std::vector<std::unique_ptr<TcpSession>>;
-	using DetachedUdpSessionList = std::vector<std::unique_ptr<UdpSession>>;
+	using PreboundSessionTable = std::unordered_map<EndpointHandle, std::unique_ptr<Session>>;
 
 	struct SessionShardState
 	{
-		TcpSessionTable			tcpSessions;
-		UdpSessionTable			udpSessions;
-		SessionHandleIndex		logicalSessionIndex;
-		DetachedTcpSessionList	detachedTcpSessions;
-		DetachedUdpSessionList	detachedUdpSessions;
+		uint32							shardIndex = 0;
+		PreboundSessionTable			preboundSessions;
+		ShardOwnedObjectTable<Session>	sessionsById;
 
-		SessionShardState();
-		~SessionShardState();
+		bool									AttachPreboundSession(std::unique_ptr<Session> session);
+		std::unique_ptr<Session>				DetachPreboundSession(const EndpointHandle& handle);
+		Session*								FindPreboundSession(const EndpointHandle& handle);
+
+		SessionId								AllocSessionId();
+		void									FreeSessionId(SessionId sessionId);
+		bool									PromotePreboundSession(SessionId sessionId, std::unique_ptr<Session>& owner);
+		std::unique_ptr<Session>				ReleaseBoundSession(SessionId sessionId, Session* expected = nullptr);
+		Session*								FindSession(SessionId sessionId);
+		const Session*							FindSession(SessionId sessionId) const;
+		ShardOwnedObjectRefSlot<Session>		FindSessionRef(SessionId sessionId);
+		ShardOwnedObjectRefSlot<const Session>	FindSessionRef(SessionId sessionId) const;
+
+		Session* FindSessionAny(SessionId sessionId, const EndpointHandle& handle);
 	};
+
+	PreboundSessionTable&	GetPreboundSessionTable(ShardLocal& L);
+	SessionShardState&		GetOrCreateSessionShardState(ShardLocal& L);
+	SessionShardState&		GetOrCreateSessionShardState();
 }

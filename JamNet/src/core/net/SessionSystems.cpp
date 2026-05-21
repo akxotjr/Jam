@@ -93,11 +93,7 @@ namespace jam::net
 				ts->lastT4ClientRecv_ns = now_ns;
 			}
 
-			if (info.session)
-			{
-				info.session->OnLinkEstablished();
-				JAMNET_LOG_DEBUG("NotifyEstablished entity = {}", static_cast<int32>(e));
-			}
+			JAMNET_LOG_DEBUG("NotifyEstablished entity = {}", static_cast<int32>(e));
 		}
 
 		void NotifyTerminated(entt::registry& R, const entt::entity e)
@@ -107,8 +103,6 @@ namespace jam::net
 			auto& info = R.get<SessionInfo>(e);
 			info.state = SessionInfo::DISCONNECTED;
 
-			if (info.session)
-				info.session->OnLinkTerminated();
 		}
 
 		uint32 ClampPendingReliableCount(const ReliabilityState& reliability)
@@ -163,7 +157,7 @@ namespace jam::net
 				uint32 size        = 0;
 			};
 
-			std::array<AckedMeta, ACK_WINDOW_SIZE + 1> acked{};
+			std::array<AckedMeta, ReliabilityState::AckWindowSize + 1> acked{};
 			uint32 ackedCount = 0;
 
 			auto capture = [&](uint16 seq)
@@ -181,7 +175,7 @@ namespace jam::net
 				};
 
 			capture(latestSeq);
-			for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
+			for (uint16 i = 1; i <= ReliabilityState::AckWindowSize; ++i)
 			{
 				if (wnd & (1u << (i - 1)))
 					capture(static_cast<uint16>(latestSeq - i));
@@ -244,7 +238,7 @@ namespace jam::net
 					if (!pkt || !pkt->packet.IsValid())
 						return;
 
-					if (pkt->retryCount >= MAX_RETRY)
+					if (pkt->retryCount >= ReliabilityState::MaxRetry)
 					{
 						JAMNET_LOG_ERROR("[Retransmit] Packet seq={} exceeded max retry", seq);
 						MarkRetransmitGiveup(metrics, *pkt);
@@ -262,7 +256,7 @@ namespace jam::net
 				};
 
 			trigger(missingSeq);
-			for (uint16 i = 1; i <= ACK_WINDOW_SIZE; ++i)
+			for (uint16 i = 1; i <= ReliabilityState::AckWindowSize; ++i)
 			{
 				if (wnd & (1u << (i - 1)))
 					trigger(static_cast<uint16>(missingSeq + i));
@@ -288,7 +282,7 @@ namespace jam::net
 					metrics->appDeliveredPayloadBytes += ctx.view.PayloadSize();
 
 				if (sessInfo.session)
-					sessInfo.session->HandleCustomPacket(ctx.view);
+					sessInfo.session->HandleCustomPacket(std::move(ctx.packet));
 				return;
 
 			default:
@@ -429,7 +423,7 @@ namespace jam::net
 				ts.lastT4ClientRecv_ns  = now_ns;
 			}
 
-			if (!R.all_of<HandshakeState>(e))   R.emplace<HandshakeState>(e);
+			if (!R.all_of<HandshakeState>(e))   R.emplace<HandshakeState>(e, HandshakeState{ .state = HandshakeState::CONNECTED });
 			if (!R.all_of<SequenceState>(e))    R.emplace<SequenceState>(e);
 			if (!R.all_of<OrderState>(e))       R.emplace<OrderState>(e);
 			if (!R.all_of<ReliabilityState>(e)) R.emplace<ReliabilityState>(e);
@@ -442,7 +436,6 @@ namespace jam::net
 		if (!R.all_of<profile::LinkQualityState>(e))     R.emplace<profile::LinkQualityState>(e);
 		if (!R.all_of<profile::TrafficSampleState>(e))   R.emplace<profile::TrafficSampleState>(e);
 
-		JAMNET_LOG_DEBUG("[SessionSystems] [Thread #{}] Session entity {} initialized, protocol = {}", CurrentThreadId(), static_cast<uint32>(e), session->IsUdp() ? "udp" : "tcp");
 	}
 
 	// ============================================================
@@ -501,7 +494,7 @@ namespace jam::net
 			if (auto* metrics = R.try_get<profile::RudpMetrics>(ctx.e))
 				metrics->outOfOrderPackets++;
 
-			if (orderState->pendings.size() >= OrderState::kMaxRecvBufferSize)
+			if (orderState->pendings.size() >= OrderState::MaxRecvBufferSize)
 			{
 				JAMNET_LOG_WARN("[Ordering] Recv buffer overflow");
 				ctx.shouldDrop = true;
@@ -522,7 +515,7 @@ namespace jam::net
 			{
 				const uint64 now = ctx.now_ns;
 
-				if (now - reliability->lastNackTime_ns >= NACK_THROTTLE_INTERVAL_NS
+				if (now - reliability->lastNackTime_ns >= ReliabilityState::NackThrottleInterval_ns
 					&& !reliability->sentNackSeqs.contains(expectedSeq)
 					&& SeqGreater(orderedSeq, expectedSeq))
 				{
@@ -563,7 +556,7 @@ namespace jam::net
 
 		const uint16 packetSeq = ctx.view.Sequence();
 
-		if (!SeqGreater(packetSeq, reliability->latestRecvSeq - ACK_TRACK_SIZE))
+		if (!SeqGreater(packetSeq, reliability->latestRecvSeq - ReliabilityState::AckTrackSize))
 			return false;
 
 		if (!(reliability->ackTrack.none() && reliability->latestRecvSeq == 0))
@@ -571,7 +564,7 @@ namespace jam::net
 			if (!SeqGreater(packetSeq, reliability->latestRecvSeq))
 			{
 				const uint16 dist = SeqDistance(reliability->latestRecvSeq, packetSeq);
-				if (dist >= ACK_TRACK_SIZE)
+				if (dist >= ReliabilityState::AckTrackSize)
 				{
 					ctx.shouldDrop = true;
 					return false;
@@ -655,65 +648,24 @@ namespace jam::net
 		return true;
 	}
 
-	void HandleSystemPacket(RecvContext& ctx)
+	bool HandlePostBindSystemPacket(RecvContext& ctx)
 	{
 		auto& R         = ctx.L.registry;
 		auto* handshake = R.try_get<HandshakeState>(ctx.e);
-		auto* info      = R.try_get<SessionInfo>(ctx.e);
 		auto* timesync  = R.try_get<TimeSyncState>(ctx.e);
-
-		if (!handshake || !info || !timesync) return;
+		auto* info      = R.try_get<SessionInfo>(ctx.e);
+		if (!info)
+			return false;
 
 		const uint64 now_ns = ctx.now_ns;
 
 		switch (U2E(eSystemPacketId, ctx.view.Id()))
 		{
-		case eSystemPacketId::CONNECT_SYN:
-		{
-			// 서버측: DISCONNECTED 상태에서 SYN 수신 -> SYNACK 응답
-			if (handshake->state != HandshakeState::DISCONNECTED)
-				return;
-
-			handshake->state = HandshakeState::CONNECT_SYN_RECEIVED;
-			EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::CONNECT_SYNACK, TransmissionWaitingQueue::CONTROL);
-
-			handshake->state                = HandshakeState::CONNECT_SYNACK_SENT;
-			handshake->lastHandshakeTime_ns = now_ns;
-			handshake->retryCount           = 0;
-
-			info->state = SessionInfo::CONNECTING;
-			break;
-		}
-		case eSystemPacketId::CONNECT_SYNACK:
-		{
-			// 클라이언트측: SYN_SENT 에서 SYNACK 수신 -> ACK 송신 + 연결 완료
-			if (handshake->state != HandshakeState::CONNECT_SYN_SENT)
-				return;
-
-			handshake->state = HandshakeState::CONNECT_SYNACK_RECEIVED;
-			EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::CONNECT_ACK, TransmissionWaitingQueue::CONTROL);
-
-			handshake->state                = HandshakeState::CONNECTED;
-			handshake->lastHandshakeTime_ns = now_ns;
-
-			ctx.L.defers.emplace_back([e = ctx.e, now_ns](entt::registry& rr) { NotifyEstablished(rr, e, now_ns); });
-			break;
-		}
-		case eSystemPacketId::CONNECT_ACK:
-		{
-			// 서버측: SYNACK_SENT 에서 ACK 수신 -> 연결 완료
-			if (handshake->state != HandshakeState::CONNECT_SYNACK_SENT)
-				return;
-
-			handshake->state                = HandshakeState::CONNECTED;
-			handshake->lastHandshakeTime_ns = now_ns;
-
-			ctx.L.defers.emplace_back([e = ctx.e, now_ns](entt::registry& rr) { NotifyEstablished(rr, e, now_ns); });
-			break;
-		}
 
 		case eSystemPacketId::DISCONNECT_FIN:
 		{
+			if (!handshake)
+				return true;
 			// 상대가 종료 시작
 			if (handshake->state == HandshakeState::CONNECTED)
 			{
@@ -721,7 +673,7 @@ namespace jam::net
 				EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_FINACK, TransmissionWaitingQueue::CONTROL);
 
 				handshake->state                = HandshakeState::DISCONNECT_FINACK_SENT;
-				handshake->lastHandshakeTime_ns = now_ns;
+				handshake->lastTime_ns = now_ns;
 
 				info->state = SessionInfo::DISCONNECTING;
 			}
@@ -730,26 +682,30 @@ namespace jam::net
 				handshake->state = HandshakeState::CLOSING;
 				EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_FINACK, TransmissionWaitingQueue::CONTROL);
 
-				handshake->lastHandshakeTime_ns = now_ns;
+				handshake->lastTime_ns = now_ns;
 			}
-			break;
+			return true;
 		}
 		case eSystemPacketId::DISCONNECT_FINACK:
 		{
+			if (!handshake)
+				return true;
 			if (handshake->state == HandshakeState::DISCONNECT_FIN_SENT || handshake->state == HandshakeState::CLOSING)
 			{
 				EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_ACK, TransmissionWaitingQueue::CONTROL);
 
 				handshake->state                = HandshakeState::TIME_WAIT;
 				handshake->timeWaitStart_ns     = now_ns;
-				handshake->lastHandshakeTime_ns = now_ns;
+				handshake->lastTime_ns = now_ns;
 
 				info->state = SessionInfo::DISCONNECTING;
 			}
-			break;
+			return true;
 		}
 		case eSystemPacketId::DISCONNECT_ACK:
 		{
+			if (!handshake)
+				return true;
 			// 수동 종료측(상대 FIN에 FINACK 보낸 후) ACK 받으면 종료 완료
 			if (handshake->state == HandshakeState::DISCONNECT_FINACK_SENT)
 			{
@@ -758,13 +714,15 @@ namespace jam::net
 
 				ctx.L.defers.emplace_back([e = ctx.e](entt::registry& rr) { NotifyTerminated(rr, e); });
 			}
-			break;
+			return true;
 		}
 
 		case eSystemPacketId::PING:
 		{
+			if (!timesync)
+				return true;
 			if (ctx.view.PayloadSize() < sizeof(PING_DATA))
-				return;
+				return true;
 
 			const auto* ping = reinterpret_cast<const PING_DATA*>(ctx.view.Payload());
 
@@ -786,17 +744,19 @@ namespace jam::net
 			{
 				txQueue->Enqueue(PacketBuilder::CreatePongPacket(pong), TxPriority::CONTROL);
 			}
-			break;
+			return true;
 		}
 
 		case eSystemPacketId::PONG:
 		{
+			if (!timesync)
+				return true;
 			if (ctx.view.PayloadSize() < sizeof(PONG_DATA))
-				return;
+				return true;
 
 			const auto*  pong = reinterpret_cast<const PONG_DATA*>(ctx.view.Payload());
 			if (pong->t1App_ns < timesync->lastT1ClientSend_ns)
-				return;
+				return true;
 
 			const uint64 t4_app  = now_ns;
 			const uint64 t4_wire = ctx.ingressTime_ns;
@@ -851,12 +811,14 @@ namespace jam::net
 				}
 			}
 
-			break;
+			return true;
 		}
 
 		default:
-			break;
+			return false;
 		}
+
+		return true;
 	}
 
 	void HandleAckPacket(RecvContext& ctx)
@@ -912,7 +874,7 @@ namespace jam::net
 		switch (ctx.view.Type())
 		{
 		case ePacketType::SYSTEM:
-			HandleSystemPacket(ctx);
+			HandlePostBindSystemPacket(ctx);
 			return;
 
 		case ePacketType::ACK:
@@ -963,8 +925,8 @@ namespace jam::net
 		if (!seqState) return false;
 
 		const uint32 fullPayloadSize = ctx.header.PayloadSize();
-		const uint16 fragTotal       = static_cast<uint16>((fullPayloadSize + FragmentState::kMaxFragmentPayloadSize - 1) / FragmentState::kMaxFragmentPayloadSize);
-		if (fragTotal > FragmentState::kMaxFragments)
+		const uint16 fragTotal       = static_cast<uint16>((fullPayloadSize + FragmentState::MaxFragmentPayloadSize - 1) / FragmentState::MaxFragmentPayloadSize);
+		if (fragTotal > FragmentState::MaxFragments)
 			return false;
 
 		const BYTE*  basePayload    = ctx.header.Payload();
@@ -985,8 +947,8 @@ namespace jam::net
 		
 		for (auto i = 0; i < fragTotal; ++i)
 		{
-			const uint32 offset = i * FragmentState::kMaxFragmentPayloadSize;
-			const uint32 chunk  = std::min<uint32>(FragmentState::kMaxFragmentPayloadSize, fullPayloadSize - offset);
+			const uint32 offset = i * FragmentState::MaxFragmentPayloadSize;
+			const uint32 chunk  = std::min<uint32>(FragmentState::MaxFragmentPayloadSize, fullPayloadSize - offset);
 			auto frag = PacketBuilder::CreatePacket(
 				ctx.header.Type(),
 				ctx.header.Id(),
@@ -1124,7 +1086,7 @@ namespace jam::net
 				continue;
 
 			const uint64 delta = now_ns - lastAliveNs;
-			if (delta <= SessionInfo::kTimeout_ns)
+			if (delta <= SessionInfo::Timeout_ns)
 				continue;
 
 			info.state = SessionInfo::DISCONNECTING;
@@ -1460,7 +1422,7 @@ namespace jam::net
 				if (!pending || !pending->packet.IsValid())
 					continue;
 
-				if (pending->retryCount >= MAX_RETRY)
+				if (pending->retryCount >= ReliabilityState::MaxRetry)
 				{
 					JAMNET_LOG_ERROR("[Retransmit] Packet seq={} exceeded max retry", seq);
 					MarkRetransmitGiveup(metrics, *pending);
@@ -1508,11 +1470,11 @@ namespace jam::net
 
 			if (handshake.state == HandshakeState::TIME_WAIT)
 			{
-				if (now_ns - handshake.timeWaitStart_ns >= HandshakeState::kHandshakeMSL_ns * 2)
+				if (now_ns - handshake.timeWaitStart_ns >= HandshakeState::MSL_ns * 2)
 				{
 					handshake.state = HandshakeState::DISCONNECTED;
 					info.state      = SessionInfo::DISCONNECTED;
-					handshake.lastHandshakeTime_ns = 0;
+					handshake.lastTime_ns = 0;
 
 					L.defers.emplace_back([entity](entt::registry& rr)
 						{
@@ -1524,19 +1486,19 @@ namespace jam::net
 				continue;
 			}
 
-			if (handshake.lastHandshakeTime_ns == 0)
+			if (handshake.lastTime_ns == 0)
 				continue;
 
-			if (now_ns - handshake.lastHandshakeTime_ns < HandshakeState::kHandshakeTimeout_ns)
+			if (now_ns - handshake.lastTime_ns < HandshakeState::Timeout_ns)
 				continue;
 
 			handshake.retryCount++;
 
-			if (handshake.retryCount >= HandshakeState::kMaxRetry)
+			if (handshake.retryCount >= HandshakeState::MaxRetry)
 			{
 				handshake.state = HandshakeState::TIME_OUT;
 				info.state      = SessionInfo::DISCONNECTED;
-				handshake.lastHandshakeTime_ns = 0;
+				handshake.lastTime_ns = 0;
 
 				L.defers.emplace_back([entity](entt::registry& rr)
 					{
@@ -1576,7 +1538,7 @@ namespace jam::net
 			
 			if (!shouldResend)
 			{
-				handshake.lastHandshakeTime_ns = now_ns;
+				handshake.lastTime_ns = now_ns;
 				continue;
 			}
 
@@ -1584,9 +1546,9 @@ namespace jam::net
 			if (!pkt.IsValid()) continue;
 
 			txQueue.Enqueue(pkt, TransmissionWaitingQueue::CONTROL);
-			JAMNET_LOG_WARN("[Handshake] Retry {}/{} resend={}", handshake.retryCount, HandshakeState::kMaxRetry, E2U(resendId));
+			JAMNET_LOG_WARN("[Handshake] Retry {}/{} resend={}", handshake.retryCount, HandshakeState::MaxRetry, E2U(resendId));
 
-			handshake.lastHandshakeTime_ns = now_ns;
+			handshake.lastTime_ns = now_ns;
 		}
 	}
 
@@ -1654,7 +1616,7 @@ namespace jam::net
 		txQueue->Enqueue(pkt, TxPriority::CONTROL);
 
 		handshake->state                   = HandshakeState::CONNECT_SYN_SENT;
-		handshake->lastHandshakeTime_ns    = NOW_NS();
+		handshake->lastTime_ns    = NOW_NS();
 		handshake->retryCount              = 0;
 
 		info->state = SessionInfo::CONNECTING;
@@ -1694,7 +1656,7 @@ namespace jam::net
 		txQueue->Enqueue(pkt, TxPriority::CONTROL);
 
 		handshake->state                = (handshake->state == HandshakeState::CONNECTED) ? HandshakeState::DISCONNECT_FIN_SENT : handshake->state;
-		handshake->lastHandshakeTime_ns = NOW_NS();
+		handshake->lastTime_ns = NOW_NS();
 
 		info->state = SessionInfo::DISCONNECTING;
 
@@ -1773,7 +1735,7 @@ namespace jam::net
 				.L              = L,
 				.e              = e,
 				.view           = view,
-				.packet         = subPacket,
+				.packet         = std::move(subPacket),
 				.now_ns         = now_ns,
 				.ingressTime_ns = ingressRecvTime_ns
 			};
@@ -1819,8 +1781,6 @@ namespace jam::net
 		group.entityFilter = [](const entt::registry& R, entt::entity e) {
 				return R.all_of<SessionInfo>(e);
 			};
-
-		JAMNET_LOG_DEBUG("[RegisterNetworkDomain] [ThreadId #{}] register network domain system", CurrentThreadId());
 
 		R.ctx().emplace<NetworkDomainRegisteredTag>();
 	}

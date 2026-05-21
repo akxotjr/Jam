@@ -31,8 +31,10 @@ namespace jam::net
 		PING				= 10,
 		PONG				= 11,
 
-		SERVER_INFO = 20,
-		CLIENT_INFO = 21,
+		TCP_BIND_REQ		= 22,
+		TCP_BIND_RES		= 23,
+		UDP_BIND_REQ		= 24,
+		UDP_BIND_RES		= 25,
 	};
 
 	enum class eAckPacketId : uint8
@@ -100,6 +102,33 @@ namespace jam::net
 	{
 		uint16 latestSeq = 0;
 		uint32 wnd;
+	};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+	struct TCP_BIND_REQ_DATA
+	{
+		uint64 accountId = 0;
+	};
+
+	struct TCP_BIND_RES_DATA
+	{
+		uint64 accountId = 0;
+		uint64 userId = 0;
+		uint8  success = 0;
+	};
+
+	struct UDP_BIND_REQ_DATA
+	{
+		uint64 accountId = 0;
+		uint64 userId = 0;
+	};
+
+	struct UDP_BIND_RES_DATA
+	{
+		uint64 accountId = 0;
+		uint64 userId = 0;
+		uint8  success = 0;
 	};
 #pragma pack(pop)
 

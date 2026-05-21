@@ -2,8 +2,10 @@
 #include "jamnet/core/net/NetRuntime.h"
 
 #include "jamnet/core/executor/MainExecutor.h"
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/memory/DefaultAllocator.h"
 #include "jamnet/core/net/SocketUtils.h"
+#include "jamnet/core/net/SessionSystems.h"
 #include "jamnet/core/utils/Clock.h"
 
 namespace jam::net
@@ -30,6 +32,11 @@ namespace jam::net
 		MAIN_EXEC_INIT();
 		GLOBAL_EXEC_INIT(m_config.geConfig);
 		GLOBAL_EXEC.Start();
+		GLOBAL_EXEC.ConveyAll(Job([]()
+			{
+				auto& L = CurrentShardLocalChecked();
+				RegisterNetworkDomain(L);
+			}));
 
 		m_bInitialized = true;
 		JAMNET_LOG_INFO("JamNet Runtime initialized");

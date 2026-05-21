@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "jamnet/core/net/UdpSession.h"
 
+#include "jambase/EnumUtils.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/Job.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/Service.h"
@@ -9,6 +11,38 @@
 
 namespace jam::net
 {
+	struct UdpPrebindConnectRetry
+	{
+		static void Submit(EndpointHandle handle, uint32 retriesLeft);
+	};
+
+	namespace
+	{
+		inline constexpr uint64 kClientBindRetryDelayNs = 500_ms;
+		inline const RouteDomain kBoundSessionRouteDomain = RouteDomain::From("BoundSession");
+
+		RouteKey MakeBoundSessionRouteKey(uint64 accountId)
+		{
+			return GLOBAL_EXEC.MakeRouteKey(kBoundSessionRouteDomain, accountId);
+		}
+
+		void SendUdpBindResponse(Session& session, bool success, uint64 accountId, RuntimeId userId)
+		{
+			const UDP_BIND_RES_DATA res{ .accountId = accountId, .userId = userId, .success = static_cast<uint8>(success ? 1 : 0) };
+			auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_RES, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &res, sizeof(res));
+			session.Send(pkt);
+		}
+
+		bool IsUdpBindPacket(const PacketHeaderView& view)
+		{
+			if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
+				return false;
+
+			const auto id = ToEnum<eSystemPacketId>(view.Id());
+			return id == eSystemPacketId::UDP_BIND_REQ || id == eSystemPacketId::UDP_BIND_RES;
+		}
+	}
+
 
 	UdpSession::UdpSession()
 	{
@@ -22,22 +56,13 @@ namespace jam::net
 		if (!service)
 			return false;
 
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle]
-			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<UdpSession*>(FindSessionByHandle(L, handle));
-				if (!self)
-					return;
+		if (IsPreBindPhase())
+		{
+			ProcessConnect();
+			return true;
+		}
 
-				const entt::entity e = self->EnsureSessionEntity();
-				if (e == entt::null)
-					return;
-
-				ConnectHandshake(e);
-			}, eJobPriority::Critical));
-
-		return true;
+		return false;
 	}
 
 	void UdpSession::Disconnect()
@@ -60,36 +85,28 @@ namespace jam::net
 		if (!packet.IsValid())
 			return;
 
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle, packet]
+		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+		if (view.IsValid() && view.TotalSize() == packet->Size() && view.Type() == ePacketType::SYSTEM
+			&& (IsUdpBindPacket(view) || GetEntity() == entt::null || !CanCreateSessionEntity()))
+		{
+			SendImmediatePacket(packet);
+			return;
+		}
+
+		const EndpointHandle endpointHandle = GetEndpointHandle();
+		const SessionId sessionId = GetSessionId();
+		Post(Job([endpointHandle, sessionId, packet]
 			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<UdpSession*>(FindSessionByHandle(L, handle));
+				auto& state = GetOrCreateSessionShardState();
+				auto* self = static_cast<UdpSession*>(state.FindSessionAny(sessionId, endpointHandle));
 				if (!self)
 					return;
 
-				const entt::entity e = self->EnsureSessionEntity();
+				const entt::entity e = self->GetEntity();
 				if (e == entt::null) return;
-				
+
 				SendPacketToSession(e, packet);
-			}));
-	}
-
-	void UdpSession::OnLinkEstablished()
-	{
-		m_state.store(eSessionState::CONNECTED, std::memory_order_relaxed);
-		OnConnected();
-	}
-
-	void UdpSession::OnLinkTerminated()
-	{
-		OnDisconnected();
-
-		m_state.store(eSessionState::DISCONNECTED, std::memory_order_relaxed);
-		MarkClosing();
-		m_releaseQueued.store(true, std::memory_order_release);
-		if (GetPendingDispatchCount() == 0)
-			OnPendingDispatchDrained();
+			}, eJobPriority::Control));
 	}
 
 	void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 /*bytes*/)
@@ -116,10 +133,22 @@ namespace jam::net
 
 	void UdpSession::ProcessRecv(int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns)
 	{
-		const entt::entity e = EnsureSessionEntity();
-		if (e == entt::null) return;
+		(void)numOfBytes;
+		PacketHeaderView directView = PacketHeaderView::Parse(packet->Head(), packet->Size());
+		if (directView.IsValid() && directView.TotalSize() == packet->Size() && directView.Type() == ePacketType::SYSTEM)
+		{
+			ProcessSystemPacket(std::move(packet), directView, ingressRecvTime_ns);
+			return;
+		}
 
-		ProcessReceivedPacket(e, packet, ingressRecvTime_ns);
+		const entt::entity e = GetEntity();
+		if (e == entt::null)
+		{
+			JAMNET_LOG_WARN("[UdpSession::ProcessRecv] session id= {}. entity is null", m_sessionId);
+			return;
+		}
+
+		ProcessReceivedPacket(e, std::move(packet), ingressRecvTime_ns);
 	}
 
 	void UdpSession::HandleError(int32 errorCode)
@@ -169,36 +198,184 @@ namespace jam::net
 
 	void UdpSession::ProcessConnect()
 	{
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle]
-			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<UdpSession*>(FindSessionByHandle(L, handle));
-				if (!self)
-					return;
+		if (const entt::entity e = GetEntity(); e != entt::null)
+		{
+			ConnectHandshake(e);
+			return;
+		}
 
-				const entt::entity e = self->EnsureSessionEntity();
-				if (e == entt::null) return;
+		if (m_prebindHandshake.state == HandshakeState::CONNECT_SYN_SENT)
+			return;
+		if (m_prebindHandshake.state != HandshakeState::DISCONNECTED)
+			return;
 
-				ConnectHandshake(e);
-			}, eJobPriority::Control));
+		SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_SYN));
+		m_prebindHandshake.state		= HandshakeState::CONNECT_SYN_SENT;
+		m_prebindHandshake.lastTime_ns	= NOW_NS();
+		m_prebindHandshake.retryCount	= 0;
+		SchedulePreBindHandshakeRetry();
 	}
 
 	void UdpSession::ProcessDisconnect()
 	{
-		const SessionHandle handle = GetSessionHandle();
-		Post(Job([handle]
+		if (const entt::entity e = GetEntity(); e != entt::null)
+		{
+			DisconnectHandshake(e);
+			return;
+		}
+
+		if (m_prebindHandshake.state != HandshakeState::CONNECTED && m_prebindHandshake.state != HandshakeState::DISCONNECT_FIN_SENT)
+			return;
+
+		SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_FIN));
+		if (m_prebindHandshake.state == HandshakeState::CONNECTED)
+			m_prebindHandshake.state = HandshakeState::DISCONNECT_FIN_SENT;
+		m_prebindHandshake.lastTime_ns = NOW_NS();
+		SchedulePreBindHandshakeRetry();
+	}
+
+	void UdpSession::HandlePreBindSystemPacket(const PacketHeaderView& view)
+	{
+		const uint64 now_ns = NOW_NS();
+		switch (ToEnum<eSystemPacketId>(view.Id()))
+		{
+		case eSystemPacketId::CONNECT_SYN:
+			if (m_prebindHandshake.state != HandshakeState::DISCONNECTED)
+				return;
+
+			SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_SYNACK));
+			m_prebindHandshake.state		= HandshakeState::CONNECT_SYNACK_SENT;
+			m_prebindHandshake.lastTime_ns	= now_ns;
+			m_prebindHandshake.retryCount	= 0;
+			SchedulePreBindHandshakeRetry();
+			return;
+
+		case eSystemPacketId::CONNECT_SYNACK:
+			if (m_prebindHandshake.state != HandshakeState::CONNECT_SYN_SENT)
+				return;
+
+			SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_ACK));
+			m_prebindHandshake.state		= HandshakeState::CONNECTED;
+			m_prebindHandshake.lastTime_ns	= now_ns;
+			++m_prebindTimerToken;
+			SetSessionState(eSessionState::Connected);
+			TrySessionBinding();
+			return;
+
+		case eSystemPacketId::CONNECT_ACK:
+			if (m_prebindHandshake.state != HandshakeState::CONNECT_SYNACK_SENT)
+				return;
+			m_prebindHandshake.state		= HandshakeState::CONNECTED;
+			m_prebindHandshake.lastTime_ns	= now_ns;
+			++m_prebindTimerToken;
+			SetSessionState(eSessionState::Connected);
+			TrySessionBinding();
+			return;
+
+		case eSystemPacketId::UDP_BIND_RES:
+			if (!IsClientSide())
+				return;
+			if (view.PayloadSize() < sizeof(UDP_BIND_RES_DATA))
+				return;
+			if (m_clientBind.bound)
+				return;
+			if (const auto* res = reinterpret_cast<const UDP_BIND_RES_DATA*>(view.Payload());
+				res && res->accountId == m_accountId && res->userId == m_userId)
 			{
-				auto& L = CurrentShardLocalChecked();
-				auto* self = static_cast<UdpSession*>(FindSessionByHandle(L, handle));
-				if (!self)
+				m_clientBind.active = false;
+				++m_clientBind.timerToken;
+				if (!res->success)
+				{
+					m_clientBind.active = false;
+					m_clientBind.bound  = false;
+					JAMNET_LOG_ERROR("[UdpSession] UDP bind failed or timed out. accountId={}, userId={}", m_accountId, m_userId);
+					Disconnect();
+					return;
+				}
+
+				m_clientBind.bound = true;
+				IssueSessionId();
+				if (GetSessionId() == kInvalidSessionId)
+				{
+					JAMNET_LOG_ERROR("[UdpSession] Failed to issue bound session id. accountId={}, userId={}", m_accountId, m_userId);
+					m_clientBind.active = false;
+					m_clientBind.bound  = false;
+					Disconnect();
+					return;
+				}
+			}
+			return;
+
+		case eSystemPacketId::UDP_BIND_REQ:
+			if (!IsServerSide())
+				return;
+			if (view.PayloadSize() < sizeof(UDP_BIND_REQ_DATA))
+				return;
+			if (const auto* req = reinterpret_cast<const UDP_BIND_REQ_DATA*>(view.Payload()); !req || req->accountId == 0 || req->userId == kInvalidRuntimeId)
+			{
+				SendUdpBindResponse(*this, false, req ? req->accountId : 0, kInvalidRuntimeId);
+				return;
+			}
+			else
+			{
+				if (GetSessionId() != kInvalidSessionId)
+				{
+					const bool samePrincipal = (m_accountId == req->accountId && m_userId == req->userId);
+					SendUdpBindResponse(*this, samePrincipal, req->accountId, samePrincipal ? m_userId : kInvalidRuntimeId);
+					return;
+				}
+				if (m_prebindHandshake.state != HandshakeState::CONNECTED)
+					return;
+				if (!TryBeginServerBind())
 					return;
 
-				const entt::entity e = self->EnsureSessionEntity();
-				if (e == entt::null) return;
+				const RouteKey boundRouteKey = MakeBoundSessionRouteKey(req->accountId);
+				const uint64 endpointId = GetEndpointId();
+				Rehome(boundRouteKey, [this, accountId = req->accountId, userId = req->userId, endpointId, boundRouteKey](bool rehomeOk) mutable
+					{
+						if (!rehomeOk || GetEndpointId() != endpointId || GetRouteKey() != boundRouteKey)
+						{
+							EndServerBind();
+							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
+						if (!ValidateServerUdpBindPrincipal(accountId, userId))
+						{
+							EndServerBind();
+							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
+						if (m_prebindHandshake.state != HandshakeState::CONNECTED)
+						{
+							EndServerBind();
+							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
 
-				DisconnectHandshake(e);
-			}, eJobPriority::Control));
+						SetAccountId(accountId);
+						SetUserId(userId);
+						IssueSessionId();
+						if (GetSessionId() == kInvalidSessionId)
+						{
+							EndServerBind();
+							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
+						if (IsClosing())
+						{
+							EndServerBind();
+							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							return;
+						}
+
+						EndServerBind();
+						SendUdpBindResponse(*this, true, accountId, m_userId);
+					});
+			}
+			return;
+
+		default: break;
+		}
 	}
 
 	void UdpSession::OnPendingDispatchDrained()
@@ -213,15 +390,171 @@ namespace jam::net
 		service->ReleaseUdpSession(this);
 	}
 
-	entt::entity UdpSession::EnsureSessionEntity()
+	void UdpSession::ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns)
 	{
-		entt::entity e = GetEntity();
-		if (e == entt::null)
+		if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
+			return;
+
+		if (IsPreBindPhase())
 		{
-			CreateEntity();
-			e = GetEntity();
+			HandlePreBindSystemPacket(view);
+			return;
 		}
 
-		return e;
+		if (IsServerSide() && ToEnum<eSystemPacketId>(view.Id()) == eSystemPacketId::UDP_BIND_REQ)
+		{
+			HandlePreBindSystemPacket(view);
+			return;
+		}
+
+		if (const entt::entity e = GetEntity(); e != entt::null)
+		{
+			auto& L = CurrentShardLocalChecked();
+			RecvContext ctx{
+				.L				= L,
+				.e				= e,
+				.view			= view,
+				.packet			= std::move(packet),
+				.now_ns			= NOW_NS(),
+				.ingressTime_ns = ingressRecvTime_ns
+			};
+
+			HandlePostBindSystemPacket(ctx);
+		}
+	}
+
+
+	void UdpSession::SchedulePreBindHandshakeRetry()
+	{
+		const uint32 token = ++m_prebindTimerToken;
+		const EndpointHandle endpointHandle = GetEndpointHandle();
+		SubmitAfter(Job([endpointHandle, token]()
+			{
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				auto* self = static_cast<UdpSession*>(state.FindPreboundSession(endpointHandle));
+				if (!self)
+					return;
+				if (!self->IsPreBindPhase())
+					return;
+				if (self->m_prebindTimerToken != token)
+					return;
+
+				auto& hs = self->m_prebindHandshake;
+				const uint64 now_ns = NOW_NS();
+				if (now_ns - hs.lastTime_ns < HandshakeState::Timeout_ns)
+				{
+					self->SchedulePreBindHandshakeRetry();
+					return;
+				}
+
+				eSystemPacketId resendId;
+				switch (hs.state)
+				{
+				case HandshakeState::CONNECT_SYN_SENT:
+					resendId = eSystemPacketId::CONNECT_SYN;
+					break;
+				case HandshakeState::CONNECT_SYNACK_SENT:
+					resendId = eSystemPacketId::CONNECT_SYNACK;
+					break;
+				case HandshakeState::DISCONNECT_FIN_SENT:
+					resendId = eSystemPacketId::DISCONNECT_FIN;
+					break;
+				case HandshakeState::DISCONNECT_FINACK_SENT:
+				case HandshakeState::CLOSING:
+					resendId = eSystemPacketId::DISCONNECT_FINACK;
+					break;
+				default:
+					return;
+				}
+
+				if (hs.retryCount >= HandshakeState::MaxRetry)
+				{
+					self->AbortPreBindHandshake();
+					return;
+				}
+
+				self->SendImmediatePacket(PacketBuilder::CreateHandshakePacket(resendId));
+				hs.retryCount++;
+				hs.lastTime_ns = now_ns;
+				self->SchedulePreBindHandshakeRetry();
+			}, eJobPriority::Control), HandshakeState::Timeout_ns);
+	}
+
+	void UdpSession::AbortPreBindHandshake()
+	{
+		m_prebindHandshake.state = HandshakeState::TIME_OUT;
+		++m_prebindTimerToken;
+		m_clientBind.active = false;
+		++m_clientBind.timerToken;
+		SetSessionState(eSessionState::Disconnected);
+		NotifyLinkTerminatedIfEstablished();
+		OnDisconnected();
+		MarkClosing();
+		m_releaseQueued.store(true, std::memory_order_release);
+		if (GetPendingDispatchCount() == 0)
+			OnPendingDispatchDrained();
+	}
+
+	void UdpSession::TrySessionBinding()
+	{
+		if (!IsClientSide() || !IsConnected())
+			return;
+		if (m_clientBind.active || m_clientBind.bound)
+			return;
+		if (m_accountId == 0)
+			return;
+
+		m_clientBind.active		= true;
+		m_clientBind.bound		= false;
+		m_clientBind.retryCount = 0;
+		SetSessionState(eSessionState::Binding);
+
+		const UDP_BIND_REQ_DATA req{ .accountId = m_accountId, .userId = m_userId };
+		auto packet = PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_REQ, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &req, sizeof(req));
+		Send(packet);
+		ScheduleSessionBindingRetry();
+	}
+
+	void UdpSession::ScheduleSessionBindingRetry()
+	{
+		const uint32 token = ++m_clientBind.timerToken;
+		const EndpointHandle endpointHandle = GetEndpointHandle();
+		SubmitAfter(Job([endpointHandle, token]()
+			{
+				auto& state = GetOrCreateSessionShardState();
+				auto* self = static_cast<UdpSession*>(state.FindPreboundSession(endpointHandle));
+				if (!self)
+					return;
+				if (!self->m_clientBind.active || self->m_clientBind.bound || self->m_clientBind.timerToken != token)
+					return;
+				if (self->m_clientBind.retryCount >= HandshakeState::MaxRetry)
+				{
+					self->m_clientBind.active = false;
+					self->m_clientBind.bound  = false;
+					JAMNET_LOG_ERROR("[UdpSession] UDP bind failed or timed out. accountId={}, userId={}", self->m_accountId, self->m_userId);
+					self->Disconnect();
+					return;
+				}
+
+				self->m_clientBind.retryCount++;
+				const UDP_BIND_REQ_DATA req{ .accountId = self->m_accountId, .userId = self->m_userId };
+				auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_REQ, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &req, sizeof(req));
+				self->Send(pkt);
+				self->ScheduleSessionBindingRetry();
+			}, eJobPriority::Control), kClientBindRetryDelayNs);
+	}
+
+
+	void UdpSession::SendImmediatePacket(Packet packet)
+	{
+		if (!packet.IsValid())
+			return;
+
+		PacketChain chain;
+		chain.Add(packet);
+
+		std::vector<PacketChain> chains;
+		chains.push_back(std::move(chain));
+		RegisterSend(std::move(chains));
 	}
 }

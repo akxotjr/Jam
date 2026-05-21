@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "jamnet/core/net/TcpListener.h"
 
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/IocpEvent.h"
 #include "jamnet/core/memory/ObjectPool.h"
 #include "jamnet/core/net/SocketUtils.h"
@@ -156,8 +157,8 @@ namespace jam::net
 			return;
 		}
 
-		auto* session = m_service->CreateTcpSession(NetAddress(remoteSockAddr));
-		if (!session)
+		auto sessionOwner = m_service->CreateTcpSession(NetAddress(remoteSockAddr));
+		if (!sessionOwner)
 		{
 			ReleaseAcceptEvent(event);
 			RegisterAccept();
@@ -174,8 +175,21 @@ namespace jam::net
 		SOCKET acceptedSocket = event->acceptSocket;
 		event->acceptSocket = INVALID_SOCKET;
 
-		session->SetSocket(acceptedSocket);
-		session->ProcessInboundConnect();
+		auto* session = sessionOwner.get();
+		session->Submit(Job([service = m_service, acceptedSocket, session = std::move(sessionOwner)]() mutable
+			{
+				auto* raw = session.get();
+				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+				if (!state.AttachPreboundSession(std::unique_ptr<Session>(std::move(session))))
+				{
+					SocketUtils::Close(acceptedSocket);
+					return;
+				}
+
+				service->NotifyTcpSessionAttached();
+				raw->SetSocket(acceptedSocket);
+				raw->ProcessInboundConnect();
+			}, eJobPriority::Critical));
 
 		ReleaseAcceptEvent(event);
 		RegisterAccept();

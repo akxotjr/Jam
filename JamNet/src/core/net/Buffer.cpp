@@ -7,6 +7,7 @@ namespace jam::net
 {
 	thread_local BufferPool::TlsFreeCaches	BufferPool::tl_freeCaches{};
 	thread_local BufWriter::TlsCurrentBlocks	BufWriter::tl_currents{};
+	thread_local uint32						g_bufWriterOpenDepth = 0;
 
 	BufWriter::TlsCurrentBlocks::~TlsCurrentBlocks()
 	{
@@ -42,7 +43,10 @@ namespace jam::net
 	{
 		m_used = 0;
 		m_open = false;
-		m_sliceClosedStates.clear();
+
+		const uint32 usedStates = std::min<uint32>(m_nextSliceStateIndex.exchange(0, std::memory_order_relaxed), k_maxSliceStates);
+		for (uint32 i = 0; i < usedStates; ++i)
+			m_sliceClosedStates[i].store(0, std::memory_order_relaxed);
 	}
 
 	bool BufferBlock::TryReserve(uint32 bytes, uint32 alignment, OUT uint32& offset, OUT uint32& sliceStateIndex)
@@ -80,24 +84,28 @@ namespace jam::net
 
 	uint32 BufferBlock::CreateSliceState(bool closed)
 	{
-		JAM_ASSERT(m_sliceClosedStates.size() < std::numeric_limits<uint32>::max());
-		const uint32 index = static_cast<uint32>(m_sliceClosedStates.size());
-		m_sliceClosedStates.push_back(closed ? 1 : 0);
+		const uint32 index = m_nextSliceStateIndex.fetch_add(1, std::memory_order_relaxed);
+		JAM_ASSERT(index < k_maxSliceStates);
+		m_sliceClosedStates[index].store(closed ? 1 : 0, std::memory_order_release);
 		return index;
 	}
 
 	bool BufferBlock::IsSliceClosed(uint32 sliceStateIndex) const
 	{
 		JAM_ASSERT(sliceStateIndex != k_invalidIndex);
-		JAM_ASSERT(sliceStateIndex < m_sliceClosedStates.size());
-		return m_sliceClosedStates[sliceStateIndex] != 0;
+		const uint32 stateCount = m_nextSliceStateIndex.load(std::memory_order_acquire);
+		JAM_ASSERT(sliceStateIndex < stateCount);
+		JAM_ASSERT(sliceStateIndex < k_maxSliceStates);
+		return m_sliceClosedStates[sliceStateIndex].load(std::memory_order_acquire) != 0;
 	}
 
 	void BufferBlock::SetSliceClosed(uint32 sliceStateIndex, bool closed)
 	{
 		JAM_ASSERT(sliceStateIndex != k_invalidIndex);
-		JAM_ASSERT(sliceStateIndex < m_sliceClosedStates.size());
-		m_sliceClosedStates[sliceStateIndex] = closed ? 1 : 0;
+		const uint32 stateCount = m_nextSliceStateIndex.load(std::memory_order_acquire);
+		JAM_ASSERT(sliceStateIndex < stateCount);
+		JAM_ASSERT(sliceStateIndex < k_maxSliceStates);
+		m_sliceClosedStates[sliceStateIndex].store(closed ? 1 : 0, std::memory_order_release);
 	}
 
 
@@ -504,7 +512,7 @@ namespace jam::net
 		UpdatePeakTlsFree(local.size());
 		lock.unlock();
 
-		LogMetricsIfNeeded(globalLocks);
+		//LogMetricsIfNeeded(globalLocks);
 	}
 
 	void BufferPool::SpillLocalCache(TlsFreeList& local, uint32 keepCount)
@@ -546,7 +554,7 @@ namespace jam::net
 		m_metrics.spillBlockCount.fetch_add(moved, std::memory_order_relaxed);
 		lock.unlock();
 
-		LogMetricsIfNeeded(globalLocks);
+		//LogMetricsIfNeeded(globalLocks);
 	}
 
 	void BufferPool::RecycleGlobal(BufferBlock* block)
@@ -571,7 +579,7 @@ namespace jam::net
 		m_freeIndices.push_back(block->m_poolIndex);
 		lock.unlock();
 
-		LogMetricsIfNeeded(globalLocks);
+		//LogMetricsIfNeeded(globalLocks);
 	}
 
 	void BufferPool::UpdatePeakTlsFree(size_t count)
@@ -627,6 +635,31 @@ namespace jam::net
 		JAM_ASSERT(reserveBytes <= BufferBlock::k_blockSize);
 		JAM_ASSERT(initialHeadroom <= reserveBytes);
 		JAM_ASSERT(IsSupportedBufferAlignment(alignment));
+
+		struct OpenDepthScope
+		{
+			uint32& depthRef;
+			explicit OpenDepthScope(uint32& depth) : depthRef(depth)
+			{
+				++depthRef;
+			}
+			~OpenDepthScope()
+			{
+				JAM_ASSERT(depthRef > 0);
+				--depthRef;
+			}
+		} depthScope(g_bufWriterOpenDepth);
+
+		if (g_bufWriterOpenDepth > 1)
+		{
+			JAMNET_LOG_WARN(
+				"[BufWriter::Open] nested open detected. pool={}, depth={}, reserveBytes={}, initialHeadroom={}, alignment={}",
+				m_pool.m_config.debugName ? m_pool.m_config.debugName : "BufferPool",
+				g_bufWriterOpenDepth,
+				reserveBytes,
+				initialHeadroom,
+				alignment);
+		}
 
 		BufferBlock*& cur = CurrentTLBlock();
 
