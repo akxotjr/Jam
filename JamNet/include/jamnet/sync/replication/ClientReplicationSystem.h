@@ -3,9 +3,12 @@
 #include "jamnet/sync/schema/gen/lifecycle_generated.h"
 #include "jamnet/sync/schema/gen/snapshot_generated.h"
 
+#include <map>
+#include <optional>
+
 namespace jam::net
 {
-    class ClientNetWorld;
+    class ClientPhysicalWorld;
     class ClientPhysicsSystem;
     struct EstimatedServerTick;
     struct LocalActorRef;
@@ -37,6 +40,58 @@ namespace jam::net
     {
         fb::fbSnapshotT snapshot = {};
         uint64          recvNs   = 0;
+    };
+
+    struct PendingSnapshotBatch
+    {
+        uint64                          serverTick = 0;
+        uint32                          inputAck = 0;
+        uint32                          inputEpoch = 0;
+        uint16                          expectedChunkCount = 1;
+        uint64                          firstRecvNs = 0;
+        uint64                          lastRecvNs = 0;
+        std::vector<std::optional<PendingSnapshot>> chunks;
+
+        bool IsComplete() const
+        {
+            if (expectedChunkCount == 0 || chunks.size() < expectedChunkCount)
+                return false;
+
+            for (uint16 i = 0; i < expectedChunkCount; ++i)
+            {
+                if (!chunks[i].has_value())
+                    return false;
+            }
+            return true;
+        }
+
+        uint16 ReceivedChunkCount() const
+        {
+            const uint16 maxCount = std::min<uint16>(expectedChunkCount, static_cast<uint16>(chunks.size()));
+            uint16 count = 0;
+            for (uint16 i = 0; i < maxCount; ++i)
+            {
+                if (chunks[i].has_value())
+                    ++count;
+            }
+            return count;
+        }
+
+        bool ContainsNetId(uint32 rawNetId) const
+        {
+            for (const auto& chunk : chunks)
+            {
+                if (!chunk.has_value())
+                    continue;
+
+                for (const auto& entPtr : chunk->snapshot.entities)
+                {
+                    if (entPtr && entPtr->net_id == rawNetId)
+                        return true;
+                }
+            }
+            return false;
+        }
     };
 
 	class ClientReplicationSystem
@@ -85,7 +140,7 @@ namespace jam::net
 
     private:
         entt::registry&                     m_world;
-        ClientNetWorld*                     m_netWorld            = nullptr;
+        ClientPhysicalWorld*                m_netWorld            = nullptr;
         ClientPhysicsSystem*                m_clientPhysics       = nullptr;
         EstimatedServerTick*                m_estimatedServerTick = nullptr;
         LocalActorRef*                      m_localActorRef       = nullptr;
@@ -95,12 +150,15 @@ namespace jam::net
 
         std::unordered_map<NetId, Replica>  m_replicas;
         std::deque<PendingLifecycleBatch>   m_pendingLifecycle;
-        std::deque<PendingSnapshot>         m_pendingSnapshots;
+        std::map<uint64, PendingSnapshotBatch> m_pendingSnapshotBatches;
 
         NetId                               m_localNetId        = NetId::Invalid();
         entt::entity                        m_localEntity       = entt::null;
 
 		uint64                              m_lastServerTick    = 0;
+        uint64                              m_lastLifecycleTick = 0;
+        uint64                              m_latestQueuedSnapshotTick = 0;
+        uint64                              m_lastAppliedSnapshotTick = 0;
         uint32                              m_lastInputAck      = 0;
 	};
 }

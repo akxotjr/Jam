@@ -378,6 +378,8 @@ struct fbSnapshotHeaderT : public ::flatbuffers::NativeTable {
   uint32_t server_tick = 0;
   uint32_t input_ack = 0;
   uint32_t input_epoch = 0;
+  uint16_t chunk_index = 0;
+  uint16_t chunk_count = 1;
   bool global_keyframe = false;
 };
 
@@ -388,7 +390,9 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_SERVER_TICK = 4,
     VT_INPUT_ACK = 6,
     VT_INPUT_EPOCH = 8,
-    VT_GLOBAL_KEYFRAME = 10
+    VT_CHUNK_INDEX = 10,
+    VT_CHUNK_COUNT = 12,
+    VT_GLOBAL_KEYFRAME = 14
   };
   uint32_t server_tick() const {
     return GetField<uint32_t>(VT_SERVER_TICK, 0);
@@ -399,6 +403,12 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t input_epoch() const {
     return GetField<uint32_t>(VT_INPUT_EPOCH, 0);
   }
+  uint16_t chunk_index() const {
+    return GetField<uint16_t>(VT_CHUNK_INDEX, 0);
+  }
+  uint16_t chunk_count() const {
+    return GetField<uint16_t>(VT_CHUNK_COUNT, 1);
+  }
   bool global_keyframe() const {
     return GetField<uint8_t>(VT_GLOBAL_KEYFRAME, 0) != 0;
   }
@@ -408,6 +418,8 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_SERVER_TICK, 4) &&
            VerifyField<uint32_t>(verifier, VT_INPUT_ACK, 4) &&
            VerifyField<uint32_t>(verifier, VT_INPUT_EPOCH, 4) &&
+           VerifyField<uint16_t>(verifier, VT_CHUNK_INDEX, 2) &&
+           VerifyField<uint16_t>(verifier, VT_CHUNK_COUNT, 2) &&
            VerifyField<uint8_t>(verifier, VT_GLOBAL_KEYFRAME, 1) &&
            verifier.EndTable();
   }
@@ -429,6 +441,12 @@ struct fbSnapshotHeaderBuilder {
   void add_input_epoch(uint32_t input_epoch) {
     fbb_.AddElement<uint32_t>(fbSnapshotHeader::VT_INPUT_EPOCH, input_epoch, 0);
   }
+  void add_chunk_index(uint16_t chunk_index) {
+    fbb_.AddElement<uint16_t>(fbSnapshotHeader::VT_CHUNK_INDEX, chunk_index, 0);
+  }
+  void add_chunk_count(uint16_t chunk_count) {
+    fbb_.AddElement<uint16_t>(fbSnapshotHeader::VT_CHUNK_COUNT, chunk_count, 1);
+  }
   void add_global_keyframe(bool global_keyframe) {
     fbb_.AddElement<uint8_t>(fbSnapshotHeader::VT_GLOBAL_KEYFRAME, static_cast<uint8_t>(global_keyframe), 0);
   }
@@ -448,11 +466,15 @@ inline ::flatbuffers::Offset<fbSnapshotHeader> CreatefbSnapshotHeader(
     uint32_t server_tick = 0,
     uint32_t input_ack = 0,
     uint32_t input_epoch = 0,
+    uint16_t chunk_index = 0,
+    uint16_t chunk_count = 1,
     bool global_keyframe = false) {
   fbSnapshotHeaderBuilder builder_(_fbb);
   builder_.add_input_epoch(input_epoch);
   builder_.add_input_ack(input_ack);
   builder_.add_server_tick(server_tick);
+  builder_.add_chunk_count(chunk_count);
+  builder_.add_chunk_index(chunk_index);
   builder_.add_global_keyframe(global_keyframe);
   return builder_.Finish();
 }
@@ -692,6 +714,7 @@ inline ::flatbuffers::Offset<fbActorEntity> CreatefbActorEntity(
 
 struct fbSnapshotT : public ::flatbuffers::NativeTable {
   typedef fbSnapshot TableType;
+  uint64_t world_id = 0;
   std::unique_ptr<jam::net::fb::fbSnapshotHeaderT> header{};
   std::vector<std::unique_ptr<jam::net::fb::fbActorEntityT>> entities{};
   fbSnapshotT() = default;
@@ -704,9 +727,13 @@ struct fbSnapshot FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbSnapshotT NativeTableType;
   typedef fbSnapshotBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_HEADER = 4,
-    VT_ENTITIES = 6
+    VT_WORLD_ID = 4,
+    VT_HEADER = 6,
+    VT_ENTITIES = 8
   };
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
+  }
   const jam::net::fb::fbSnapshotHeader *header() const {
     return GetPointer<const jam::net::fb::fbSnapshotHeader *>(VT_HEADER);
   }
@@ -716,6 +743,7 @@ struct fbSnapshot FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyOffset(verifier, VT_HEADER) &&
            verifier.VerifyTable(header()) &&
            VerifyOffset(verifier, VT_ENTITIES) &&
@@ -732,6 +760,9 @@ struct fbSnapshotBuilder {
   typedef fbSnapshot Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbSnapshot::VT_WORLD_ID, world_id, 0);
+  }
   void add_header(::flatbuffers::Offset<jam::net::fb::fbSnapshotHeader> header) {
     fbb_.AddOffset(fbSnapshot::VT_HEADER, header);
   }
@@ -751,9 +782,11 @@ struct fbSnapshotBuilder {
 
 inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t world_id = 0,
     ::flatbuffers::Offset<jam::net::fb::fbSnapshotHeader> header = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>>> entities = 0) {
   fbSnapshotBuilder builder_(_fbb);
+  builder_.add_world_id(world_id);
   builder_.add_entities(entities);
   builder_.add_header(header);
   return builder_.Finish();
@@ -761,11 +794,13 @@ inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(
 
 inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshotDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t world_id = 0,
     ::flatbuffers::Offset<jam::net::fb::fbSnapshotHeader> header = 0,
     const std::vector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> *entities = nullptr) {
   auto entities__ = entities ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>>(*entities) : 0;
   return jam::net::fb::CreatefbSnapshot(
       _fbb,
+      world_id,
       header,
       entities__);
 }
@@ -813,6 +848,8 @@ inline void fbSnapshotHeader::UnPackTo(fbSnapshotHeaderT *_o, const ::flatbuffer
   { auto _e = server_tick(); _o->server_tick = _e; }
   { auto _e = input_ack(); _o->input_ack = _e; }
   { auto _e = input_epoch(); _o->input_epoch = _e; }
+  { auto _e = chunk_index(); _o->chunk_index = _e; }
+  { auto _e = chunk_count(); _o->chunk_count = _e; }
   { auto _e = global_keyframe(); _o->global_keyframe = _e; }
 }
 
@@ -827,12 +864,16 @@ inline ::flatbuffers::Offset<fbSnapshotHeader> fbSnapshotHeader::Pack(::flatbuff
   auto _server_tick = _o->server_tick;
   auto _input_ack = _o->input_ack;
   auto _input_epoch = _o->input_epoch;
+  auto _chunk_index = _o->chunk_index;
+  auto _chunk_count = _o->chunk_count;
   auto _global_keyframe = _o->global_keyframe;
   return jam::net::fb::CreatefbSnapshotHeader(
       _fbb,
       _server_tick,
       _input_ack,
       _input_epoch,
+      _chunk_index,
+      _chunk_count,
       _global_keyframe);
 }
 
@@ -943,12 +984,14 @@ inline ::flatbuffers::Offset<fbActorEntity> fbActorEntity::Pack(::flatbuffers::F
 }
 
 inline fbSnapshotT::fbSnapshotT(const fbSnapshotT &o)
-      : header((o.header) ? new jam::net::fb::fbSnapshotHeaderT(*o.header) : nullptr) {
+      : world_id(o.world_id),
+        header((o.header) ? new jam::net::fb::fbSnapshotHeaderT(*o.header) : nullptr) {
   entities.reserve(o.entities.size());
   for (const auto &entities_ : o.entities) { entities.emplace_back((entities_) ? new jam::net::fb::fbActorEntityT(*entities_) : nullptr); }
 }
 
 inline fbSnapshotT &fbSnapshotT::operator=(fbSnapshotT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(world_id, o.world_id);
   std::swap(header, o.header);
   std::swap(entities, o.entities);
   return *this;
@@ -963,6 +1006,7 @@ inline fbSnapshotT *fbSnapshot::UnPack(const ::flatbuffers::resolver_function_t 
 inline void fbSnapshot::UnPackTo(fbSnapshotT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = header(); if (_e) { if(_o->header) { _e->UnPackTo(_o->header.get(), _resolver); } else { _o->header = std::unique_ptr<jam::net::fb::fbSnapshotHeaderT>(_e->UnPack(_resolver)); } } else if (_o->header) { _o->header.reset(); } }
   { auto _e = entities(); if (_e) { _o->entities.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->entities[_i]) { _e->Get(_i)->UnPackTo(_o->entities[_i].get(), _resolver); } else { _o->entities[_i] = std::unique_ptr<jam::net::fb::fbActorEntityT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->entities.resize(0); } }
 }
@@ -975,10 +1019,12 @@ inline ::flatbuffers::Offset<fbSnapshot> fbSnapshot::Pack(::flatbuffers::FlatBuf
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSnapshotT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _world_id = _o->world_id;
   auto _header = _o->header ? CreatefbSnapshotHeader(_fbb, _o->header.get(), _rehasher) : 0;
   auto _entities = _o->entities.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbActorEntity>> (_o->entities.size(), [](size_t i, _VectorArgs *__va) { return CreatefbActorEntity(*__va->__fbb, __va->__o->entities[i].get(), __va->__rehasher); }, &_va ) : 0;
   return jam::net::fb::CreatefbSnapshot(
       _fbb,
+      _world_id,
       _header,
       _entities);
 }

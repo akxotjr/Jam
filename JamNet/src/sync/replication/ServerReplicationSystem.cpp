@@ -6,8 +6,8 @@
 #include "jamnet/sync/replication/ServerPhysicsSystem.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
 
-#include "jamnet/sync/networld/ServerNetWorld.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
+#include "jamnet/sync/networld/ServerPhysicalWorld.h"
+#include "jamnet/sync/replication/WorldContext.h"
 #include "jamnet/sync/replication/ServerAoiSystem.h"
 
 #include "jamnet/sync/transport/CustomPacketHelper.h"
@@ -20,6 +20,18 @@ namespace jam::net
 		constexpr size_t kSnapshotBatch = 128;
 		constexpr size_t kPacketPayloadBudget = JAMNET_MTU - PacketHeader::HALF_SIZE - 24;
 		constexpr uint8 kCreateFullStateBudget = 5;
+
+		struct PlannedSnapshotCandidate
+		{
+			entt::entity e = entt::null;
+			NetId netId = NetId::Invalid();
+			bool useFull = false;
+		};
+
+		struct PlannedSnapshotChunk
+		{
+			std::vector<PlannedSnapshotCandidate> candidates;
+		};
 	}
 
 	ServerReplicationSystem::ServerReplicationSystem(entt::registry& world)
@@ -32,7 +44,7 @@ namespace jam::net
 	{
 		m_tickCounter	 = 0;
 		m_netWorld = nullptr;
-		if (auto* nw = m_world.ctx().find<ServerNetWorld*>())
+		if (auto* nw = m_world.ctx().find<ServerPhysicalWorld*>())
 			m_netWorld = (nw && *nw) ? *nw : nullptr;
 		m_inputSys  = m_world.ctx().find<ServerInputSystem>();
 		m_aoiSys	= m_world.ctx().find<ServerAoiSystem>();
@@ -100,6 +112,9 @@ namespace jam::net
 			auto& userState = m_userStates[user];
 			const uint32 ack		= inputSys ? inputSys->LastAppliedSeq(user) : 0;
 			const uint32 inputEpoch = inputSys ? inputSys->LastAppliedCommandEpoch(user) : 0;
+			uint32 snapshotPacketCount = 0;
+			uint32 snapshotActorCount = 0;
+			uint32 visibleActorCount = 0;
 
 			m_sentThisTickScratch.clear();
 			m_sentThisTickScratch.reserve(256);
@@ -118,6 +133,7 @@ namespace jam::net
 			}
 
 			QueueLifecycleForVisibleActors(user, forceSyncUser);
+			//QueueLifecycleForStaticActors(user, forceSyncUser);
 			EmitPendingLifecyclePackets(user, tick);
 
 			if (forceSyncUser)
@@ -138,7 +154,7 @@ namespace jam::net
 			auto addCandidate = [&](entt::entity e, NetId nid)
 			{
 				const ActorFrameCache* actorFrame = FindActorFrameCache(nid);
-				if (!actorFrame || !actorFrame->canReplicate || actorFrame->e == entt::null)
+				if (!actorFrame || actorFrame->e == entt::null || actorFrame->isStatic || !actorFrame->canReplicate)
 					return;
 
 				const auto   knownEpochIt	 = userState.knownFullEpoch.find(nid);
@@ -181,20 +197,12 @@ namespace jam::net
 
 			if (const auto* visibleActors = m_aoiSys->GetVisibleActors(user))
 			{
+				visibleActorCount = static_cast<uint32>(visibleActors->size());
 				for (const AoiVisibleActorSlot& slot : *visibleActors)
 				{
 					if (!slot.alive || slot.actor == entt::null || !m_world.valid(slot.actor) || !m_world.all_of<NetId>(slot.actor))
 						continue;
 					addCandidate(slot.actor, m_world.get<NetId>(slot.actor));
-				}
-			}
-			else
-			{
-				auto view = m_world.view<NetId, NetActorBodyType>();
-				for (auto e : view)
-				{
-					const NetId nid = view.get<NetId>(e);
-					addCandidate(e, nid);
 				}
 			}
 
@@ -222,14 +230,12 @@ namespace jam::net
 				return 0;
 			};
 
+			std::vector<PlannedSnapshotChunk> plannedChunks;
 			size_t cursor = 0;
 			while (cursor < m_orderedCandidatesScratch.size())
 			{
-				m_fbb->Clear();
-
-				m_actorOffsScratch.clear();
-				m_actorOffsScratch.reserve(kSnapshotBatch);
-
+				PlannedSnapshotChunk chunkPlan{};
+				chunkPlan.candidates.reserve(kSnapshotBatch);
 				size_t usedPayloadBudget = 0;
 				const size_t beginCursor = cursor;
 
@@ -237,7 +243,7 @@ namespace jam::net
 				{
 					const Candidate& c = m_orderedCandidatesScratch[cursor];
 
-					if (m_actorOffsScratch.size() >= kSnapshotBatch)
+					if (chunkPlan.candidates.size() >= kSnapshotBatch)
 						break;
 
 					const size_t est = estimateActorBytes(c);
@@ -249,11 +255,42 @@ namespace jam::net
 
 					if ((usedPayloadBudget + est) > kPacketPayloadBudget)
 					{
-						if (!m_actorOffsScratch.empty())
+						if (!chunkPlan.candidates.empty())
 							break;
 						continue;
 					}
 
+					if (m_sentThisTickScratch.contains(c.netId))
+						continue;
+
+					m_sentThisTickScratch.insert(c.netId);
+					chunkPlan.candidates.push_back(PlannedSnapshotCandidate{
+						.e = c.e,
+						.netId = c.netId,
+						.useFull = c.useFull
+					});
+					usedPayloadBudget += est;
+				}
+
+				if (chunkPlan.candidates.empty())
+				{
+					if (cursor == beginCursor)
+						++cursor;
+					continue;
+				}
+
+				plannedChunks.push_back(std::move(chunkPlan));
+			}
+
+			const uint16 chunkCount = static_cast<uint16>(std::min<size_t>(plannedChunks.size(), std::numeric_limits<uint16>::max()));
+			for (uint16 chunkIndex = 0; chunkIndex < chunkCount; ++chunkIndex)
+			{
+				m_fbb->Clear();
+				m_actorOffsScratch.clear();
+				m_actorOffsScratch.reserve(plannedChunks[chunkIndex].candidates.size());
+
+				for (const PlannedSnapshotCandidate& c : plannedChunks[chunkIndex].candidates)
+				{
 					flatbuffers::Offset<fb::fbActorEntity> off = 0;
 					if (c.useFull)
 						off = BuildFullActorEntity(c.e, user);
@@ -263,38 +300,30 @@ namespace jam::net
 					if (off.IsNull())
 						continue;
 
-					if (m_sentThisTickScratch.contains(c.netId))
-						continue;
-
-					m_sentThisTickScratch.insert(c.netId);
 					m_actorOffsScratch.push_back(off);
-					usedPayloadBudget += est;
-
 					if (c.useFull)
 						MarkFullStateSent(user, c.netId);
 				}
 
 				if (m_actorOffsScratch.empty())
-				{
-					if (cursor == beginCursor)
-						++cursor;
 					continue;
-				}
 
-				const auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack, inputEpoch);
+				const auto header = fb::CreatefbSnapshotHeader(*m_fbb, tick, ack, inputEpoch, chunkIndex, chunkCount);
 				const auto vec	  = m_fbb->CreateVector(m_actorOffsScratch);
-				const auto snap	  = fb::CreatefbSnapshot(*m_fbb, header, vec);
+				const auto snap	  = fb::CreatefbSnapshot(*m_fbb, m_netWorld->GetWorldId(), header, vec);
 				m_fbb->Finish(snap, fb::fbSnapshotIdentifier());
 
 				auto pkt = PacketBuilder::CreateCustomPacket(CustomPacketId::SNAPSHOT, PacketFlags::NONE, eChannel::UNRELIABLE_SEQUENCED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
 				if (!pkt.IsValid())
 					continue;
 
-				TransportInfo info{};
-				info.method = eTransportMethod::Single;
-				info.userId = user;
-				m_netWorld->Send(info, pkt);
+				//if (user == 844424930131969)
+				//	JAMNET_LOG_DEBUG("[ServerReplicationSystem] user id= {}. send snapshot", user);
+				m_netWorld->SendTo(pkt, user);
+				++snapshotPacketCount;
+				snapshotActorCount += static_cast<uint32>(m_actorOffsScratch.size());
 			}
+
 		}
 	}
 
@@ -955,6 +984,40 @@ namespace jam::net
 		}
 	}
 
+	//void ServerReplicationSystem::QueueLifecycleForStaticActors(uint64 userId, bool forceSyncUser)
+	//{
+	//	if (userId == 0)
+	//		return;
+
+	//	const ReplicationUserState* userState = FindUserState(userId);
+	//	const std::unordered_set<NetId>* knownActors = userState ? &userState->knownActors : nullptr;
+
+	//	auto isKnownActor = [&](NetId id) -> bool
+	//	{
+	//		if (!id.IsValid())
+	//			return false;
+	//		return knownActors && knownActors->contains(id);
+	//	};
+
+	//	auto staticView = m_world.view<NetId, ReplicationStaticTag>();
+	//	for (auto e : staticView)
+	//	{
+	//		const NetId netId = staticView.get<NetId>(e);
+	//		if (!netId.IsValid())
+	//			continue;
+
+	//		CancelRemovalForUser(userId, netId);
+	//		if (!isKnownActor(netId))
+	//		{
+	//			QueueLifecycleCreateForUser(userId, netId);
+	//			continue;
+	//		}
+
+	//		if (forceSyncUser)
+	//			QueueLifecycleMetaForKnownUser(userId, netId);
+	//	}
+	//}
+
 	void ServerReplicationSystem::EmitPendingLifecyclePackets(uint64 userId, uint32 tick)
 	{
 		auto* userState = FindUserState(userId);
@@ -1020,17 +1083,15 @@ namespace jam::net
 				break;
 
 			const auto vec = m_fbb->CreateVector(actorOffs);
-			const auto batch = fb::CreatefbLifecycleBatch(*m_fbb, tick, vec);
+			const auto batch = fb::CreatefbLifecycleBatch(*m_fbb, m_netWorld->GetWorldId(), tick, vec);
 			m_fbb->Finish(batch, fb::fbLifecycleBatchIdentifier());
 
 			auto pkt = PacketBuilder::CreateCustomPacket(CustomPacketId::LIFECYCLE, PacketFlags::NONE, eChannel::RELIABLE_ORDERED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
 			if (!pkt.IsValid())
 				continue;
 
-			TransportInfo info{};
-			info.method = eTransportMethod::Single;
-			info.userId = userId;
-			m_netWorld->Send(info, pkt);
+
+			m_netWorld->SendTo(pkt, userId);
 
 			CommitPendingLifecycleBatch(userId, sentEvents);
 		}
@@ -1063,6 +1124,10 @@ namespace jam::net
 				}
 			}
 			else if (event.op == fb::fbLifecycleOp_Remove && event.reason == fb::fbRemovalReason_Destroyed)
+			{
+				ForgetActorForUser(userId, netId);
+			}
+			else if (event.op == fb::fbLifecycleOp_Remove && event.reason == fb::fbRemovalReason_AoiLeft)
 			{
 				ForgetActorForUser(userId, netId);
 			}

@@ -2,6 +2,7 @@ namespace jam.net.fb;
 
 table fbPossessActorReq
 {
+	world_id: ulong;
 	net_id: uint;
 }
 
@@ -14,6 +15,7 @@ table fbPossessActorRes
 
 table fbUnpossessActorReq
 {
+	world_id: ulong;
 	net_id: uint;
 }
 

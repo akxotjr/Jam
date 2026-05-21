@@ -35,6 +35,7 @@ struct fbUnpossessActorResT;
 
 struct fbPossessActorReqT : public ::flatbuffers::NativeTable {
   typedef fbPossessActorReq TableType;
+  uint64_t world_id = 0;
   uint32_t net_id = 0;
 };
 
@@ -42,14 +43,19 @@ struct fbPossessActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   typedef fbPossessActorReqT NativeTableType;
   typedef fbPossessActorReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_NET_ID = 4
+    VT_WORLD_ID = 4,
+    VT_NET_ID = 6
   };
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
+  }
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            verifier.EndTable();
   }
@@ -62,6 +68,9 @@ struct fbPossessActorReqBuilder {
   typedef fbPossessActorReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbPossessActorReq::VT_WORLD_ID, world_id, 0);
+  }
   void add_net_id(uint32_t net_id) {
     fbb_.AddElement<uint32_t>(fbPossessActorReq::VT_NET_ID, net_id, 0);
   }
@@ -78,8 +87,10 @@ struct fbPossessActorReqBuilder {
 
 inline ::flatbuffers::Offset<fbPossessActorReq> CreatefbPossessActorReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t world_id = 0,
     uint32_t net_id = 0) {
   fbPossessActorReqBuilder builder_(_fbb);
+  builder_.add_world_id(world_id);
   builder_.add_net_id(net_id);
   return builder_.Finish();
 }
@@ -152,6 +163,7 @@ inline ::flatbuffers::Offset<fbPossessActorRes> CreatefbPossessActorRes(
 
 struct fbUnpossessActorReqT : public ::flatbuffers::NativeTable {
   typedef fbUnpossessActorReq TableType;
+  uint64_t world_id = 0;
   uint32_t net_id = 0;
 };
 
@@ -159,14 +171,19 @@ struct fbUnpossessActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   typedef fbUnpossessActorReqT NativeTableType;
   typedef fbUnpossessActorReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_NET_ID = 4
+    VT_WORLD_ID = 4,
+    VT_NET_ID = 6
   };
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
+  }
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            verifier.EndTable();
   }
@@ -179,6 +196,9 @@ struct fbUnpossessActorReqBuilder {
   typedef fbUnpossessActorReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbUnpossessActorReq::VT_WORLD_ID, world_id, 0);
+  }
   void add_net_id(uint32_t net_id) {
     fbb_.AddElement<uint32_t>(fbUnpossessActorReq::VT_NET_ID, net_id, 0);
   }
@@ -195,8 +215,10 @@ struct fbUnpossessActorReqBuilder {
 
 inline ::flatbuffers::Offset<fbUnpossessActorReq> CreatefbUnpossessActorReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t world_id = 0,
     uint32_t net_id = 0) {
   fbUnpossessActorReqBuilder builder_(_fbb);
+  builder_.add_world_id(world_id);
   builder_.add_net_id(net_id);
   return builder_.Finish();
 }
@@ -265,6 +287,7 @@ inline fbPossessActorReqT *fbPossessActorReq::UnPack(const ::flatbuffers::resolv
 inline void fbPossessActorReq::UnPackTo(fbPossessActorReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
@@ -276,9 +299,11 @@ inline ::flatbuffers::Offset<fbPossessActorReq> fbPossessActorReq::Pack(::flatbu
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbPossessActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _world_id = _o->world_id;
   auto _net_id = _o->net_id;
   return jam::net::fb::CreatefbPossessActorReq(
       _fbb,
+      _world_id,
       _net_id);
 }
 
@@ -320,6 +345,7 @@ inline fbUnpossessActorReqT *fbUnpossessActorReq::UnPack(const ::flatbuffers::re
 inline void fbUnpossessActorReq::UnPackTo(fbUnpossessActorReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
@@ -331,9 +357,11 @@ inline ::flatbuffers::Offset<fbUnpossessActorReq> fbUnpossessActorReq::Pack(::fl
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUnpossessActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _world_id = _o->world_id;
   auto _net_id = _o->net_id;
   return jam::net::fb::CreatefbUnpossessActorReq(
       _fbb,
+      _world_id,
       _net_id);
 }
 

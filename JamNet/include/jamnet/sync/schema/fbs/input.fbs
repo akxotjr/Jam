@@ -3,6 +3,7 @@ namespace jam.net.fb;
 
 table fbGameInput
 {
+	world_id			: ulong;
 	user_id				: ulong;
 	sequence			: uint;
 	flags				: uint;

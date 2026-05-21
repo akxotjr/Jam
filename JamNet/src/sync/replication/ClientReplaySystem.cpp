@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "jamnet/sync/replication/ClientReplaySystem.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
+#include "jamnet/sync/replication/WorldContext.h"
 
 
 namespace jam::net

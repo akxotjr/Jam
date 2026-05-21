@@ -1,9 +1,9 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/sync/replication/ClientPhysicsSystem.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
+#include "jamnet/sync/replication/WorldContext.h"
 #include "jamnet/sync/replication/CorrectionReplayRunner.h"
-#include "jamnet/sync/networld/ClientNetWorld.h"
+#include "jamnet/sync/networld/ClientPhysicalWorld.h"
 
 #include <jampx/PhysicsTypes.h>
 #include <jampx/IPhysicsFacade.h>
@@ -111,7 +111,7 @@ namespace jam::net
 	{
         m_replayRunner = std::make_unique<CorrectionReplayRunner>(m_physics);
 
-        if (auto* nw = m_world.ctx().find<ClientNetWorld*>())
+        if (auto* nw = m_world.ctx().find<ClientPhysicalWorld*>())
             m_userId = (*nw) ? (*nw)->GetUserId() : 0;
     }
 
@@ -328,29 +328,6 @@ namespace jam::net
         	(posErr <= m_config.positionErrorThreshold)
             &&  (yawErr <= m_config.rotationErrorThreshold)
             &&  (pitchErr <= m_config.rotationErrorThreshold);
-
- /*       JAMNET_LOG_DEBUG(
-            "[ClientReconcile] serverTick={}, inputAck={}, currentSeq={}, posErr={}, yawErr={}, pitchErr={}, authPos=({}, {}, {}), livePos=({}, {}, {}), authYaw={}, liveYaw={}, authPitch={}, livePitch={}, inputFlags={}, inputYaw={}, inputPitch={}, inputMode={}",
-            signal.serverTick,
-            inputAck,
-            currentSeq,
-            posErr,
-            yawErr,
-            pitchErr,
-            auth.pos.x,
-            auth.pos.y,
-            auth.pos.z,
-            live.pos.x,
-            live.pos.y,
-            live.pos.z,
-            auth.facingYaw,
-            live.facingYaw,
-            auth.facingPitch,
-            live.facingPitch,
-            inputHistory.current.input.inputFlags,
-            inputHistory.current.input.facingYaw,
-            inputHistory.current.input.facingPitch,
-            E2U(inputHistory.current.input.moveMode));*/
 
         if (withinThreshold)
         {
@@ -603,7 +580,7 @@ namespace jam::net
             return false;
 
         const NetId targetNetId = NetId::MakeRaw(targetNetIdRaw);
-        if (auto* nwPtr = m_world.ctx().find<ClientNetWorld*>(); nwPtr && *nwPtr)
+        if (auto* nwPtr = m_world.ctx().find<ClientPhysicalWorld*>(); nwPtr && *nwPtr)
         {
             const entt::entity e = (*nwPtr)->GetEntity(targetNetId);
             if (e != entt::null && m_world.valid(e))
@@ -690,11 +667,11 @@ namespace jam::net
         if (!m_physics)
             return;
 
-        auto* nwPtr = m_world.ctx().find<ClientNetWorld*>();
+        auto* nwPtr = m_world.ctx().find<ClientPhysicalWorld*>();
         if (!nwPtr || !*nwPtr)
             return;
 
-        ClientNetWorld* netWorld = *nwPtr;
+        ClientPhysicalWorld* physicalWorld = *nwPtr;
 
         for (const px::PhysicsEvent& evt : m_physics->ConsumePhysicsEvents())
         {
@@ -713,7 +690,7 @@ namespace jam::net
             if (owner->userId == 0 || owner->userId != m_userId)
                 continue;
 
-            netWorld->PredictReplicatedActorDespawn(*netId);
+            physicalWorld->PredictReplicatedActorDespawn(*netId);
         }
     }
 }

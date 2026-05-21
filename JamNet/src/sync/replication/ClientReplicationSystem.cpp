@@ -3,9 +3,9 @@
 #include "jamnet/sync/replication/ReplicationCodec.h"
 #include "jamnet/sync/replication/ClientReplicationSystem.h"
 
-#include "jamnet/sync/networld/ClientNetWorld.h"
+#include "jamnet/sync/networld/ClientPhysicalWorld.h"
 #include "jamnet/sync/replication/ClientPhysicsSystem.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
+#include "jamnet/sync/replication/WorldContext.h"
 
 namespace jam::net
 {
@@ -18,7 +18,7 @@ namespace jam::net
 	{
 		Clear();
 
-		if (auto* nw = m_world.ctx().find<ClientNetWorld*>())
+		if (auto* nw = m_world.ctx().find<ClientPhysicalWorld*>())
 			m_netWorld = (nw && *nw) ? *nw : nullptr;
 		m_clientPhysics			= m_world.ctx().find<ClientPhysicsSystem>();
 		m_estimatedServerTick	= m_world.ctx().find<EstimatedServerTick>();
@@ -32,11 +32,14 @@ namespace jam::net
 	{
 		m_replicas.clear();
 		m_pendingLifecycle.clear();
-		m_pendingSnapshots.clear();
+		m_pendingSnapshotBatches.clear();
 		m_localNetId = NetId::Invalid();
 		m_localEntity = entt::null;
 		ClearLocalActorRef();
 		m_lastServerTick = 0;
+		m_lastLifecycleTick = 0;
+		m_latestQueuedSnapshotTick = 0;
+		m_lastAppliedSnapshotTick = 0;
 		m_lastInputAck = 0;
 
 		if (m_estimatedServerTick)
@@ -59,7 +62,8 @@ namespace jam::net
 			PendingLifecycleBatch pending = std::move(m_pendingLifecycle.front());
 			m_pendingLifecycle.pop_front();
 
-			m_lastServerTick = std::max<uint64>(pending.batch.server_tick, m_lastServerTick);
+			m_lastLifecycleTick = std::max<uint64>(pending.batch.server_tick, m_lastLifecycleTick);
+			m_lastServerTick = std::max(m_lastLifecycleTick, m_lastAppliedSnapshotTick);
 
 			for (const auto& actorPtr : pending.batch.actors)
 			{
@@ -68,38 +72,62 @@ namespace jam::net
 			}
 		}
 
-		while (!m_pendingSnapshots.empty())
+		if (m_pendingSnapshotBatches.empty())
+			return;
+
+		// Snapshot delivery on UNRELIABLE_SEQUENCED is freshness-biased and drop-tolerant.
+		// Older incomplete ticks must never block the newest available tick.
+		const uint64 latestQueuedTick = std::max(m_latestQueuedSnapshotTick, m_pendingSnapshotBatches.rbegin()->first);
+		if (latestQueuedTick <= m_lastAppliedSnapshotTick)
 		{
-			PendingSnapshot pending = std::move(m_pendingSnapshots.front());
-			m_pendingSnapshots.pop_front();
+			m_pendingSnapshotBatches.clear();
+			return;
+		}
 
-			fb::fbSnapshotT& snapshot = pending.snapshot;
+		for (auto it = m_pendingSnapshotBatches.begin(); it != m_pendingSnapshotBatches.end();)
+		{
+			if (it->first >= latestQueuedTick)
+				break;
+			it = m_pendingSnapshotBatches.erase(it);
+		}
 
-			const auto* hdr = snapshot.header.get();
-			if (!hdr) continue;
+		auto batchIt = m_pendingSnapshotBatches.find(latestQueuedTick);
+		if (batchIt == m_pendingSnapshotBatches.end())
+			return;
 
-			const uint64 serverTick = hdr->server_tick;
-			const uint32 inputAck   = hdr->input_ack;
-			const uint32 inputEpoch = hdr->input_epoch;
+		PendingSnapshotBatch& batch = batchIt->second;
 
-			if (serverTick < m_lastServerTick)
+		for (uint16 chunkIndex = 0; chunkIndex < batch.expectedChunkCount; ++chunkIndex)
+		{
+			if (chunkIndex >= batch.chunks.size() || !batch.chunks[chunkIndex].has_value())
 				continue;
 
-			m_lastServerTick = serverTick;
-			m_lastInputAck   = std::max(m_lastInputAck, inputAck);
+			PendingSnapshot pending = std::move(*batch.chunks[chunkIndex]);
+			batch.chunks[chunkIndex].reset();
 
-			if (m_estimatedServerTick)
-				m_estimatedServerTick->Update(serverTick, pending.recvNs, NOW_NS());
+			fb::fbSnapshotT& snapshot = pending.snapshot;
+			const auto* hdr = snapshot.header.get();
+			if (!hdr)
+				continue;
 
 			for (const auto& entPtr : snapshot.entities)
 			{
 				if (!entPtr) continue;
-				ProcessEntity(*entPtr, serverTick, inputEpoch);
+				ProcessEntity(*entPtr, batch.serverTick, batch.inputEpoch);
 			}
-
-			ResolveDeferredTargetBindingsAndSpawn();
-			PruneOldReplicas(serverTick);
 		}
+
+		if (m_estimatedServerTick)
+			m_estimatedServerTick->Update(batch.serverTick, batch.firstRecvNs, NOW_NS());
+
+		m_lastAppliedSnapshotTick = batch.serverTick;
+		m_lastServerTick = std::max(m_lastLifecycleTick, m_lastAppliedSnapshotTick);
+		m_lastInputAck   = std::max(m_lastInputAck, batch.inputAck);
+		ResolveDeferredTargetBindingsAndSpawn();
+		PruneOldReplicas(batch.serverTick);
+
+		m_pendingSnapshotBatches.erase(batchIt);
+		m_latestQueuedSnapshotTick = m_pendingSnapshotBatches.empty() ? 0 : m_pendingSnapshotBatches.rbegin()->first;
 	}
 
 	void ClientReplicationSystem::EnqueueLifecycle(fb::fbLifecycleBatchT batch)
@@ -111,10 +139,44 @@ namespace jam::net
 
 	void ClientReplicationSystem::EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs)
 	{
-		m_pendingSnapshots.emplace_back(PendingSnapshot{
+		const auto* hdr = snapshot.header.get();
+		if (!hdr)
+			return;
+
+		const uint64 serverTick = hdr->server_tick;
+		if (serverTick <= m_lastAppliedSnapshotTick)
+			return;
+
+		m_latestQueuedSnapshotTick = std::max(m_latestQueuedSnapshotTick, serverTick);
+
+		const uint16 chunkIndex = hdr->chunk_index;
+		const uint16 chunkCount = std::max<uint16>(1, hdr->chunk_count);
+		if (chunkIndex >= chunkCount)
+			return;
+
+		PendingSnapshotBatch& batch = m_pendingSnapshotBatches[serverTick];
+		if (batch.serverTick == 0)
+		{
+			batch.serverTick		 = serverTick;
+			batch.inputAck			 = hdr->input_ack;
+			batch.inputEpoch		 = hdr->input_epoch;
+			batch.expectedChunkCount = chunkCount;
+			batch.firstRecvNs		 = recvNs;
+		}
+
+		batch.inputAck			 = std::max(batch.inputAck, hdr->input_ack);
+		batch.inputEpoch		 = hdr->input_epoch;
+		batch.expectedChunkCount = std::max(batch.expectedChunkCount, chunkCount);
+		batch.lastRecvNs		 = recvNs;
+
+		if (batch.chunks.size() < batch.expectedChunkCount)
+			batch.chunks.resize(batch.expectedChunkCount);
+
+		batch.chunks[chunkIndex] = PendingSnapshot{
 			.snapshot = std::move(snapshot),
-			.recvNs = recvNs
-		});
+			.recvNs   = recvNs
+		};
+
 	}
 
 	void ClientReplicationSystem::ProcessLifecycleActor(const fb::fbLifecycleActorT& actor)
@@ -226,7 +288,8 @@ namespace jam::net
 		replica.e			 = resolved;
 		replica.lastSeenTick = serverTick;
 
-		const bool wasHidden = m_world.all_of<OutOfAoiTag>(resolved) || m_world.all_of<PredictedDespawnTag>(resolved);
+		const bool hiddenByAoi = m_world.all_of<OutOfAoiTag>(resolved);
+		const bool hiddenByPrediction = m_world.all_of<PredictedDespawnTag>(resolved);
 		const px::eBodyType snapshotBodyType = (hasCharFull || hasCharDelta) ? px::eBodyType::Character : px::eBodyType::Rigid;
 		const NetActorBodyType* actorBody = nullptr;
 		if (hasFull || hasDelta || hasKine || hasCharFull || hasCharDelta)
@@ -279,6 +342,9 @@ namespace jam::net
 		if (!hasResolvedSpawnState)
 			return;
 
+		if (hiddenByAoi)
+			return;
+
 		if (m_world.all_of<PhysicsSpawnedTag>(resolved))
 			return;
 
@@ -295,7 +361,7 @@ namespace jam::net
 			}
 		}
 
-		if (wasHidden)
+		if (hiddenByPrediction)
 		{
 			if (m_netWorld)
 				m_netWorld->ReactivateReplicatedActor(nid, replica.isLocal);

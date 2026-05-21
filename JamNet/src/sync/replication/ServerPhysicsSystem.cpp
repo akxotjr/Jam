@@ -1,9 +1,13 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/sync/replication/ServerPhysicsSystem.h"
+
+#include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 #include "jamnet/sync/replication/ServerAoiSystem.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
-#include "jamnet/sync/networld/ServerNetWorld.h"
+#include "jamnet/sync/networld/ServerPhysicalWorld.h"
+#include "jamnet/sync/replication/WorldContext.h"
 
 namespace jam::net
 {
@@ -349,11 +353,11 @@ namespace jam::net
 		if (!m_physics)
 			return;
 
-		auto* nwPtr = m_world.ctx().find<ServerNetWorld*>();
+		auto* nwPtr = m_world.ctx().find<ServerPhysicalWorld*>();
 		if (!nwPtr || !*nwPtr)
 			return;
 
-		ServerNetWorld* netWorld = *nwPtr;
+		ServerPhysicalWorld* physicalWorld = *nwPtr;
 		std::unordered_set<uint32> pending;
 
 		for (const px::PhysicsEvent& evt : m_physics->ConsumePhysicsEvents())
@@ -375,7 +379,7 @@ namespace jam::net
 			if (!pending.insert(netId->Raw()).second)
 				continue;
 
-			netWorld->DespawnActorImmediate(*netId, 0);
+			physicalWorld->DespawnActorImmediate(*netId, 0);
 		}
 	}
 }

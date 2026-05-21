@@ -38,6 +38,7 @@ struct fbDespawnActorResT;
 
 struct fbSpawnActorReqT : public ::flatbuffers::NativeTable {
   typedef fbSpawnActorReq TableType;
+  uint64_t world_id = 0;
   uint32_t spawn_req_id = 0;
   uint64_t owner_user_id = 0;
   uint64_t controller_user_id = 0;
@@ -66,25 +67,29 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbSpawnActorReqT NativeTableType;
   typedef fbSpawnActorReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SPAWN_REQ_ID = 4,
-    VT_OWNER_USER_ID = 6,
-    VT_CONTROLLER_USER_ID = 8,
-    VT_PREFAB_KEY = 10,
-    VT_POS = 12,
-    VT_ROT = 14,
-    VT_SPAWN_SRC = 16,
-    VT_TEAM_ID = 18,
-    VT_PART_ID = 20,
-    VT_ROLE_ID = 22,
-    VT_OVERRIDE_MASK = 24,
-    VT_LINEAR_VEL = 26,
-    VT_ANGULAR_VEL = 28,
-    VT_LINEAR_DAMPING = 30,
-    VT_ANGULAR_DAMPING = 32,
-    VT_YAW = 34,
-    VT_PITCH = 36,
-    VT_TARGET_NET_ID = 38
+    VT_WORLD_ID = 4,
+    VT_SPAWN_REQ_ID = 6,
+    VT_OWNER_USER_ID = 8,
+    VT_CONTROLLER_USER_ID = 10,
+    VT_PREFAB_KEY = 12,
+    VT_POS = 14,
+    VT_ROT = 16,
+    VT_SPAWN_SRC = 18,
+    VT_TEAM_ID = 20,
+    VT_PART_ID = 22,
+    VT_ROLE_ID = 24,
+    VT_OVERRIDE_MASK = 26,
+    VT_LINEAR_VEL = 28,
+    VT_ANGULAR_VEL = 30,
+    VT_LINEAR_DAMPING = 32,
+    VT_ANGULAR_DAMPING = 34,
+    VT_YAW = 36,
+    VT_PITCH = 38,
+    VT_TARGET_NET_ID = 40
   };
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
+  }
   uint32_t spawn_req_id() const {
     return GetField<uint32_t>(VT_SPAWN_REQ_ID, 0);
   }
@@ -142,6 +147,7 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_REQ_ID, 4) &&
            VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
@@ -171,6 +177,9 @@ struct fbSpawnActorReqBuilder {
   typedef fbSpawnActorReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_WORLD_ID, world_id, 0);
+  }
   void add_spawn_req_id(uint32_t spawn_req_id) {
     fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_SPAWN_REQ_ID, spawn_req_id, 0);
   }
@@ -238,6 +247,7 @@ struct fbSpawnActorReqBuilder {
 
 inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t world_id = 0,
     uint32_t spawn_req_id = 0,
     uint64_t owner_user_id = 0,
     uint64_t controller_user_id = 0,
@@ -260,6 +270,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
   builder_.add_prefab_key(prefab_key);
   builder_.add_controller_user_id(controller_user_id);
   builder_.add_owner_user_id(owner_user_id);
+  builder_.add_world_id(world_id);
   builder_.add_target_net_id(target_net_id);
   builder_.add_pitch(pitch);
   builder_.add_yaw(yaw);
@@ -357,6 +368,7 @@ inline ::flatbuffers::Offset<fbSpawnActorRes> CreatefbSpawnActorRes(
 
 struct fbDespawnActorReqT : public ::flatbuffers::NativeTable {
   typedef fbDespawnActorReq TableType;
+  uint64_t world_id = 0;
   uint32_t net_id = 0;
 };
 
@@ -364,14 +376,19 @@ struct fbDespawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   typedef fbDespawnActorReqT NativeTableType;
   typedef fbDespawnActorReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_NET_ID = 4
+    VT_WORLD_ID = 4,
+    VT_NET_ID = 6
   };
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
+  }
   uint32_t net_id() const {
     return GetField<uint32_t>(VT_NET_ID, 0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
            verifier.EndTable();
   }
@@ -384,6 +401,9 @@ struct fbDespawnActorReqBuilder {
   typedef fbDespawnActorReq Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbDespawnActorReq::VT_WORLD_ID, world_id, 0);
+  }
   void add_net_id(uint32_t net_id) {
     fbb_.AddElement<uint32_t>(fbDespawnActorReq::VT_NET_ID, net_id, 0);
   }
@@ -400,8 +420,10 @@ struct fbDespawnActorReqBuilder {
 
 inline ::flatbuffers::Offset<fbDespawnActorReq> CreatefbDespawnActorReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t world_id = 0,
     uint32_t net_id = 0) {
   fbDespawnActorReqBuilder builder_(_fbb);
+  builder_.add_world_id(world_id);
   builder_.add_net_id(net_id);
   return builder_.Finish();
 }
@@ -462,7 +484,8 @@ inline ::flatbuffers::Offset<fbDespawnActorRes> CreatefbDespawnActorRes(
 ::flatbuffers::Offset<fbDespawnActorRes> CreatefbDespawnActorRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbDespawnActorResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 inline fbSpawnActorReqT::fbSpawnActorReqT(const fbSpawnActorReqT &o)
-      : spawn_req_id(o.spawn_req_id),
+      : world_id(o.world_id),
+        spawn_req_id(o.spawn_req_id),
         owner_user_id(o.owner_user_id),
         controller_user_id(o.controller_user_id),
         prefab_key(o.prefab_key),
@@ -483,6 +506,7 @@ inline fbSpawnActorReqT::fbSpawnActorReqT(const fbSpawnActorReqT &o)
 }
 
 inline fbSpawnActorReqT &fbSpawnActorReqT::operator=(fbSpawnActorReqT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(world_id, o.world_id);
   std::swap(spawn_req_id, o.spawn_req_id);
   std::swap(owner_user_id, o.owner_user_id);
   std::swap(controller_user_id, o.controller_user_id);
@@ -513,6 +537,7 @@ inline fbSpawnActorReqT *fbSpawnActorReq::UnPack(const ::flatbuffers::resolver_f
 inline void fbSpawnActorReq::UnPackTo(fbSpawnActorReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = spawn_req_id(); _o->spawn_req_id = _e; }
   { auto _e = owner_user_id(); _o->owner_user_id = _e; }
   { auto _e = controller_user_id(); _o->controller_user_id = _e; }
@@ -541,6 +566,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSpawnActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _world_id = _o->world_id;
   auto _spawn_req_id = _o->spawn_req_id;
   auto _owner_user_id = _o->owner_user_id;
   auto _controller_user_id = _o->controller_user_id;
@@ -561,6 +587,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
   auto _target_net_id = _o->target_net_id;
   return jam::net::fb::CreatefbSpawnActorReq(
       _fbb,
+      _world_id,
       _spawn_req_id,
       _owner_user_id,
       _controller_user_id,
@@ -622,6 +649,7 @@ inline fbDespawnActorReqT *fbDespawnActorReq::UnPack(const ::flatbuffers::resolv
 inline void fbDespawnActorReq::UnPackTo(fbDespawnActorReqT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = net_id(); _o->net_id = _e; }
 }
 
@@ -633,9 +661,11 @@ inline ::flatbuffers::Offset<fbDespawnActorReq> fbDespawnActorReq::Pack(::flatbu
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbDespawnActorReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _world_id = _o->world_id;
   auto _net_id = _o->net_id;
   return jam::net::fb::CreatefbDespawnActorReq(
       _fbb,
+      _world_id,
       _net_id);
 }
 

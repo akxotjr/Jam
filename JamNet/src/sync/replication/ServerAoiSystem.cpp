@@ -1,14 +1,14 @@
 #include "pch.h"
 #include "jamnet/sync/replication/ServerAoiSystem.h"
 
-#include "jamnet/sync/networld/ServerNetWorld.h"
+#include "jamnet/sync/networld/ServerPhysicalWorld.h"
 #include "jamnet/sync/replication/ServerPhysicsSystem.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
+#include "jamnet/sync/replication/WorldContext.h"
 
 namespace jam::net
 {
 	ServerAoiSystem::ServerAoiSystem(entt::registry& world, px::IPhysicsFacade* physics)
-		: m_world(world), m_physics(physics)
+		: m_registry(world), m_physics(physics)
 	{
 	}
 
@@ -41,6 +41,7 @@ namespace jam::net
 	void ServerAoiSystem::Tick()
 	{
 		RefreshContext();
+		ClearTransientEvents();
 
 		CollectDirtyUsersFromControlledActors();
 		CollectDirtyActorsFromPhysics();
@@ -141,8 +142,11 @@ namespace jam::net
 
 	void ServerAoiSystem::OnActorSpawned(entt::entity actor)
 	{
-		if (actor == entt::null || !m_world.valid(actor))
+		if (actor == entt::null || !m_registry.valid(actor))
 			return;
+
+		if (const auto* netId = m_registry.try_get<NetId>(actor); netId && m_registry.all_of<ReplicationStaticTag>(actor))
+			SetAlwaysVisible(*netId, true);
 
 		m_actorStates.erase(actor);
 		MarkActorDirty(actor);
@@ -150,6 +154,10 @@ namespace jam::net
 
 	void ServerAoiSystem::OnActorDestroyed(entt::entity actor)
 	{
+		if (m_registry.valid(actor))
+			if (const auto* netId = m_registry.try_get<NetId>(actor); netId)
+				SetAlwaysVisible(*netId, false);
+
 		auto stIt = m_actorStates.find(actor);
 		if (stIt != m_actorStates.end() && stIt->second.initialized)
 			RemoveActorFromCell(stIt->second.anchorCell, actor);
@@ -202,10 +210,10 @@ namespace jam::net
 			return key.actor == actor;
 		});
 
-		if (!m_world.valid(actor) || !m_world.all_of<NetId>(actor))
+		if (!m_registry.valid(actor) || !m_registry.all_of<NetId>(actor))
 			return;
 
-		const NetId netId = m_world.get<NetId>(actor);
+		const NetId netId = m_registry.get<NetId>(actor);
 		for (uint64 userId : visibleUsers)
 		{
 			if (auto stateIt = m_states.find(userId); stateIt != m_states.end())
@@ -257,15 +265,24 @@ namespace jam::net
 
 	void ServerAoiSystem::RefreshContext()
 	{
-		if (auto* nwPtr = m_world.ctx().find<ServerNetWorld*>(); nwPtr)
-			m_netWorld = *nwPtr;
-		if (auto* phys = m_world.ctx().find<ServerPhysicsSystem>())
+		if (auto* nwPtr = m_registry.ctx().find<ServerPhysicalWorld*>(); nwPtr)
+			m_world = *nwPtr;
+		if (auto* phys = m_registry.ctx().find<ServerPhysicsSystem>())
 			m_serverPhysics = phys;
+	}
+
+	void ServerAoiSystem::ClearTransientEvents()
+	{
+		for (UserAoiState& state : m_states | std::views::values)
+		{
+			state.entered.clear();
+			state.left.clear();
+		}
 	}
 
 	void ServerAoiSystem::CollectDirtyUsersFromControlledActors()
 	{
-		if (!m_netWorld)
+		if (!m_world)
 			return;
 
 		for (const auto& userId : m_states | std::views::keys)
@@ -313,7 +330,7 @@ namespace jam::net
 	{
 		for (entt::entity actor : m_dirtyActors)
 		{
-			if (actor == entt::null || !m_world.valid(actor))
+			if (actor == entt::null || !m_registry.valid(actor))
 				continue;
 
 			const px::Vec3 actorPos = ResolveActorPosition(actor);
@@ -331,7 +348,7 @@ namespace jam::net
 		{
 			if (pending.userId == 0 || pending.actor == entt::null || !m_states.contains(pending.userId))
 				return true;
-			if (!m_world.valid(pending.actor) || !m_world.all_of<NetId>(pending.actor))
+			if (!m_registry.valid(pending.actor) || !m_registry.all_of<NetId>(pending.actor))
 				return true;
 			return false;
 		});
@@ -364,6 +381,7 @@ namespace jam::net
 		if (!ShouldMoveAnchorCell(userPos, userState.anchorCell))
 		{
 			userState.lastPos = userPos;
+			EnqueueVisibilityForUserCells(userId, userState.interestCells);
 			return;
 		}
 
@@ -373,6 +391,7 @@ namespace jam::net
 		userState.interestCells = BuildInterestCells(userPos);
 
 		OnUserCellsChanged(userId, oldCells, userState.interestCells);
+		EnqueueVisibilityForUserCells(userId, userState.interestCells);
 	}
 
 	void ServerAoiSystem::UpdateActorAnchorCell(entt::entity actor, const px::Vec3& actorPos)
@@ -400,6 +419,7 @@ namespace jam::net
 		if (!ShouldMoveAnchorCell(actorPos, actorState.anchorCell))
 		{
 			actorState.lastPos = actorPos;
+			EnqueueVisibilityForActorCell(actor, actorState.anchorCell);
 			return;
 		}
 
@@ -487,9 +507,34 @@ namespace jam::net
 			EnqueueVisibilityEval(userId, actor);
 	}
 
+	void ServerAoiSystem::EnqueueVisibilityForUserCells(uint64 userId, std::span<const AoiCellCoord> cells)
+	{
+		for (const AoiCellCoord& cell : cells)
+		{
+			const uint64 cellKey = MakeCellKey(cell);
+			if (auto it = m_cellActors.find(cellKey); it != m_cellActors.end())
+			{
+				for (const AoiActorSlot& slot : it->second)
+					if (slot.alive)
+						EnqueueVisibilityEval(userId, slot.actor);
+			}
+		}
+	}
+
+	void ServerAoiSystem::EnqueueVisibilityForActorCell(entt::entity actor, const AoiCellCoord& cell)
+	{
+		const uint64 cellKey = MakeCellKey(cell);
+		if (auto it = m_cellSubscribers.find(cellKey); it != m_cellSubscribers.end())
+		{
+			for (const AoiSubscriberSlot& slot : it->second)
+				if (slot.alive)
+					EnqueueVisibilityEval(slot.userId, actor);
+		}
+	}
+
 	void ServerAoiSystem::EvaluateVisibility(uint64 userId, entt::entity actor)
 	{
-		if (userId == 0 || actor == entt::null || !m_world.valid(actor) || !m_world.all_of<NetId>(actor))
+		if (userId == 0 || actor == entt::null || !m_registry.valid(actor) || !m_registry.all_of<NetId>(actor))
 			return;
 
 		auto stateIt = m_states.find(userId);
@@ -497,7 +542,7 @@ namespace jam::net
 			return;
 
 		UserAoiState& state = stateIt->second;
-		const NetId netId = m_world.get<NetId>(actor);
+		const NetId netId = m_registry.get<NetId>(actor);
 		auto& visibleUsers  = m_actorVisibleUsers[actor];
 		auto& visibleActors = m_userVisibleActors[userId];
 		const AoiVisibilityKey visibilityKey = MakeVisibilityKey(userId, actor);
@@ -511,7 +556,7 @@ namespace jam::net
 			visibleActors.push_back(AoiVisibleActorSlot{ e, true });
 		};
 
-		if (m_alwaysVisible.contains(netId))
+		if (m_registry.all_of<ReplicationStaticTag>(actor) || m_alwaysVisible.contains(netId))
 		{
 			if (!m_visibleMembership.contains(visibilityKey))
 			{
@@ -627,7 +672,7 @@ namespace jam::net
 		if (!m_physics)
 			return true;
 
-		const uint32 currentTick = m_world.ctx().contains<TickCounter>() ? m_world.ctx().get<TickCounter>().tick : 0;
+		const uint32 currentTick = m_registry.ctx().contains<TickCounter>() ? m_registry.ctx().get<TickCounter>().tick : 0;
 		const AoiVisibilityKey key = MakeVisibilityKey(userId, actor);
 
 		if (wasVisible)
@@ -648,20 +693,20 @@ namespace jam::net
 
 	px::Vec3 ServerAoiSystem::ResolveActorPosition(entt::entity actor) const
 	{
-		if (const auto* cs = m_world.try_get<CharAuthorityState>(actor))
+		if (const auto* cs = m_registry.try_get<CharAuthorityState>(actor))
 			return cs->state.pos;
-		if (const auto* rs = m_world.try_get<RigidAuthorityState>(actor))
+		if (const auto* rs = m_registry.try_get<RigidAuthorityState>(actor))
 			return rs->state.pose.p;
 		return {};
 	}
 
 	px::Vec3 ServerAoiSystem::ResolveUserPosition(uint64 userId) const
 	{
-		if (!m_netWorld)
+		if (!m_world)
 			return {};
 
-		const entt::entity actor = m_netWorld->GetControlledEntity(userId);
-		if (actor == entt::null || !m_world.valid(actor))
+		const entt::entity actor = m_world->GetControlledEntity(userId);
+		if (actor == entt::null || !m_registry.valid(actor))
 			return {};
 		return ResolveActorPosition(actor);
 	}

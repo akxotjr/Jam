@@ -73,6 +73,8 @@ table fbSnapshotHeader
 	server_tick			: uint;
 	input_ack			: uint;
 	input_epoch			: uint;
+	chunk_index			: ushort = 0;
+	chunk_count			: ushort = 1;
 	global_keyframe		: bool = false;
 }
 
@@ -105,6 +107,7 @@ table fbActorEntity
 
 table fbSnapshot
 {
+	world_id			: ulong;
 	header				: fbSnapshotHeader;
 	entities			: [fbActorEntity];
 }

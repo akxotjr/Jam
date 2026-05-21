@@ -7,7 +7,7 @@
 
 namespace jam::net
 {
-	class ServerNetWorld;
+	class ServerPhysicalWorld;
 	class ServerPhysicsSystem;
 
 	enum class eAoiCondition : uint8
@@ -137,14 +137,14 @@ namespace jam::net
 	struct AoiConfig
 	{
 		eAoiCondition   condition             = eAoiCondition::AABB_2D;
-		float           gridCellSize          = 50.0f;      // 
+		float           gridCellSize          = 20.0f;      // 
 		float           hysteresisOffset      = 10.0f;
-		float           cellHysteresisOffset  = 5.0f;
+		float           cellHysteresisOffset  = 10.0f;
 
-		float           aabbX                 = 50.0f;      // AABB half x
-		float           aabbY                 = 50.0f;      // AABB half y (only AABB_3D)
-		float           aabbZ                 = 50.0f;      // AABB half y
-		float           radius                = 50.0f;      // Circle or Sphere radius
+		float           aabbX                 = 30.0f;      // AABB half x
+		float           aabbY                 = 30.0f;      // AABB half y (only AABB_3D)
+		float           aabbZ                 = 30.0f;      // AABB half y
+		float           radius                = 30.0f;      // Circle or Sphere radius
 
 		bool            enableLos             = false;      // LOS inspection toggle
 		uint32          losRetestTicks        = 10;
@@ -162,22 +162,23 @@ namespace jam::net
 	public:
 		explicit ServerAoiSystem(entt::registry& world, px::IPhysicsFacade* physics);
 
-		void                            Init(const AoiConfig& cfg = {});
-		void                            Tick();
+		void									Init(const AoiConfig& cfg = {});
+		void									Tick();
 
-		void                            OnUserEnter(uint64 userId);
-		void                            OnUserLeave(uint64 userId);
+		void									OnUserEnter(uint64 userId);
+		void									OnUserLeave(uint64 userId);
 
-		void                            OnActorSpawned(entt::entity actor);
-		void                            OnActorDestroyed(entt::entity actor);
+		void									OnActorSpawned(entt::entity actor);
+		void									OnActorDestroyed(entt::entity actor);
 
-		bool                            IsVisible(uint64 userId, NetId netId) const;
-		const UserAoiState*             GetState(uint64 userId) const;
+		bool									IsVisible(uint64 userId, NetId netId) const;
+		const UserAoiState*						GetState(uint64 userId) const;
 		const std::vector<AoiVisibleActorSlot>* GetVisibleActors(uint64 userId) const;
-		void                            SetAlwaysVisible(NetId netId, bool always);
+		void									SetAlwaysVisible(NetId netId, bool always);
 
 	private:
 		void                            RefreshContext();
+		void                            ClearTransientEvents();
 
 		void                            CollectDirtyUsersFromControlledActors();
 		void                            CollectDirtyActorsFromPhysics();
@@ -191,6 +192,8 @@ namespace jam::net
 
 		void                            OnUserCellsChanged(uint64 userId, std::span<const AoiCellCoord> oldCells, std::span<const AoiCellCoord> newCells);
 		void                            OnActorCellChanged(entt::entity actor, const AoiCellCoord& oldCell, const AoiCellCoord& newCell);
+		void                            EnqueueVisibilityForUserCells(uint64 userId, std::span<const AoiCellCoord> cells);
+		void                            EnqueueVisibilityForActorCell(entt::entity actor, const AoiCellCoord& cell);
 
 		void                            EvaluateVisibility(uint64 userId, entt::entity actor);
 		bool                            PassesVisibilityTests(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible);
@@ -222,11 +225,11 @@ namespace jam::net
 		AoiVisibilityKey                MakeVisibilityKey(uint64 userId, entt::entity actor) const;
 
 	private:
-		entt::registry&														m_world;
-		px::IPhysicsFacade*													m_physics             = nullptr;
-		ServerNetWorld*														m_netWorld            = nullptr;
-		ServerPhysicsSystem*												m_serverPhysics       = nullptr;
-		AoiConfig															m_cfg                 = {};
+		entt::registry&														m_registry;
+		px::IPhysicsFacade*													m_physics          = nullptr;
+		ServerPhysicalWorld*												m_world            = nullptr;
+		ServerPhysicsSystem*												m_serverPhysics    = nullptr;
+		AoiConfig															m_cfg              = {};
 
 		std::unordered_map<uint64, UserAoiState>							m_states;
 		std::unordered_set<NetId>											m_alwaysVisible;

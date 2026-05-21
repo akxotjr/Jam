@@ -23,6 +23,7 @@ struct fbGameInputT;
 
 struct fbGameInputT : public ::flatbuffers::NativeTable {
   typedef fbGameInput TableType;
+  uint64_t world_id = 0;
   uint64_t user_id = 0;
   uint32_t sequence = 0;
   uint32_t flags = 0;
@@ -41,19 +42,23 @@ struct fbGameInput FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbGameInputT NativeTableType;
   typedef fbGameInputBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_USER_ID = 4,
-    VT_SEQUENCE = 6,
-    VT_FLAGS = 8,
-    VT_COMMAND_EPOCH = 10,
-    VT_YAW = 12,
-    VT_PITCH = 14,
-    VT_MOVE_MODE = 16,
-    VT_MOUSE_MOVE_KIND = 18,
-    VT_TARGET_X = 20,
-    VT_TARGET_Y = 22,
-    VT_TARGET_Z = 24,
-    VT_TARGET_NET_ID = 26
+    VT_WORLD_ID = 4,
+    VT_USER_ID = 6,
+    VT_SEQUENCE = 8,
+    VT_FLAGS = 10,
+    VT_COMMAND_EPOCH = 12,
+    VT_YAW = 14,
+    VT_PITCH = 16,
+    VT_MOVE_MODE = 18,
+    VT_MOUSE_MOVE_KIND = 20,
+    VT_TARGET_X = 22,
+    VT_TARGET_Y = 24,
+    VT_TARGET_Z = 26,
+    VT_TARGET_NET_ID = 28
   };
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
+  }
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
@@ -93,6 +98,7 @@ struct fbGameInput FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_SEQUENCE, 4) &&
            VerifyField<uint32_t>(verifier, VT_FLAGS, 4) &&
@@ -116,6 +122,9 @@ struct fbGameInputBuilder {
   typedef fbGameInput Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbGameInput::VT_WORLD_ID, world_id, 0);
+  }
   void add_user_id(uint64_t user_id) {
     fbb_.AddElement<uint64_t>(fbGameInput::VT_USER_ID, user_id, 0);
   }
@@ -165,6 +174,7 @@ struct fbGameInputBuilder {
 
 inline ::flatbuffers::Offset<fbGameInput> CreatefbGameInput(
     ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint64_t world_id = 0,
     uint64_t user_id = 0,
     uint32_t sequence = 0,
     uint32_t flags = 0,
@@ -179,6 +189,7 @@ inline ::flatbuffers::Offset<fbGameInput> CreatefbGameInput(
     uint32_t target_net_id = 0) {
   fbGameInputBuilder builder_(_fbb);
   builder_.add_user_id(user_id);
+  builder_.add_world_id(world_id);
   builder_.add_target_net_id(target_net_id);
   builder_.add_target_z(target_z);
   builder_.add_target_y(target_y);
@@ -204,6 +215,7 @@ inline fbGameInputT *fbGameInput::UnPack(const ::flatbuffers::resolver_function_
 inline void fbGameInput::UnPackTo(fbGameInputT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = user_id(); _o->user_id = _e; }
   { auto _e = sequence(); _o->sequence = _e; }
   { auto _e = flags(); _o->flags = _e; }
@@ -226,6 +238,7 @@ inline ::flatbuffers::Offset<fbGameInput> fbGameInput::Pack(::flatbuffers::FlatB
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbGameInputT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _world_id = _o->world_id;
   auto _user_id = _o->user_id;
   auto _sequence = _o->sequence;
   auto _flags = _o->flags;
@@ -240,6 +253,7 @@ inline ::flatbuffers::Offset<fbGameInput> fbGameInput::Pack(::flatbuffers::FlatB
   auto _target_net_id = _o->target_net_id;
   return jam::net::fb::CreatefbGameInput(
       _fbb,
+      _world_id,
       _user_id,
       _sequence,
       _flags,

@@ -1,8 +1,8 @@
 #include "pch.h"
 #include "jamnet/sync/replication/ServerInputSystem.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
-#include "jamnet/sync/networld/ServerNetWorld.h"
+#include "jamnet/sync/replication/WorldContext.h"
+#include "jamnet/sync/networld/ServerPhysicalWorld.h"
 #include <cmath>
 
 namespace jam::net
@@ -18,7 +18,7 @@ namespace jam::net
 				return false;
 
 			const NetId targetNetId = NetId::MakeRaw(targetNetRaw);
-			if (auto* nwPtr = world.ctx().find<ServerNetWorld*>(); nwPtr && *nwPtr)
+			if (auto* nwPtr = world.ctx().find<ServerPhysicalWorld*>(); nwPtr && *nwPtr)
 			{
 				const entt::entity e = (*nwPtr)->GetEntity(targetNetId);
 				if (e != entt::null && world.valid(e))
@@ -97,8 +97,6 @@ namespace jam::net
 
 	void ServerInputSystem::Tick()
 	{
-		DrainInputQueue();
-
 		const uint32 serverTick = m_world.ctx().contains<TickCounter>()
 			? m_world.ctx().get<TickCounter>().tick
 			: 0;
@@ -137,8 +135,7 @@ namespace jam::net
 
 	void ServerInputSystem::EnqueueInput(uint64 userId, const InputCmd& cmd)
 	{
-		UserInputData data{ userId, cmd };
-		m_inputQueue.enqueue(data);
+		QueuePendingInput(userId, cmd);
 	}
 
 	void ServerInputSystem::MarkInputApplied(uint64 userId)
@@ -167,20 +164,6 @@ namespace jam::net
 		if (auto it = m_appliedInputs.find(userId); it != m_appliedInputs.end())
 			return it->second.input.commandEpoch;
 		return 0;
-	}
-
-	void ServerInputSystem::DrainInputQueue()
-	{
-		constexpr size_t BULK_SIZE = 256;
-		UserInputData batch[BULK_SIZE];
-
-		size_t count = m_inputQueue.try_dequeue_bulk(batch, BULK_SIZE);
-
-		for (size_t i = 0; i < count; ++i)
-		{
-			const auto& data = batch[i];
-			QueuePendingInput(data.userId, data.cmd);
-		}
 	}
 
 	void ServerInputSystem::QueuePendingInput(uint64 userId, const InputCmd& cmd)
@@ -237,4 +220,3 @@ namespace jam::net
 		return {};
 	}
 }
-

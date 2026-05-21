@@ -3,7 +3,7 @@
 
 #include <jampx/IPhysicsFacade.h>
 
-#include "jamnet/sync/replication/NetWorldContext.h"
+#include "jamnet/sync/replication/WorldContext.h"
 
 #include <cmath>
 

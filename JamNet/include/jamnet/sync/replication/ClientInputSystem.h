@@ -1,25 +1,15 @@
-﻿#pragma once
-#include "jamnet/core/executor/SeqLock.h"
+#pragma once
+#include "jamnet/runtime/UserContext.h"
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
 namespace jam::net
 {
-	class ClientNetWorld;
+	class ClientPhysicalWorld;
 
-	/**
-	 * @name ClientInputSystem
-	 *
-	 * @brief 입력 수집, 히스토리, 서버 전송
-	 * @details
-	 * - 매 틱 InputCmd 생성 (seq + flags)
-	 * - 입력 히스토리 저장 (Replay 용)
-	 * - 서버로 입력 패킷 전송
-	 * - 서버 Ack 수신 시 히스토리에서 ack 된 입력 제거
-	 */
 	class ClientInputSystem
 	{
 	public:
-		explicit ClientInputSystem(entt::registry& world) : m_world(world) {}
+		explicit ClientInputSystem(entt::registry& registry) : m_registry(registry) {}
 
 		void						Init();
 		void						Tick();
@@ -36,15 +26,19 @@ namespace jam::net
 		void						ResetInput();
 
 	private:
-		void						SendInput(ClientNetWorld* netWorld, const InputCmd& cmd);
+		void						SendInput(const InputCmd& cmd);
 
 
 	private:
-		entt::registry&									m_world;
+		entt::registry&									m_registry;
+
+		ClientPhysicalWorld*							m_world			 = nullptr;
+		UserId											m_userId		 = kInvalidUserId;
+
 		bool											m_bInitialized   = false;
 		std::unique_ptr<flatbuffers::FlatBufferBuilder>	m_fbb			 = nullptr;
 
-		SeqLockBox<px::CharacterInput>					m_inputSample    = {};
+		px::CharacterInput								m_inputSample    = {};
 
 		static constexpr size_t							k_maxHistorySize = 512;
 	};

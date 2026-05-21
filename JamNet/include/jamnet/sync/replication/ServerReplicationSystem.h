@@ -8,7 +8,7 @@
 namespace jam::net
 {
 	class ServerAoiSystem;
-	class ServerNetWorld;
+	class ServerPhysicalWorld;
 	class ServerInputSystem;
 	class ServerPhysicsSystem;
 
@@ -135,10 +135,11 @@ namespace jam::net
 
         void                                            QueueLifecycleCreateForUser(uint64 userId, NetId netId);
 		void                                            QueueLifecycleMetaForUser(uint64 userId, NetId netId);
-        void                                            QueueLifecycleMetaForKnownUser(uint64 userId, NetId netId);
+		void                                            QueueLifecycleMetaForKnownUser(uint64 userId, NetId netId);
 		void                                            QueueRemovalForUser(uint64 userId, NetId netId, fb::fbRemovalReason reason);
 		void                                            CancelRemovalForUser(uint64 userId, NetId netId);
 		void                                            QueueLifecycleForVisibleActors(uint64 userId, bool forceSyncUser);
+		//void                                            QueueLifecycleForStaticActors(uint64 userId, bool forceSyncUser);
 		void                                            EmitPendingLifecyclePackets(uint64 userId, uint32 tick);
 		void                                            CommitPendingLifecycleBatch(uint64 userId, const std::vector<std::pair<NetId, PendingLifecycleEvent>>& sentEvents);
 
@@ -155,7 +156,7 @@ namespace jam::net
 	private:
 		entt::registry&                                                             m_world;
 		std::unique_ptr<flatbuffers::FlatBufferBuilder>                             m_fbb;
-		ServerNetWorld*                                                             m_netWorld      = nullptr;
+		ServerPhysicalWorld*                                                             m_netWorld      = nullptr;
 		ServerInputSystem*                                                          m_inputSys      = nullptr;
 		ServerAoiSystem*                                                            m_aoiSys        = nullptr;
 		ServerPhysicsSystem*                                                        m_physSys       = nullptr;

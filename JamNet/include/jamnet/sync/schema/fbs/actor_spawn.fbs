@@ -7,6 +7,7 @@ namespace jam.net.fb;
 
 table fbSpawnActorReq
 {
+	world_id				: ulong;
 	spawn_req_id			: uint;
 	owner_user_id			: ulong;
 	controller_user_id		: ulong;
@@ -39,6 +40,7 @@ table fbSpawnActorRes
 
 table fbDespawnActorReq
 {
+	world_id			: ulong;
 	net_id				: uint;
 }
 

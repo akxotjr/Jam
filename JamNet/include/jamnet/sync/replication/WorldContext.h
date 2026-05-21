@@ -1,9 +1,10 @@
 #pragma once
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
-
 namespace jam::net
 {
+	class WorldMembershipHost;
+
 	// ---- common ---- 
 
 	struct TickCounter
@@ -271,7 +272,7 @@ namespace jam::net
 		return GetLocalEntity(world);
 	}
 
-	static void InitClientNetWorldCtx(entt::registry& world)
+	static void InitClientPhysicalWorldCtx(entt::registry& world)
 	{
 		world.ctx().emplace<TickCounter>();
 
@@ -287,7 +288,7 @@ namespace jam::net
 		world.ctx().emplace<RenderCorrectionDelta>();
 	}
 
-	static void InitServerNetWorldCtx(entt::registry& world)
+	static void InitServerPhysicalWorldCtx(entt::registry& world)
 	{
 		
 	}

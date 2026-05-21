@@ -52,7 +52,7 @@ namespace jam::net
 	};
 
 
-	/// @brief	PhysicsFacade(ObjectId) is NetWorld(registry) local Key. 
+	/// @brief	PhysicsFacade(ObjectId) is WorldBase(registry) local Key. 
 	///			rule : ObjectId == entt::entity 
 	inline px::ObjectId MakeObjectId(entt::entity e) noexcept
 	{
@@ -144,7 +144,7 @@ namespace jam::net
 	 -----------------------------------------------------------**/
 
 
-	/// @brief Tag of local character. Local character is unique in NetWorld.
+	/// @brief Tag of local character. Local character is unique in WorldBase.
 	struct LocalActorTag {};
 
 	/// @brief Tag of remote actor. Remote actors are the remaining actors excluding a local actor.

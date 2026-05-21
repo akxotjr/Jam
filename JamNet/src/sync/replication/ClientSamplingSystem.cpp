@@ -1,10 +1,10 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jamnet/sync/replication/ClientSamplingSystem.h"
 
-#include "jamnet/sync/networld/ClientNetWorld.h"
+#include "jamnet/sync/networld/ClientPhysicalWorld.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/ReplicationEvents.h"
-#include "jamnet/sync/replication/NetWorldContext.h"
+#include "jamnet/runtime/AppRuntimeEvents.h"
+#include "jamnet/sync/replication/WorldContext.h"
 
 
 namespace jam::net
@@ -46,17 +46,20 @@ namespace jam::net
 	{
 		uint32 currentTick = m_world.ctx().get<TickCounter>().tick;
 
-		RenderSamplesEvent samples{};
-		samples.tick	  = currentTick;
-		samples.timestamp = NOW_NS();
+		PresentationFramePushedEvent snapshotEvent{};
+		snapshotEvent.frame.tick = currentTick;
+		snapshotEvent.frame.timestamp = static_cast<float>(NOW_NS());
+		snapshotEvent.frame.sequence = currentTick;
 
-		if (auto* netWorld = m_world.ctx().find<ClientNetWorld*>())
+		if (auto* physicalWorld = m_world.ctx().find<ClientPhysicalWorld*>())
 		{
-			samples.userId = (*netWorld)->GetUserId();
+			snapshotEvent.accountId = (*physicalWorld)->GetAccountId();
+			snapshotEvent.userId = (*physicalWorld)->GetUserId();
+			snapshotEvent.worldId = (*physicalWorld)->GetWorldKey().worldId;
 		}
 
 		auto view = m_world.view<NetId, NetActorBodyType, PhysicsSpawnedTag, RemoteActorTag>();
-		samples.actors.reserve(view.size_hint() + 1);
+		snapshotEvent.frame.actors.reserve(view.size_hint() + 1);
 
 		// local
 		{
@@ -78,14 +81,16 @@ namespace jam::net
 				sampled.pos = CompressVisualLead(auth.pos, sampled.pos);
 			}
 
-			RenderSamplesEvent::ActorSample sample{
+			ActorPresentationState actorSnapshot{
 				.objectId = MakeObjectId(local),
-				.isLocal  = true,
-				.cs		  = sampled,
-				.csRaw	  = live
+				.isLocal = true,
+				.cs = sampled,
+				.csRaw = live
 			};
+			if (local != entt::null && m_world.valid(local) && m_world.all_of<NetId>(local))
+				actorSnapshot.netId = m_world.get<NetId>(local);
 
-			samples.actors.push_back(sample);
+			snapshotEvent.frame.actors.push_back(std::move(actorSnapshot));
 
 			// sampling 단계에서 render correction delta를 점진적으로 0으로 수렴시킨다.
 			static constexpr float kDeltaDecay = 0.80f;
@@ -108,30 +113,32 @@ namespace jam::net
 		for (const auto e : view)
 		{
 			const auto& bodyType = view.get<NetActorBodyType>(e).body;
-
-			RenderSamplesEvent::ActorSample sample{};
+			const NetId netId = view.get<NetId>(e);
 
 			if (bodyType == px::eBodyType::Character)
 			{
 				const auto& [cs] = m_world.get<CharAuthorityState>(e);
-				sample.objectId	= MakeObjectId(e);
-				sample.isLocal	= false;
-				sample.cs		= cs;
+				snapshotEvent.frame.actors.push_back(ActorPresentationState{
+					.objectId = MakeObjectId(e),
+					.netId = netId,
+					.isLocal = false,
+					.cs = cs
+				});
+
 			}
 			else
 			{
 				const auto& [rs] = m_world.get<RigidAuthorityState>(e);
-				sample.objectId	= MakeObjectId(e);
-				sample.isLocal	= false;
-				sample.rs		= rs;
+				snapshotEvent.frame.actors.push_back(ActorPresentationState{
+					.objectId = MakeObjectId(e),
+					.netId = netId,
+					.isLocal = false,
+					.rs = rs
+				});
+
 			}
-
-			samples.actors.push_back(sample);
 		}
 
-		if (!samples.actors.empty())
-		{
-			GLOBAL_EVENTBUS_PUBLISH(std::move(samples));
-		}
+		GLOBAL_EVENTBUS_PUBLISH(snapshotEvent);
 	}
 }

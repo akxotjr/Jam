@@ -1,44 +1,57 @@
 #pragma once
-#include "jamnet/sync/networld/NetWorld.h"
-#include "jamnet/sync/transport/ITransportEndpoint.h"
+#include "jamnet/runtime/world/PhysicalWorld.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/ReplicationEvents.h"
+#include "jamnet/runtime/AppRuntimeEvents.h"
 #include "jamnet/runtime/schema/RPCSchemaIds.h"
 
-#include "jamnet/sync/schema/gen/lifecycle_generated.h"
 #include "jamnet/sync/schema/gen/actor_spawn_generated.h"
 #include "jamnet/sync/schema/gen/actor_control_generated.h"
 
 #include <jampx/IPhysicsFacade.h>
 #include <atomic>
 #include <functional>
+#include <limits>
+#include <string>
+#include <unordered_map>
 
+#include "jamnet/runtime/ClientSession.h"
 
 
 namespace jam::net
 {
-	class ClientNetWorld : public NetWorld
+
+	class ClientPhysicalWorld : public PhysicalWorld
 	{
 	public:
-		ClientNetWorld() = default;
-		~ClientNetWorld() override = default;
+		ClientPhysicalWorld() = default;
+		explicit ClientPhysicalWorld(const WorldConfig& config) : PhysicalWorld(config) {}
+		~ClientPhysicalWorld() override = default;
 
-		void								Init() override;
+		bool								Init() override;
+		void								Start(uint64 dt_ns) override;
+		void								Resume(uint64 dt_ns) override;
+		void								Stop() override;
+		void								Shutdown(eMailboxCloseMode mode, std::function<void()> onClosed = nullptr) override;
 
-		void								SetTransportSystem(std::shared_ptr<ITransportEndpoint> transport);
 		void								SetPhysicsFacade(std::unique_ptr<px::IPhysicsFacade> physics);
 		void								SetLevelPath(const std::string& levelPath) { m_levelPath = levelPath; }
 		void								SetHeadless(bool headless) { m_headless = headless; }
 		bool								IsHeadless() const { return m_headless; }
 
+		void								SetSessionBundle(const ClientSessionBundle& sessions);
 
+		void								SetAccountId(uint64 accountId) { m_accountId = accountId; }
+		uint64								GetAccountId() const { return m_accountId; }
 		void								SetUserId(uint64 userId) { m_userId = userId; }
 		uint64								GetUserId() const { return m_userId; }
+		bool								AddMember(WorldUserContext user) override;
+		bool								RemoveMember(uint64 userId) override;
 
 		entt::entity						GetEntity(NetId netId);
 
-		void								Send(Packet packet);
-		void								OnRecvPacket(const PacketHeaderView& view);
+		void								Send(Packet packet) override;
+		void								HandleWorldPacket(uint64 callerUserId, Packet pkt) override;
+
 
 		void								SpawnActor(SpawnParams params);
 		void								DespawnActor(NetId netId);
@@ -65,7 +78,9 @@ namespace jam::net
 	
 
 	private:
-		void								TickOnShard() override;
+		bool								RegisterWorldRouting();
+
+		void								Tick() override;
 		
 		void								ProcessLifecyclePacket(const PacketHeaderView& view);
 		void								ProcessSnapshot(const PacketHeaderView& view);
@@ -73,8 +88,9 @@ namespace jam::net
 		void								SpawnActorImpl(SpawnParams params);
 		void								DespawnActorImpl(NetId netId);
 		void								SetActorDormantImpl(NetId netId);
-		void								PublishActorSpawned(entt::entity e, uint32 spawnReqId, bool isLocal, eRenderActorLifecycleReason reason = eRenderActorLifecycleReason::Created);
-		void								PublishActorDespawned(entt::entity e, eRenderActorLifecycleReason reason = eRenderActorLifecycleReason::Destroyed);
+		void								PublishActorSpawned(entt::entity e, uint32 spawnReqId, bool isLocal, eActorLifecycleReason reason = eActorLifecycleReason::Spawned);
+		void								PublishActorDespawned(entt::entity e, eActorLifecycleReason reason = eActorLifecycleReason::Despawned);
+		void								PublishWorldParticipantEvent(uint64 participantUserId, eWorldParticipantChange change);
 
 		void								RequestSpawnActor(const SpawnParams& params);
 
@@ -84,17 +100,20 @@ namespace jam::net
 		void								OnUnpossesActorResponse(std::optional<RPCTableRef<fb::fbUnpossessActorRes>> res);
 
 		void								BootstrapLevelActors();
+		bool								BootstrapLocalRoute();
 
 	private:
-		std::shared_ptr<ITransportEndpoint>				m_transport;
+		ClientSessionBundle								m_sessions;
 
-		std::unique_ptr<px::IPhysicsFacade>				m_physics;
 
 		std::string										m_levelPath;
 		px::LevelLayerInfo								m_levelLayerInfo = {};
-		bool											m_headless = false;
+		uint16											m_localShardIndex = std::numeric_limits<uint16>::max();
+		uint16											m_localWorldIndex = 0;
 
+		uint64											m_accountId = 0;
 		uint64											m_userId = 0;
+		bool											m_headless = false;
 		NetId											m_localNetId = NetId::Invalid();
 		std::atomic<uint64>								m_latestClickMoveSeq = 0;
 		std::atomic<uint32>								m_latestLocalCommandEpoch = 0;
@@ -102,4 +121,7 @@ namespace jam::net
 		std::unordered_map<NetId, entt::entity>			m_netIdToEntity;		// netId -> entity (for ensure by server)
 		std::unordered_map<uint32, entt::entity>		m_spawnReqIdToEntity;	// spawnReqId -> pending entities
 	};
+
+
+	using ClientPxWorldRef = ShardOwnedObjectRefSlot<ClientPhysicalWorld>;
 }

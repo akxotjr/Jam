@@ -19,6 +19,7 @@ table fbLifecycleActor
 
 table fbLifecycleBatch
 {
+	world_id			: ulong;
 	server_tick		: uint;
 	actors			: [fbLifecycleActor];
 }
