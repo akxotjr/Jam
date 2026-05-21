@@ -4,6 +4,14 @@
 
 namespace jam
 {
+	enum class eTimeUnit
+	{
+		Ns,
+		Us,
+		Ms,
+		Sec,
+	};
+
 	constexpr uint64 operator""_ns(unsigned long long v) { return static_cast<uint64>(v); }
 	constexpr uint64 operator""_us(unsigned long long v) { return static_cast<uint64>(v) * 1'000ull; }
 	constexpr uint64 operator""_ms(unsigned long long v) { return static_cast<uint64>(v) * 1'000'000ull; }

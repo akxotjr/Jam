@@ -1,4 +1,6 @@
-﻿#pragma once
+#pragma once
+
+#include <cmath>
 
 namespace jam
 {
@@ -27,7 +29,7 @@ namespace jam
 	enum eCoreUsageProfile : uint8
 	{
 		CoreProfileServer,   // 서버: 코어를 최대한 사용
-		CoreProfileClient    // 클라이언트: 여유 남겨두고 절반 정도만 사용
+		CoreProfileClient    // 클라이언트: 여유를 남기되 대략 60~70% 수준 사용
 	};
 
 	struct AutoCoreLayoutConfig
@@ -90,14 +92,14 @@ namespace jam
 		float usageScale = cfg.usageScale;
 		if (usageScale == 0.f)
 		{
-			usageScale = cfg.profile == CoreProfileServer ? 1.0f : 0.5f;
+			usageScale = cfg.profile == CoreProfileServer ? 1.0f : (2.0f / 3.0f);
 		}
 
 		uint32 budget = rawBudget;
 		if (cfg.profile == CoreProfileClient)
 		{
 			const float scaled = std::max(1.0f, static_cast<float>(rawBudget) * usageScale);
-			budget = static_cast<uint32>(scaled);
+			budget = static_cast<uint32>(std::ceil(scaled));
 		}
 
 		// GlobalExecutor roles: shard + iocp + fiber + offload
@@ -182,4 +184,3 @@ namespace jam
 		return layout;
 	}
 }
-
