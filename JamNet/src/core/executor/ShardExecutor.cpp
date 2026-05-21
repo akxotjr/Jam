@@ -9,6 +9,11 @@ namespace jam
 {
 	namespace
 	{
+		inline constexpr uint32 k_maxConsecutiveControlLocalPops = 10;
+	}
+
+	namespace
+	{
 		struct ShardMetricsSnapshotRequest
 		{
 			ShardExecutorMetrics snapshot{};
@@ -25,6 +30,7 @@ namespace jam
 			: m_config(config)
 	{
 		m_scheduler	= std::make_unique<FiberScheduler>(m_backend);
+		m_local.shardIndex = static_cast<uint32>(m_config.index);
 		m_metrics.shardIndex = m_config.index;
 	}
 
@@ -150,25 +156,43 @@ namespace jam
 		NotifyWorkAvailable();
 	}
 
-	std::shared_ptr<Mailbox> ShardExecutor::CreateMailbox()
+	Mailbox* ShardExecutor::CreateMailbox()
 	{
 		auto id = m_nextMailboxId.fetch_add(1, std::memory_order_relaxed);
-		auto mb = std::make_shared<Mailbox>(id, weak_from_this());
+		auto mb = std::make_unique<Mailbox>(id, weak_from_this());
+		auto* mbRaw = mb.get();
 		{
 			WRITE_LOCK
-			m_mailboxes.emplace(id, mb);
+			m_mailboxes.emplace(id, std::move(mb));
 		}
 
 		if (m_shardSlot)
 		{
 			auto& qs = m_shardSlot->inbox;
 			qs.state.store(E2U(eShardState::Closed), std::memory_order_release);
-			qs.q.store(mb.get(), std::memory_order_release);
+			qs.q.store(mbRaw, std::memory_order_release);
 			qs.gen.fetch_add(1, std::memory_order_acq_rel);
 			qs.state.store(E2U(eShardState::Open), std::memory_order_release);
 		}
 
-		return mb;
+		return mbRaw;
+	}
+
+	MailboxRef ShardExecutor::CreateMailboxRef(RuntimeId ownerId)
+	{
+		if (ownerId == kInvalidRuntimeId)
+			return {};
+
+		Mailbox* mailbox = CreateMailbox();
+		if (!mailbox)
+			return {};
+
+		return MailboxRef
+		{
+			.mailbox = mailbox,
+			.ownerId = ownerId,
+			.generation = GetRuntimeGeneration(ownerId),
+		};
 	}
 
 	bool ShardExecutor::CloseMailbox(uint32 id, eMailboxCloseMode mode, std::function<void()> onClosed)
@@ -186,13 +210,15 @@ namespace jam
 		m_mailboxes.erase(id);
 	}
 
-	void ShardExecutor::NotifyReady(uint32 mailboxId)
+	bool ShardExecutor::NotifyReady(uint32 mailboxId)
 	{
 		if (mailboxId == 0)
-			return;
+			return false;
 
-		m_readyMailboxes.enqueue(mailboxId);
+		if (!m_readyMailboxes.enqueue(mailboxId))
+			return false;
 		NotifyWorkAvailable();
+		return true;
 	}
 
 	void ShardExecutor::PinCoreSlot(const CoreSlot& slot, uint16 numaNode)
@@ -227,37 +253,18 @@ namespace jam
 		NotifyWorkAvailable();
 	}
 
-	void ShardExecutor::Tick(uint64 now_ns, uint64 dt_ns)
+	FiberAwaitKey ShardExecutor::AllocateAwaitKey()
+	{
+		return m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
+	}
+
+	bool ShardExecutor::RunDueDomainGroups(uint64 now_ns)
 	{
 		auto& L = m_local;
+		bool didWork = false;
 		
-		// Domain groups tick
 		for (auto& group : L.domainGroups | std::views::values)
 		{
-			const uint64 period_ns = group.tickPeriod_ns;
-			uint64		 group_dt  = dt_ns;
-
-			// tick 주기 체크 (0이면 매번 실행)
-			if (period_ns != 0)
-			{
-				if (group.lastTick_ns == 0)
-					group.lastTick_ns = now_ns - period_ns;
-
-				if (now_ns < group.lastTick_ns + period_ns)
-					continue;
-
-				group_dt = period_ns;
-				group.lastTick_ns += period_ns;
-
-				if (now_ns >= group.lastTick_ns + period_ns)
-					group.lastTick_ns = now_ns;
-			}
-			else
-			{
-				group.lastTick_ns = now_ns;
-			}
-
-			// Bootstrap (한 번만 실행)
 			if (!group.bootstraps.empty())
 			{
 				auto bootstraps = std::move(group.bootstraps);
@@ -267,16 +274,67 @@ namespace jam
 				{
 					if (fn) fn(L);
 				}
+
+				didWork = true;
 			}
 
-			// Systems
-			for (auto& fn : group.systems)
+			if (group.systems.empty())
+				continue;
+
+			const uint64 period_ns = group.tickPeriod_ns;
+
+			if (period_ns == 0)
 			{
-				if (fn) fn(L, now_ns, group_dt);
+				group.nextTick_ns = now_ns;
+
+				for (auto& fn : group.systems)
+				{
+					if (fn)
+						fn(L, now_ns, 0_ns);
+				}
+
+				++m_metrics.tickCount;
+				didWork = true;
+				continue;
+			}
+
+			if (group.nextTick_ns == 0)
+				group.nextTick_ns = now_ns;
+
+			if (now_ns < group.nextTick_ns)
+				continue;
+
+			int32 catches = 0;
+			const int32 maxCatchUp = std::max(1, m_config.maxTickCatchUp);
+			while (now_ns >= group.nextTick_ns && catches < maxCatchUp)
+			{
+				const uint64 tickNow_ns = group.nextTick_ns;
+				group.nextTick_ns += period_ns;
+
+				for (auto& fn : group.systems)
+				{
+					if (fn)
+						fn(L, tickNow_ns, period_ns);
+				}
+
+				++m_metrics.tickCount;
+				++catches;
+				didWork = true;
+			}
+
+			if (now_ns >= group.nextTick_ns)
+			{
+				group.nextTick_ns = now_ns + period_ns;
+				++m_metrics.tickCatchUpCount;
 			}
 		}
 
-		// Defers (registry에 대한 지연 작업)
+		return didWork;
+	}
+
+	bool ShardExecutor::ProcessDefers()
+	{
+		auto& L = m_local;
 		if (!L.defers.empty())
 		{
 			auto defers = std::move(L.defers);
@@ -286,7 +344,33 @@ namespace jam
 			{
 				if (f) f(L.registry);
 			}
+
+			return true;
 		}
+
+		return false;
+	}
+
+	uint64 ShardExecutor::TimeUntilNextDomainDue(uint64 now_ns) const
+	{
+		uint64 wait_ns = UINT64_MAX;
+
+		for (const auto& group : m_local.domainGroups | std::views::values)
+		{
+			if (!group.bootstraps.empty())
+				return 0_ns;
+
+			if (group.systems.empty())
+				continue;
+
+			const uint64 period_ns = group.tickPeriod_ns;
+			if (period_ns == 0 || group.nextTick_ns == 0 || now_ns >= group.nextTick_ns)
+				return 0_ns;
+
+			wait_ns = std::min(wait_ns, group.nextTick_ns - now_ns);
+		}
+
+		return wait_ns;
 	}
 
 
@@ -430,14 +514,13 @@ namespace jam
 
 	void ShardExecutor::Loop()
 	{
-		m_lastTick_ns = NOW_NS();
-
 		while (m_running.load())
 		{
 			++m_metrics.loopCount;
 			bool didWork = false;
 			const uint64 observedWakeEpoch = m_wakeEpoch.load(std::memory_order_acquire);
 
+			didWork |= ProcessJobsOnce();
 			DrainReadyMailboxes(64, 64 * m_config.batchBudget, m_config.batchBudget);
 			didWork |= ProcessJobsOnce();
 
@@ -457,38 +540,18 @@ namespace jam
 			if (fiberMetrics.lastPollReadyRunCount > 0)
 				didWork = true;
 
-			const uint64 now_ns		= NOW_NS();
-			const uint64 tickPeriod = m_config.tickPeriod_ns;
-
-			if (now_ns >= m_lastTick_ns + tickPeriod)
-			{
-				int32 catches = 0;
-
-				while (now_ns >= m_lastTick_ns + tickPeriod && catches < m_config.maxTickCatchUp)
-				{
-					m_lastTick_ns += tickPeriod;
-					Tick(m_lastTick_ns, tickPeriod);
-					++catches;
-				}
-
-				m_metrics.tickCount += static_cast<uint64>(catches);
-				if (catches > 1)
-					m_metrics.tickCatchUpCount += static_cast<uint64>(catches - 1);
-
-				if (now_ns >= m_lastTick_ns + tickPeriod)
-					m_lastTick_ns = now_ns;
-
-				didWork = true;
-			}
+			const uint64 now_ns = NOW_NS();
+			didWork |= RunDueDomainGroups(now_ns);
+			didWork |= ProcessDefers();
 
 			if (!didWork)
 			{
 				++m_metrics.idleLoopCount;
 				const uint64 idleStart_ns = NOW_NS();
 				uint64 idleWait_ns = static_cast<uint64>(std::max(0, m_config.idleSleepMs)) * 1'000'000ull;
-				const uint64 nextTick_ns = m_lastTick_ns + tickPeriod;
-				if (now_ns < nextTick_ns)
-					idleWait_ns = std::min(idleWait_ns, nextTick_ns - now_ns);
+				const uint64 nextDomainDue_ns = TimeUntilNextDomainDue(now_ns);
+				if (nextDomainDue_ns != UINT64_MAX)
+					idleWait_ns = std::min(idleWait_ns, nextDomainDue_ns);
 				const uint64 nextFiberWakeup_ns = m_scheduler->NextWakeupTime();
 				if (nextFiberWakeup_ns != 0)
 				{
@@ -534,11 +597,13 @@ namespace jam
 
 	void ShardExecutor::PushLocal(Job&& j)
 	{
-		const size_t idx = static_cast<size_t>(j.Priority());
-		if (idx >= k_jobPriorityCount)
-			return;
+		if (j.Priority() == eJobPriority::Critical)
+			m_jobLocalCritical.push_back(std::move(j));
+		else if (j.Priority() == eJobPriority::Control)
+			m_jobLocalControl.push_back(std::move(j));
+		else
+			m_jobLocalBackground.push_back(std::move(j));
 
-		m_jobLocalByPrio[idx].push_back(std::move(j));
 		m_jobLocalTotal.fetch_add(1, std::memory_order_relaxed);
 	}
 
@@ -547,14 +612,41 @@ namespace jam
 		if (m_jobLocalTotal.load(std::memory_order_relaxed) == 0)
 			return false;
 
-		for (size_t i = 0; i < k_jobPriorityCount; ++i)
+		if (!m_jobLocalCritical.empty())
 		{
-			auto& q = m_jobLocalByPrio[i];
-			if (q.empty())
-				continue;
+			j = std::move(m_jobLocalCritical.front());
+			m_jobLocalCritical.pop_front();
+			m_consecutiveControlPops = 0;
+			m_jobLocalTotal.fetch_sub(1, std::memory_order_relaxed);
+			return true;
+		}
 
-			j = std::move(q.front());
-			q.pop_front();
+		const bool hasControl = !m_jobLocalControl.empty();
+		const bool hasBackground = !m_jobLocalBackground.empty();
+
+		if (hasBackground && (!hasControl || m_consecutiveControlPops >= k_maxConsecutiveControlLocalPops))
+		{
+			j = std::move(m_jobLocalBackground.front());
+			m_jobLocalBackground.pop_front();
+			m_consecutiveControlPops = 0;
+			m_jobLocalTotal.fetch_sub(1, std::memory_order_relaxed);
+			return true;
+		}
+
+		if (hasControl)
+		{
+			j = std::move(m_jobLocalControl.front());
+			m_jobLocalControl.pop_front();
+			++m_consecutiveControlPops;
+			m_jobLocalTotal.fetch_sub(1, std::memory_order_relaxed);
+			return true;
+		}
+
+		if (hasBackground)
+		{
+			j = std::move(m_jobLocalBackground.front());
+			m_jobLocalBackground.pop_front();
+			m_consecutiveControlPops = 0;
 			m_jobLocalTotal.fetch_sub(1, std::memory_order_relaxed);
 			return true;
 		}
@@ -576,6 +668,10 @@ namespace jam
 		const size_t n = m_jobIngress.try_dequeue_bulk(batch.data(), batch.size());
 		if (n == 0)
 			return false;
+
+		//size_t remained = m_jobIngress.size_approx();
+		//if (m_config.index == 1 && remained != 0)
+		//	JAMNET_LOG_DEBUG("[ShardExecutor::DrainIngressOnce] drain count= {}, remain ingress queue size(approx)= {}", n, remained);
 
 		++m_metrics.ingressBatchCount;
 		m_metrics.ingressJobCount += static_cast<uint64>(n);
@@ -618,7 +714,7 @@ namespace jam
 		return didWork;
 	}
 
-	uint64 ShardExecutor::ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget)
+	uint64 ShardExecutor::ProcessMailbox(Mailbox* mb, int32 budget)
 	{
 		if (!mb || budget <= 0) return 0;
 
@@ -663,9 +759,13 @@ namespace jam
 			return movedCount;
 		}
 
-		if (!mb->IsEmpty() && mb->TryBeginConsume())
+		if ((mb->ConsumeRepostRequested() || !mb->IsEmpty()) && mb->TryBeginConsume())
 		{
-			m_readyMailboxes.enqueue(mb->GetId());
+			if (!NotifyReady(mb->GetId()))
+			{
+				mb->RequestRepost();
+				mb->EndConsume();
+			}
 		}
 
 		return movedCount;
@@ -698,17 +798,17 @@ namespace jam
 		}
 
 		if (remainingJobBudget < 0)
-			JAMNET_LOG_DEBUG("remaining job budget < 0");
+			JAMNET_LOG_WARN("remaining job budget < 0");
 	}
 
-	std::shared_ptr<Mailbox> ShardExecutor::FindMailbox(uint32 id)
+	Mailbox* ShardExecutor::FindMailbox(uint32 id)
 	{
 		if (id == 0)
 			return nullptr;
 
 		READ_LOCK
 		auto it = m_mailboxes.find(id);
-		return (it != m_mailboxes.end()) ? it->second : nullptr;
+		return (it != m_mailboxes.end()) ? it->second.get() : nullptr;
 	}
 
 	bool ShardExecutor::IsShardThread() const

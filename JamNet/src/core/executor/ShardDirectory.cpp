@@ -194,6 +194,13 @@ namespace jam
 			--m_routePlacementCounts[assignment.shardIndex];
 	}
 
+	void ShardDirectory::ReleaseRoute(uint16 shardIndex) const
+	{
+		std::scoped_lock guard(m_routePlacementMutex);
+		if (shardIndex < m_routePlacementCounts.size() && m_routePlacementCounts[shardIndex] != 0)
+			--m_routePlacementCounts[shardIndex];
+	}
+
 	std::shared_ptr<ShardExecutor> ShardDirectory::ShardAt(uint64 index) const
 	{
 		if (index >= Size()) return {};

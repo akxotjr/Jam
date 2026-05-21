@@ -20,6 +20,16 @@ namespace jam
 			const uint64 prev = m_size.fetch_add(1, std::memory_order_relaxed);
 			if (prev == 0)
 				NotifyReadyIfFirst();
+			else if (IsProcessing())
+			{
+				if (RequestRepost())
+				{
+					if (auto owner = m_owner.lock())
+						owner->NotifyReady(m_id);
+				}
+			}
+			else
+				NotifyReadyIfFirst();
 		}
 		return expected;
 	}
@@ -35,6 +45,16 @@ namespace jam
 			const uint64 prev = m_size.fetch_add(1, std::memory_order_relaxed);
 			if (prev == 0)
 				NotifyReadyIfFirst();
+			else if (IsProcessing())
+			{
+				if (RequestRepost())
+				{
+					if (auto owner = m_owner.lock())
+						owner->NotifyReady(m_id);
+				}
+			}
+			else
+				NotifyReadyIfFirst();
 		}
 		return expected;
 	}
@@ -49,6 +69,16 @@ namespace jam
 		{
 			const uint64 prev = m_size.fetch_add(count, std::memory_order_relaxed);
 			if (prev == 0)
+				NotifyReadyIfFirst();
+			else if (IsProcessing())
+			{
+				if (RequestRepost())
+				{
+					if (auto owner = m_owner.lock())
+						owner->NotifyReady(m_id);
+				}
+			}
+			else
 				NotifyReadyIfFirst();
 		}
 		return enqueued ? count : 0;
@@ -145,7 +175,7 @@ namespace jam
 
 		m_inFlight.fetch_add(count, std::memory_order_relaxed);
 	}
-
+	
 	void Mailbox::OnJobExecuted()
 	{
 		const uint64 prev = m_inFlight.fetch_sub(1, std::memory_order_relaxed);
@@ -163,7 +193,13 @@ namespace jam
 			return;
 
 		if (auto owner = m_owner.lock())
-			owner->NotifyReady(m_id);
+		{
+			if (!owner->NotifyReady(m_id))
+			{
+				RequestRepost();
+				EndConsume();
+			}
+		}
 		else
 			EndConsume();
 	}
@@ -175,6 +211,16 @@ namespace jam
 		while (TryDequeue(ignored))
 			++discarded;
 		return discarded;
+	}
+
+	bool Mailbox::ConsumeRepostRequested()
+	{
+		return m_repostRequested.exchange(false, std::memory_order_acq_rel);
+	}
+
+	bool Mailbox::RequestRepost()
+	{
+		return !m_repostRequested.exchange(true, std::memory_order_acq_rel);
 	}
 
 	bool Mailbox::TryFinalizeClose()
@@ -206,15 +252,28 @@ namespace jam
 		return state == eMailboxState::ClosingDrain || state == eMailboxState::ClosingAbort;
 	}
 
-	void Mailbox::NotifyReadyIfFirst()
+	bool Mailbox::NotifyReadyIfFirst()
 	{
 		if (!TryBeginConsume())
-			return;
+		{
+			RequestRepost();
+			return false;
+		}
 
 		if (auto owner = m_owner.lock())
-			owner->NotifyReady(m_id);
-		else
+		{
+			if (owner->NotifyReady(m_id))
+				return true;
+
+			RequestRepost();
 			EndConsume();
+			return false;
+		}
+		else
+		{
+			EndConsume();
+			return false;
+		}
 	}
 
 	void Mailbox::EnqueueCloseCallback(std::function<void()> onClosed)

@@ -183,6 +183,12 @@ namespace jam
 			m_directory->ReleaseRoute(assignment);
 	}
 
+	void GlobalExecutor::ReleaseRoute(uint16 shardIndex)
+	{
+		if (m_directory)
+			m_directory->ReleaseRoute(shardIndex);
+	}
+
 	void GlobalExecutor::Submit(Job j)
 	{
 		m_offload.enqueue(std::move(j));

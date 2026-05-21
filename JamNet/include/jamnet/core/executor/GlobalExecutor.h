@@ -50,10 +50,10 @@ namespace jam
 
 		// shard/endpoint
 		uint32											GetShardCount() const { return m_directory ? static_cast<uint32>(m_directory->Size()) : 0; }
-		std::shared_ptr<ShardExecutor>					GetShard(uint32 index) const { return m_directory ? m_directory->ShardAt(index) : nullptr; }
+		std::shared_ptr<ShardExecutor>					GetShardFromIndex(uint32 index) const { return m_directory ? m_directory->ShardAt(index) : nullptr; }
 		std::shared_ptr<ShardExecutor>					GetShard(uint64 key)   const { return GetShard(RouteKey(key)); }
 		std::shared_ptr<ShardExecutor>					GetShard(RouteKey rk)  const { return m_directory && IsValidRouteKey(rk) ? m_directory->ShardAt(m_directory->PickShard(rk)) : nullptr; }
-		std::shared_ptr<ShardExecutor>					GetShard(const RouteAssignment& assignment) const { return IsValidRouteAssignment(assignment) ? GetShard(assignment.shardIndex) : nullptr; }
+		std::shared_ptr<ShardExecutor>					GetShard(const RouteAssignment& assignment) const { return IsValidRouteAssignment(assignment) ? GetShardFromIndex(assignment.shardIndex) : nullptr; }
 
 		std::vector<std::shared_ptr<ShardExecutor>>&	GetShards() const { return m_directory->Shards(); }
 
@@ -66,7 +66,8 @@ namespace jam
 		RouteKey										MakeRouteKey(std::string_view domain, uint64 id) const { return m_directory ? m_directory->MakeRouteKey(domain, id) : RouteKey{}; }
 		RouteAssignment									PlaceRoute(RouteKey key, const RoutePlacementOptions& opt = {}) const;
 		void											ReleaseRoute(const RouteAssignment& assignment) const;
-		
+		void ReleaseRoute(uint16 shardIndex);
+
 		void											ConveyAll(Job j);		// Convey job to all shards
 
 		void											SpawnFiber(FiberFn fn, const FiberDesc& desc = {}) const;

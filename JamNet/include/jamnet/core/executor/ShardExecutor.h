@@ -13,9 +13,13 @@
 #include <condition_variable>
 #include <deque>
 
+#include "MailboxRef.h"
+
 namespace jam::net
 {
 	struct SessionShardState;
+	struct WorldShardState;
+	struct UserShardState;
 }
 
 namespace jam
@@ -24,30 +28,30 @@ namespace jam
 
 	struct ShardSystemGroup
 	{
+		using SystemFn    = std::function<void(ShardLocal&, uint64 now_ns, uint64 dt_ns)>;
+		using BootstrapFn = std::function<void(ShardLocal&)>;
+
+
 		ShardDomain											tag			  = {};
 		uint64												tickPeriod_ns = 0_ns;      // 이 그룹의 Tick 주기
-		uint64												lastTick_ns   = 0_ns;
+		uint64												nextTick_ns   = 0_ns;
 
-		// 시스템 함수들
-		using SystemFn = std::function<void(ShardLocal&, uint64 now_ns, uint64 dt_ns)>;
 		std::vector<SystemFn>								systems;
-
-		// 초기화 함수 (한 번만 실행)
-		using BootstrapFn = std::function<void(ShardLocal&)>;
 		std::vector<BootstrapFn>							bootstraps;
 
-		// 이 그룹의 시스템들이 처리할 엔티티 타입
 		std::function<bool(entt::registry&, entt::entity)>	entityFilter   = nullptr;
 	};
-
-
 
 
 	struct ShardLocal
 	{
 		entt::registry										registry;
-		FiberScheduler*										scheduler = nullptr;
+		uint32												shardIndex	 = UINT32_MAX;
+		FiberScheduler*										scheduler    = nullptr;
+
 		std::shared_ptr<net::SessionShardState>				sessionState = nullptr;
+		std::shared_ptr<net::WorldShardState>				worldState	 = nullptr;
+		std::shared_ptr<net::UserShardState>				usersState	 = nullptr;
 
 		std::vector<std::function<void(entt::registry&)>>	defers;
 
@@ -55,10 +59,11 @@ namespace jam
 	};
 
 
-	inline void RegisterShardSystemFn(ShardLocal& L, ShardDomain tag, ShardSystemGroup::SystemFn system)
+	inline void RegisterShardSystemFn(ShardLocal& L, ShardDomain tag, uint64 tickPeriod_ns, ShardSystemGroup::SystemFn system)
 	{
 		auto& group = L.domainGroups[tag];
-		group.tag = tag;
+		group.tag			= tag;
+		group.tickPeriod_ns = tickPeriod_ns;
 		group.systems.push_back(std::move(system));
 	}
 
@@ -78,7 +83,6 @@ namespace jam
 		int32       batchBudget		= 32;
 		int32       idleSleepMs		= 1;
 		uint16      numaNode		= 0xFFFF;
-		uint64      tickPeriod_ns	= 16'666'666_ns;
 		int32		maxTickCatchUp  = 4;
 	};
 
@@ -99,11 +103,10 @@ namespace jam
 		void							Submit(Job j) override;
 		void							SubmitAfter(Job j, uint64 delay_ns);
 
-
-		std::shared_ptr<Mailbox>		CreateMailbox();
+		MailboxRef						CreateMailboxRef(RuntimeId ownerId);
 		bool							CloseMailbox(uint32 id, eMailboxCloseMode mode = eMailboxCloseMode::Drain, std::function<void()> onClosed = {});
 		void							RemoveMailbox(uint32 id);
-		void							NotifyReady(uint32 mailboxId);
+		bool							NotifyReady(uint32 mailboxId);
 
 		void							BeginDrain();
 
@@ -111,6 +114,7 @@ namespace jam
 		void							ResumeFiber(FiberAwaitKey key);
 		void							CancelFiberByKey(FiberAwaitKey key, eCancelCode code);
 		void							CancelFiberById(uint32 id, eCancelCode code);
+		FiberAwaitKey					AllocateAwaitKey();
 
 		PeriodicHandle					ScheduleFixedRate(Job j, const PeriodicOptions& opt);
 		PeriodicHandle					ScheduleFixedDelay(Job j, const PeriodicOptions& opt);
@@ -133,7 +137,9 @@ namespace jam
 		void							WaitUntilLoopExited() const;
 
 		void							Loop();
-		void							Tick(uint64 now_ns, uint64 dt_ns);
+		bool							RunDueDomainGroups(uint64 now_ns);
+		bool							ProcessDefers();
+		uint64							TimeUntilNextDomainDue(uint64 now_ns) const;
 		void							NotifyWorkAvailable();
 		void							WaitForWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns);
 
@@ -142,9 +148,10 @@ namespace jam
 		bool							DrainIngressOnce(int32 budget);
 
 		bool							ProcessJobsOnce();
-		uint64							ProcessMailbox(const std::shared_ptr<Mailbox>& mb, int32 budget);
+		uint64							ProcessMailbox(Mailbox* mb, int32 budget);
 		void							DrainReadyMailboxes(int32 maxMailboxes, int32 totalJobBudget, int32 budgetPerMailbox);
-		std::shared_ptr<Mailbox>		FindMailbox(uint32 id);
+		Mailbox*						CreateMailbox();
+		Mailbox*						FindMailbox(uint32 id);
 
 	private:
 		ShardExecutorConfig										m_config  = {};
@@ -160,11 +167,14 @@ namespace jam
 
 		ConcurrentQueue<Job>									m_jobIngress;
 		
-		std::array<std::deque<Job>, k_jobPriorityCount>			m_jobLocalByPrio = {};
-		std::atomic<size_t>										m_jobLocalTotal	 = 0;
+		std::deque<Job>											m_jobLocalCritical = {};
+		std::deque<Job>											m_jobLocalControl  = {};
+		std::deque<Job>											m_jobLocalBackground = {};
+		std::atomic<size_t>										m_jobLocalTotal		= 0;
+		uint32													m_consecutiveControlPops = 0;
 
 		USE_LOCK
-		std::unordered_map<uint32, std::shared_ptr<Mailbox>>    m_mailboxes;
+		std::unordered_map<uint32, std::unique_ptr<Mailbox>>    m_mailboxes;
 		std::atomic<uint32>										m_nextMailboxId	 = 1;
 		ConcurrentQueue<uint32>									m_readyMailboxes;
 		std::mutex												m_wakeMutex;
@@ -178,8 +188,6 @@ namespace jam
 		CoreSlot												m_pinSlot	 = {};
 
 		ShardLocal												m_local;
-
-		uint64													m_lastTick_ns = 0_ns;
 
 		// Periodic
 		struct PeriodicState

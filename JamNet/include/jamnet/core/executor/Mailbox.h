@@ -57,6 +57,8 @@ namespace jam
 		void								OnJobExecuted();
 		uint64								DiscardPending();
 		bool								TryFinalizeClose();
+		bool								ConsumeRepostRequested();
+		bool								RequestRepost();
 
 		bool								IsEmpty()			 const { return GetSizeApprox() == 0; }
 		uint64								GetSizeApprox()		 const { return m_size.load(std::memory_order_relaxed); }
@@ -69,7 +71,7 @@ namespace jam
 		eMailboxState						GetState()			 const { return m_state.load(std::memory_order_acquire); }
 
 	private:
-		void								NotifyReadyIfFirst();
+		bool								NotifyReadyIfFirst();
 		void								EnqueueCloseCallback(std::function<void()> onClosed);
 		void								InvokeCloseCallbacks();
 
@@ -81,6 +83,7 @@ namespace jam
 		std::atomic<uint64>					m_size			= 0;
 		std::atomic<uint64>					m_inFlight		= 0;
 		std::atomic<bool>					m_processing	= false;
+		std::atomic<bool>					m_repostRequested = false;
 		std::atomic<eMailboxState>			m_state			= eMailboxState::Open;
 
 		std::mutex							m_closeMutex;
@@ -98,4 +101,3 @@ namespace jam
 		return n;
 	}
 }
-

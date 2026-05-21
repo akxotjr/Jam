@@ -42,6 +42,8 @@ namespace jam
 		uint64                                          PickShard(RouteKey key) const;
 		RouteAssignment                                 PlaceRoute(RouteKey key, const RoutePlacementOptions& opt) const;
 		void                                            ReleaseRoute(const RouteAssignment& assignment) const;
+		void											ReleaseRoute(uint16 shardIndex) const;
+		
 		std::shared_ptr<ShardExecutor>                  ShardAt(uint64 index) const;
 		std::vector<std::shared_ptr<ShardExecutor>>&    Shards() { return m_shards; }
 
