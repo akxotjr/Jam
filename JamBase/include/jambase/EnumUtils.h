@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <type_traits>
 #include <cstdint>
@@ -8,8 +8,20 @@ namespace jam
     template<class E>
     using underlying_t = std::underlying_type_t<E>;
 
-    template<class E>
-    constexpr underlying_t<E> u(E e) noexcept { return static_cast<underlying_t<E>>(e); }
+
+	template <typename E>
+	constexpr underlying_t<E> ToUnderlying(E e) noexcept
+	{
+		static_assert(std::is_enum_v<E>);
+		return static_cast<underlying_t<E>>(e);
+	}
+
+	template <typename E>
+	constexpr E ToEnum(underlying_t<E> value) noexcept
+	{
+		static_assert(std::is_enum_v<E>);
+		return static_cast<E>(value);
+	}
 
     template<class Enum, class Storage = underlying_t<Enum>>
     class FlagsT
@@ -22,7 +34,7 @@ namespace jam
         using storage_type = Storage;
 
         constexpr FlagsT() noexcept = default;
-        constexpr FlagsT(Enum e) noexcept : m_bits(static_cast<Storage>(u(e))) {}
+        constexpr FlagsT(Enum e) noexcept : m_bits(static_cast<Storage>(ToUnderlying(e))) {}
         constexpr FlagsT(Storage bits) noexcept : m_bits(bits) {}
 
         static constexpr FlagsT None() noexcept { return FlagsT(Storage{ 0 }); }
@@ -36,9 +48,9 @@ namespace jam
         constexpr bool has_all(FlagsT mask) const noexcept { return (m_bits & mask.m_bits) == mask.m_bits; }
 
         // modifiers
-        constexpr void set(Enum e)    noexcept { m_bits |= static_cast<Storage>(u(e)); }
-        constexpr void reset(Enum e)  noexcept { m_bits &= ~static_cast<Storage>(u(e)); }
-        constexpr void toggle(Enum e) noexcept { m_bits ^= static_cast<Storage>(u(e)); }
+        constexpr void set(Enum e)    noexcept { m_bits |= static_cast<Storage>(ToUnderlying(e)); }
+        constexpr void reset(Enum e)  noexcept { m_bits &= ~static_cast<Storage>(ToUnderlying(e)); }
+        constexpr void toggle(Enum e) noexcept { m_bits ^= static_cast<Storage>(ToUnderlying(e)); }
         constexpr void clear()        noexcept { m_bits = 0; }
 
         // ops (Flags <-> Flags)

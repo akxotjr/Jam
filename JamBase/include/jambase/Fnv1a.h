@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <cstdint>
 #include <cstddef>
 #include <string_view>
@@ -7,7 +7,7 @@
 #include <bit>        // std::endian (C++20)
 #include <cstring>    // std::memcpy
 
-
+#include <xxhash.h>
 
 namespace jam
 {

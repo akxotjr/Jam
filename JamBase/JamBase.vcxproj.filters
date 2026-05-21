@@ -9,5 +9,6 @@
     <ClInclude Include="include\jambase\Logger.h" />
     <ClInclude Include="include\jambase\JamAssert.h" />
     <ClInclude Include="include\jambase\TaggedKey.h" />
+    <ClInclude Include="include\jambase\SmallHash.h" />
   </ItemGroup>
 </Project>
