@@ -31,6 +31,7 @@ namespace jam::net
 	void ClientReplicationSystem::Clear()
 	{
 		m_replicas.clear();
+		m_deferredBaselineSnapshots.clear();
 		m_pendingLifecycle.clear();
 		m_pendingSnapshotBatches.clear();
 		m_localNetId = NetId::Invalid();
@@ -80,6 +81,8 @@ namespace jam::net
 		const uint64 latestQueuedTick = std::max(m_latestQueuedSnapshotTick, m_pendingSnapshotBatches.rbegin()->first);
 		if (latestQueuedTick <= m_lastAppliedSnapshotTick)
 		{
+			for (const auto& item : m_pendingSnapshotBatches)
+				PreserveDeferredBaselineSnapshots(item.second);
 			m_pendingSnapshotBatches.clear();
 			return;
 		}
@@ -88,6 +91,7 @@ namespace jam::net
 		{
 			if (it->first >= latestQueuedTick)
 				break;
+			PreserveDeferredBaselineSnapshots(it->second);
 			it = m_pendingSnapshotBatches.erase(it);
 		}
 
@@ -145,7 +149,14 @@ namespace jam::net
 
 		const uint64 serverTick = hdr->server_tick;
 		if (serverTick <= m_lastAppliedSnapshotTick)
+		{
+			for (const auto& entPtr : snapshot.entities)
+			{
+				if (!entPtr) continue;
+				StoreDeferredBaselineSnapshot(*entPtr, serverTick, hdr->input_epoch);
+			}
 			return;
+		}
 
 		m_latestQueuedSnapshotTick = std::max(m_latestQueuedSnapshotTick, serverTick);
 
@@ -190,6 +201,8 @@ namespace jam::net
 
 		if (actor.op == fb::fbLifecycleOp_Remove)
 		{
+			m_deferredBaselineSnapshots.erase(netId);
+
 			if (actor.remove_reason == fb::fbRemovalReason_Destroyed)
 			{
 				m_netWorld->DestroyReplicatedActor(netId);
@@ -253,6 +266,8 @@ namespace jam::net
 		const bool wasHidden = m_world.all_of<OutOfAoiTag>(entity) || m_world.all_of<PredictedDespawnTag>(entity);
 		if (wasHidden)
 			m_netWorld->ReactivateReplicatedActor(netId, replica.isLocal);
+
+		ApplyDeferredBaselineSnapshot(netId);
 	}
 
 	void ClientReplicationSystem::ApplyActorMeta(NetId netId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica)
@@ -282,7 +297,11 @@ namespace jam::net
 
 		const entt::entity resolved = ResolveEntityForSnapshot(nid);
 		if (resolved == entt::null || !m_world.valid(resolved))
+		{
+			StoreDeferredBaselineSnapshot(ent, serverTick, inputEpoch);
+			JAMNET_LOG_WARN("[ProcessEntity] net id= {}, failed to resolve Entity for snapshot", nid.Raw());
 			return;
+		}
 
 		Replica& replica = GetOrCreateReplica(nid);
 		replica.e			 = resolved;
@@ -330,6 +349,9 @@ namespace jam::net
 			ApplyRigidDeltaSnapshot(replica, serverTick, ent.transform_delta.get(), baselineRev);
 		}
 
+		if (hasCharFull || hasFull)
+			m_deferredBaselineSnapshots.erase(nid);
+
 		const bool hasResolvedSpawnState =
 			hasCharFull
 			|| hasFull
@@ -340,7 +362,10 @@ namespace jam::net
 			return;
 
 		if (!hasResolvedSpawnState)
+		{
+			JAMNET_LOG_WARN("[ProcessEntity] net id= {}, doesn't have resolved spawn state", nid.Raw());
 			return;
+		}
 
 		if (hiddenByAoi)
 			return;
@@ -377,6 +402,77 @@ namespace jam::net
 			return entt::null;
 
 		return m_netWorld->GetEntity(netId);
+	}
+
+	void ClientReplicationSystem::PreserveDeferredBaselineSnapshots(const PendingSnapshotBatch& batch)
+	{
+		for (const auto& chunk : batch.chunks)
+		{
+			if (!chunk.has_value())
+				continue;
+
+			for (const auto& entPtr : chunk->snapshot.entities)
+			{
+				if (!entPtr) continue;
+				StoreDeferredBaselineSnapshot(*entPtr, batch.serverTick, batch.inputEpoch);
+			}
+		}
+	}
+
+	void ClientReplicationSystem::StoreDeferredBaselineSnapshot(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch)
+	{
+		const NetId netId = NetId::MakeRaw(ent.net_id);
+		if (!netId.IsValid())
+			return;
+
+		if (!HasBaselinePayload(ent))
+			return;
+
+		if (!NeedsBaseline(netId))
+			return;
+
+		auto& pending = m_deferredBaselineSnapshots[netId];
+		if (pending.serverTick > serverTick)
+			return;
+
+		pending.entity = ent;
+		pending.serverTick = serverTick;
+		pending.inputEpoch = inputEpoch;
+	}
+
+	void ClientReplicationSystem::ApplyDeferredBaselineSnapshot(NetId netId)
+	{
+		auto it = m_deferredBaselineSnapshots.find(netId);
+		if (it == m_deferredBaselineSnapshots.end())
+			return;
+
+		if (!NeedsBaseline(netId))
+		{
+			m_deferredBaselineSnapshots.erase(it);
+			return;
+		}
+
+		const entt::entity resolved = ResolveEntityForSnapshot(netId);
+		if (resolved == entt::null || !m_world.valid(resolved))
+			return;
+
+		DeferredBaselineSnapshot pending = std::move(it->second);
+		m_deferredBaselineSnapshots.erase(it);
+		ProcessEntity(pending.entity, pending.serverTick, pending.inputEpoch);
+	}
+
+	bool ClientReplicationSystem::HasBaselinePayload(const fb::fbActorEntityT& ent) const
+	{
+		return ent.character_full != nullptr || ent.transform_full != nullptr;
+	}
+
+	bool ClientReplicationSystem::NeedsBaseline(NetId netId) const
+	{
+		if (!netId.IsValid())
+			return false;
+
+		const auto it = m_replicas.find(netId);
+		return it == m_replicas.end() || !it->second.hasBaseline;
 	}
 
 	void ClientReplicationSystem::ApplyRigidFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformFull* tf, uint32 baselineRev)
@@ -535,7 +631,10 @@ namespace jam::net
 		}
 
 		if (!replica.hasBaseline)
+		{
+			JAMNET_LOG_WARN("[ApplyCharacterDeltaSnapshot] net id= {}, replica doesn't have baseline", replica.netId.Raw());
 			return;
+		}
 
 		if (baselineRev != replica.baselineRev)
 		{
@@ -596,6 +695,16 @@ namespace jam::net
 
 		for (NetId id : toErase)
 			m_replicas.erase(id);
+
+		toErase.clear();
+		for (const auto& [id, pending] : m_deferredBaselineSnapshots)
+		{
+			if (serverTick > pending.serverTick && (serverTick - pending.serverTick) > forgetAfterTicks)
+				toErase.push_back(id);
+		}
+
+		for (NetId id : toErase)
+			m_deferredBaselineSnapshots.erase(id);
 	}
 
 	void ClientReplicationSystem::UpdateUniqueLocalFromMeta(NetId netId, const fb::fbActorMetaT& meta, Replica& replica)

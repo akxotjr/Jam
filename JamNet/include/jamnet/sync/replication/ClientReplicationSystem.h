@@ -5,6 +5,7 @@
 
 #include <map>
 #include <optional>
+#include <unordered_map>
 
 namespace jam::net
 {
@@ -94,6 +95,13 @@ namespace jam::net
         }
     };
 
+    struct DeferredBaselineSnapshot
+    {
+        fb::fbActorEntityT entity = {};
+        uint64             serverTick = 0;
+        uint32             inputEpoch = 0;
+    };
+
 	class ClientReplicationSystem
 	{
     public:
@@ -120,6 +128,11 @@ namespace jam::net
         void                                ApplyActorMeta(NetId netId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica);
         void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
         entt::entity                        ResolveEntityForSnapshot(NetId netId);
+        void                                PreserveDeferredBaselineSnapshots(const PendingSnapshotBatch& batch);
+        void                                StoreDeferredBaselineSnapshot(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
+        void                                ApplyDeferredBaselineSnapshot(NetId netId);
+        bool                                HasBaselinePayload(const fb::fbActorEntityT& ent) const;
+        bool                                NeedsBaseline(NetId netId) const;
         
 		void                                ApplyRigidFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformFull* tf, uint32 baselineRev);
         void                                ApplyRigidDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformDelta* tf, uint32 baselineRev);
@@ -149,6 +162,7 @@ namespace jam::net
         uint64                              m_userId            = 0;
 
         std::unordered_map<NetId, Replica>  m_replicas;
+        std::unordered_map<NetId, DeferredBaselineSnapshot> m_deferredBaselineSnapshots;
         std::deque<PendingLifecycleBatch>   m_pendingLifecycle;
         std::map<uint64, PendingSnapshotBatch> m_pendingSnapshotBatches;
 

@@ -19,7 +19,7 @@ namespace jam::net
 		constexpr size_t kLifecycleBatch = 96;
 		constexpr size_t kSnapshotBatch = 128;
 		constexpr size_t kPacketPayloadBudget = JAMNET_MTU - PacketHeader::HALF_SIZE - 24;
-		constexpr uint8 kCreateFullStateBudget = 5;
+		constexpr uint8 kCreateFullStateBudget = 90;
 
 		struct PlannedSnapshotCandidate
 		{
@@ -317,8 +317,6 @@ namespace jam::net
 				if (!pkt.IsValid())
 					continue;
 
-				//if (user == 844424930131969)
-				//	JAMNET_LOG_DEBUG("[ServerReplicationSystem] user id= {}. send snapshot", user);
 				m_netWorld->SendTo(pkt, user);
 				++snapshotPacketCount;
 				snapshotActorCount += static_cast<uint32>(m_actorOffsScratch.size());
@@ -583,7 +581,7 @@ namespace jam::net
 			return;
 
 		JAMNET_LOG_DEBUG("[ServerReplicationSystem] OnEnter() : userId= {}", userId);
-		ForceLifecycleSyncForUser(userId, 5);
+		ForceLifecycleSyncForUser(userId, 30);
 	}
 
 	void ServerReplicationSystem::OnUserLeave(uint64 userId)
@@ -1062,7 +1060,10 @@ namespace jam::net
 					continue;
 
 				if ((usedPayloadBudget + est) > kPacketPayloadBudget && !actorOffs.empty())
+				{
+					JAMNET_LOG_WARN("[EmitPendingLifecyclePackets] user id= {}, pending packets size is over budget");
 					break;
+				}
 
 				entt::entity e = entt::null;
 				if (event.op != fb::fbLifecycleOp_Remove)
