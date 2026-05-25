@@ -37,6 +37,10 @@ JamNet은 C++ 기반의 **authoritative multiplayer server framework**입니다.
 - shard executor workload 및 queue 분산 관측  
 - UDP datagram batching 및 goodput 관측  
 - 단일 `ServerPhysicalWorld` 기준 shard workload 차이 확인
+
+
+
+
 ### **다음 마일스톤 (미검증 범위)**  
   
 - multi-world 배치 환경에서의 실제 확장률 측정  
@@ -79,24 +83,30 @@ X : 미구현 또는 미검증
 
 ---
 
-<a id="toc"></a>
-## 2. 목차
+##  목차
+
+### 프로젝트 개요
 
 - <a href="#overview">1. 개요</a>
-- <a href="#toc">2. 목차</a>
-- <a href="#terms">3. 용어 정리</a>
-- <a href="#motivation">4. 왜 만들었는가</a>
-- <a href="#design-decisions">5. 핵심 설계 결정</a>
-- <a href="#design-goals">6. 핵심 설계 목표</a>
-- <a href="#architecture">7. 시스템 아키텍처 개요</a>
-- <a href="#troubleshooting">8. Troubleshooting 및 개선</a>
-- <a href="#execution-model">9. 실행 모델</a>
-- <a href="#network-model">10. 네트워크 모델</a>
-- <a href="#memory-management">11. 메모리 관리</a>
-- <a href="#state-sync">12. 서버-클라이언트 상태 동기화</a>
-- <a href="#benchmark">13. 벤치마크 및 검증</a>
-- <a href="#lessons">14. 배운점</a>
-- <a href="#future-work">15. 향후 개선방향</a>
+- <a href="#terms">2. 용어 정리</a>
+- <a href="#motivation">3. 왜 만들었는가</a>
+- <a href="#design-decisions">4. 핵심 설계 결정</a>
+- <a href="#design-goals">5. 핵심 설계 목표</a>
+
+###  런타임 구조
+
+- <a href="#architecture">6. 시스템 아키텍처 개요</a>
+- <a href="#troubleshooting">7. Troubleshooting 및 개선</a>
+- <a href="#execution-model">8. 실행 모델</a>
+- <a href="#network-model">9. 네트워크 모델</a>
+- <a href="#memory-management">10. 메모리 관리</a>
+- <a href="#state-sync">11. 서버-클라이언트 상태 동기화</a>
+
+### 검증 및 회고
+
+- <a href="#benchmark">12. 벤치마크 및 검증</a>
+- <a href="#lessons">13. 배운점</a>
+- <a href="#future-work">14. 향후 개선방향</a>
 
 
 <div style="page-break-before: always;"></div>
@@ -104,7 +114,7 @@ X : 미구현 또는 미검증
 ---
 
 <a id="terms"></a>
-## 3. 용어 정리
+## 2. 용어 정리
 
 | 용어                           | 의미                                                                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -127,7 +137,7 @@ X : 미구현 또는 미검증
 ---
 
 <a id="motivation"></a>
-## 4. 왜 만들었는가
+## 3. 왜 만들었는가
 
 JamNet을 만든 이유는 게임 서버의 어려움이 소켓 API 사용법보다 **실시간 상태를 안전하고 예측 가능하게 유지하는 구조**에 있다고 생각했기 때문입니다.
 
@@ -142,10 +152,14 @@ JamNet을 만든 이유는 게임 서버의 어려움이 소켓 API 사용법보
 - 서버 authoritative 구조에서 클라이언트 입력 반응성과 상태 일관성을 어떻게 함께 만족시킬 것인가
 - 월드, 세션, actor, replication이 서로 직접 얽히지 않게 어떤 경계를 둘 것인가
 
+<div style="page-break-before: always;"></div>
+
+
+
 ---
 
 <a id="design-decisions"></a>
-## 5. 핵심 설계 결정
+## 4. 핵심 설계 결정
 
 이 프로젝트의 설계 결정은 대부분 "더 빠른 구조"보다 **문제가 생겼을 때 원인을 추적할 수 있는 구조**를 우선한 결과입니다.
 
@@ -161,7 +175,7 @@ JamNet을 만든 이유는 게임 서버의 어려움이 소켓 API 사용법보
 
 ---
 <a id="design-goals"></a>
-## 6. 핵심 설계 목표
+## 5. 핵심 설계 목표
 
 JamNet의 설계 목표는 **MMORPG 서버에서 동시에 필요한 처리량, 응답성, 상태 일관성이 서로 충돌할 때 어느 쪽을 어떤 구조로 분리할지 결정하는 것**이었습니다.
 
@@ -178,9 +192,12 @@ JamNet의 설계 목표는 **MMORPG 서버에서 동시에 필요한 처리량, 
 
 ---
 <a id="architecture"></a>
-## 7. 시스템 아키텍처 개요
+## 6. 시스템 아키텍처 개요
 
 <img src="../image/jamnet_01_arch.svg" height = 400>
+<p align="center">  
+<sub>Figure 1. JamNet Runtime Architecture Overview</sub>  
+</p>
 
 
 JamNet은 네트워크 전송 계층, 실행 모델, 월드 런타임, 물리/ECS 상태, replication, 클라이언트 보정 흐름을 하나의 서버 런타임 안에서 연결합니다.
@@ -200,11 +217,11 @@ JamNet은 `JamBase`, `JamPx`와 함께 동작합니다.
 
 ---
 <a id="troubleshooting"></a>
-## 8. Troubleshooting 및 개선
+## 7. Troubleshooting 및 개선
 
 이 장은 설계 선택 자체보다, 실제 구현과 부하 테스트 과정에서 발생한 문제를 어떻게 추적하고 수정했는지에 초점을 둡니다.
 
-### 8.1 Mailbox ready notification race로 shard job이 실행되지 않던 문제
+### 7.1 Mailbox ready notification race로 shard job이 실행되지 않던 문제
 
 - **상황**
   - 100개 이상의 UDP client를 동시에 접속시키는 테스트에서 일부 `UdpSession`의 send 경로가 멈췄습니다.
@@ -227,7 +244,7 @@ JamNet은 `JamBase`, `JamPx`와 함께 동작합니다.
   - MPSC queue 자체보다 **queue와 scheduler 사이의 ready 상태 전이**가 더 위험한 지점이었습니다.
   - ready notification은 중복 알림을 줄이는 것뿐 아니라 lost wake-up이 없는지도 함께 검증해야 했습니다.
 
-### 8.2 InvokeOnShard 기반 fiber wait가 burst 상황에서 재개되지 않던 문제
+### 7.2 InvokeOnShard 기반 fiber wait가 burst 상황에서 재개되지 않던 문제
 
 - **상황**
   - `std::future` 기반 wait를 줄이기 위해 `InvokeOnShard()`를 도입했습니다.
@@ -251,7 +268,7 @@ JamNet은 `JamBase`, `JamPx`와 함께 동작합니다.
   - burst 상황에서 fiber resume에 의존하는 범위를 줄였습니다.
   - in-flight action과 rollback 지점을 user context 중심으로 추적할 수 있게 됐습니다.
 
-### 8.3 AOI 갱신 비용이 user 수 x actor 수로 증가하던 문제
+### 7.3 AOI 갱신 비용이 user 수 x actor 수로 증가하던 문제
 
 - **상황**
   - 초기 AOI 계산은 user character 기준으로 actor 가시성을 검사하는 단순한 방식이었습니다.
@@ -276,12 +293,14 @@ JamNet은 `JamBase`, `JamPx`와 함께 동작합니다.
 
 ---
 <a id="execution-model"></a>
-## 9. 실행 모델
+## 8. 실행 모델
 
 실행 모델에서 가장 먼저 부딪힌 문제는 "멀티스레드로 만들면 빨라진다"가 항상 맞지 않는다는 점이었습니다. 게임 서버에서는 빠른 실행보다 **같은 owner의 상태가 어떤 순서로 바뀌었는지 설명 가능해야 하는 경우**가 많습니다.
 
 <img src="../image/jamnet_02_execution_model.svg" height= 70>
-
+<p align="center">  
+<sub>Figure 2. Ownership-based Shard Execution Model</sub>  
+</p>
 
 공유 상태마다 lock을 붙이면 작은 예제는 단순하지만, 네트워크 수신, 세션 처리, 월드 tick, replication이 얽힐수록 호출 경로와 상태 변경 순서가 흐려집니다. hot path에서는 lock 경합도 생깁니다.
 
@@ -303,11 +322,14 @@ Shard 내부 queue, mailbox wake-up, fiber scheduling의 세부 구조는 [Execu
 ---
 
 <a id="network-model"></a>
-## 10. 네트워크 모델
+## 9. 네트워크 모델
 
 네트워크 모델의 핵심 문제는 TCP/UDP 선택이 아니라, **게임 데이터마다 실패 방식이 다르다**는 점이었습니다.
 
 <img src= "../image/jamnet_03_network_model.svg" height= 350>
+<p align="center">  
+<sub>Figure 3. Transport Channel and Reliable UDP Model</sub>  
+</p>
 
 예를 들어 이동 snapshot은 늦게 도착한 과거 값보다 다음 최신 값이 낫습니다. 반면 actor 생성/삭제, 던전 입장 결과, ownership 변경은 손실되면 클라이언트의 월드 해석이 깨집니다.
 
@@ -332,7 +354,7 @@ ACK/NACK, retransmit, fragmentation, receive ordering처럼 channel 내부 구�
 ---
 
 <a id="memory-management"></a>
-## 11. 메모리 관리
+## 10. 메모리 관리
 
 메모리 관리에서의 문제는 단순히 allocation 횟수를 줄이는 것이 아니라, **packet data가 언제까지 살아 있어야 하는지 명확히 하는 것**이었습니다.
 
@@ -352,11 +374,14 @@ JamNet은 범용 allocator를 모두 대체하려 하지 않고, hot path와 lif
 ---
 
 <a id="state-sync"></a>
-## 12. 서버-클라이언트 상태 동기화
+## 11. 서버-클라이언트 상태 동기화
 
 상태 동기화의 핵심 trade-off는 **서버 권위와 클라이언트 조작감이 서로 반대 방향을 요구한다**는 점입니다.
 
 <img src= "../image/jamnet_04_replication.svg" height= 350>
+<p align="center">  
+<sub>Figure 4. Authoritative Replication and Replay Pipeline</sub>  
+</p>
 
 전투 판정, 위치 검증, 아이템 획득, 몬스터 AI 결과를 클라이언트가 최종 결정하면 치트와 불일치를 막기 어렵습니다. 반대로 모든 입력을 서버 응답 후에만 반영하면 조작감이 나빠집니다.
 
@@ -380,12 +405,13 @@ AOI state, actor별 baseline cache, user별 known epoch, lifecycle/snapshot 적�
 
 ---
 <a id="benchmark"></a>
-## 13. 벤치마크 및 검증  
+## 12. 벤치마크 및 검증  
   
 현재 benchmark는 production scale 성능 측정보다는,  
 JamNet runtime의 workload 분포와 지연 경로를 관찰하는 데 목적이 있습니다.  
   
-### 테스트 환경  
+### 테스트 환경 
+
 - CPU: AMD Ryzen 7 8845HS (8c 16t)
 - RAM: 32GB
 - 101 UDP client session  
@@ -423,7 +449,7 @@ multi-world scaling, fragmentation stress, replication bandwidth 한계 등은 �
 
 ---
 <a id="lessons"></a>
-## 14. 배운점
+## 13. 배운점
 
 - **경계 설정이 개별 기술보다 중요함**
   - IOCP, UDP, fiber, ECS는 각각 도구일 뿐이고, 실제 난이도는 이 도구들이 만나는 경계에서 발생했습니다.
@@ -445,9 +471,14 @@ multi-world scaling, fragmentation stress, replication bandwidth 한계 등은 �
   - packet buffer, retransmit queue, wire patching, owned/view 구분은 모두 데이터가 언제까지 살아 있어야 하는지 명확히 하기 위한 설계였습니다.
   - 복사를 줄이기 전에 ownership과 lifetime이 먼저 정리되어야 했습니다.
 
+<div style="page-break-before: always;"></div>
+
 ---
 <a id="future-work"></a>
-## 15. 향후 개선방향
+## 14. 향후 개선방향
+
+> **Next Milestone**  
+> 다음 단계는 기능 추가보다 **측정 범위 확장, routing policy 고도화, replication budget, failure handling**을 운영 관점에서 정리하는 것입니다.
 
 - **Benchmark 재측정과 운영 지표 정리**
   - executor, network, replication을 분리해서 측정할 계획입니다.
