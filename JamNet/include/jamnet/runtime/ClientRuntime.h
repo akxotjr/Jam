@@ -34,6 +34,7 @@ namespace jam::net
 		std::vector<WorldMembershipView>		GetWorldMemberships() const override;
 		std::optional<WorldMembershipView>		GetMainWorldMembership() const override;
 		ActorPresentationFrameView				GetActorPresentationFrame(LocalWorldId localWorldId) const override;
+		ClientUdpSession*						GetUdpSession() const;
 	
 		LocalWorldId							GetMainLocalWorldId() const;
 

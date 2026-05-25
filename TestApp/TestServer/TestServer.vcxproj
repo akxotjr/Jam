@@ -172,6 +172,7 @@
     </ProjectReference>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ExecutorMetricsReporter.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>

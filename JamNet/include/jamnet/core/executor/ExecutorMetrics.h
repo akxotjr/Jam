@@ -1,6 +1,8 @@
 #pragma once
 #include "jamnet/core/utils/TimeUnits.h"
 
+#include <vector>
+
 namespace jam
 {
 	struct GlobalExecutorMetrics
@@ -44,6 +46,13 @@ namespace jam
 
 		uint64 tickCount                = 0;
 		uint64 tickCatchUpCount         = 0;
+	};
+
+	struct ExecutorMetricsSampleEvent
+	{
+		uint64								sampleTime_ns	= 0;
+		GlobalExecutorMetrics				global			= {};
+		std::vector<ShardExecutorMetrics>	shards			= {};
 	};
 
 	struct FiberMetrics

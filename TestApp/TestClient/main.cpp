@@ -4,13 +4,18 @@
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
 
+#include <filesystem>
 #include <fstream>
-#include <future>
+#include <iomanip>
+#include <sstream>
+#include <unordered_map>
 
 #include "ClientInstance.h"
 #include "UserInstance.h"
 #include "BotInstance.h"
 #include "Renderer.h"
+#include "jamnet/core/executor/GlobalEventBus.h"
+#include "jamnet/core/net/NetworkProfile.h"
 #include "jampx/PhysicsCore.h"
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
 #include "jampx/prefab/PrefabCooker.h"
@@ -32,7 +37,7 @@ struct TestConfig
 	uint16 tcpPort      = 7777;
 	uint16 udpPort      = 8888;
 	bool botHeadlessPhysicalWorld = true;
-	float metricsWarmupSec = 8.0f;
+	uint32 runDurationSec = 0;
 };
 
 // 고해상도 슬립 보조: 남은 시간이 임계값 이상이면 sleep_for 후 마무리는 얕은 스핀/양보
@@ -85,60 +90,59 @@ struct ScopedTimerResolution
 
 namespace
 {
-	/*struct SessionMetricsRow
+	struct SessionMetricsRow
 	{
-		uint64 captureEpochMs = 0;
-
-		uint32 clientInstanceId = 0;
-		uint64 userId = 0;
-		uint64 sessionId = 0;
-		uint32 entity = 0;
+		uint64		captureEpochMs		= 0;
+		uint32		clientInstanceId	= 0;
+		uint64		userId				= 0;
+		uint64		sessionId			= 0;
+		uint32		entity				= 0;
 		std::string protocol;
 
-		float wireRtt_ms = 0.0f;
-		float wireRttSample_ms = 0.0f;
-		float pipelineRtt_ms = 0.0f;
-		float pipelineRttSample_ms = 0.0f;
+		float wireRtt_ms			= 0.0f;
+		float wireRttSample_ms		= 0.0f;
+		float pipelineRtt_ms		= 0.0f;
+		float pipelineRttSample_ms	= 0.0f;
 		float pipelineQueueTotal_ms = 0.0f;
-		float pingClientQueue_ms = 0.0f;
-		float pingServerQueue_ms = 0.0f;
-		float pongServerProc_ms = 0.0f;
-		float pongServerQueue_ms = 0.0f;
-		float pongClientQueue_ms = 0.0f;
-		float jitter_ms = 0.0f;
-		float packetLoss = 0.0f;
-		float recvThroughput_kbps = 0.0f;
-		float sendThroughput_kbps = 0.0f;
-		float bandwidthMbps = 0.0f;
+		float pingClientQueue_ms	= 0.0f;
+		float pingServerQueue_ms	= 0.0f;
+		float pongServerProc_ms		= 0.0f;
+		float pongServerQueue_ms	= 0.0f;
+		float pongClientQueue_ms	= 0.0f;
+		float jitter_ms				= 0.0f;
+		float packetLoss			= 0.0f;
+		float recvThroughput_kbps	= 0.0f;
+		float sendThroughput_kbps	= 0.0f;
+		float bandwidthMbps			= 0.0f;
 
-		float txPacketsPerSec = 0.0f;
-		float rxPacketsPerSec = 0.0f;
-		float txBytesPerSec = 0.0f;
-		float rxBytesPerSec = 0.0f;
+		float txPacketsPerSec		= 0.0f;
+		float rxPacketsPerSec		= 0.0f;
+		float txBytesPerSec			= 0.0f;
+		float rxBytesPerSec			= 0.0f;
 
-		float firstSendSuccessPct = 0.0f;
-		float rtxHitPct = 0.0f;
-		float rtxRecoveryPct = 0.0f;
-		float avgRtxPerHitPacket = 0.0f;
+		float firstSendSuccessPct	= 0.0f;
+		float rtxHitPct				= 0.0f;
+		float rtxRecoveryPct		= 0.0f;
+		float avgRtxPerHitPacket	= 0.0f;
 		float deliveryLatencyAvg_ms = 0.0f;
 		float recoveryLatencyAvg_ms = 0.0f;
 
-		float goodputPct = 0.0f;
-		float fragEfficiencyPct = 0.0f;
-		float ackPiggybackHitPct = 0.0f;
-		float avgUdpPacketsPerDatagram = 0.0f;
-		float avgUdpBytesPerDatagram = 0.0f;
-		float udpBundleHitPct = 0.0f;
+		float goodputPct			= 0.0f;
+		float fragEfficiencyPct		= 0.0f;
+		float ackPiggybackHitPct	= 0.0f;
+		float avgUdpPacketsPerDatagram	= 0.0f;
+		float avgUdpBytesPerDatagram	= 0.0f;
+		float udpBundleHitPct			= 0.0f;
 
-		float outOfOrderPct = 0.0f;
-		float duplicatePct = 0.0f;
+		float outOfOrderPct			= 0.0f;
+		float duplicatePct			= 0.0f;
 
-		uint32 pendingReliableNow = 0;
-		uint32 pendingReliablePeek = 0;
-		uint32 maxRtxPerPacket = 0;
+		uint32 pendingReliableNow	= 0;
+		uint32 pendingReliablePeek	= 0;
+		uint32 maxRtxPerPacket		= 0;
 
-		float rtxTimeoutPct = 0.0f;
-		float rtxGiveupPct = 0.0f;
+		float rtxTimeoutPct			= 0.0f;
+		float rtxGiveupPct			= 0.0f;
 	};
 
 	static uint64 NowEpochMs()
@@ -159,170 +163,68 @@ namespace
 		return oss.str();
 	}
 
-	static std::optional<SessionMetricsRow> CaptureSessionRow(
-		Session* session,
+	static SessionMetricsRow MakeSessionMetricsRow(
+		const profile::NetworkProfileSampleEvent& ev,
 		uint32 clientInstanceId,
-		uint64 userId,
 		const char* protocolTag)
 	{
-		if (!session)
-			return std::nullopt;
+		SessionMetricsRow row{};
+		row.captureEpochMs	= NowEpochMs();
+		row.clientInstanceId = clientInstanceId;
+		row.userId			= ev.userId;
+		row.sessionId		= ev.sessionId;
+		row.entity			= static_cast<uint32>(ev.entity);
+		row.protocol		= protocolTag;
 
-		const SessionHandle handle = session->GetSessionHandle();
-		auto promise = std::make_shared<std::promise<std::optional<SessionMetricsRow>>>();
-		auto future = promise->get_future();
+		const auto& netView = ev.net;
+		const auto& kpiView = ev.rudp;
 
-		session->Post(Job([handle, clientInstanceId, userId, protocol = std::string(protocolTag), promise]()
-			{
-				try
-				{
-					auto& L = CurrentShardLocalChecked();
-					Session* session = FindSessionByHandle(L, handle);
-					if (!session)
-					{
-						promise->set_value(std::nullopt);
-						return;
-					}
-					auto& R = L.registry;
+		row.wireRtt_ms				= netView.wireRtt_ms;
+		row.wireRttSample_ms		= netView.wireRttSample_ms;
+		row.pipelineRtt_ms			= netView.pipelineRtt_ms;
+		row.pipelineRttSample_ms	= netView.pipelineRttSample_ms;
+		row.pipelineQueueTotal_ms	= netView.pipelineQueueTotal_ms;
+		row.pingClientQueue_ms		= netView.pingClientQueue_ms;
+		row.pingServerQueue_ms		= netView.pingServerQueue_ms;
+		row.pongServerProc_ms		= netView.pongServerProc_ms;
+		row.pongServerQueue_ms		= netView.pongServerQueue_ms;
+		row.pongClientQueue_ms		= netView.pongClientQueue_ms;
+		row.jitter_ms				= netView.jitter_ms;
+		row.packetLoss				= netView.packetLoss;
+		row.recvThroughput_kbps		= netView.recvThroughput_kbps;
+		row.sendThroughput_kbps		= netView.sendThroughput_kbps;
+		row.bandwidthMbps			= netView.bandwidthMbps;
 
-					const entt::entity e = session->GetEntity();
-					if (e == entt::null || !R.valid(e))
-					{
-						promise->set_value(std::nullopt);
-						return;
-					}
+		row.txPacketsPerSec			= kpiView.txPacketsPerSec;
+		row.rxPacketsPerSec			= kpiView.rxPacketsPerSec;
+		row.txBytesPerSec			= kpiView.txBytesPerSec;
+		row.rxBytesPerSec			= kpiView.rxBytesPerSec;
 
-					SessionMetricsRow row{};
-					row.captureEpochMs = NowEpochMs();
-					row.clientInstanceId = clientInstanceId;
-					row.userId = userId;
-					row.sessionId = session->GetSessionId();
-					row.entity = static_cast<uint32>(e);
-					row.protocol = protocol;
+		row.firstSendSuccessPct		= kpiView.firstSendSuccessPct;
+		row.rtxHitPct				= kpiView.rtxHitPct;
+		row.rtxRecoveryPct			= kpiView.rtxRecoveryPct;
+		row.avgRtxPerHitPacket		= kpiView.avgRtxPerHitPacket;
+		row.deliveryLatencyAvg_ms	= static_cast<float>(kpiView.deliveryLatency.avg_ns / 1'000'000.0);
+		row.recoveryLatencyAvg_ms	= static_cast<float>(kpiView.recoveryLatency.avg_ns / 1'000'000.0);
 
-					const auto netView = profile::NetworkStatsView::FromEntity(R, e);
-					const auto kpiView = profile::RudpKpiView::FromEntity(R, e);
+		row.goodputPct				= kpiView.goodputPct;
+		row.fragEfficiencyPct		= kpiView.fragEfficiencyPct;
+		row.ackPiggybackHitPct		= kpiView.ackPiggybackHitPct;
+		row.avgUdpPacketsPerDatagram = kpiView.avgUdpPacketsPerDatagram;
+		row.avgUdpBytesPerDatagram   = kpiView.avgUdpBytesPerDatagram;
+		row.udpBundleHitPct			= kpiView.udpBundleHitPct;
 
-					row.wireRtt_ms = netView.wireRtt_ms;
-					row.wireRttSample_ms = netView.wireRttSample_ms;
-					row.pipelineRtt_ms = netView.pipelineRtt_ms;
-					row.pipelineRttSample_ms = netView.pipelineRttSample_ms;
-					row.pipelineQueueTotal_ms = netView.pipelineQueueTotal_ms;
-					row.pingClientQueue_ms = netView.pingClientQueue_ms;
-					row.pingServerQueue_ms = netView.pingServerQueue_ms;
-					row.pongServerProc_ms = netView.pongServerProc_ms;
-					row.pongServerQueue_ms = netView.pongServerQueue_ms;
-					row.pongClientQueue_ms = netView.pongClientQueue_ms;
-					row.jitter_ms = netView.jitter_ms;
-					row.packetLoss = netView.packetLoss;
-					row.recvThroughput_kbps = netView.recvThroughput_kbps;
-					row.sendThroughput_kbps = netView.sendThroughput_kbps;
-					row.bandwidthMbps = netView.bandwidthMbps;
+		row.outOfOrderPct			= kpiView.outOfOrderPct;
+		row.duplicatePct			= kpiView.duplicatePct;
 
-					row.txPacketsPerSec = kpiView.txPacketsPerSec;
-					row.rxPacketsPerSec = kpiView.rxPacketsPerSec;
-					row.txBytesPerSec = kpiView.txBytesPerSec;
-					row.rxBytesPerSec = kpiView.rxBytesPerSec;
+		row.pendingReliableNow		= kpiView.pendingReliableNow;
+		row.pendingReliablePeek		= kpiView.pendingReliablePeek;
+		row.maxRtxPerPacket			= kpiView.maxRtxPerPacket;
 
-					row.firstSendSuccessPct = kpiView.firstSendSuccessPct;
-					row.rtxHitPct = kpiView.rtxHitPct;
-					row.rtxRecoveryPct = kpiView.rtxRecoveryPct;
-					row.avgRtxPerHitPacket = kpiView.avgRtxPerHitPacket;
-					row.deliveryLatencyAvg_ms = static_cast<float>(kpiView.deliveryLatency.avg_ns / 1'000'000.0);
-					row.recoveryLatencyAvg_ms = static_cast<float>(kpiView.recoveryLatency.avg_ns / 1'000'000.0);
+		row.rtxTimeoutPct			= kpiView.rtxTimeoutPct;
+		row.rtxGiveupPct			= kpiView.rtxGiveupPct;
 
-					row.goodputPct = kpiView.goodputPct;
-					row.fragEfficiencyPct = kpiView.fragEfficiencyPct;
-					row.ackPiggybackHitPct = kpiView.ackPiggybackHitPct;
-					row.avgUdpPacketsPerDatagram = kpiView.avgUdpPacketsPerDatagram;
-					row.avgUdpBytesPerDatagram = kpiView.avgUdpBytesPerDatagram;
-					row.udpBundleHitPct = kpiView.udpBundleHitPct;
-
-					row.outOfOrderPct = kpiView.outOfOrderPct;
-					row.duplicatePct = kpiView.duplicatePct;
-
-					row.pendingReliableNow = kpiView.pendingReliableNow;
-					row.pendingReliablePeek = kpiView.pendingReliablePeek;
-					row.maxRtxPerPacket = kpiView.maxRtxPerPacket;
-
-					row.rtxTimeoutPct = kpiView.rtxTimeoutPct;
-					row.rtxGiveupPct = kpiView.rtxGiveupPct;
-
-					promise->set_value(row);
-				}
-				catch (...)
-				{
-					promise->set_value(std::nullopt);
-				}
-			}));
-
-		if (future.wait_for(std::chrono::milliseconds(80)) != std::future_status::ready)
-			return std::nullopt;
-
-		return future.get();
-	}
-
-	static bool ResetSessionProfileWindow(Session* session)
-	{
-		if (!session)
-			return false;
-
-		const SessionHandle handle = session->GetSessionHandle();
-		auto promise = std::make_shared<std::promise<bool>>();
-		auto future = promise->get_future();
-
-		session->Post(Job([handle, promise]()
-			{
-				try
-				{
-					auto& L = CurrentShardLocalChecked();
-					Session* session = FindSessionByHandle(L, handle);
-					if (!session)
-					{
-						promise->set_value(false);
-						return;
-					}
-					auto& R = L.registry;
-
-					const entt::entity e = session->GetEntity();
-					if (e == entt::null || !R.valid(e))
-					{
-						promise->set_value(false);
-						return;
-					}
-
-					profile::ResetNetworkProfileWindow(R, e);
-					promise->set_value(true);
-				}
-				catch (...)
-				{
-					promise->set_value(false);
-				}
-			}));
-
-		if (future.wait_for(std::chrono::milliseconds(80)) != std::future_status::ready)
-			return false;
-
-		return future.get();
-	}
-
-	static uint32 ResetSessionProfileWindows(const std::vector<std::unique_ptr<ClientInstance>>& clients)
-	{
-		uint32 resetCount = 0;
-		for (const auto& client : clients)
-		{
-			if (!client)
-				continue;
-
-			auto* nm = client->GetNetworkManager();
-			if (!nm)
-				continue;
-
-			if (ResetSessionProfileWindow(nm->GetUdpSession()))
-				++resetCount;
-		}
-
-		return resetCount;
+		return row;
 	}
 
 	class SessionCsvReporter
@@ -334,7 +236,7 @@ namespace
 			m_dir = std::filesystem::path("Reports") / "NetworkProfile";
 			std::filesystem::create_directories(m_dir);
 
-			m_csvPath = m_dir / ("session_metrics_" + stamp + ".csv");
+			m_csvPath     = m_dir / ("session_metrics_" + stamp + ".csv");
 			m_summaryPath = m_dir / ("session_metrics_" + stamp + "_summary.csv");
 
 			m_csv.open(m_csvPath, std::ios::out | std::ios::trunc);
@@ -347,24 +249,12 @@ namespace
 				m_csv.flush();
 		}
 
-		void DumpOnce(const std::vector<std::unique_ptr<ClientInstance>>& clients)
+		void WriteSample(const profile::NetworkProfileSampleEvent& ev, uint32 clientInstanceId, const char* protocolTag)
 		{
 			if (!m_csv.is_open())
 				return;
 
-			for (const auto& client : clients)
-			{
-				if (!client)
-					continue;
-
-				auto* nm = client->GetNetworkManager();
-				if (!nm)
-					continue;
-
-				if (auto row = CaptureSessionRow(nm->GetUdpSession(), client->GetInstanceId(), client->GetUserId(), "UDP"); row.has_value())
-					WriteRow(row.value());
-			}
-
+			WriteRow(MakeSessionMetricsRow(ev, clientInstanceId, protocolTag));
 			m_csv.flush();
 		}
 
@@ -372,32 +262,32 @@ namespace
 		{
 			struct Agg
 			{
-				uint64 count = 0;
-				double sum_wireRtt = 0.0;
-				double sum_wireRttSample = 0.0;
-				double sum_pipelineRtt = 0.0;
-				double sum_pipelineRttSample = 0.0;
-				double sum_pipelineQueueTotal = 0.0;
-				double sum_pingClientQueue = 0.0;
-				double sum_pingServerQueue = 0.0;
-				double sum_pongServerProc = 0.0;
-				double sum_pongServerQueue = 0.0;
-				double sum_pongClientQueue = 0.0;
-				double sum_jitter = 0.0;
-				double sum_loss = 0.0;
-				double sum_bw = 0.0;
-				double sum_txpps = 0.0;
-				double sum_rxpps = 0.0;
-				double sum_rtxHit = 0.0;
-				double sum_rtxRecovery = 0.0;
-				double sum_deliveryLatency = 0.0;
-				double sum_recoveryLatency = 0.0;
-				double sum_goodput = 0.0;
+				uint64 count					= 0;
+				double sum_wireRtt				= 0.0;
+				double sum_wireRttSample		= 0.0;
+				double sum_pipelineRtt			= 0.0;
+				double sum_pipelineRttSample	= 0.0;
+				double sum_pipelineQueueTotal	= 0.0;
+				double sum_pingClientQueue		= 0.0;
+				double sum_pingServerQueue		= 0.0;
+				double sum_pongServerProc		= 0.0;
+				double sum_pongServerQueue		= 0.0;
+				double sum_pongClientQueue		= 0.0;
+				double sum_jitter				= 0.0;
+				double sum_loss					= 0.0;
+				double sum_bw					= 0.0;
+				double sum_txpps				= 0.0;
+				double sum_rxpps				= 0.0;
+				double sum_rtxHit				= 0.0;
+				double sum_rtxRecovery			= 0.0;
+				double sum_deliveryLatency		= 0.0;
+				double sum_recoveryLatency		= 0.0;
+				double sum_goodput				= 0.0;
 				double sum_avgUdpPacketsPerDatagram = 0.0;
-				double sum_avgUdpBytesPerDatagram = 0.0;
-				double sum_udpBundleHitPct = 0.0;
-				double max_pending = 0.0;
-				double max_rtxPerPacket = 0.0;
+				double sum_avgUdpBytesPerDatagram   = 0.0;
+				double sum_udpBundleHitPct		= 0.0;
+				double max_pending				= 0.0;
+				double max_rtxPerPacket			= 0.0;
 			};
 
 			std::unordered_map<std::string, Agg> table;
@@ -406,31 +296,31 @@ namespace
 				const std::string key = std::to_string(row.clientInstanceId) + "|" + std::to_string(row.userId) + "|" + row.protocol + "|" + std::to_string(row.sessionId);
 				auto& a = table[key];
 				a.count++;
-				a.sum_wireRtt += row.wireRtt_ms;
-				a.sum_wireRttSample += row.wireRttSample_ms;
-				a.sum_pipelineRtt += row.pipelineRtt_ms;
-				a.sum_pipelineRttSample += row.pipelineRttSample_ms;
-				a.sum_pipelineQueueTotal += row.pipelineQueueTotal_ms;
-				a.sum_pingClientQueue += row.pingClientQueue_ms;
-				a.sum_pingServerQueue += row.pingServerQueue_ms;
-				a.sum_pongServerProc += row.pongServerProc_ms;
-				a.sum_pongServerQueue += row.pongServerQueue_ms;
-				a.sum_pongClientQueue += row.pongClientQueue_ms;
-				a.sum_jitter += row.jitter_ms;
-				a.sum_loss += row.packetLoss;
-				a.sum_bw += row.bandwidthMbps;
-				a.sum_txpps += row.txPacketsPerSec;
-				a.sum_rxpps += row.rxPacketsPerSec;
-				a.sum_rtxHit += row.rtxHitPct;
-				a.sum_rtxRecovery += row.rtxRecoveryPct;
-				a.sum_deliveryLatency += row.deliveryLatencyAvg_ms;
-				a.sum_recoveryLatency += row.recoveryLatencyAvg_ms;
-				a.sum_goodput += row.goodputPct;
-				a.sum_avgUdpPacketsPerDatagram += row.avgUdpPacketsPerDatagram;
-				a.sum_avgUdpBytesPerDatagram += row.avgUdpBytesPerDatagram;
-				a.sum_udpBundleHitPct += row.udpBundleHitPct;
-				a.max_pending = std::max(a.max_pending, static_cast<double>(row.pendingReliableNow));
-				a.max_rtxPerPacket = std::max(a.max_rtxPerPacket, static_cast<double>(row.maxRtxPerPacket));
+				a.sum_wireRtt					+= row.wireRtt_ms;
+				a.sum_wireRttSample				+= row.wireRttSample_ms;
+				a.sum_pipelineRtt				+= row.pipelineRtt_ms;
+				a.sum_pipelineRttSample			+= row.pipelineRttSample_ms;
+				a.sum_pipelineQueueTotal		+= row.pipelineQueueTotal_ms;
+				a.sum_pingClientQueue			+= row.pingClientQueue_ms;
+				a.sum_pingServerQueue			+= row.pingServerQueue_ms;
+				a.sum_pongServerProc			+= row.pongServerProc_ms;
+				a.sum_pongServerQueue			+= row.pongServerQueue_ms;
+				a.sum_pongClientQueue			+= row.pongClientQueue_ms;
+				a.sum_jitter					+= row.jitter_ms;
+				a.sum_loss						+= row.packetLoss;
+				a.sum_bw						+= row.bandwidthMbps;
+				a.sum_txpps						+= row.txPacketsPerSec;
+				a.sum_rxpps						+= row.rxPacketsPerSec;
+				a.sum_rtxHit					+= row.rtxHitPct;
+				a.sum_rtxRecovery				+= row.rtxRecoveryPct;
+				a.sum_deliveryLatency			+= row.deliveryLatencyAvg_ms;
+				a.sum_recoveryLatency			+= row.recoveryLatencyAvg_ms;
+				a.sum_goodput					+= row.goodputPct;
+				a.sum_avgUdpPacketsPerDatagram	+= row.avgUdpPacketsPerDatagram;
+				a.sum_avgUdpBytesPerDatagram	+= row.avgUdpBytesPerDatagram;
+				a.sum_udpBundleHitPct			+= row.udpBundleHitPct;
+				a.max_pending					= std::max(a.max_pending, static_cast<double>(row.pendingReliableNow));
+				a.max_rtxPerPacket				= std::max(a.max_rtxPerPacket, static_cast<double>(row.maxRtxPerPacket));
 			}
 
 			std::ofstream summary(m_summaryPath, std::ios::out | std::ios::trunc);
@@ -537,12 +427,13 @@ namespace
 		}
 
 	private:
-		std::filesystem::path m_dir;
-		std::filesystem::path m_csvPath;
-		std::filesystem::path m_summaryPath;
-		std::ofstream m_csv;
-		std::vector<SessionMetricsRow> m_rows;
-	};*/
+		std::filesystem::path			m_dir;
+		std::filesystem::path			m_csvPath;
+		std::filesystem::path			m_summaryPath;
+		std::ofstream					m_csv;
+		std::vector<SessionMetricsRow>	m_rows;
+	};
+
 }
 
 static void Run(const TestConfig& config)
@@ -610,17 +501,41 @@ static void Run(const TestConfig& config)
 
 	ScopedTimerResolution timerResGuard{};
 
-	//SessionCsvReporter reporter{};
-	//const float warmupSec = std::max(0.0f, config.metricsWarmupSec);
-	//const auto warmupDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(warmupSec));
-	//const auto warmupEnd = std::chrono::steady_clock::now() + warmupDuration;
-	//bool metricsWindowActive = (warmupSec <= 0.0f);
-	//auto nextDump = std::chrono::steady_clock::now() + 1s;
+	SessionCsvReporter reporter{};
+	auto profileSampleSub = GLOBAL_EVENTBUS_SUBSCRIBE(
+		profile::NetworkProfileSampleEvent,
+		[&](const profile::NetworkProfileSampleEvent& ev)
+		{
+			for (const auto& client : clients)
+			{
+				if (!client)
+					continue;
+
+				auto* runtime = client->GetRuntime();
+				if (!runtime)
+					continue;
+
+				auto* udp = runtime->GetUdpSession();
+				if (!udp || udp->GetSessionId() != ev.sessionId)
+					continue;
+
+				reporter.WriteSample(ev, client->GetInstanceId(), "UDP");
+				return;
+			}
+		},
+		jam::SubscribeOptions{ .policy = jam::eDispatchPolicy::MainExecutor });
 	auto prevFrameStart = std::chrono::steady_clock::now();
+	const auto runStart = prevFrameStart;
 
 	while (!renderer.ShouldClose())
 	{
 		const auto frameStart = std::chrono::steady_clock::now();
+		if (config.runDurationSec != 0
+			&& frameStart - runStart >= std::chrono::seconds(config.runDurationSec))
+		{
+			break;
+		}
+
 		float frameDeltaSec = static_cast<float>(std::chrono::duration<double>(frameStart - prevFrameStart).count());
 		prevFrameStart = frameStart;
 		frameDeltaSec = std::clamp(frameDeltaSec, 0.0f, 0.25f);
@@ -640,23 +555,14 @@ static void Run(const TestConfig& config)
 			client->Render();
 		}
 
-		const auto now = std::chrono::steady_clock::now();
-		//if (!metricsWindowActive && now >= warmupEnd)
-		//{
-		//	const uint32 resetCount = ResetSessionProfileWindows(clients);
-		//	metricsWindowActive = true;
-		//	nextDump = now + 1s;
-		//}
-
-		//if (metricsWindowActive && now >= nextDump)
-		//{
-		//	reporter.DumpOnce(clients);
-		//	nextDump += 1s;
-		//}
-
 		double reqMs=0, actMs=0, spinMs=0;
 		PreciseFrameSleep(frameStart, targetSpan, sleepGuard, reqMs, actMs, spinMs);
 	}
+
+	MAIN_EXEC.DrainAll();
+	profileSampleSub.reset();
+	MAIN_EXEC.DrainAll();
+	reporter.WriteSummary();
 
 	clients.clear();
 	renderer.Shutdown();
@@ -697,8 +603,8 @@ int main()
 		testConfig.botHeadlessPhysicalWorld = (botHeadless != 0);
 	}
 
-	std::cout << "Metrics warmup seconds: ";
-	std::cin >> testConfig.metricsWarmupSec;
+	std::cout << "Run duration seconds (0=until window close): ";
+	std::cin >> testConfig.runDurationSec;
 
 	Run(testConfig);
 

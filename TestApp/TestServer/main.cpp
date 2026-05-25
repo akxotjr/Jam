@@ -7,6 +7,8 @@
 #include "jampx/PhysicsFacade.h"
 #include "jampx/prefab/PhysicsPrefabRegistry.h"
 
+#include "ExecutorMetricsReporter.h"
+
 using namespace std;
 
 using namespace jam::net;
@@ -55,8 +57,23 @@ int main()
 
 		std::this_thread::sleep_for(500ms);
 
+		testserver::ExecutorCsvReporter executorReporter{};
+		executorReporter.WriteSample(testserver::CaptureExecutorMetricsSample());
+		constexpr auto executorMetricsSamplePeriod = std::chrono::seconds(5);
+		auto nextExecutorMetricsSample = std::chrono::steady_clock::now() + executorMetricsSamplePeriod;
+
 		while (true)
 		{
+			const auto now = std::chrono::steady_clock::now();
+			if (now >= nextExecutorMetricsSample)
+			{
+				executorReporter.WriteSample(testserver::CaptureExecutorMetricsSample());
+				do
+				{
+					nextExecutorMetricsSample += executorMetricsSamplePeriod;
+				} while (now >= nextExecutorMetricsSample);
+			}
+
 			if (_kbhit())
 			{
 				char ch = static_cast<char>(_getch());
@@ -72,6 +89,8 @@ int main()
 
 
 		JAMNET_LOG_INFO("Shutting down server...");
+		executorReporter.WriteSample(testserver::CaptureExecutorMetricsSample());
+		executorReporter.WriteSummary();
 
 		if (serverManager)
 		{

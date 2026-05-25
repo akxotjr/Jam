@@ -247,6 +247,11 @@ namespace jam::net
 		};
 	}
 
+	ClientUdpSession* ClientRuntime::GetUdpSession() const
+	{
+		return m_networkManager ? m_networkManager->GetUdpSession() : nullptr;
+	}
+
 	LocalWorldId ClientRuntime::GetMainLocalWorldId() const
 	{
 		auto membership = GetMainWorldMembership();
