@@ -366,11 +366,22 @@ namespace jam::net::profile
 		return static_cast<float>(lostPackets) / static_cast<float>(totalExpected);
 	}
 
-	void TrafficSampleState::RecordTrafficSample(uint64 recvBytes, uint64 sendBytes, uint64 interval_ns)
+	void TrafficSampleState::AccumulateTrafficSample(uint64 recvBytes, uint64 sendBytes, uint64 interval_ns)
 	{
-		sampleRecvBytes   = recvBytes;
-		sampleSendBytes   = sendBytes;
-		sampleInterval_ns = interval_ns;
+		pendingRecvBytes   += recvBytes;
+		pendingSendBytes   += sendBytes;
+		pendingInterval_ns += interval_ns;
+	}
+
+	void TrafficSampleState::CommitTrafficSample()
+	{
+		sampleRecvBytes   = pendingRecvBytes;
+		sampleSendBytes   = pendingSendBytes;
+		sampleInterval_ns = pendingInterval_ns;
+
+		pendingRecvBytes   = 0;
+		pendingSendBytes   = 0;
+		pendingInterval_ns = 0;
 	}
 
 	float TrafficSampleState::GetRecvThroughputKbps() const
@@ -406,7 +417,7 @@ namespace jam::net::profile
 			view.appRttQueueTotal_ms = view.pipelineQueueTotal_ms;
 			view.pingClientQueue_ms = linkQuality->pingClientQueue_ms;
 			view.pingServerQueue_ms = linkQuality->pingServerQueue_ms;
-			view.pongServerProc_ms = linkQuality->pongServerProc_ms;
+			view.pongServerProc_ms  = linkQuality->pongServerProc_ms;
 			view.pongServerQueue_ms = linkQuality->pongServerQueue_ms;
 			view.pongClientQueue_ms = linkQuality->pongClientQueue_ms;
 			view.rtt_ms		= view.wireRtt_ms;
@@ -480,7 +491,7 @@ namespace jam::net::profile
 		const uint64 sendDelta = (sendNow >= sendPrev) ? (sendNow - sendPrev) : 0;
 		sampleState.prevSendBytes = sendNow;
 
-		sampleState.RecordTrafficSample(recvDelta, sendDelta, sampleInterval_ns);
+		sampleState.AccumulateTrafficSample(recvDelta, sendDelta, sampleInterval_ns);
 
 		if (!linkQuality || !metrics)
 			return;
@@ -498,7 +509,7 @@ namespace jam::net::profile
 		linkQuality->AccumulatePacketLoss(ClampToUint32(rtxDelta), ClampToUint32(txDelta));
 	}
 
-	void ResetNetworkProfileWindow(entt::registry& R, entt::entity e, uint64 now_ns)
+	void BeginNetworkProfileWindow(entt::registry& R, entt::entity e, uint64 now_ns)
 	{
 		if (e == entt::null || !R.valid(e))
 			return;
@@ -526,6 +537,9 @@ namespace jam::net::profile
 				sampleState->sampleRecvBytes = 0;
 				sampleState->sampleSendBytes = 0;
 				sampleState->sampleInterval_ns = 0;
+				sampleState->pendingRecvBytes = 0;
+				sampleState->pendingSendBytes = 0;
+				sampleState->pendingInterval_ns = 0;
 			}
 			else
 			{

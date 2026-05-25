@@ -1,4 +1,5 @@
 #pragma once
+#include "jamnet/core/executor/RuntimeId.h"
 #include "jamnet/core/net/PacketStructure.h"
 
 #include <array>
@@ -90,8 +91,15 @@ namespace jam::net::profile
 		uint64						sampleRecvBytes			= 0;
 		uint64						sampleSendBytes			= 0;
 		uint64						sampleInterval_ns		= 0;
+		uint64						pendingRecvBytes		= 0;
+		uint64						pendingSendBytes		= 0;
+		uint64						pendingInterval_ns		= 0;
+		uint64						warmupStart_ns			= 0;
+		bool						warmupComplete			= false;
+		uint64						lastSampleEventPublish_ns = 0;
 
-		void						RecordTrafficSample(uint64 recvBytes, uint64 sendBytes, uint64 interval_ns);
+		void						AccumulateTrafficSample(uint64 recvBytes, uint64 sendBytes, uint64 interval_ns);
+		void						CommitTrafficSample();
 		float						GetRecvThroughputKbps() const;
 		float						GetSendThroughputKbps() const;
 		float						GetBandwidthMbps() const;
@@ -249,6 +257,18 @@ namespace jam::net::profile
 		static RudpKpiView FromEntity(entt::registry& R, entt::entity e);
 	};
 
+	struct NetworkProfileSampleEvent
+	{
+		uint64				sampleTime_ns	= 0;
+		uint64				accountId		= 0;
+		uint64				userId			= 0;
+		uint64				endpointId		= 0;
+		SessionId			sessionId		= kInvalidSessionId;
+		entt::entity		entity			= entt::null;
+		NetworkStatsView	net				= {};
+		RudpKpiView			rudp			= {};
+	};
+
 	struct RudpMetricsSnapshot
 	{
 		uint64				txPackets					= 0;
@@ -299,7 +319,7 @@ namespace jam::net::profile
 	};
 
 	void AccumulateSystemNetworkStats(TrafficSampleState& sampleState, const SessionTotalTraffic& totalTraffic, LinkQualityState* linkQuality, const RudpMetrics* metrics, uint64 interval_ns);
-	void ResetNetworkProfileWindow(entt::registry& R, entt::entity e, uint64 now_ns = 0);
+	void BeginNetworkProfileWindow(entt::registry& R, entt::entity e, uint64 now_ns = 0);
 
 
 } // namespace jam::net::profile

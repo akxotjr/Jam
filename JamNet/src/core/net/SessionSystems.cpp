@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "jamnet/core/executor/GlobalEventBus.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/ShardExecutor.h"
 
@@ -17,6 +18,9 @@ namespace jam::net
 
 	namespace
 	{
+		constexpr uint64 kNetworkProfileWarmupPeriod_ns		 = 10_s;
+		constexpr uint64 kNetworkProfileSampleEventPeriod_ns = 5_s;
+
 		PacketChain MakeSinglePacketChain(const Packet& packet)
 		{
 			PacketChain chain;
@@ -1554,21 +1558,62 @@ namespace jam::net
 
 	void SystemNetworkStats(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
 	{
-		(void)now_ns;
-
 		auto& R = L.registry;
 		auto view = R.view<profile::SessionTotalTraffic, profile::TrafficSampleState>();
 
 		const uint64 interval_ns = (dt_ns > 0) ? dt_ns : 1_s;
+		const uint64 sampleTime_ns = (now_ns > 0) ? now_ns : NOW_NS();
 
 		for (auto entity : view)
 		{
-			auto& traffic = view.get<profile::SessionTotalTraffic>(entity);
+			auto& traffic       = view.get<profile::SessionTotalTraffic>(entity);
 			auto& trafficSample = view.get<profile::TrafficSampleState>(entity);
-			auto* linkQuality = R.try_get<profile::LinkQualityState>(entity);
-			auto* metrics = R.try_get<profile::RudpMetrics>(entity);
+			auto* linkQuality   = R.try_get<profile::LinkQualityState>(entity);
+			auto* metrics       = R.try_get<profile::RudpMetrics>(entity);
+
+			if (!trafficSample.warmupComplete)
+			{
+				if (trafficSample.warmupStart_ns == 0)
+					trafficSample.warmupStart_ns = sampleTime_ns;
+
+				if (sampleTime_ns - trafficSample.warmupStart_ns < kNetworkProfileWarmupPeriod_ns)
+					continue;
+
+				profile::BeginNetworkProfileWindow(R, entity, sampleTime_ns);
+				trafficSample.warmupComplete = true;
+				trafficSample.lastSampleEventPublish_ns = sampleTime_ns;
+				continue;
+			}
 
 			profile::AccumulateSystemNetworkStats(trafficSample, traffic, linkQuality, metrics, interval_ns);
+
+			if (trafficSample.lastSampleEventPublish_ns == 0)
+			{
+				trafficSample.lastSampleEventPublish_ns = sampleTime_ns;
+				continue;
+			}
+
+			if (sampleTime_ns - trafficSample.lastSampleEventPublish_ns < kNetworkProfileSampleEventPeriod_ns)
+				continue;
+
+			trafficSample.lastSampleEventPublish_ns = sampleTime_ns;
+			trafficSample.CommitTrafficSample();
+
+			auto* info = R.try_get<SessionInfo>(entity);
+			if (!info || !info->session)
+				continue;
+
+			profile::NetworkProfileSampleEvent ev{};
+			ev.sampleTime_ns = sampleTime_ns;
+			ev.accountId     = info->session->GetAccountId();
+			ev.userId        = info->session->GetUserId();
+			ev.endpointId    = info->session->GetEndpointId();
+			ev.sessionId     = info->session->GetSessionId();
+			ev.entity        = entity;
+			ev.net           = profile::NetworkStatsView::FromEntity(R, entity);
+			ev.rudp          = profile::RudpKpiView::FromEntity(R, entity);
+
+			GLOBAL_EVENTBUS_PUBLISH(std::move(ev));
 		}
 	}
 
