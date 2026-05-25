@@ -1516,12 +1516,18 @@ namespace jam::net
 	bool ServerWorldActionSystem::SubmitWorldJob(const WorldKey& key, std::function<void(WorldBase&)> job)
 	{
 		if (!key.IsIssued() || !job)
+		{
+			JAMNET_LOG_WARN("[ServerWorldAcitonSystem::SubmitWorldJob] WorldKey isn't issue or Job is nullptr");
 			return false;
+		}
 
 		const uint16 shardIndex = GetWorldShardIndex(key.worldId);
 		auto shard = GLOBAL_EXEC.GetShardFromIndex(shardIndex);
 		if (!shard)
+		{
+			JAMNET_LOG_WARN("[ServerWorldActionSystem::SubmitWorldJob] not found target world. world id= {} / shard index= {} ", key.worldId, shardIndex);
 			return false;
+		}
 
 		auto invoke = [key, job = std::move(job)](ShardLocal& local) mutable
 		{

@@ -373,6 +373,8 @@ namespace jam::net
 
 	void ServerUdpSession::OnSpawnActorRequest(entt::entity e, const fb::fbSpawnActorReq& req, uint32 requestId)
 	{
+		JAMNET_LOG_DEBUG("[ServerUdpSession::OnSpawnActorRequest] account id= {}, user id= {} request spawn actor", m_accountId, m_userId);
+
 		const WorldKey targetWorldKey = ResolveRequestedWorldKey(m_userId, req.world_id());
 		if (!m_manager || !targetWorldKey.IsIssued())
 		{

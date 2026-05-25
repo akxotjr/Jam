@@ -266,10 +266,13 @@ namespace jam::net
 
 	void ClientWorldActionSystem::RequestSpawnActor(LocalWorldId worldId, const SpawnParams& params)
 	{
-		SubmitPhysicalWorldJob(worldId, [params](ClientPhysicalWorld& world)
+		bool submiited= SubmitPhysicalWorldJob(worldId, [params](ClientPhysicalWorld& world)
 			{
 				world.SpawnActor(params);
 			});
+
+		if (!submiited)
+			JAMNET_LOG_WARN("[ClientWorldActionSystem::RequestSpawnActor] local world id= {}, failed to SubmitPhysicalWorldJob.", worldId);
 	}
 
 	void ClientWorldActionSystem::RequestDespawnActor(LocalWorldId worldId, NetId netId)
@@ -579,17 +582,6 @@ namespace jam::net
 			return;
 		}
 
-		shard->Submit(Job([world = std::move(world)]() mutable
-			{
-				auto& state = GetOrCreateWorldShardState(CurrentShardLocalChecked());
-				const LocalWorldId localWorldId = world ? world->GetLocalWorldId() : kInvalidLocalWorldId;
-				if (localWorldId == kInvalidLocalWorldId)
-					return;
-
-				if (!state.AdoptWorld(std::move(world)))
-					state.FreeLocalWorldId(localWorldId);
-			}, eJobPriority::Control));
-
 		const auto publishLocalWorldIdUpdate = [accountId = m_owner->GetAccountId(), userId = m_owner->GetUserId(), membershipKey = key, localWorldId](ShardLocal& local)
 			{
 				auto& userState = GetOrCreateUserShardState(local);
@@ -609,15 +601,34 @@ namespace jam::net
 				}
 			};
 
-		if (auto* current = CurrentShardLocal(); current && current->shardIndex == userShardIndex)
-			publishLocalWorldIdUpdate(*current);
-		else if (auto userShard = GLOBAL_EXEC.GetShardFromIndex(userShardIndex))
-		{
-			userShard->Submit(Job([publishLocalWorldIdUpdate = std::move(publishLocalWorldIdUpdate)]() mutable
+		shard->Submit(Job([world = std::move(world), userShardIndex, publishLocalWorldIdUpdate]() mutable
+			{
+				auto& state = GetOrCreateWorldShardState(CurrentShardLocalChecked());
+				const LocalWorldId localWorldId = world ? world->GetLocalWorldId() : kInvalidLocalWorldId;
+				if (localWorldId == kInvalidLocalWorldId)
+					return;
+
+				if (!state.AdoptWorld(std::move(world)))
 				{
-					publishLocalWorldIdUpdate(CurrentShardLocalChecked());
-				}, eJobPriority::Control));
-		}
+					JAMNET_LOG_WARN("[ClientWorldActionSystem::EnsureClientWorld] world id= {}. failed to adopt world", localWorldId);
+					state.FreeLocalWorldId(localWorldId);
+					return;
+				}
+
+				//if (auto* current = CurrentShardLocal(); current && current->shardIndex == userShardIndex)
+				//{
+				//	publishLocalWorldIdUpdate(*current);
+				//	return;
+				//}
+
+				if (auto userShard = GLOBAL_EXEC.GetShardFromIndex(userShardIndex))
+				{
+					userShard->Submit(Job([publishLocalWorldIdUpdate]() mutable
+						{
+							publishLocalWorldIdUpdate(CurrentShardLocalChecked());
+						}, eJobPriority::Control));
+				}
+			}, eJobPriority::Control));
 
 	}
 

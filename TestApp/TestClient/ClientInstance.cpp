@@ -99,7 +99,7 @@ void ClientInstance::SpawnPlayer()
 	}
 	else
 	{
-		pos = { static_cast<float>(m_instanceId % 10) * 5.f, 5.f, -10.f - (static_cast<float>(m_instanceId) / 10.f) * 5.f };
+		pos = { static_cast<float>(m_instanceId % 10) * 10.f, 5.f, -10.f - (static_cast<float>(m_instanceId) / 10.f) * 10.f };
 	}
 
 	net::SpawnParams charParams{};
@@ -293,6 +293,7 @@ void ClientInstance::HandleWorldMembership(const net::WorldMembershipEvent& evt)
 	}
 
 	//JAMNET_LOG_INFO("[Client #{}] Main world ready: localWorldId={}", m_instanceId, nextMainWorld);
+	JAMNET_LOG_DEBUG("[ClientInstance::HandleWorldMembership] account id= {} call SpawnPlayer", m_accountId);
 	SpawnPlayer();
 }
 

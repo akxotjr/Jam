@@ -11,6 +11,9 @@
 #include "jamnet/runtime/world/IWorldActionSystem.h"
 #include "jamnet/sync/networld/ClientPhysicalWorld.h"
 #include "jamnet/sync/networld/ClientVirtualWorld.h"
+#include <functional>
+#include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace jam::net
@@ -60,9 +63,14 @@ namespace jam::net
 		template <typename Fn>
 		bool SubmitPhysicalWorldJob(LocalWorldId localWorldId, Fn&& fn)
 		{
+			static constexpr uint8 kMaxPendingWorldRetries = 8;
+
 			auto it = m_physicalWorlds.find(localWorldId);
 			if (it == m_physicalWorlds.end())
+			{
+				JAMNET_LOG_WARN("[SubmitPhysicalWorldJob] local world id={} is not exist in m_physicalWorlds", localWorldId);
 				return false;
+			}
 
 			if (ClientPhysicalWorld* world = it->second.TryGet(); world && world->IsCurrentShardContext())
 			{
@@ -70,11 +78,46 @@ namespace jam::net
 				return true;
 			}
 
-			return it->second.TryPost(Job([id = localWorldId, fn = std::forward<Fn>(fn)]() mutable
+			using FnType = std::decay_t<Fn>;
+			auto sharedFn = std::make_shared<FnType>(std::forward<Fn>(fn));
+			auto retryJob = std::make_shared<std::function<void(uint8)>>();
+			std::weak_ptr<std::function<void(uint8)>> weakRetryJob = retryJob;
+
+			*retryJob = [id = localWorldId, sharedFn, weakRetryJob](uint8 retry) mutable
 				{
 					auto& state = GetOrCreateWorldShardState(CurrentShardLocalChecked());
 					if (auto* world = dynamic_cast<ClientPhysicalWorld*>(state.FindWorld(id)))
-						fn(*world);
+					{
+						(*sharedFn)(*world);
+						return;
+					}
+
+					if (retry >= kMaxPendingWorldRetries)
+					{
+						JAMNET_LOG_WARN("[SubmitPhysicalWorldJob] local world id= {}. not found in WorldShardState", id);
+						return;
+					}
+
+					auto shard = GLOBAL_EXEC.GetShardFromIndex(GetLocalWorldShardIndex(id));
+					if (!shard)
+					{
+						JAMNET_LOG_WARN("[SubmitPhysicalWorldJob] local world id= {}. failed to resolve world shard", id);
+						return;
+					}
+
+					auto nextRetryJob = weakRetryJob.lock();
+					if (!nextRetryJob)
+						return;
+
+					shard->Submit(Job([retryJob = std::move(nextRetryJob), retry]() mutable
+						{
+							(*retryJob)(static_cast<uint8>(retry + 1));
+						}, eJobPriority::Normal));
+				};
+
+			return it->second.TryPost(Job([retryJob]() mutable
+				{
+					(*retryJob)(0);
 				}));
 		}
 

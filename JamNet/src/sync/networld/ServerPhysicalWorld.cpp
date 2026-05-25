@@ -268,6 +268,7 @@ namespace jam::net
 		JAM_ASSERT(IsCurrentShardContext());
 
 		NetId nid = SpawnActorImpl(params);
+		JAMNET_LOG_DEBUG("[SpawnActorAsync] Spawn actor. net id= {}", nid.Raw());
 
 		if (onDone)
 			onDone(nid);

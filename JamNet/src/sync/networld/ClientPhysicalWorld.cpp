@@ -434,6 +434,8 @@ namespace jam::net
 			params.targetNetId.Raw());
 		fbb.Finish(root);
 
+		JAMNET_LOG_DEBUG("[ClientPhysicalWorld::OnSpawnActorRequest] account id= {}, user id= {} request spawn actor", m_accountId, m_userId);
+
 		RPCCallOptions opt{ .channel = eChannel::RELIABLE_ORDERED, .timeout_ns = 10_s };
 		RPCCallAsyncMember<fb::fbSpawnActorReq, fb::fbSpawnActorRes>(
 			m_sessions.TryGetUdp(),
