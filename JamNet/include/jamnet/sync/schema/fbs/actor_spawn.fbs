@@ -12,7 +12,7 @@ table fbSpawnActorReq
 	owner_user_id			: ulong;
 	controller_user_id		: ulong;
 
-	prefab_key				: ulong;
+	actor_archetype_key		: ulong;
 	pos						: fbVec3;
 	rot						: fbQuat;
 	spawn_src				: uint;		// 0 : level, 1: runtime, 2: network, 3: tool

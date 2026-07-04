@@ -1,6 +1,6 @@
 #pragma once
 
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 
 #include <jampx/PhysicsTypes.h>
@@ -102,7 +102,7 @@ namespace jam::net
 		uint32					objectId  = 0;
 		bool					isLocal	  = false;
 		eActorLifecycleReason	reason	  = eActorLifecycleReason::Spawned;
-		px::PrefabKey			prefab	  = {};
+		ActorArchetypeKey		actorArchetypeKey = {};
 	};
 
 	struct ClickMoveResolvedEvent

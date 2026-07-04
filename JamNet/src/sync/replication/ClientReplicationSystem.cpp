@@ -233,13 +233,14 @@ namespace jam::net
 			}
 		}
 
+		bool created = false;
 		if (entity == entt::null || !m_world.valid(entity))
 		{
 			const px::eBodyType bodyType = static_cast<px::eBodyType>(meta->body_type);
 			if (bodyType == px::eBodyType::None)
 				JAM_CRASH("[ProcessLifecycleActor] : NetActorBodyType is None.");
 
-			entity = m_netWorld->EnsureReplicatedActor(netId, px::PrefabKey{ meta->prefab_key }, meta->owner_user_id, meta->controller_user_id, bodyType);
+			entity = m_netWorld->EnsureReplicatedActor(netId, ActorArchetypeKey::FromU64(meta->actor_archetype_key), meta->owner_user_id, meta->controller_user_id, bodyType, &created);
 		}
 
 		if (entity == entt::null || !m_world.valid(entity))
@@ -262,6 +263,8 @@ namespace jam::net
 		Replica& replica = GetOrCreateReplica(netId);
 		replica.e = entity;
 		ApplyActorMeta(netId, entity, *meta, replica);
+		if (created)
+			m_netWorld->PublishActorSpawned(entity, meta->spawn_req_id, replica.isLocal, eActorLifecycleReason::Spawned);
 
 		const bool wasHidden = m_world.all_of<OutOfAoiTag>(entity) || m_world.all_of<PredictedDespawnTag>(entity);
 		if (wasHidden)
@@ -275,7 +278,11 @@ namespace jam::net
 		if (entity == entt::null || !m_world.valid(entity))
 			return;
 
-		m_world.emplace_or_replace<NetPrefabKey>(entity, NetPrefabKey{ px::PrefabKey{ meta.prefab_key } });
+		m_world.emplace_or_replace<NetActorArchetypeKey>(entity, NetActorArchetypeKey{ ActorArchetypeKey::FromU64(meta.actor_archetype_key) });
+		if (px::PhysicsArchetypeKey physicsArchetypeKey{}; m_netWorld->TryResolvePhysicsArchetypeKey(ActorArchetypeKey::FromU64(meta.actor_archetype_key), physicsArchetypeKey))
+			m_world.emplace_or_replace<NetPhysicsArchetypeKey>(entity, NetPhysicsArchetypeKey{ physicsArchetypeKey });
+		else if (m_world.all_of<NetPhysicsArchetypeKey>(entity))
+			m_world.remove<NetPhysicsArchetypeKey>(entity);
 		m_world.emplace_or_replace<OwnershipTag>(entity, OwnershipTag{ meta.owner_user_id });
 		m_world.emplace_or_replace<ControlTag>(entity, ControlTag{ meta.controller_user_id });
 		m_world.emplace_or_replace<NetTeamPartRole>(entity, NetTeamPartRole::FromPacked(meta.packed_id));

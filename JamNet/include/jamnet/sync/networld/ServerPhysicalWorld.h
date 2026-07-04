@@ -1,5 +1,5 @@
 #pragma once
-#include "jamnet/runtime/world/PhysicalWorld.h"
+#include "jamnet/runtime/world/core/PhysicalWorld.h"
 
 #include <jampx/IPhysicsFacade.h>
 
@@ -26,7 +26,6 @@ namespace jam::net
 		void								Stop() override;
 
 		void								SetPhysicsFacade(std::unique_ptr<px::IPhysicsFacade> physics);
-		void								SetLevelPath(const std::string& levelPath) { m_levelPath = levelPath; }
 		void								HandleWorldPacket(uint64 callerUserId, Packet packet) override;
 
 		bool								AddMember(WorldUserContext user) override;
@@ -72,9 +71,6 @@ namespace jam::net
 
 	private:
 		std::atomic<uint32>							m_netIdGenerator{ 1 };
-
-		std::string									m_levelPath;
-		px::LevelLayerInfo							m_levelLayerInfo	= {};
 
 		std::atomic<bool>							m_pendingInitialFullSnapshot{ false };
 

@@ -12,7 +12,7 @@
 #include "jamnet/sync/replication/ReplicationCodec.h"
 #include "jamnet/sync/transport/CustomPacketHelper.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
-#include "jamnet/runtime/world/ServerWorldActionSystem.h"
+#include "jamnet/runtime/world/action/ServerWorldActionSystem.h"
 
 namespace jam::net
 {
@@ -340,8 +340,8 @@ namespace jam::net
 			{
 				.status	= eWorldActionStatus::Failed,
 				.action = parsed.action,
-				.source = WorldKey{ req.src_desc_id(), req.src_world_id() },
-				.target = WorldKey{ req.target_desc_id(), req.target_world_id() },
+				.source = WorldKey{ req.src_archetype_key(), req.src_world_id() },
+				.target = WorldKey{ req.target_archetype_key(), req.target_world_id() },
 			};
 			SendWorldAssignmentResponse(GetEntity(), res, requestId);
 			return;
@@ -382,8 +382,8 @@ namespace jam::net
 			return;
 		}
 
-		const px::PrefabKey key{ req.prefab_key() };
-		if (!key.IsValid() || !req.pos() || !req.rot())
+		const ActorArchetypeKey actorArchetypeKey = ActorArchetypeKey::FromU64(req.actor_archetype_key());
+		if (!IsValidAssetKey(actorArchetypeKey) || !req.pos() || !req.rot())
 		{
 			SendSpawnActorResponse(e, false, req.spawn_req_id(), NetId::Invalid(), requestId);
 			return;
@@ -407,16 +407,16 @@ namespace jam::net
 
 		SpawnParams params{};
 
-		params.spawnId		= req.spawn_req_id();
-		params.owner		= (req.owner_user_id() != 0 || req.controller_user_id() != 0) ? userId : 0;
-		params.controller	= (req.controller_user_id() != 0) ? userId : 0;
-		params.targetNetId  = NetId::MakeRaw(req.target_net_id());
-		params.desc.spawnSrc = px::eSpawnSource::Runtime;
-		params.desc.prefab	= key;
-		params.desc.pose    = { .p = { req.pos()->x(), req.pos()->y(), req.pos()->z() }, .q = { req.rot()->x(), req.rot()->y(), req.rot()->z(), req.rot()->w() } };
-		params.desc.team	= static_cast<uint16>(req.team_id());
-		params.desc.part	= static_cast<uint8>(req.part_id());
-		params.desc.role	= static_cast<uint8>(req.role_id());
+		params.spawnId				= req.spawn_req_id();
+		params.actorArchetypeKey	= actorArchetypeKey;
+		params.owner				= (req.owner_user_id() != 0 || req.controller_user_id() != 0) ? userId : 0;
+		params.controller			= (req.controller_user_id() != 0) ? userId : 0;
+		params.targetNetId			= NetId::MakeRaw(req.target_net_id());
+		params.desc.spawnSrc		= px::eSpawnSource::Runtime;
+		params.desc.pose			= { .p = { req.pos()->x(), req.pos()->y(), req.pos()->z() }, .q = { req.rot()->x(), req.rot()->y(), req.rot()->z(), req.rot()->w() } };
+		params.desc.team			= static_cast<uint16>(req.team_id());
+		params.desc.part			= static_cast<uint8>(req.part_id());
+		params.desc.role			= static_cast<uint8>(req.role_id());
 
 		px::SpawnOverrideMask::Flag overrideMask{ req.override_mask() };
 

@@ -178,13 +178,13 @@ namespace jam::net
     {
         if (!m_physics || !m_world.valid(e)) return;
 
-        const auto& pk = m_world.get<NetPrefabKey>(e);
-        if (!pk.key.IsValid()) return;
+        const auto& pk = m_world.get<NetPhysicsArchetypeKey>(e);
+        if (!IsValidAssetKey(pk.key)) return;
 
         const px::ObjectId id = MakeObjectId(e);
 
         px::SpawnDesc desc{};
-        desc.prefab     = pk.key;
+        desc.archetype  = pk.key;
         desc.spawnSrc   = isLocal ? px::eSpawnSource::Runtime : px::eSpawnSource::Network;
 
         const auto& tpr = m_world.get<NetTeamPartRole>(e);

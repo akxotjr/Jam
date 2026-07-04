@@ -1,5 +1,5 @@
 #pragma once
-#include "jamnet/runtime/world/PhysicalWorld.h"
+#include "jamnet/runtime/world/core/PhysicalWorld.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 #include "jamnet/runtime/AppRuntimeEvents.h"
 #include "jamnet/runtime/schema/RPCSchemaIds.h"
@@ -19,9 +19,12 @@
 
 namespace jam::net
 {
+	class ClientReplicationSystem;
 
 	class ClientPhysicalWorld : public PhysicalWorld
 	{
+		friend class ClientReplicationSystem;
+
 	public:
 		ClientPhysicalWorld() = default;
 		explicit ClientPhysicalWorld(const WorldConfig& config) : PhysicalWorld(config) {}
@@ -34,7 +37,6 @@ namespace jam::net
 		void								Shutdown(eMailboxCloseMode mode, std::function<void()> onClosed = nullptr) override;
 
 		void								SetPhysicsFacade(std::unique_ptr<px::IPhysicsFacade> physics);
-		void								SetLevelPath(const std::string& levelPath) { m_levelPath = levelPath; }
 		void								SetHeadless(bool headless) { m_headless = headless; }
 		bool								IsHeadless() const { return m_headless; }
 
@@ -73,7 +75,7 @@ namespace jam::net
 		void								ReactivateReplicatedActor(NetId netId, bool isLocal);
 		void								DestroyReplicatedActor(NetId netId);
 
-		entt::entity						EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller, px::eBodyType bodyType);
+		entt::entity						EnsureReplicatedActor(NetId netId, ActorArchetypeKey actorArchetypeKey, uint64 owner, uint64 controller, px::eBodyType bodyType, bool* outCreated = nullptr);
 		entt::entity						TryConfirmPendingSpawn(NetId netId, uint32 spawnReqId);
 	
 
@@ -93,6 +95,7 @@ namespace jam::net
 		void								PublishWorldParticipantEvent(uint64 participantUserId, eWorldParticipantChange change);
 
 		void								RequestSpawnActor(const SpawnParams& params);
+		bool								TryResolvePhysicsArchetypeKey(ActorArchetypeKey actorArchetypeKey, OUT px::PhysicsArchetypeKey& outKey) const;
 
 		void								OnSpawnActorResponse(std::optional<RPCTableRef<fb::fbSpawnActorRes>> res);
 		void								OnDespawnActorResponse(std::optional<RPCTableRef<fb::fbDespawnActorRes>> res);
@@ -106,8 +109,6 @@ namespace jam::net
 		ClientSessionBundle								m_sessions;
 
 
-		std::string										m_levelPath;
-		px::LevelLayerInfo								m_levelLayerInfo = {};
 		uint16											m_localShardIndex = std::numeric_limits<uint16>::max();
 		uint16											m_localWorldIndex = 0;
 

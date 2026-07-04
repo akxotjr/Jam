@@ -1,7 +1,8 @@
 // Deprecated: legacy replication/app bridge types.
 // New app-layer code should use jamnet/runtime/AppRuntimeEvents.h and ClientRuntime polling APIs instead.
 #pragma once
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/actor/ActorArchetypeDatabase.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 
 #include <jampx/PhysicsTypes.h>
 
@@ -89,14 +90,14 @@ namespace jam::net
 		uint32			objectId	= 0;
 		bool			isLocal		= false;
 		eRenderActorLifecycleReason reason = eRenderActorLifecycleReason::Created;
-		px::PrefabKey	prefab		= {};
+		ActorArchetypeKey		actorArchetypeKey = {};
 	};
 
 	struct RenderLevelSpawnedEvent
 	{
 		uint64	accountId = 0;
 		uint64	userId = 0;
-		std::unordered_map<px::ObjectId, px::PrefabKey> instances;
+		std::unordered_map<px::ObjectId, px::PhysicsArchetypeKey> instances;
 	};
 
 	struct RenderActorDespawnedEvent

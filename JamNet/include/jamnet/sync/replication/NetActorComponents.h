@@ -1,5 +1,7 @@
 #pragma once
 
+#include "jamnet/runtime/actor/ActorArchetypeDatabase.h"
+
 #include <jampx/PhysicsTypes.h>
 
 
@@ -59,10 +61,14 @@ namespace jam::net
 		return static_cast<px::ObjectId>(e);
 	}
 
-	/// @brief	PrefabKey(in PhyiscsFacade) of NetActor
-	struct NetPrefabKey
+	struct NetPhysicsArchetypeKey
 	{
-		px::PrefabKey		key;
+		px::PhysicsArchetypeKey		key;
+	};
+
+	struct NetActorArchetypeKey
+	{
+		ActorArchetypeKey		key;
 	};
 
 

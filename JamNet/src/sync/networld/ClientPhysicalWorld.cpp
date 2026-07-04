@@ -364,7 +364,7 @@ namespace jam::net
 
 	void ClientPhysicalWorld::RequestSpawnActor(const SpawnParams& params)
 	{
-		if (!params.desc.prefab.IsValid())
+		if (!IsValidAssetKey(params.desc.archetype))
 			return;
 
 		flatbuffers::FlatBufferBuilder fbb(256);
@@ -417,7 +417,7 @@ namespace jam::net
 			params.spawnId,
 			params.owned ? m_userId : 0,
 			params.controlled ? m_userId : 0,
-			params.desc.prefab.value,
+			params.actorArchetypeKey.v,
 			&pos,
 			&rot,
 			static_cast<uint32>(params.desc.spawnSrc),
@@ -542,46 +542,65 @@ namespace jam::net
 	}
 
 
-	entt::entity ClientPhysicalWorld::EnsureReplicatedActor(NetId netId, px::PrefabKey prefabKey, uint64 owner, uint64 controller, px::eBodyType bodyType)
+bool ClientPhysicalWorld::TryResolvePhysicsArchetypeKey(ActorArchetypeKey actorArchetypeKey, OUT px::PhysicsArchetypeKey& outKey) const
+{
+	const ActorArchetypeData* actorArchetype = m_actorArchetypes.Find(actorArchetypeKey);
+	if (!actorArchetype || !IsValidAssetKey(actorArchetype->physicsArchetype))
+		return false;
+
+	outKey = actorArchetype->physicsArchetype;
+	return true;
+}
+
+entt::entity ClientPhysicalWorld::EnsureReplicatedActor(NetId netId, ActorArchetypeKey actorArchetypeKey, uint64 owner, uint64 controller, px::eBodyType bodyType, bool* outCreated)
+{
+	if (auto it = m_netIdToEntity.find(netId); it != m_netIdToEntity.end())
 	{
-		if (auto it = m_netIdToEntity.find(netId); it != m_netIdToEntity.end())
+		if (it->second != entt::null && m_registry.valid(it->second))
 		{
-			if (it->second != entt::null && m_registry.valid(it->second))
-			{
-				return it->second;
-			}
-			m_netIdToEntity.erase(it);
+			if (outCreated) *outCreated = false;
+			return it->second;
 		}
+		m_netIdToEntity.erase(it);
+	}
 
-		entt::entity e = m_registry.create();
+	px::PhysicsArchetypeKey physicsArchetypeKey{};
+	if (!TryResolvePhysicsArchetypeKey(actorArchetypeKey, physicsArchetypeKey))
+	{
+		if (outCreated) *outCreated = false;
+		return entt::null;
+	}
 
-		m_registry.emplace<NetId>(e, netId);
-		m_registry.emplace<NetPrefabKey>(e, NetPrefabKey{ prefabKey });
-		m_registry.emplace<NetTeamPartRole>(e);
-		m_registry.emplace<OwnershipTag>(e, OwnershipTag{ owner });
-		m_registry.emplace<ControlTag>(e, ControlTag{ controller });
-		m_registry.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
-		if (bodyType == px::eBodyType::Rigid)
-		{
-			m_registry.emplace<RigidAuthorityState>(e);
-			m_registry.emplace<RigidProxyState>(e);
-			m_registry.emplace<RigidReplayHistory>(e);
-		}
-		else
-		{
-			m_registry.emplace<CharAuthorityState>(e);
-			m_registry.emplace<CharProxyState>(e);
-			m_registry.emplace<CharReplayHistory>(e);
-		}
+	entt::entity e = m_registry.create();
 
-		if (m_physics && m_physics->IsReplayCandidate(prefabKey))
+	m_registry.emplace<NetId>(e, netId);
+	m_registry.emplace<NetActorArchetypeKey>(e, NetActorArchetypeKey{ actorArchetypeKey });
+	m_registry.emplace<NetPhysicsArchetypeKey>(e, NetPhysicsArchetypeKey{ physicsArchetypeKey });
+	m_registry.emplace<NetTeamPartRole>(e);
+	m_registry.emplace<OwnershipTag>(e, OwnershipTag{ owner });
+	m_registry.emplace<ControlTag>(e, ControlTag{ controller });
+	m_registry.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
+	if (bodyType == px::eBodyType::Rigid)
+	{
+		m_registry.emplace<RigidAuthorityState>(e);
+		m_registry.emplace<RigidProxyState>(e);
+		m_registry.emplace<RigidReplayHistory>(e);
+	}
+	else
+	{
+		m_registry.emplace<CharAuthorityState>(e);
+		m_registry.emplace<CharProxyState>(e);
+		m_registry.emplace<CharReplayHistory>(e);
+	}
+
+		if (m_physics && m_physics->IsReplayCandidate(physicsArchetypeKey))
 		{
 			m_registry.emplace<ReplayCandidateTag>(e);
 			m_registry.emplace<ReplayRetention>(e, ReplayRetention{});
 		}
 
 		m_netIdToEntity.emplace(netId, e);
-		PublishActorSpawned(e, 0, false);
+		if (outCreated) *outCreated = true;
 
 		return e;
 	}
@@ -732,21 +751,22 @@ namespace jam::net
 
 	void ClientPhysicalWorld::PublishActorSpawned(entt::entity e, uint32 spawnReqId, bool isLocal, eActorLifecycleReason reason)
 	{
-		if (!m_registry.valid(e) || !m_registry.all_of<NetId, NetPrefabKey>(e))
+		if (!m_registry.valid(e) || !m_registry.all_of<NetId>(e))
 			return;
 
 		(void)spawnReqId;
 
 		ActorLifecycleEvent event{};
-		event.accountId	   = m_accountId;
-		event.userId	   = m_userId;
-		event.localWorldId = GetLocalWorldId();
-		event.spawnReqId   = spawnReqId;
-		event.netId        = m_registry.get<NetId>(e);
-		event.objectId     = MakeObjectId(e);
-		event.isLocal      = isLocal;
-		event.reason       = reason;
-		event.prefab       = m_registry.get<NetPrefabKey>(e).key;
+		event.accountId			= m_accountId;
+		event.userId			= m_userId;
+		event.localWorldId		= GetLocalWorldId();
+		event.spawnReqId		= spawnReqId;
+		event.netId				= m_registry.get<NetId>(e);
+		event.objectId			= MakeObjectId(e);
+		event.isLocal			= isLocal;
+		event.reason			= reason;
+		if (const auto* actorArchetype = m_registry.try_get<NetActorArchetypeKey>(e))
+			event.actorArchetypeKey = actorArchetype->key;
 
 		GLOBAL_EVENTBUS_PUBLISH(event);
 	}
@@ -779,7 +799,7 @@ namespace jam::net
 		{
 			.key = GetWorldKey(),
 			.localWorldId = GetLocalWorldId(),
-			.kind = m_config.desc.kind,
+			.kind = m_config.templateData.kind,
 			.participantUserId = participantUserId,
 		};
 		GLOBAL_EVENTBUS_PUBLISH(event);
@@ -787,72 +807,75 @@ namespace jam::net
 
 	void ClientPhysicalWorld::BootstrapLevelActors()
 	{
-		if (!m_physics || m_levelPath.empty())
+		if (!m_physics || m_actorLevels.instances.empty())
 			return;
 
-		m_levelLayerInfo = m_physics->SetLevelPath(m_levelPath);
-		if (m_levelLayerInfo.totalCount == 0) 
-			return;
-
-		for (const auto& [layer, count] : m_levelLayerInfo.countPerLayer)
+		for (const ActorLevelInstanceData& instance : m_actorLevels.instances)
 		{
-			if (count == 0) continue;
+			const ActorArchetypeData* actorArchetype = m_actorArchetypes.Find(instance.actorArchetype);
+			if (!actorArchetype || !IsValidAssetKey(actorArchetype->key) || !IsValidAssetKey(actorArchetype->physicsArchetype))
+				continue;
 
-			std::vector<px::LevelInstanceInfo> instances;
-			instances.resize(count);
+			const px::PhysicsArchetypeKey physicsArchetypeKey = actorArchetype->physicsArchetype;
+			if (!IsValidAssetKey(physicsArchetypeKey))
+				continue;
 
-			std::vector<entt::entity> created;
-			created.reserve(count);
+			const px::eBodyType bodyType = m_physics->FindBodyType(physicsArchetypeKey);
+			if (bodyType == px::eBodyType::None)
+				continue;
 
-			for (uint32 i = 0; i < count; ++i)
+			const entt::entity e = m_registry.create();
+			const NetId nid = NetId::MakeLevel(instance.levelActorId);
+			if (!nid.IsValid())
 			{
-				const entt::entity e = m_registry.create();
-				created.push_back(e);
-
-				instances[i].objectId = MakeObjectId(e);
-			}
-
-			if (!m_physics->LoadLevel(layer, instances))
-			{
-				for (const auto e : created)
-				{
-					if (m_registry.valid(e))
-						m_registry.destroy(e);
-				}
+				m_registry.destroy(e);
 				continue;
 			}
 
-			for (const auto& inst : instances)
+			m_registry.emplace<NetId>(e, nid);
+			m_registry.emplace<NetActorArchetypeKey>(e, NetActorArchetypeKey{ actorArchetype->key });
+			m_registry.emplace<NetPhysicsArchetypeKey>(e, NetPhysicsArchetypeKey{ physicsArchetypeKey });
+			m_registry.emplace<OwnershipTag>(e);
+			m_registry.emplace<ControlTag>(e);
+			m_registry.emplace<NetTeamPartRole>(e);
+			m_registry.emplace<NetActorBodyType>(e, NetActorBodyType{ bodyType });
+
+			if (bodyType == px::eBodyType::Character)
 			{
-				if (inst.objectId == px::INVALID_OBJ_ID) continue;
-
-				const entt::entity e = static_cast<entt::entity>(inst.objectId);
-				if (!m_registry.valid(e)) continue;
-
-				const NetId nid = NetId::MakeLevel(inst.levelActorId);
-				if (!nid.IsValid()) continue;
-
-				m_registry.emplace<NetId>(e, nid);
-				m_registry.emplace<NetPrefabKey>(e, NetPrefabKey{ inst.prefab });
-				m_registry.emplace<OwnershipTag>(e);
-				m_registry.emplace<ControlTag>(e);
-				m_registry.emplace<RemoteActorTag>(e);
-				m_registry.emplace<NetTeamPartRole>(e);
-				m_registry.emplace<PhysicsSpawnedTag>(e);
-				m_registry.emplace<NetActorBodyType>(e, NetActorBodyType{ .body = px::eBodyType::Rigid });
-				m_registry.emplace<RigidAuthorityState>(e, inst.state);
-				m_registry.emplace<RigidProxyState>(e, inst.state);
-				m_registry.emplace<RigidReplayHistory>(e);
-
-				if (m_physics->IsReplayCandidate(inst.prefab))
-				{
-					m_registry.emplace<ReplayCandidateTag>(e);
-					m_registry.emplace<ReplayRetention>(e, ReplayRetention{});
-				}
-
-				m_netIdToEntity[nid] = e;
-				PublishActorSpawned(e, 0, false, eActorLifecycleReason::Spawned);
+				px::CharacterState state{};
+				state.pos = instance.pose.p;
+				m_registry.emplace<CharAuthorityState>(e, state);
+				m_registry.emplace<CharProxyState>(e, state);
+				m_registry.emplace<CharReplayHistory>(e);
 			}
+			else
+			{
+				px::RigidState state{};
+				state.pose = instance.pose;
+				m_registry.emplace<RigidAuthorityState>(e, state);
+				m_registry.emplace<RigidProxyState>(e, state);
+				m_registry.emplace<RigidReplayHistory>(e);
+			}
+
+			if (m_physics->IsReplayCandidate(physicsArchetypeKey))
+			{
+				m_registry.emplace<ReplayCandidateTag>(e);
+				m_registry.emplace<ReplayRetention>(e, ReplayRetention{});
+			}
+
+			m_netIdToEntity[nid] = e;
+			m_registry.ctx().get<ClientPhysicsSystem>().SpawnActor(e, false);
+			if (!m_registry.valid(e))
+				continue;
+
+			if (!m_registry.all_of<PhysicsSpawnedTag>(e) && !m_physics->IsStepPending())
+			{
+				m_netIdToEntity.erase(nid);
+				m_registry.destroy(e);
+				continue;
+			}
+
+			PublishActorSpawned(e, 0, false, eActorLifecycleReason::Spawned);
 		}
 	}
 
@@ -863,7 +886,8 @@ namespace jam::net
 		m_registry.emplace<NetPendingSpawnTag>(e);
 		m_registry.emplace<NetSpawnRequestId>(e, NetSpawnRequestId{ params.spawnId });
 		m_registry.emplace<NetId>(e, NetId::Invalid());             // pre-creating NetId to invalid val. actual value is initialized when receive server snapshot. 
-		m_registry.emplace<NetPrefabKey>(e, NetPrefabKey{ params.desc.prefab });
+		m_registry.emplace<NetActorArchetypeKey>(e, NetActorArchetypeKey{ params.actorArchetypeKey });
+		m_registry.emplace<NetPhysicsArchetypeKey>(e, NetPhysicsArchetypeKey{ params.desc.archetype });
 		m_registry.emplace<OwnershipTag>(e, OwnershipTag{ params.owned ? m_userId : 0 });
 		m_registry.emplace<ControlTag>(e, ControlTag{ params.controlled ? m_userId : 0 });
 		m_registry.emplace<NetTeamPartRole>(e, NetTeamPartRole{ params.desc.team, params.desc.part, params.desc.role });
@@ -886,7 +910,7 @@ namespace jam::net
 			m_registry.emplace<CharReplayHistory>(e);
 		}
 
-		if (m_physics && m_physics->IsReplayCandidate(params.desc.prefab))
+		if (m_physics && m_physics->IsReplayCandidate(params.desc.archetype))
 		{
 			m_registry.emplace<ReplayCandidateTag>(e);
 			m_registry.emplace<ReplayRetention>(e, ReplayRetention{});
@@ -979,7 +1003,7 @@ namespace jam::net
 		{
 			const uint64 routeSeed = (m_config.key.worldId != kInvalidNetWorldId)
 				? m_config.key.worldId
-				: (static_cast<uint64>(m_config.key.descId) << 32) ^ m_userId;
+				: (m_config.key.archetypeKey.v << 32) ^ m_userId;
 
 			const RouteAssignment assignment = GLOBAL_EXEC.PlaceRoute(
 				GLOBAL_EXEC.MakeRouteKey(kClientWorldRouteDomain, routeSeed));

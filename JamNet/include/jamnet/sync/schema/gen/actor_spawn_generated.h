@@ -42,7 +42,7 @@ struct fbSpawnActorReqT : public ::flatbuffers::NativeTable {
   uint32_t spawn_req_id = 0;
   uint64_t owner_user_id = 0;
   uint64_t controller_user_id = 0;
-  uint64_t prefab_key = 0;
+  uint64_t actor_archetype_key = 0;
   std::unique_ptr<jam::net::fb::fbVec3> pos{};
   std::unique_ptr<jam::net::fb::fbQuat> rot{};
   uint32_t spawn_src = 0;
@@ -71,7 +71,7 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_SPAWN_REQ_ID = 6,
     VT_OWNER_USER_ID = 8,
     VT_CONTROLLER_USER_ID = 10,
-    VT_PREFAB_KEY = 12,
+    VT_ACTOR_ARCHETYPE_KEY = 12,
     VT_POS = 14,
     VT_ROT = 16,
     VT_SPAWN_SRC = 18,
@@ -99,8 +99,8 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t controller_user_id() const {
     return GetField<uint64_t>(VT_CONTROLLER_USER_ID, 0);
   }
-  uint64_t prefab_key() const {
-    return GetField<uint64_t>(VT_PREFAB_KEY, 0);
+  uint64_t actor_archetype_key() const {
+    return GetField<uint64_t>(VT_ACTOR_ARCHETYPE_KEY, 0);
   }
   const jam::net::fb::fbVec3 *pos() const {
     return GetStruct<const jam::net::fb::fbVec3 *>(VT_POS);
@@ -151,7 +151,7 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_SPAWN_REQ_ID, 4) &&
            VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
-           VerifyField<uint64_t>(verifier, VT_PREFAB_KEY, 8) &&
+           VerifyField<uint64_t>(verifier, VT_ACTOR_ARCHETYPE_KEY, 8) &&
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_POS, 4) &&
            VerifyField<jam::net::fb::fbQuat>(verifier, VT_ROT, 4) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_SRC, 4) &&
@@ -189,8 +189,8 @@ struct fbSpawnActorReqBuilder {
   void add_controller_user_id(uint64_t controller_user_id) {
     fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_CONTROLLER_USER_ID, controller_user_id, 0);
   }
-  void add_prefab_key(uint64_t prefab_key) {
-    fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_PREFAB_KEY, prefab_key, 0);
+  void add_actor_archetype_key(uint64_t actor_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_ACTOR_ARCHETYPE_KEY, actor_archetype_key, 0);
   }
   void add_pos(const jam::net::fb::fbVec3 *pos) {
     fbb_.AddStruct(fbSpawnActorReq::VT_POS, pos);
@@ -251,7 +251,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     uint32_t spawn_req_id = 0,
     uint64_t owner_user_id = 0,
     uint64_t controller_user_id = 0,
-    uint64_t prefab_key = 0,
+    uint64_t actor_archetype_key = 0,
     const jam::net::fb::fbVec3 *pos = nullptr,
     const jam::net::fb::fbQuat *rot = nullptr,
     uint32_t spawn_src = 0,
@@ -267,7 +267,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     float pitch = 0.0f,
     uint32_t target_net_id = 0) {
   fbSpawnActorReqBuilder builder_(_fbb);
-  builder_.add_prefab_key(prefab_key);
+  builder_.add_actor_archetype_key(actor_archetype_key);
   builder_.add_controller_user_id(controller_user_id);
   builder_.add_owner_user_id(owner_user_id);
   builder_.add_world_id(world_id);
@@ -488,7 +488,7 @@ inline fbSpawnActorReqT::fbSpawnActorReqT(const fbSpawnActorReqT &o)
         spawn_req_id(o.spawn_req_id),
         owner_user_id(o.owner_user_id),
         controller_user_id(o.controller_user_id),
-        prefab_key(o.prefab_key),
+        actor_archetype_key(o.actor_archetype_key),
         pos((o.pos) ? new jam::net::fb::fbVec3(*o.pos) : nullptr),
         rot((o.rot) ? new jam::net::fb::fbQuat(*o.rot) : nullptr),
         spawn_src(o.spawn_src),
@@ -510,7 +510,7 @@ inline fbSpawnActorReqT &fbSpawnActorReqT::operator=(fbSpawnActorReqT o) FLATBUF
   std::swap(spawn_req_id, o.spawn_req_id);
   std::swap(owner_user_id, o.owner_user_id);
   std::swap(controller_user_id, o.controller_user_id);
-  std::swap(prefab_key, o.prefab_key);
+  std::swap(actor_archetype_key, o.actor_archetype_key);
   std::swap(pos, o.pos);
   std::swap(rot, o.rot);
   std::swap(spawn_src, o.spawn_src);
@@ -541,7 +541,7 @@ inline void fbSpawnActorReq::UnPackTo(fbSpawnActorReqT *_o, const ::flatbuffers:
   { auto _e = spawn_req_id(); _o->spawn_req_id = _e; }
   { auto _e = owner_user_id(); _o->owner_user_id = _e; }
   { auto _e = controller_user_id(); _o->controller_user_id = _e; }
-  { auto _e = prefab_key(); _o->prefab_key = _e; }
+  { auto _e = actor_archetype_key(); _o->actor_archetype_key = _e; }
   { auto _e = pos(); if (_e) _o->pos = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
   { auto _e = rot(); if (_e) _o->rot = std::unique_ptr<jam::net::fb::fbQuat>(new jam::net::fb::fbQuat(*_e)); }
   { auto _e = spawn_src(); _o->spawn_src = _e; }
@@ -570,7 +570,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
   auto _spawn_req_id = _o->spawn_req_id;
   auto _owner_user_id = _o->owner_user_id;
   auto _controller_user_id = _o->controller_user_id;
-  auto _prefab_key = _o->prefab_key;
+  auto _actor_archetype_key = _o->actor_archetype_key;
   auto _pos = _o->pos ? _o->pos.get() : nullptr;
   auto _rot = _o->rot ? _o->rot.get() : nullptr;
   auto _spawn_src = _o->spawn_src;
@@ -591,7 +591,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
       _spawn_req_id,
       _owner_user_id,
       _controller_user_id,
-      _prefab_key,
+      _actor_archetype_key,
       _pos,
       _rot,
       _spawn_src,

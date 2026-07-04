@@ -638,21 +638,21 @@ namespace jam::net
 
 	flatbuffers::Offset<fb::fbActorMeta> ServerReplicationSystem::BuildActorMeta(entt::entity e, uint64 userId)
 	{
-		uint64 owner		= 0;
-		uint64 controller	= 0;
-		uint64 prefab		= 0;
-		uint32 spawnReqId	= 0;
-		uint32 packedId		= 0;
+		uint64 owner				= 0;
+		uint64 controller			= 0;
+		uint64 actorArchetypeKey	= 0;
+		uint32 spawnReqId			= 0;
+		uint32 packedId				= 0;
 		const auto* body = m_world.try_get<NetActorBodyType>(e);
 		if (!body || body->body == px::eBodyType::None)
 			return 0;
 
 		const uint8 bodyType = static_cast<uint8>(body->body);
 
-		if (auto* o   = m_world.try_get<OwnershipTag>(e))		owner		= o->userId;
-		if (auto* c   = m_world.try_get<ControlTag>(e))			controller  = c->userId;
-		if (auto* p   = m_world.try_get<NetPrefabKey>(e))		prefab		= p->key.value;
-		if (auto* tpr = m_world.try_get<NetTeamPartRole>(e))	packedId	= tpr->Packed();
+		if (auto* o   = m_world.try_get<OwnershipTag>(e))			owner			 = o->userId;
+		if (auto* c   = m_world.try_get<ControlTag>(e))				controller		 = c->userId;
+		if (auto* a   = m_world.try_get<NetActorArchetypeKey>(e))	actorArchetypeKey = a->key.v;
+		if (auto* tpr = m_world.try_get<NetTeamPartRole>(e))		packedId		 = tpr->Packed();
 
 		if (userId != 0 && userId == owner)
 		{
@@ -660,7 +660,7 @@ namespace jam::net
 				spawnReqId = s->requestId;
 		}
 
-		return fb::CreatefbActorMeta(*m_fbb, owner, controller, prefab, spawnReqId, packedId, bodyType);
+		return fb::CreatefbActorMeta(*m_fbb, owner, controller, actorArchetypeKey, spawnReqId, packedId, bodyType);
 	}
 
 	flatbuffers::Offset<fb::fbLifecycleActor> ServerReplicationSystem::BuildLifecycleActor(const PendingLifecycleEvent& event, entt::entity e, NetId netId, uint64 userId)
