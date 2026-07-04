@@ -1,12 +1,11 @@
 #pragma once
 
 #include "jamnet/core/executor/ShardOwnedObject.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 
 #include <limits>
 #include <memory>
 #include <unordered_map>
-#include <vector>
 
 
 namespace jam
@@ -43,7 +42,7 @@ namespace jam::net
 		ShardOwnedObjectTable<WorldBase>									worldsById;
 		std::unordered_map<WorldKey, WorldMeta, WorldKeyHash>				authoritativeWorldsByKey;
 		std::unordered_map<WorldKey, LocalWorldId, WorldKeyHash>			localIdsByKey;
-		std::unordered_multimap<uint32, WorldKey>							worldsByDesc;
+		std::unordered_multimap<WorldArchetypeKey, WorldKey>				worldsByArchetypeKey;
 		std::unordered_multimap<WorldGroup, WorldKey>						worldsByGroup;
 
 		LocalWorldId				AllocLocalWorldId();

@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "jamnet/core/executor/ShardExecutor.h"
-#include "jamnet/runtime/world/WorldShardState.h"
-#include "jamnet/runtime/world/WorldBase.h"
+#include "jamnet/runtime/world/core/WorldShardState.h"
+#include "jamnet/runtime/world/core/WorldBase.h"
 
 namespace jam::net
 {
@@ -104,16 +104,16 @@ namespace jam::net
 		WorldMeta entry{};
 		entry.key			= config.key;
 		entry.localWorldId	= localWorldId;
-		entry.kind			= config.desc.kind;
-		entry.group			= config.desc.group;
-		entry.capacity		= config.desc.capacity;
-		entry.runtime		= (config.desc.kind == eWorldKind::Physical) ? ePhysicalWorldRuntimeState::Standby : ePhysicalWorldRuntimeState::Active;
+		entry.kind			= config.templateData.kind;
+		entry.group			= config.templateData.group;
+		entry.capacity		= config.templateData.capacity;
+		entry.runtime		= (config.templateData.kind == eWorldKind::Physical) ? ePhysicalWorldRuntimeState::Standby : ePhysicalWorldRuntimeState::Active;
 		
 		localIdsByKey[config.key] = localWorldId;
 		authoritativeWorldsByKey[config.key] = entry;
-		worldsByDesc.emplace(config.key.descId, config.key);
-		if (config.desc.group != kInvalidWorldGroup)
-			worldsByGroup.emplace(config.desc.group, config.key);
+		worldsByArchetypeKey.emplace(config.key.archetypeKey, config.key);
+		if (config.templateData.group != kInvalidWorldGroup)
+			worldsByGroup.emplace(config.templateData.group, config.key);
 	}
 
 	void WorldShardState::UnregisterWorld(const WorldKey& key)
@@ -123,7 +123,7 @@ namespace jam::net
 
 		localIdsByKey.erase(key);
 		authoritativeWorldsByKey.erase(key);
-		std::erase_if(worldsByDesc, [&key](const auto& pair)
+		std::erase_if(worldsByArchetypeKey, [&key](const auto& pair)
 			{
 				return pair.second == key;
 			});

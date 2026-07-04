@@ -2,8 +2,8 @@
 
 #include "jamnet/core/executor/AtomicSnapshot.h"
 #include "jamnet/runtime/UserContext.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
-#include "jamnet/runtime/world/WorldShardState.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
+#include "jamnet/runtime/world/core/WorldShardState.h"
 
 #include <optional>
 #include <unordered_map>
@@ -22,7 +22,7 @@ namespace jam::net
 	struct WorldDirectorySnapshot
 	{
 		std::unordered_map<WorldKey, WorldMeta, WorldKeyHash>		worldsByKey;
-		std::unordered_multimap<uint32, WorldKey>					worldsByDesc;
+		std::unordered_multimap<WorldArchetypeKey, WorldKey>		worldsByArchetypeKey;
 		std::unordered_multimap<WorldGroup, WorldKey>				worldsByGroup;
 		std::unordered_map<UserId, UserMembershipSnapshotEntry>		usersById;
 	};
@@ -40,7 +40,7 @@ namespace jam::net
 		void										RemoveUserMemberships(UserId userId);
 
 		std::optional<WorldMeta>					FindWorld(const WorldKey& key) const;
-		std::vector<WorldMeta>						FindWorldsByDesc(uint32 descId) const;
+		std::vector<WorldMeta>						FindWorldsByArchetype(WorldArchetypeKey archetypeKey) const;
 		std::vector<WorldMeta>						FindWorldsByGroup(WorldGroup group) const;
 		std::optional<UserMembershipSnapshotEntry>	FindUserMembershipEntry(UserId userId) const;
 

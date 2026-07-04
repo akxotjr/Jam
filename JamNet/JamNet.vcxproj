@@ -121,7 +121,7 @@
       <ShowIncludes>true</ShowIncludes>
       <ExternalWarningLevel>InheritWarningLevel</ExternalWarningLevel>
       <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\jampx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)SharedData\Generated\;$(SolutionDir)JamPx\include\jampx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -139,7 +139,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\jampx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)SharedData\Generated\;$(SolutionDir)JamPx\include\jampx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -157,7 +157,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)SharedData\Generated\;$(SolutionDir)JamPx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -178,8 +178,8 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(SolutionDir)SharedData\Generated\;$(SolutionDir)JamPx\api\;$(ProjectDir)include\;$(ProjectDir);$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
@@ -260,21 +260,33 @@
     <ClInclude Include="include\jamnet\runtime\schema\gen\world_assignment_generated.h" />
     <ClInclude Include="include\jamnet\runtime\schema\RPCSchemaIds.h" />
     <ClInclude Include="include\jamnet\runtime\UserContext.h" />
-    <ClInclude Include="include\jamnet\runtime\world\ClientWorldActionSystem.h" />
-    <ClInclude Include="include\jamnet\runtime\world\DefaultWorldAssignmentPolicy.h" />
-    <ClInclude Include="include\jamnet\runtime\world\IWorldAssignmentPolicy.h" />
-    <ClInclude Include="include\jamnet\runtime\world\PhysicalWorld.h" />
-    <ClInclude Include="include\jamnet\runtime\world\ServerWorldActionSystem.h" />
-    <ClInclude Include="include\jamnet\runtime\world\VirtualWorld.h" />
-    <ClInclude Include="include\jamnet\runtime\world\WorldBase.h" />
-    <ClInclude Include="include\jamnet\runtime\world\WorldDirectory.h" />
-    <ClInclude Include="include\jamnet\runtime\world\IWorldActionSystem.h" />
+    <ClInclude Include="include\jamnet\runtime\actor\ActorArchetypeDatabase.h" />
+    <ClInclude Include="include\jamnet\runtime\actor\ActorArchetypesLoader.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\ActorLevelDatabase.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\ActorLevelsLoader.h" />
+    <ClInclude Include="include\jamnet\runtime\world\action\ClientWorldActionSystem.h" />
+    <ClInclude Include="include\jamnet\runtime\world\action\DefaultWorldAssignmentPolicy.h" />
+    <ClInclude Include="include\jamnet\runtime\world\action\IWorldAssignmentPolicy.h" />
+    <ClInclude Include="include\jamnet\runtime\world\core\PhysicalWorld.h" />
+    <ClInclude Include="include\jamnet\runtime\world\action\ServerWorldActionSystem.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\SharedDataCatalog.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\SharedDataCatalogLoader.h" />
+    <ClInclude Include="include\jamnet\runtime\world\core\VirtualWorld.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldArchetypeDatabase.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldArchetypesLoader.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldConfigResolver.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldDataBootstrap.h" />
+    <ClInclude Include="include\jamnet\runtime\world\core\WorldBase.h" />
+    <ClInclude Include="include\jamnet\runtime\world\core\WorldDirectory.h" />
+    <ClInclude Include="include\jamnet\runtime\world\action\IWorldActionSystem.h" />
     <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\ServerSession.h" />
-    <ClInclude Include="include\jamnet\runtime\world\WorldActionTypes.h" />
-    <ClInclude Include="include\jamnet\runtime\world\WorldShardState.h" />
-    <ClInclude Include="include\jamnet\runtime\world\WorldDescAsset.h" />
-    <ClInclude Include="include\jamnet\runtime\world\WorldTransferSubsystem.h" />
+    <ClInclude Include="include\jamnet\runtime\world\types\WorldActionTypes.h" />
+    <ClInclude Include="include\jamnet\runtime\world\core\WorldShardState.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldTemplateDatabase.h" />
+    <ClInclude Include="include\jamnet\runtime\world\types\WorldTemplateKey.h" />
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldTemplatesLoader.h" />
+    <ClInclude Include="include\jamnet\runtime\world\action\WorldTransferSubsystem.h" />
     <ClInclude Include="include\jamnet\sync\networld\ClientPhysicalWorld.h" />
     <ClInclude Include="include\jamnet\sync\networld\ClientVirtualWorld.h" />
     <ClInclude Include="include\jamnet\sync\networld\ServerPhysicalWorld.h" />
@@ -362,16 +374,27 @@
     <ClCompile Include="src\runtime\ServerNetworkManager.cpp" />
     <ClCompile Include="src\runtime\ServerSession.cpp" />
     <ClCompile Include="src\runtime\UserContext.cpp" />
-    <ClCompile Include="src\runtime\world\ClientWorldActionSystem.cpp" />
-    <ClCompile Include="src\runtime\world\DefaultWorldAssignmentPolicy.cpp" />
-    <ClCompile Include="src\runtime\world\ServerWorldActionSystem.cpp" />
-    <ClCompile Include="src\runtime\world\PhysicalWorld.cpp" />
-    <ClCompile Include="src\runtime\world\VirtualWorld.cpp" />
-    <ClCompile Include="src\runtime\world\WorldBase.cpp" />
-    <ClCompile Include="src\runtime\world\WorldDirectory.cpp" />
-    <ClCompile Include="src\runtime\world\WorldDescAsset.cpp" />
-    <ClCompile Include="src\runtime\world\WorldShardState.cpp" />
-    <ClCompile Include="src\runtime\world\WorldTransferSubsystem.cpp" />
+    <ClCompile Include="src\runtime\actor\ActorArchetypeDatabase.cpp" />
+    <ClCompile Include="src\runtime\actor\ActorArchetypesLoader.cpp" />
+    <ClCompile Include="src\runtime\world\data\ActorLevelDatabase.cpp" />
+    <ClCompile Include="src\runtime\world\data\ActorLevelsLoader.cpp" />
+    <ClCompile Include="src\runtime\world\action\ClientWorldActionSystem.cpp" />
+    <ClCompile Include="src\runtime\world\action\DefaultWorldAssignmentPolicy.cpp" />
+    <ClCompile Include="src\runtime\world\action\ServerWorldActionSystem.cpp" />
+    <ClCompile Include="src\runtime\world\core\PhysicalWorld.cpp" />
+    <ClCompile Include="src\runtime\world\data\SharedDataCatalog.cpp" />
+    <ClCompile Include="src\runtime\world\data\SharedDataCatalogLoader.cpp" />
+    <ClCompile Include="src\runtime\world\core\VirtualWorld.cpp" />
+    <ClCompile Include="src\runtime\world\data\WorldArchetypeDatabase.cpp" />
+    <ClCompile Include="src\runtime\world\data\WorldArchetypesLoader.cpp" />
+    <ClCompile Include="src\runtime\world\data\WorldConfigResolver.cpp" />
+    <ClCompile Include="src\runtime\world\data\WorldDataBootstrap.cpp" />
+    <ClCompile Include="src\runtime\world\core\WorldBase.cpp" />
+    <ClCompile Include="src\runtime\world\core\WorldDirectory.cpp" />
+    <ClCompile Include="src\runtime\world\core\WorldShardState.cpp" />
+    <ClCompile Include="src\runtime\world\data\WorldTemplateDatabase.cpp" />
+    <ClCompile Include="src\runtime\world\data\WorldTemplatesLoader.cpp" />
+    <ClCompile Include="src\runtime\world\action\WorldTransferSubsystem.cpp" />
     <ClCompile Include="src\sync\networld\ClientPhysicalWorld.cpp" />
     <ClCompile Include="src\sync\networld\ClientVirtualWorld.cpp" />
     <ClCompile Include="src\sync\networld\ServerPhysicalWorld.cpp" />

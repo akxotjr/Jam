@@ -1,14 +1,16 @@
 #include "pch.h"
-#include "jamnet/runtime/world/ClientWorldActionSystem.h"
+#include "jamnet/runtime/world/action/ClientWorldActionSystem.h"
 
 #include "jamnet/core/executor/GlobalEventBus.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ShardInvoke.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/RPCAPI.h"
+#include "jamnet/runtime/actor/ActorArchetypesLoader.h"
 #include "jamnet/runtime/ClientNetworkManager.h"
 #include "jamnet/runtime/AppRuntimeEvents.h"
 #include "jamnet/runtime/ClientSession.h"
+#include "jamnet/runtime/world/data/ActorLevelsLoader.h"
 #include "jamnet/sync/networld/ClientPhysicalWorld.h"
 #include "jamnet/sync/networld/ClientVirtualWorld.h"
 #include "jamnet/sync/transport/CustomPacketHelper.h"
@@ -33,7 +35,12 @@ namespace jam::net
 		m_owner = owner;
 		if (!m_owner) return;
 
-		m_asset    = WorldDescIO::LoadWorldDescAsset(m_owner->m_config.worldAssetPath);
+		m_worldData = WorldDataBootstrap::Load(WorldDataBootstrapPaths
+			{
+				.sharedDataCatalogPath = m_owner->m_config.sharedDataCatalogPath,
+				.worldTemplatePath = m_owner->m_config.worldTemplatePath,
+				.worldArchetypePath = m_owner->m_config.worldArchetypePath,
+			});
 		m_transfer = std::make_unique<WorldTransferSubsystem>();
 	}
 
@@ -44,7 +51,7 @@ namespace jam::net
 		m_virtualWorlds.clear();
 		m_physicalWorlds.clear();
 		m_owner = nullptr;
-		m_asset = {};
+		m_worldData = {};
 		m_transfer.reset();
 	}
 
@@ -532,12 +539,12 @@ namespace jam::net
 		if (!m_owner || !key.IsIssued() || ResolveLocalWorldId(key.worldId) != kInvalidLocalWorldId)
 			return;
 
-		WorldConfig worldConfig = m_asset.MakeConfig(key);
+		WorldConfig worldConfig = m_worldData.resolver.ResolveWorldConfig(key);
 		if (!worldConfig.IsValid())
 			return;
 
 		std::unique_ptr<WorldBase> world;
-		if (worldConfig.desc.kind == eWorldKind::Virtual)
+		if (worldConfig.templateData.kind == eWorldKind::Virtual)
 		{
 			auto vworld = std::make_unique<ClientVirtualWorld>(worldConfig);
 			vworld->SetAccountId(m_owner->GetAccountId());
@@ -549,7 +556,6 @@ namespace jam::net
 			auto pworld = std::make_unique<ClientPhysicalWorld>(worldConfig);
 			pworld->SetAccountId(m_owner->GetAccountId());
 			pworld->SetUserId(m_owner->GetUserId());
-			pworld->SetLevelPath(worldConfig.desc.levelKey);
 			pworld->SetHeadless(m_owner->m_config.headlessWorld);
 			pworld->SetSessionBundle(ClientSessionBundle
 				{
@@ -557,7 +563,17 @@ namespace jam::net
 					.udp = m_owner->m_udp,
 				});
 			if (!m_owner->m_config.headlessWorld && m_owner->m_config.physicsFactory)
-				pworld->SetPhysicsFacade(m_owner->m_config.physicsFactory());
+			{
+				if (auto physics = m_owner->m_config.physicsFactory())
+				{
+					physics->SetPhysicsAssetPath(worldConfig.templateData.physicsAssetPath);
+					pworld->SetPhysicsFacade(std::move(physics));
+				}
+			}
+			if (!worldConfig.templateData.actorArchetypeSetPath.empty())
+				pworld->SetActorArchetypeDatabase(ActorArchetypesLoader::Load(worldConfig.templateData.actorArchetypeSetPath));
+			if (!worldConfig.templateData.actorLevelPath.empty())
+				pworld->SetActorLevelDatabase(ActorLevelsLoader::Load(worldConfig.templateData.actorLevelPath));
 			world = std::move(pworld);
 		}
 
@@ -847,10 +863,10 @@ namespace jam::net
 		WorldMeta entry{};
 		entry.key = config.key;
 		entry.localWorldId = localWorldId;
-		entry.kind = config.desc.kind;
-		entry.group = config.desc.group;
-		entry.capacity = config.desc.capacity;
-		entry.runtime = (config.desc.kind == eWorldKind::Physical)
+		entry.kind = config.templateData.kind;
+		entry.group = config.templateData.group;
+		entry.capacity = config.templateData.capacity;
+		entry.runtime = (config.templateData.kind == eWorldKind::Physical)
 			? ePhysicalWorldRuntimeState::Standby
 			: ePhysicalWorldRuntimeState::Active;
 		return entry;

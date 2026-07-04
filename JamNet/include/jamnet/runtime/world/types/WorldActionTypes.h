@@ -5,6 +5,8 @@
 
 #include "jamnet/core/executor/RuntimeId.h"
 #include "jamnet/runtime/schema/gen/world_assignment_generated.h"
+#include "jamnet/runtime/world/types/WorldTemplateKey.h"
+#include "jamnet/runtime/world/data/WorldArchetypeDatabase.h"
 
 #include <functional>
 #include <string>
@@ -120,10 +122,10 @@ namespace jam::net
 
 	struct WorldKey
 	{
-		uint32			descId  = 0;
-		NetWorldId		worldId	= kInvalidNetWorldId;
+		WorldArchetypeKey	archetypeKey;
+		NetWorldId			worldId	= kInvalidNetWorldId;
 
-		bool IsValid()  const { return descId != 0; }
+		bool IsValid()  const { return IsValidAssetKey(archetypeKey); }
 		bool IsIssued() const { return IsValid() && worldId != kInvalidNetWorldId; }
 
 		bool operator==(const WorldKey&) const = default;
@@ -134,7 +136,7 @@ namespace jam::net
 	{
 		size_t operator()(const WorldKey& key) const noexcept
 		{
-			return SmallHashOf(key.descId, key.worldId);
+			return SmallHashOf(key.archetypeKey.v, key.worldId);
 		}
 	};
 
@@ -224,8 +226,10 @@ namespace jam::net
 
 
 	// settings shared by all instances of the same world type.
-	struct WorldDesc
+	struct WorldTemplateData
 	{
+		std::string			name;
+		WorldTemplateKey	key;
 		eWorldKind			kind						 = eWorldKind::Physical;
 		WorldGroup			group						 = kInvalidWorldGroup;
 		bool				allowMultipleInstancePerUser = false;
@@ -239,15 +243,16 @@ namespace jam::net
 		uint32				capacity					 = 0;
 		eWorldTickMode		tickMode					 = eWorldTickMode::Fixed;
 		WorldRouteConfig	route						 = {};
-		std::string			levelKey;
-		std::string			physicsProfile;
+		std::string			actorArchetypeSetPath;
+		std::string			actorLevelPath;
+		std::string			physicsAssetPath;
 	};
 
 	// Concrete instance config resolved from template + issued world key.
 	struct WorldConfig
 	{
-		WorldKey	key	 = {};
-		WorldDesc	desc = {};
+		WorldKey			key	 = {};
+		WorldTemplateData	templateData = {};
 
 		bool IsValid() const { return key.IsValid(); }
 		bool operator==(const WorldConfig& rhs) const
@@ -386,13 +391,13 @@ namespace jam::net
 			.action		 = action,
 			.source		 = WorldKey
 			{
-				.descId  = req.src_desc_id(),
-				.worldId = req.src_world_id()
+				.archetypeKey = req.src_archetype_key(),
+				.worldId	  = req.src_world_id()
 			},
 			.target	= WorldKey
 			{
-				.descId  = req.target_desc_id(),
-				.worldId = req.target_world_id(),
+				.archetypeKey = req.target_archetype_key(),
+				.worldId	  = req.target_world_id(),
 			},
 			.onResponse	= std::move(onResponse),
 		};
@@ -418,7 +423,7 @@ namespace jam::net
 			membershipDeltaOffsets.push_back(fb::CreatefbWorldMembershipDelta(
 				fbb,
 				fbOp,
-				delta.membership.key.descId,
+				delta.membership.key.archetypeKey.v,
 				delta.membership.key.worldId,
 				ToUnderlying(delta.membership.kind),
 				ToUnderlying(delta.membership.role),
@@ -435,7 +440,7 @@ namespace jam::net
 		{
 			worldRuntimeDeltaOffsets.push_back(fb::CreatefbWorldRuntimeDelta(
 				fbb,
-				delta.key.descId,
+				delta.key.archetypeKey.v,
 				delta.key.worldId,
 				ToUnderlying(delta.runtime)));
 		}
@@ -450,9 +455,9 @@ namespace jam::net
 			ToUnderlying(reason), 
 			ToUnderlying(action), 
 			static_cast<uint8>(execFlags.bits()),
-			source.descId,
+			source.archetypeKey.v,
 			source.worldId,
-			target.descId,
+			target.archetypeKey.v,
 			target.worldId,
 			membershipDeltasOffset,
 			worldRuntimeDeltasOffset);

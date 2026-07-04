@@ -105,7 +105,7 @@ inline const char *EnumNamefbWorldMembershipDeltaOp(fbWorldMembershipDeltaOp e) 
 struct fbWorldMembershipDeltaT : public ::flatbuffers::NativeTable {
   typedef fbWorldMembershipDelta TableType;
   jam::net::fb::fbWorldMembershipDeltaOp op = jam::net::fb::fbWorldMembershipDeltaOp_Upsert;
-  uint32_t key_desc_id = 0;
+  uint64_t key_archetype_key = 0;
   uint64_t key_world_id = 0;
   uint8_t kind = 0;
   uint8_t role = 0;
@@ -117,7 +117,7 @@ struct fbWorldMembershipDelta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
   typedef fbWorldMembershipDeltaBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_OP = 4,
-    VT_KEY_DESC_ID = 6,
+    VT_KEY_ARCHETYPE_KEY = 6,
     VT_KEY_WORLD_ID = 8,
     VT_KIND = 10,
     VT_ROLE = 12,
@@ -126,8 +126,8 @@ struct fbWorldMembershipDelta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
   jam::net::fb::fbWorldMembershipDeltaOp op() const {
     return static_cast<jam::net::fb::fbWorldMembershipDeltaOp>(GetField<uint8_t>(VT_OP, 0));
   }
-  uint32_t key_desc_id() const {
-    return GetField<uint32_t>(VT_KEY_DESC_ID, 0);
+  uint64_t key_archetype_key() const {
+    return GetField<uint64_t>(VT_KEY_ARCHETYPE_KEY, 0);
   }
   uint64_t key_world_id() const {
     return GetField<uint64_t>(VT_KEY_WORLD_ID, 0);
@@ -145,7 +145,7 @@ struct fbWorldMembershipDelta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_OP, 1) &&
-           VerifyField<uint32_t>(verifier, VT_KEY_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_KEY_ARCHETYPE_KEY, 8) &&
            VerifyField<uint64_t>(verifier, VT_KEY_WORLD_ID, 8) &&
            VerifyField<uint8_t>(verifier, VT_KIND, 1) &&
            VerifyField<uint8_t>(verifier, VT_ROLE, 1) &&
@@ -164,8 +164,8 @@ struct fbWorldMembershipDeltaBuilder {
   void add_op(jam::net::fb::fbWorldMembershipDeltaOp op) {
     fbb_.AddElement<uint8_t>(fbWorldMembershipDelta::VT_OP, static_cast<uint8_t>(op), 0);
   }
-  void add_key_desc_id(uint32_t key_desc_id) {
-    fbb_.AddElement<uint32_t>(fbWorldMembershipDelta::VT_KEY_DESC_ID, key_desc_id, 0);
+  void add_key_archetype_key(uint64_t key_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbWorldMembershipDelta::VT_KEY_ARCHETYPE_KEY, key_archetype_key, 0);
   }
   void add_key_world_id(uint64_t key_world_id) {
     fbb_.AddElement<uint64_t>(fbWorldMembershipDelta::VT_KEY_WORLD_ID, key_world_id, 0);
@@ -193,14 +193,14 @@ struct fbWorldMembershipDeltaBuilder {
 inline ::flatbuffers::Offset<fbWorldMembershipDelta> CreatefbWorldMembershipDelta(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     jam::net::fb::fbWorldMembershipDeltaOp op = jam::net::fb::fbWorldMembershipDeltaOp_Upsert,
-    uint32_t key_desc_id = 0,
+    uint64_t key_archetype_key = 0,
     uint64_t key_world_id = 0,
     uint8_t kind = 0,
     uint8_t role = 0,
     uint8_t presence = 0) {
   fbWorldMembershipDeltaBuilder builder_(_fbb);
   builder_.add_key_world_id(key_world_id);
-  builder_.add_key_desc_id(key_desc_id);
+  builder_.add_key_archetype_key(key_archetype_key);
   builder_.add_presence(presence);
   builder_.add_role(role);
   builder_.add_kind(kind);
@@ -212,7 +212,7 @@ inline ::flatbuffers::Offset<fbWorldMembershipDelta> CreatefbWorldMembershipDelt
 
 struct fbWorldRuntimeDeltaT : public ::flatbuffers::NativeTable {
   typedef fbWorldRuntimeDelta TableType;
-  uint32_t key_desc_id = 0;
+  uint64_t key_archetype_key = 0;
   uint64_t key_world_id = 0;
   uint8_t runtime = 0;
 };
@@ -221,12 +221,12 @@ struct fbWorldRuntimeDelta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   typedef fbWorldRuntimeDeltaT NativeTableType;
   typedef fbWorldRuntimeDeltaBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_KEY_DESC_ID = 4,
+    VT_KEY_ARCHETYPE_KEY = 4,
     VT_KEY_WORLD_ID = 6,
     VT_RUNTIME = 8
   };
-  uint32_t key_desc_id() const {
-    return GetField<uint32_t>(VT_KEY_DESC_ID, 0);
+  uint64_t key_archetype_key() const {
+    return GetField<uint64_t>(VT_KEY_ARCHETYPE_KEY, 0);
   }
   uint64_t key_world_id() const {
     return GetField<uint64_t>(VT_KEY_WORLD_ID, 0);
@@ -237,7 +237,7 @@ struct fbWorldRuntimeDelta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_KEY_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_KEY_ARCHETYPE_KEY, 8) &&
            VerifyField<uint64_t>(verifier, VT_KEY_WORLD_ID, 8) &&
            VerifyField<uint8_t>(verifier, VT_RUNTIME, 1) &&
            verifier.EndTable();
@@ -251,8 +251,8 @@ struct fbWorldRuntimeDeltaBuilder {
   typedef fbWorldRuntimeDelta Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_key_desc_id(uint32_t key_desc_id) {
-    fbb_.AddElement<uint32_t>(fbWorldRuntimeDelta::VT_KEY_DESC_ID, key_desc_id, 0);
+  void add_key_archetype_key(uint64_t key_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbWorldRuntimeDelta::VT_KEY_ARCHETYPE_KEY, key_archetype_key, 0);
   }
   void add_key_world_id(uint64_t key_world_id) {
     fbb_.AddElement<uint64_t>(fbWorldRuntimeDelta::VT_KEY_WORLD_ID, key_world_id, 0);
@@ -273,12 +273,12 @@ struct fbWorldRuntimeDeltaBuilder {
 
 inline ::flatbuffers::Offset<fbWorldRuntimeDelta> CreatefbWorldRuntimeDelta(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t key_desc_id = 0,
+    uint64_t key_archetype_key = 0,
     uint64_t key_world_id = 0,
     uint8_t runtime = 0) {
   fbWorldRuntimeDeltaBuilder builder_(_fbb);
   builder_.add_key_world_id(key_world_id);
-  builder_.add_key_desc_id(key_desc_id);
+  builder_.add_key_archetype_key(key_archetype_key);
   builder_.add_runtime(runtime);
   return builder_.Finish();
 }
@@ -288,9 +288,9 @@ inline ::flatbuffers::Offset<fbWorldRuntimeDelta> CreatefbWorldRuntimeDelta(
 struct fbWorldActionReqT : public ::flatbuffers::NativeTable {
   typedef fbWorldActionReq TableType;
   jam::net::fb::fbWorldAction action = jam::net::fb::fbWorldAction_AutoAssign;
-  uint32_t src_desc_id = 0;
+  uint64_t src_archetype_key = 0;
   uint64_t src_world_id = 0;
-  uint32_t target_desc_id = 0;
+  uint64_t target_archetype_key = 0;
   uint64_t target_world_id = 0;
 };
 
@@ -299,22 +299,22 @@ struct fbWorldActionReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbWorldActionReqBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_ACTION = 4,
-    VT_SRC_DESC_ID = 6,
+    VT_SRC_ARCHETYPE_KEY = 6,
     VT_SRC_WORLD_ID = 8,
-    VT_TARGET_DESC_ID = 10,
+    VT_TARGET_ARCHETYPE_KEY = 10,
     VT_TARGET_WORLD_ID = 12
   };
   jam::net::fb::fbWorldAction action() const {
     return static_cast<jam::net::fb::fbWorldAction>(GetField<uint8_t>(VT_ACTION, 0));
   }
-  uint32_t src_desc_id() const {
-    return GetField<uint32_t>(VT_SRC_DESC_ID, 0);
+  uint64_t src_archetype_key() const {
+    return GetField<uint64_t>(VT_SRC_ARCHETYPE_KEY, 0);
   }
   uint64_t src_world_id() const {
     return GetField<uint64_t>(VT_SRC_WORLD_ID, 0);
   }
-  uint32_t target_desc_id() const {
-    return GetField<uint32_t>(VT_TARGET_DESC_ID, 0);
+  uint64_t target_archetype_key() const {
+    return GetField<uint64_t>(VT_TARGET_ARCHETYPE_KEY, 0);
   }
   uint64_t target_world_id() const {
     return GetField<uint64_t>(VT_TARGET_WORLD_ID, 0);
@@ -323,9 +323,9 @@ struct fbWorldActionReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_ACTION, 1) &&
-           VerifyField<uint32_t>(verifier, VT_SRC_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_SRC_ARCHETYPE_KEY, 8) &&
            VerifyField<uint64_t>(verifier, VT_SRC_WORLD_ID, 8) &&
-           VerifyField<uint32_t>(verifier, VT_TARGET_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_TARGET_ARCHETYPE_KEY, 8) &&
            VerifyField<uint64_t>(verifier, VT_TARGET_WORLD_ID, 8) &&
            verifier.EndTable();
   }
@@ -341,14 +341,14 @@ struct fbWorldActionReqBuilder {
   void add_action(jam::net::fb::fbWorldAction action) {
     fbb_.AddElement<uint8_t>(fbWorldActionReq::VT_ACTION, static_cast<uint8_t>(action), 0);
   }
-  void add_src_desc_id(uint32_t src_desc_id) {
-    fbb_.AddElement<uint32_t>(fbWorldActionReq::VT_SRC_DESC_ID, src_desc_id, 0);
+  void add_src_archetype_key(uint64_t src_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbWorldActionReq::VT_SRC_ARCHETYPE_KEY, src_archetype_key, 0);
   }
   void add_src_world_id(uint64_t src_world_id) {
     fbb_.AddElement<uint64_t>(fbWorldActionReq::VT_SRC_WORLD_ID, src_world_id, 0);
   }
-  void add_target_desc_id(uint32_t target_desc_id) {
-    fbb_.AddElement<uint32_t>(fbWorldActionReq::VT_TARGET_DESC_ID, target_desc_id, 0);
+  void add_target_archetype_key(uint64_t target_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbWorldActionReq::VT_TARGET_ARCHETYPE_KEY, target_archetype_key, 0);
   }
   void add_target_world_id(uint64_t target_world_id) {
     fbb_.AddElement<uint64_t>(fbWorldActionReq::VT_TARGET_WORLD_ID, target_world_id, 0);
@@ -367,15 +367,15 @@ struct fbWorldActionReqBuilder {
 inline ::flatbuffers::Offset<fbWorldActionReq> CreatefbWorldActionReq(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     jam::net::fb::fbWorldAction action = jam::net::fb::fbWorldAction_AutoAssign,
-    uint32_t src_desc_id = 0,
+    uint64_t src_archetype_key = 0,
     uint64_t src_world_id = 0,
-    uint32_t target_desc_id = 0,
+    uint64_t target_archetype_key = 0,
     uint64_t target_world_id = 0) {
   fbWorldActionReqBuilder builder_(_fbb);
   builder_.add_target_world_id(target_world_id);
+  builder_.add_target_archetype_key(target_archetype_key);
   builder_.add_src_world_id(src_world_id);
-  builder_.add_target_desc_id(target_desc_id);
-  builder_.add_src_desc_id(src_desc_id);
+  builder_.add_src_archetype_key(src_archetype_key);
   builder_.add_action(action);
   return builder_.Finish();
 }
@@ -388,9 +388,9 @@ struct fbWorldActionResT : public ::flatbuffers::NativeTable {
   uint8_t reason = 0;
   uint8_t request_action = 0;
   uint8_t exec_flags = 0;
-  uint32_t src_desc_id = 0;
+  uint64_t src_archetype_key = 0;
   uint64_t src_world_id = 0;
-  uint32_t target_desc_id = 0;
+  uint64_t target_archetype_key = 0;
   uint64_t target_world_id = 0;
   std::vector<std::unique_ptr<jam::net::fb::fbWorldMembershipDeltaT>> membership_deltas{};
   std::vector<std::unique_ptr<jam::net::fb::fbWorldRuntimeDeltaT>> world_runtime_deltas{};
@@ -408,9 +408,9 @@ struct fbWorldActionRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_REASON = 6,
     VT_REQUEST_ACTION = 8,
     VT_EXEC_FLAGS = 10,
-    VT_SRC_DESC_ID = 12,
+    VT_SRC_ARCHETYPE_KEY = 12,
     VT_SRC_WORLD_ID = 14,
-    VT_TARGET_DESC_ID = 16,
+    VT_TARGET_ARCHETYPE_KEY = 16,
     VT_TARGET_WORLD_ID = 18,
     VT_MEMBERSHIP_DELTAS = 20,
     VT_WORLD_RUNTIME_DELTAS = 22
@@ -427,14 +427,14 @@ struct fbWorldActionRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint8_t exec_flags() const {
     return GetField<uint8_t>(VT_EXEC_FLAGS, 0);
   }
-  uint32_t src_desc_id() const {
-    return GetField<uint32_t>(VT_SRC_DESC_ID, 0);
+  uint64_t src_archetype_key() const {
+    return GetField<uint64_t>(VT_SRC_ARCHETYPE_KEY, 0);
   }
   uint64_t src_world_id() const {
     return GetField<uint64_t>(VT_SRC_WORLD_ID, 0);
   }
-  uint32_t target_desc_id() const {
-    return GetField<uint32_t>(VT_TARGET_DESC_ID, 0);
+  uint64_t target_archetype_key() const {
+    return GetField<uint64_t>(VT_TARGET_ARCHETYPE_KEY, 0);
   }
   uint64_t target_world_id() const {
     return GetField<uint64_t>(VT_TARGET_WORLD_ID, 0);
@@ -452,9 +452,9 @@ struct fbWorldActionRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_REASON, 1) &&
            VerifyField<uint8_t>(verifier, VT_REQUEST_ACTION, 1) &&
            VerifyField<uint8_t>(verifier, VT_EXEC_FLAGS, 1) &&
-           VerifyField<uint32_t>(verifier, VT_SRC_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_SRC_ARCHETYPE_KEY, 8) &&
            VerifyField<uint64_t>(verifier, VT_SRC_WORLD_ID, 8) &&
-           VerifyField<uint32_t>(verifier, VT_TARGET_DESC_ID, 4) &&
+           VerifyField<uint64_t>(verifier, VT_TARGET_ARCHETYPE_KEY, 8) &&
            VerifyField<uint64_t>(verifier, VT_TARGET_WORLD_ID, 8) &&
            VerifyOffset(verifier, VT_MEMBERSHIP_DELTAS) &&
            verifier.VerifyVector(membership_deltas()) &&
@@ -485,14 +485,14 @@ struct fbWorldActionResBuilder {
   void add_exec_flags(uint8_t exec_flags) {
     fbb_.AddElement<uint8_t>(fbWorldActionRes::VT_EXEC_FLAGS, exec_flags, 0);
   }
-  void add_src_desc_id(uint32_t src_desc_id) {
-    fbb_.AddElement<uint32_t>(fbWorldActionRes::VT_SRC_DESC_ID, src_desc_id, 0);
+  void add_src_archetype_key(uint64_t src_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbWorldActionRes::VT_SRC_ARCHETYPE_KEY, src_archetype_key, 0);
   }
   void add_src_world_id(uint64_t src_world_id) {
     fbb_.AddElement<uint64_t>(fbWorldActionRes::VT_SRC_WORLD_ID, src_world_id, 0);
   }
-  void add_target_desc_id(uint32_t target_desc_id) {
-    fbb_.AddElement<uint32_t>(fbWorldActionRes::VT_TARGET_DESC_ID, target_desc_id, 0);
+  void add_target_archetype_key(uint64_t target_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbWorldActionRes::VT_TARGET_ARCHETYPE_KEY, target_archetype_key, 0);
   }
   void add_target_world_id(uint64_t target_world_id) {
     fbb_.AddElement<uint64_t>(fbWorldActionRes::VT_TARGET_WORLD_ID, target_world_id, 0);
@@ -520,19 +520,19 @@ inline ::flatbuffers::Offset<fbWorldActionRes> CreatefbWorldActionRes(
     uint8_t reason = 0,
     uint8_t request_action = 0,
     uint8_t exec_flags = 0,
-    uint32_t src_desc_id = 0,
+    uint64_t src_archetype_key = 0,
     uint64_t src_world_id = 0,
-    uint32_t target_desc_id = 0,
+    uint64_t target_archetype_key = 0,
     uint64_t target_world_id = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>>> membership_deltas = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>>> world_runtime_deltas = 0) {
   fbWorldActionResBuilder builder_(_fbb);
   builder_.add_target_world_id(target_world_id);
+  builder_.add_target_archetype_key(target_archetype_key);
   builder_.add_src_world_id(src_world_id);
+  builder_.add_src_archetype_key(src_archetype_key);
   builder_.add_world_runtime_deltas(world_runtime_deltas);
   builder_.add_membership_deltas(membership_deltas);
-  builder_.add_target_desc_id(target_desc_id);
-  builder_.add_src_desc_id(src_desc_id);
   builder_.add_exec_flags(exec_flags);
   builder_.add_request_action(request_action);
   builder_.add_reason(reason);
@@ -546,9 +546,9 @@ inline ::flatbuffers::Offset<fbWorldActionRes> CreatefbWorldActionResDirect(
     uint8_t reason = 0,
     uint8_t request_action = 0,
     uint8_t exec_flags = 0,
-    uint32_t src_desc_id = 0,
+    uint64_t src_archetype_key = 0,
     uint64_t src_world_id = 0,
-    uint32_t target_desc_id = 0,
+    uint64_t target_archetype_key = 0,
     uint64_t target_world_id = 0,
     const std::vector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>> *membership_deltas = nullptr,
     const std::vector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>> *world_runtime_deltas = nullptr) {
@@ -560,9 +560,9 @@ inline ::flatbuffers::Offset<fbWorldActionRes> CreatefbWorldActionResDirect(
       reason,
       request_action,
       exec_flags,
-      src_desc_id,
+      src_archetype_key,
       src_world_id,
-      target_desc_id,
+      target_archetype_key,
       target_world_id,
       membership_deltas__,
       world_runtime_deltas__);
@@ -580,7 +580,7 @@ inline void fbWorldMembershipDelta::UnPackTo(fbWorldMembershipDeltaT *_o, const 
   (void)_o;
   (void)_resolver;
   { auto _e = op(); _o->op = _e; }
-  { auto _e = key_desc_id(); _o->key_desc_id = _e; }
+  { auto _e = key_archetype_key(); _o->key_archetype_key = _e; }
   { auto _e = key_world_id(); _o->key_world_id = _e; }
   { auto _e = kind(); _o->kind = _e; }
   { auto _e = role(); _o->role = _e; }
@@ -596,7 +596,7 @@ inline ::flatbuffers::Offset<fbWorldMembershipDelta> fbWorldMembershipDelta::Pac
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbWorldMembershipDeltaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _op = _o->op;
-  auto _key_desc_id = _o->key_desc_id;
+  auto _key_archetype_key = _o->key_archetype_key;
   auto _key_world_id = _o->key_world_id;
   auto _kind = _o->kind;
   auto _role = _o->role;
@@ -604,7 +604,7 @@ inline ::flatbuffers::Offset<fbWorldMembershipDelta> fbWorldMembershipDelta::Pac
   return jam::net::fb::CreatefbWorldMembershipDelta(
       _fbb,
       _op,
-      _key_desc_id,
+      _key_archetype_key,
       _key_world_id,
       _kind,
       _role,
@@ -620,7 +620,7 @@ inline fbWorldRuntimeDeltaT *fbWorldRuntimeDelta::UnPack(const ::flatbuffers::re
 inline void fbWorldRuntimeDelta::UnPackTo(fbWorldRuntimeDeltaT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = key_desc_id(); _o->key_desc_id = _e; }
+  { auto _e = key_archetype_key(); _o->key_archetype_key = _e; }
   { auto _e = key_world_id(); _o->key_world_id = _e; }
   { auto _e = runtime(); _o->runtime = _e; }
 }
@@ -633,12 +633,12 @@ inline ::flatbuffers::Offset<fbWorldRuntimeDelta> fbWorldRuntimeDelta::Pack(::fl
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbWorldRuntimeDeltaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _key_desc_id = _o->key_desc_id;
+  auto _key_archetype_key = _o->key_archetype_key;
   auto _key_world_id = _o->key_world_id;
   auto _runtime = _o->runtime;
   return jam::net::fb::CreatefbWorldRuntimeDelta(
       _fbb,
-      _key_desc_id,
+      _key_archetype_key,
       _key_world_id,
       _runtime);
 }
@@ -653,9 +653,9 @@ inline void fbWorldActionReq::UnPackTo(fbWorldActionReqT *_o, const ::flatbuffer
   (void)_o;
   (void)_resolver;
   { auto _e = action(); _o->action = _e; }
-  { auto _e = src_desc_id(); _o->src_desc_id = _e; }
+  { auto _e = src_archetype_key(); _o->src_archetype_key = _e; }
   { auto _e = src_world_id(); _o->src_world_id = _e; }
-  { auto _e = target_desc_id(); _o->target_desc_id = _e; }
+  { auto _e = target_archetype_key(); _o->target_archetype_key = _e; }
   { auto _e = target_world_id(); _o->target_world_id = _e; }
 }
 
@@ -668,16 +668,16 @@ inline ::flatbuffers::Offset<fbWorldActionReq> fbWorldActionReq::Pack(::flatbuff
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbWorldActionReqT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _action = _o->action;
-  auto _src_desc_id = _o->src_desc_id;
+  auto _src_archetype_key = _o->src_archetype_key;
   auto _src_world_id = _o->src_world_id;
-  auto _target_desc_id = _o->target_desc_id;
+  auto _target_archetype_key = _o->target_archetype_key;
   auto _target_world_id = _o->target_world_id;
   return jam::net::fb::CreatefbWorldActionReq(
       _fbb,
       _action,
-      _src_desc_id,
+      _src_archetype_key,
       _src_world_id,
-      _target_desc_id,
+      _target_archetype_key,
       _target_world_id);
 }
 
@@ -686,9 +686,9 @@ inline fbWorldActionResT::fbWorldActionResT(const fbWorldActionResT &o)
         reason(o.reason),
         request_action(o.request_action),
         exec_flags(o.exec_flags),
-        src_desc_id(o.src_desc_id),
+        src_archetype_key(o.src_archetype_key),
         src_world_id(o.src_world_id),
-        target_desc_id(o.target_desc_id),
+        target_archetype_key(o.target_archetype_key),
         target_world_id(o.target_world_id) {
   membership_deltas.reserve(o.membership_deltas.size());
   for (const auto &membership_deltas_ : o.membership_deltas) { membership_deltas.emplace_back((membership_deltas_) ? new jam::net::fb::fbWorldMembershipDeltaT(*membership_deltas_) : nullptr); }
@@ -701,9 +701,9 @@ inline fbWorldActionResT &fbWorldActionResT::operator=(fbWorldActionResT o) FLAT
   std::swap(reason, o.reason);
   std::swap(request_action, o.request_action);
   std::swap(exec_flags, o.exec_flags);
-  std::swap(src_desc_id, o.src_desc_id);
+  std::swap(src_archetype_key, o.src_archetype_key);
   std::swap(src_world_id, o.src_world_id);
-  std::swap(target_desc_id, o.target_desc_id);
+  std::swap(target_archetype_key, o.target_archetype_key);
   std::swap(target_world_id, o.target_world_id);
   std::swap(membership_deltas, o.membership_deltas);
   std::swap(world_runtime_deltas, o.world_runtime_deltas);
@@ -723,9 +723,9 @@ inline void fbWorldActionRes::UnPackTo(fbWorldActionResT *_o, const ::flatbuffer
   { auto _e = reason(); _o->reason = _e; }
   { auto _e = request_action(); _o->request_action = _e; }
   { auto _e = exec_flags(); _o->exec_flags = _e; }
-  { auto _e = src_desc_id(); _o->src_desc_id = _e; }
+  { auto _e = src_archetype_key(); _o->src_archetype_key = _e; }
   { auto _e = src_world_id(); _o->src_world_id = _e; }
-  { auto _e = target_desc_id(); _o->target_desc_id = _e; }
+  { auto _e = target_archetype_key(); _o->target_archetype_key = _e; }
   { auto _e = target_world_id(); _o->target_world_id = _e; }
   { auto _e = membership_deltas(); if (_e) { _o->membership_deltas.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->membership_deltas[_i]) { _e->Get(_i)->UnPackTo(_o->membership_deltas[_i].get(), _resolver); } else { _o->membership_deltas[_i] = std::unique_ptr<jam::net::fb::fbWorldMembershipDeltaT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->membership_deltas.resize(0); } }
   { auto _e = world_runtime_deltas(); if (_e) { _o->world_runtime_deltas.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->world_runtime_deltas[_i]) { _e->Get(_i)->UnPackTo(_o->world_runtime_deltas[_i].get(), _resolver); } else { _o->world_runtime_deltas[_i] = std::unique_ptr<jam::net::fb::fbWorldRuntimeDeltaT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->world_runtime_deltas.resize(0); } }
@@ -743,9 +743,9 @@ inline ::flatbuffers::Offset<fbWorldActionRes> fbWorldActionRes::Pack(::flatbuff
   auto _reason = _o->reason;
   auto _request_action = _o->request_action;
   auto _exec_flags = _o->exec_flags;
-  auto _src_desc_id = _o->src_desc_id;
+  auto _src_archetype_key = _o->src_archetype_key;
   auto _src_world_id = _o->src_world_id;
-  auto _target_desc_id = _o->target_desc_id;
+  auto _target_archetype_key = _o->target_archetype_key;
   auto _target_world_id = _o->target_world_id;
   auto _membership_deltas = _o->membership_deltas.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbWorldMembershipDelta>> (_o->membership_deltas.size(), [](size_t i, _VectorArgs *__va) { return CreatefbWorldMembershipDelta(*__va->__fbb, __va->__o->membership_deltas[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _world_runtime_deltas = _o->world_runtime_deltas.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbWorldRuntimeDelta>> (_o->world_runtime_deltas.size(), [](size_t i, _VectorArgs *__va) { return CreatefbWorldRuntimeDelta(*__va->__fbb, __va->__o->world_runtime_deltas[i].get(), __va->__rehasher); }, &_va ) : 0;
@@ -755,9 +755,9 @@ inline ::flatbuffers::Offset<fbWorldActionRes> fbWorldActionRes::Pack(::flatbuff
       _reason,
       _request_action,
       _exec_flags,
-      _src_desc_id,
+      _src_archetype_key,
       _src_world_id,
-      _target_desc_id,
+      _target_archetype_key,
       _target_world_id,
       _membership_deltas,
       _world_runtime_deltas);

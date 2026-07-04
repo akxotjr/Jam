@@ -43,7 +43,7 @@
 
 // WorldBase
 #include "jamnet/sync/networld/ClientPhysicalWorld.h"
-#include "jamnet/runtime/world/WorldBase.h"
+#include "jamnet/runtime/world/core/WorldBase.h"
 #include "jamnet/sync/networld/ServerPhysicalWorld.h"
 
 // bridge
@@ -81,10 +81,10 @@
 #include "jamnet/runtime/ServerSession.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
 
-#include "jamnet/runtime/world/DefaultWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/ClientWorldActionSystem.h"
-#include "jamnet/runtime/world/ServerWorldActionSystem.h"
-#include "jamnet/runtime/world/IWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/IWorldActionSystem.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
-#include "jamnet/runtime/world/WorldDirectory.h"
+#include "jamnet/runtime/world/action/DefaultWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/action/ClientWorldActionSystem.h"
+#include "jamnet/runtime/world/action/ServerWorldActionSystem.h"
+#include "jamnet/runtime/world/action/IWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/action/IWorldActionSystem.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
+#include "jamnet/runtime/world/core/WorldDirectory.h"

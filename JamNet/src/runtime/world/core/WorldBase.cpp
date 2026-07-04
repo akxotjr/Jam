@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
-#include "jamnet/runtime/world/WorldBase.h"
+#include "jamnet/runtime/world/core/WorldBase.h"
 
 #include "jamnet/core/executor/ShardInvoke.h"
 #include "jamnet/runtime/ServerSession.h"

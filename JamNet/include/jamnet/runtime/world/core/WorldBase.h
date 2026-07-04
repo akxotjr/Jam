@@ -5,8 +5,8 @@
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/executor/Mailbox.h"
 #include "jamnet/core/executor/MailboxRef.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
-#include "jamnet/runtime/world/WorldShardState.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
+#include "jamnet/runtime/world/core/WorldShardState.h"
 #include "jamnet/runtime/ServerSession.h"
 
 #include <atomic>

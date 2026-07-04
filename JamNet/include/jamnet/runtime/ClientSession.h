@@ -3,7 +3,7 @@
 #include "jamnet/core/net/TcpSession.h"
 #include "jamnet/core/net/UdpSession.h"
 
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 #include "jamnet/runtime/schema/RPCSchemaIds.h"
 #include "jamnet/runtime/schema/gen/world_assignment_generated.h"
 

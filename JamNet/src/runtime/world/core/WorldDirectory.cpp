@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "jamnet/runtime/world/WorldDirectory.h"
+#include "jamnet/runtime/world/core/WorldDirectory.h"
 
 
 namespace jam::net
@@ -9,7 +9,7 @@ namespace jam::net
 		void RemoveIndexedWorld(WorldDirectorySnapshot& snapshot, const WorldKey& key)
 		{
 			snapshot.worldsByKey.erase(key);
-			std::erase_if(snapshot.worldsByDesc, [&key](const auto& pair)
+			std::erase_if(snapshot.worldsByArchetypeKey, [&key](const auto& pair)
 				{
 					return pair.second == key;
 				});
@@ -31,7 +31,7 @@ namespace jam::net
 			{
 				RemoveIndexedWorld(next, entry.key);
 				next.worldsByKey[entry.key] = entry;
-				next.worldsByDesc.emplace(entry.key.descId, entry.key);
+				next.worldsByArchetypeKey.emplace(entry.key.archetypeKey, entry.key);
 				if (entry.group != kInvalidWorldGroup)
 					next.worldsByGroup.emplace(entry.group, entry.key);
 			});
@@ -98,9 +98,9 @@ namespace jam::net
 		return (it != snapshot->worldsByKey.end()) ? std::optional(it->second) : std::nullopt;
 	}
 
-	std::vector<WorldMeta> WorldDirectory::FindWorldsByDesc(uint32 descId) const
+	std::vector<WorldMeta> WorldDirectory::FindWorldsByArchetype(WorldArchetypeKey archetypeKey) const
 	{
-		if (descId == 0)
+		if (!IsValidAssetKey(archetypeKey))
 			return {};
 
 		auto snapshot = m_snapshot.Load();
@@ -108,7 +108,7 @@ namespace jam::net
 			return {};
 
 		std::vector<WorldMeta> worlds;
-		const auto [first, last] = snapshot->worldsByDesc.equal_range(descId);
+		const auto [first, last] = snapshot->worldsByArchetypeKey.equal_range(archetypeKey);
 		for (auto it = first; it != last; ++it)
 		{
 			auto worldIt = snapshot->worldsByKey.find(it->second);

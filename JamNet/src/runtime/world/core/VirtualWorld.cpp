@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "jamnet/runtime/world/VirtualWorld.h"
+#include "jamnet/runtime/world/core/VirtualWorld.h"
 
 namespace jam::net
 {

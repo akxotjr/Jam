@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "jamnet/runtime/world/PhysicalWorld.h"
+#include "jamnet/runtime/world/core/PhysicalWorld.h"
 
 namespace jam::net
 {

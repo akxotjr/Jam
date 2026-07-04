@@ -1,7 +1,7 @@
 #pragma once
 
 #include "jamnet/core/net/PacketBuilder.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 #include "jamnet/sync/schema/gen/input_generated.h"
 #include "jamnet/sync/schema/gen/lifecycle_generated.h"
 #include "jamnet/sync/schema/gen/snapshot_generated.h"

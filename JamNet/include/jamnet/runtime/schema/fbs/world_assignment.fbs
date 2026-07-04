@@ -18,7 +18,7 @@ enum fbWorldMembershipDeltaOp : ubyte
 table fbWorldMembershipDelta
 {
 	op					: fbWorldMembershipDeltaOp = Upsert;
-	key_desc_id			: uint		= 0;
+	key_archetype_key	: ulong		= 0;
 	key_world_id		: ulong		= 0;	// authoritative NetWorldId
 	kind				: ubyte		= 0;
 	role				: ubyte		= 0;
@@ -27,7 +27,7 @@ table fbWorldMembershipDelta
 
 table fbWorldRuntimeDelta
 {
-	key_desc_id			: uint		= 0;
+	key_archetype_key	: ulong		= 0;
 	key_world_id		: ulong		= 0;	// authoritative NetWorldId
 	runtime				: ubyte		= 0;
 }
@@ -35,9 +35,9 @@ table fbWorldRuntimeDelta
 table fbWorldActionReq
 {
 	action				: fbWorldAction = AutoAssign;
-	src_desc_id			: uint = 0;
+	src_archetype_key	: ulong = 0;
 	src_world_id		: ulong = 0;
-	target_desc_id		: uint  = 0;
+	target_archetype_key: ulong = 0;
 	target_world_id	    : ulong = 0;
 }
 
@@ -47,9 +47,9 @@ table fbWorldActionRes
 	reason				: ubyte		= 0;
 	request_action		: ubyte		= 0;
 	exec_flags			: ubyte		= 0;
-	src_desc_id			: uint		= 0;
+	src_archetype_key	: ulong		= 0;
 	src_world_id		: ulong		= 0;
-	target_desc_id		: uint		= 0;
+	target_archetype_key: ulong		= 0;
 	target_world_id		: ulong		= 0;
 	membership_deltas	: [fbWorldMembershipDelta];
 	world_runtime_deltas: [fbWorldRuntimeDelta];

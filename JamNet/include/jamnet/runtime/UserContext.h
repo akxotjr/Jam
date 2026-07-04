@@ -1,7 +1,7 @@
 #pragma once
 
 #include "jamnet/core/executor/ShardOwnedObject.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 
 #include <optional>
 #include <unordered_map>

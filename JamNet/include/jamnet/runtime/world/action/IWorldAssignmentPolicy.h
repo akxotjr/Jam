@@ -1,13 +1,14 @@
 #pragma once
 
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 
 #include <memory>
 
 namespace jam::net
 {
 	class WorldDirectory;
-	struct WorldDescAsset;
+	struct WorldArchetypeDatabase;
+	struct WorldTemplateDatabase;
 
 	class IWorldAssignmentPolicy
 	{
@@ -16,7 +17,8 @@ namespace jam::net
 
 		virtual WorldActionPlan PlanAction(const WorldActionRequest& req) = 0;
 		virtual void			BindWorldDirectory(const WorldDirectory* directory) { (void)directory; }
-		virtual void			BindWorldTemplateAsset(const WorldDescAsset* asset) { (void)asset; }
+		virtual void			BindWorldArchetypeDatabase(const WorldArchetypeDatabase* database) { (void)database; }
+		virtual void			BindWorldTemplateDatabase(const WorldTemplateDatabase* database) { (void)database; }
 
 		void					SetResolveMode(eWorldResolveMode mode) { m_resolveMode = mode; }
 		void					SetFallbackConfig(const WorldConfig& config) { m_fallbackConfig = config; }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "jamnet/runtime/world/VirtualWorld.h"
+#include "jamnet/runtime/world/core/VirtualWorld.h"
 #include <unordered_map>
 #include <vector>
 

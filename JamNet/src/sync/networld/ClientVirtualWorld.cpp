@@ -45,7 +45,7 @@ namespace jam::net
 		{
 			.key = GetWorldKey(),
 			.localWorldId = GetLocalWorldId(),
-			.kind = m_config.desc.kind,
+			.kind = m_config.templateData.kind,
 			.participantUserId = participantUserId,
 		};
 		GLOBAL_EVENTBUS_PUBLISH(event);

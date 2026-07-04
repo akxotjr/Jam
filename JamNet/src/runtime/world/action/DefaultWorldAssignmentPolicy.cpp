@@ -1,7 +1,7 @@
 #include "pch.h"
-#include "jamnet/runtime/world/DefaultWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/action/DefaultWorldAssignmentPolicy.h"
 
-#include "jamnet/runtime/world/WorldDirectory.h"
+#include "jamnet/runtime/world/core/WorldDirectory.h"
 
 #include <algorithm>
 
@@ -9,11 +9,11 @@ namespace jam::net
 {
 	namespace
 	{
-		const WorldMembership* FindMembershipByDesc(const UserMembershipSnapshotEntry& memberships, uint32 descId)
+		const WorldMembership* FindMembershipByArchetype(const UserMembershipSnapshotEntry& memberships, WorldArchetypeKey archetypeKey)
 		{
-			auto it = std::ranges::find_if(memberships.memberships, [descId](const WorldMembership& membership)
+			auto it = std::ranges::find_if(memberships.memberships, [archetypeKey](const WorldMembership& membership)
 				{
-					return membership.key.descId == descId;
+					return membership.key.archetypeKey == archetypeKey;
 				});
 			return (it != memberships.memberships.end()) ? &(*it) : nullptr;
 		}
@@ -47,28 +47,33 @@ namespace jam::net
 		}
 	}
 
-	uint32 DefaultWorldAssignmentPolicy::ResolveDescId(const WorldActionRequest& req) const
+	WorldArchetypeKey DefaultWorldAssignmentPolicy::ResolveArchetypeKey(const WorldActionRequest& req) const
 	{
-		if (req.target.descId != 0)
-			return req.target.descId;
-		if (req.source.descId != 0)
-			return req.source.descId;
-		return 0;
+		if (IsValidAssetKey(req.target.archetypeKey))
+			return req.target.archetypeKey;
+		if (IsValidAssetKey(req.source.archetypeKey))
+			return req.source.archetypeKey;
+		return {};
 	}
 
-	const WorldDesc* DefaultWorldAssignmentPolicy::ResolveDesc(const WorldActionRequest& req) const
+	const WorldTemplateData* DefaultWorldAssignmentPolicy::ResolveTemplate(const WorldActionRequest& req) const
 	{
-		const uint32 templateId = ResolveDescId(req);
-		if (templateId == 0 || !m_asset)
+		const WorldArchetypeKey archetypeKey = ResolveArchetypeKey(req);
+		if (!IsValidAssetKey(archetypeKey) || !m_archetypes || !m_templates)
 			return nullptr;
-		return m_asset->Find(templateId);
+
+		const auto* archetype = m_archetypes->Find(archetypeKey);
+		if (!archetype)
+			return nullptr;
+
+		return m_templates->Find(archetype->templateKey);
 	}
 
 	std::optional<WorldMeta> DefaultWorldAssignmentPolicy::SelectWorld(
-		const WorldDesc& desc,
+		const WorldTemplateData& templateData,
 		std::span<const WorldMeta> candidates) const
 	{
-		(void)desc;
+		(void)templateData;
 		const WorldMeta* selected = nullptr;
 		for (const auto& candidate : candidates)
 		{
@@ -102,7 +107,7 @@ namespace jam::net
 		case eWorldAction::Leave:
 			plan.action	= eWorldAction::Leave;
 			plan.execFlags = {};
-			if (const WorldDesc* sourceDesc = ResolveDesc(req); sourceDesc && sourceDesc->destroyWhenEmpty)
+			if (const WorldTemplateData* sourceTemplate = ResolveTemplate(req); sourceTemplate && sourceTemplate->destroyWhenEmpty)
 				plan.execFlags.set(eWorldActionExecFlag::DestroySource);
 				plan.source = req.source;
 			if (memberships)
@@ -132,25 +137,25 @@ namespace jam::net
 			return plan;
 		}
 
-		const WorldDesc* desc = ResolveDesc(req);
-		if (!desc)
+		const WorldTemplateData* templateData = ResolveTemplate(req);
+		if (!templateData)
 		{
 			plan.status = eWorldActionStatus::Failed;
 			plan.reason = eWorldActionReason::InvalidArgument;
 			return plan;
 		}
-		const uint32 templateId = ResolveDescId(req);
+		const WorldArchetypeKey archetypeKey = ResolveArchetypeKey(req);
 		plan.source = req.source;
 		if (memberships)
 		{
 			if (const auto* source = req.source.IsValid() ? FindMembershipByKey(*memberships, req.source) : nullptr)
 				plan.sourcePresence = source->presence;
 		}
-		if (!desc->allowMultipleInstancePerUser)
+		if (!templateData->allowMultipleInstancePerUser)
 		{
 			if (memberships)
 			{
-				if (const auto* existing = FindMembershipByDesc(*memberships, templateId))
+				if (const auto* existing = FindMembershipByArchetype(*memberships, archetypeKey))
 				{
 					if (req.action == eWorldAction::AutoAssign)
 					{
@@ -183,7 +188,7 @@ namespace jam::net
 			const auto* currentActive = FindActivePhysicalMembership(*memberships);
 			if (req.action == eWorldAction::Promote)
 			{
-				if (!targetMembership || targetMembership->key != req.target || desc->kind != eWorldKind::Physical)
+				if (!targetMembership || targetMembership->key != req.target || templateData->kind != eWorldKind::Physical)
 				{
 					plan.status = eWorldActionStatus::Failed;
 					plan.reason = eWorldActionReason::InvalidArgument;
@@ -206,7 +211,7 @@ namespace jam::net
 				return plan;
 			}
 
-			if (desc->kind == eWorldKind::Physical)
+			if (templateData->kind == eWorldKind::Physical)
 			{
 				if (req.action == eWorldAction::Transfer)
 					plan.resultingPresence = sourceMembership ? sourceMembership->presence : eWorldMembershipPresence::Passive;
@@ -220,7 +225,7 @@ namespace jam::net
 		}
 		else
 		{
-			plan.resultingPresence = (desc->kind == eWorldKind::Physical)
+			plan.resultingPresence = (templateData->kind == eWorldKind::Physical)
 				? eWorldMembershipPresence::Active
 				: eWorldMembershipPresence::None;
 		}
@@ -232,13 +237,13 @@ namespace jam::net
 		plan.execFlags = (plan.action == eWorldAction::Transfer)
 			? WorldActionExecFlags{}
 			: WorldActionExecFlags{};
-		if (plan.action == eWorldAction::Transfer && desc->destroyWhenEmpty)
+		if (plan.action == eWorldAction::Transfer && templateData->destroyWhenEmpty)
 			plan.execFlags.set(eWorldActionExecFlag::DestroySource);
 
 		if (req.action == eWorldAction::AutoAssign)
 		{
-			const std::vector<WorldMeta> worlds = m_directory->FindWorldsByDesc(templateId);
-			if (const auto selected = SelectWorld(*desc, worlds))
+			const std::vector<WorldMeta> worlds = m_directory->FindWorldsByArchetype(archetypeKey);
+			if (const auto selected = SelectWorld(*templateData, worlds))
 			{
 				plan.action	= eWorldAction::Join;
 				plan.execFlags = {};
@@ -248,7 +253,7 @@ namespace jam::net
 
 			plan.action	= eWorldAction::Join;
 			plan.execFlags = eWorldActionExecFlag::CreateTarget;
-			plan.target = WorldKey{ .descId = templateId };
+			plan.target = WorldKey{ .archetypeKey = archetypeKey };
 			return plan;
 		}
 

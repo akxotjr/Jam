@@ -1,16 +1,17 @@
 #pragma once
 
-#include "WorldDescAsset.h"
-#include "WorldDirectory.h"
-#include "WorldTransferSubsystem.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ShardInvoke.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/runtime/AppRuntimeEvents.h"
 #include "jamnet/runtime/UserContext.h"
-#include "jamnet/runtime/world/IWorldActionSystem.h"
+#include "jamnet/runtime/world/data/WorldDataBootstrap.h"
+#include "jamnet/runtime/world/core/WorldDirectory.h"
+#include "jamnet/runtime/world/action/WorldTransferSubsystem.h"
+#include "jamnet/runtime/world/action/IWorldActionSystem.h"
 #include "jamnet/sync/networld/ClientPhysicalWorld.h"
 #include "jamnet/sync/networld/ClientVirtualWorld.h"
+
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -173,7 +174,7 @@ namespace jam::net
 	private:
 		ClientNetworkManager*								m_owner		= nullptr;
 		WorldDirectory										m_directory = {};
-		WorldDescAsset										m_asset		= {};
+		WorldDataBootstrapBundle							m_worldData	= {};
 		std::unique_ptr<WorldTransferSubsystem>				m_transfer	= nullptr;
 
 		std::unordered_map<NetWorldId, LocalWorldId>		m_localByNet;

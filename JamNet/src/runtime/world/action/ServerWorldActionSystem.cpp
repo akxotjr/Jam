@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "jamnet/runtime/world/ServerWorldActionSystem.h"
+#include "jamnet/runtime/world/action/ServerWorldActionSystem.h"
 
 #include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ShardInvoke.h"
@@ -9,8 +9,10 @@
 #include "jamnet/core/utils/Clock.h"
 #include "jamnet/runtime/ServerNetworkManager.h"
 #include "jamnet/runtime/ServerSession.h"
-#include "jamnet/runtime/world/WorldShardState.h"
-#include "jamnet/runtime/world/DefaultWorldAssignmentPolicy.h"
+#include "jamnet/runtime/actor/ActorArchetypesLoader.h"
+#include "jamnet/runtime/world/core/WorldShardState.h"
+#include "jamnet/runtime/world/action/DefaultWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/data/ActorLevelsLoader.h"
 
 #include "jamnet/sync/networld/ServerPhysicalWorld.h"
 #include "jamnet/sync/networld/ServerVirtualWorld.h"
@@ -283,12 +285,12 @@ namespace jam::net
 			if (localWorldId == kInvalidLocalWorldId) return;
 
 			WorldConfig resolved = config;
-			resolved.key = { key.descId, MakeWorldId(route.shardIndex, GetLocalWorldLocalIndex(localWorldId), GetLocalWorldGeneration(localWorldId)) };
+			resolved.key = { key.archetypeKey, MakeWorldId(route.shardIndex, GetLocalWorldLocalIndex(localWorldId), GetLocalWorldGeneration(localWorldId)) };
 			key = resolved.key;
 
 			std::unique_ptr<WorldBase> world;
 
-			if (resolved.desc.kind == eWorldKind::Virtual)
+			if (resolved.templateData.kind == eWorldKind::Virtual)
 			{
 				world = std::make_unique<ServerVirtualWorld>(resolved);
 			}
@@ -297,19 +299,27 @@ namespace jam::net
 				auto physicalWorld = std::make_unique<ServerPhysicalWorld>(resolved);
 				if (netManager)
 				{
-					if (netManager->GetPhysicsFacotryProvider() && !resolved.desc.physicsProfile.empty())
+					if (netManager->GetPhysicsFactoryProvider() && !resolved.templateData.physicsAssetPath.empty())
 					{
-						if (auto phys = netManager->GetPhysicsFacotryProvider()(resolved.desc.physicsProfile))
+						if (auto phys = netManager->GetPhysicsFactoryProvider()(resolved.templateData.physicsAssetPath))
+						{
+							phys->SetPhysicsAssetPath(resolved.templateData.physicsAssetPath);
 							physicalWorld->SetPhysicsFacade(std::move(phys));
+						}
 					}
-					else if (netManager->GetPhysicsFacotry())
+					else if (netManager->GetPhysicsFactory())
 					{
-						if (auto phys = netManager->GetPhysicsFacotry()())
+						if (auto phys = netManager->GetPhysicsFactory()())
+						{
+							phys->SetPhysicsAssetPath(resolved.templateData.physicsAssetPath);
 							physicalWorld->SetPhysicsFacade(std::move(phys));
+						}
 					}
-
-					physicalWorld->SetLevelPath(resolved.desc.levelKey);
 				}
+				if (!resolved.templateData.actorArchetypeSetPath.empty())
+					physicalWorld->SetActorArchetypeDatabase(ActorArchetypesLoader::Load(resolved.templateData.actorArchetypeSetPath));
+				if (!resolved.templateData.actorLevelPath.empty())
+					physicalWorld->SetActorLevelDatabase(ActorLevelsLoader::Load(resolved.templateData.actorLevelPath));
 				world = std::move(physicalWorld);
 			}
 
@@ -345,19 +355,25 @@ namespace jam::net
 		m_netManager = owner;
 		if (!m_netManager) return;
 
-		m_asset = WorldDescIO::LoadWorldDescAsset(m_netManager->m_config.worldAssetPath);
+		m_worldData = WorldDataBootstrap::Load(WorldDataBootstrapPaths
+			{
+				.sharedDataCatalogPath = m_netManager->m_config.sharedDataCatalogPath,
+				.worldTemplatePath = m_netManager->m_config.worldTemplatePath,
+				.worldArchetypePath = m_netManager->m_config.worldArchetypePath,
+			});
 			
 		if (m_policy)
 		{
 			m_policy->BindWorldDirectory(&m_directory);
-			m_policy->BindWorldTemplateAsset(&m_asset);
+			m_policy->BindWorldArchetypeDatabase(&m_worldData.archetypes);
+			m_policy->BindWorldTemplateDatabase(&m_worldData.templates);
 		}
 	}
 
 	void ServerWorldActionSystem::Shutdown()
 	{
 		m_netManager = nullptr;
-		m_asset = {};
+		m_worldData = {};
 	}
 
 	void ServerWorldActionSystem::SetWorldAssignmentPolicy(std::unique_ptr<IWorldAssignmentPolicy> policy)
@@ -366,7 +382,8 @@ namespace jam::net
 		if (m_policy)
 		{
 			m_policy->BindWorldDirectory(&m_directory);
-			m_policy->BindWorldTemplateAsset(&m_asset);
+			m_policy->BindWorldArchetypeDatabase(&m_worldData.archetypes);
+			m_policy->BindWorldTemplateDatabase(&m_worldData.templates);
 		}
 	}
 
@@ -499,7 +516,7 @@ namespace jam::net
 		bool shouldCreate = false;
 		{
 			std::scoped_lock lock(m_pendingCreateMutex);
-			auto& pending = m_pendingCreatesByDesc[plan.target.descId];
+			auto& pending = m_pendingCreatesByArchetype[plan.target.archetypeKey];
 			shouldCreate = pending.empty();
 			pending.push_back(PendingCreateTargetAction
 				{
@@ -513,7 +530,7 @@ namespace jam::net
 		if (!shouldCreate)
 			return true;
 
-		targetShard->Submit(Job([this, descId = plan.target.descId, plan, route, config]() mutable
+		targetShard->Submit(Job([this, archetypeKey = plan.target.archetypeKey, plan, route, config]() mutable
 			{
 				WorldKey createdKey = plan.target;
 				CreateWorldOnShard(GetOrCreateWorldShardState(CurrentShardLocalChecked()), createdKey, route, config, m_netManager, &m_directory);
@@ -521,10 +538,10 @@ namespace jam::net
 				std::vector<PendingCreateTargetAction> pendingActions;
 				{
 					std::scoped_lock lock(m_pendingCreateMutex);
-					if (auto it = m_pendingCreatesByDesc.find(descId); it != m_pendingCreatesByDesc.end())
+					if (auto it = m_pendingCreatesByArchetype.find(archetypeKey); it != m_pendingCreatesByArchetype.end())
 					{
 						pendingActions = std::move(it->second);
-						m_pendingCreatesByDesc.erase(it);
+						m_pendingCreatesByArchetype.erase(it);
 					}
 				}
 
@@ -598,10 +615,10 @@ namespace jam::net
 		if (const auto* previous = FindWorldMembership(userCtx->worlds, plan.target))
 			action.previousTargetMembership = *previous;
 
-		const eWorldRole joinRole = ResolveAuthoritativeJoinRole(*userCtx, config.desc.kind);
+		const eWorldRole joinRole = ResolveAuthoritativeJoinRole(*userCtx, config.templateData.kind);
 		WorldMembership optimisticMembership{};
 		optimisticMembership.key = plan.target;
-		optimisticMembership.kind = config.desc.kind;
+		optimisticMembership.kind = config.templateData.kind;
 		optimisticMembership.role = joinRole;
 		optimisticMembership.presence = plan.resultingPresence;
 		if (const std::optional<WorldMeta> worldMeta = m_directory.FindWorld(plan.target); worldMeta.has_value())
@@ -842,10 +859,10 @@ namespace jam::net
 		};
 
 		WorldUserContext user = MakeWorldUserContext(userId);
-		const eWorldRole transferRole = ResolveAuthoritativeTransferRole(*userCtx, plan.source, config.desc.kind);
+		const eWorldRole transferRole = ResolveAuthoritativeTransferRole(*userCtx, plan.source, config.templateData.kind);
 		WorldMembership optimisticMembership{};
 		optimisticMembership.key = plan.target;
-		optimisticMembership.kind = config.desc.kind;
+		optimisticMembership.kind = config.templateData.kind;
 		optimisticMembership.role = transferRole;
 		optimisticMembership.presence = plan.resultingPresence;
 		if (const std::optional<WorldMeta> worldMeta = m_directory.FindWorld(plan.target); worldMeta.has_value())
@@ -1409,7 +1426,7 @@ namespace jam::net
 
 	WorldConfig ServerWorldActionSystem::ResolveWorldConfig(const WorldKey& key) const
 	{
-		return key.IsValid() ? m_asset.MakeConfig(key) : WorldConfig{};
+		return key.IsValid() ? m_worldData.resolver.ResolveWorldConfig(key) : WorldConfig{};
 	}
 
 	std::shared_ptr<ShardExecutor> ServerWorldActionSystem::ResolveWorldShard(const WorldKey& key) const
@@ -1433,13 +1450,13 @@ namespace jam::net
 	RouteAssignment ServerWorldActionSystem::PlaceNewWorldRoute(const WorldConfig& config) const
 	{
 		RoutePlacementOptions placement{};
-		if (config.desc.route.preferredShard != 0)
+		if (config.templateData.route.preferredShard != 0)
 		{
-			placement.affinity.preferredShard = config.desc.route.preferredShard;
-			placement.affinity.hard = config.desc.route.hardAffinity;
+			placement.affinity.preferredShard = config.templateData.route.preferredShard;
+			placement.affinity.hard = config.templateData.route.hardAffinity;
 		}
 
-		return GLOBAL_EXEC.PlaceRoute(GLOBAL_EXEC.MakeRouteKey("WorldTemplate", config.key.descId), placement);
+		return GLOBAL_EXEC.PlaceRoute(GLOBAL_EXEC.MakeRouteKey("WorldTemplate", config.key.archetypeKey.v), placement);
 	}
 
 	bool ServerWorldActionSystem::ExecuteAddWorldMemberOnCurrentWorldShard(const WorldTransferContext& ctx, WorldUserContext user, const WorldConfig& config, WorldMembership* outMembership, eWorldActionReason& failureReason)
@@ -1468,7 +1485,7 @@ namespace jam::net
 
 			outMembership->key		  = ctx.target;
 			outMembership->localWorldId = worldMeta->localWorldId;
-			outMembership->kind		  = config.desc.kind;
+			outMembership->kind		  = config.templateData.kind;
 			outMembership->presence	  = ctx.resultingPresence;
 		}
 
@@ -1517,7 +1534,7 @@ namespace jam::net
 	{
 		if (!key.IsIssued() || !job)
 		{
-			JAMNET_LOG_WARN("[ServerWorldAcitonSystem::SubmitWorldJob] WorldKey isn't issue or Job is nullptr");
+			JAMNET_LOG_WARN("[ServerWorldActionSystem::SubmitWorldJob] WorldKey isn't issue or Job is nullptr");
 			return false;
 		}
 

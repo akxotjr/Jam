@@ -1,11 +1,11 @@
 #pragma once
 
-#include "jamnet/runtime/world/IWorldActionSystem.h"
-#include "jamnet/runtime/world/WorldBase.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
-#include "jamnet/runtime/world/WorldDirectory.h"
-#include "jamnet/runtime/world/WorldDescAsset.h"
-#include "jamnet/runtime/world/IWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/action/IWorldActionSystem.h"
+#include "jamnet/runtime/world/core/WorldBase.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
+#include "jamnet/runtime/world/data/WorldDataBootstrap.h"
+#include "jamnet/runtime/world/core/WorldDirectory.h"
+#include "jamnet/runtime/world/action/IWorldAssignmentPolicy.h"
 #include "jamnet/sync/networld/ServerPhysicalWorld.h"
 
 #include <atomic>
@@ -142,9 +142,9 @@ namespace jam::net
 		std::unique_ptr<IWorldAssignmentPolicy>		m_policy	 = nullptr;
 
 		WorldDirectory								m_directory	 = {};
-		WorldDescAsset								m_asset		 = {};
+		WorldDataBootstrapBundle					m_worldData		 = {};
 		std::atomic<uint64>							m_nextInFlightActionId = 1;
 		std::mutex									m_pendingCreateMutex;
-		std::unordered_map<uint32, std::vector<PendingCreateTargetAction>> m_pendingCreatesByDesc;
+		std::unordered_map<WorldArchetypeKey, std::vector<PendingCreateTargetAction>> m_pendingCreatesByArchetype;
 	};
 }

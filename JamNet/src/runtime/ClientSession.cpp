@@ -5,7 +5,7 @@
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/RPCAPI.h"
 #include "jamnet/runtime/ClientNetworkManager.h"
-#include "jamnet/runtime/world/ClientWorldActionSystem.h"
+#include "jamnet/runtime/world/action/ClientWorldActionSystem.h"
 #include "jamnet/sync/networld/ClientPhysicalWorld.h"
 
 #include "jamnet/sync/transport/CustomPacketHelper.h"
@@ -33,8 +33,8 @@ namespace jam::net
 				.reason    = static_cast<eWorldActionReason>(table.reason()),
 				.action    = static_cast<eWorldAction>(table.request_action()),
 				.execFlags = WorldActionExecFlags(table.exec_flags()),
-				.source    = WorldKey{ table.src_desc_id(), table.src_world_id() },
-				.target    = WorldKey{ table.target_desc_id(), table.target_world_id() },
+				.source    = WorldKey{ table.src_archetype_key(), table.src_world_id() },
+				.target    = WorldKey{ table.target_archetype_key(), table.target_world_id() },
 			};
 			if (const auto* deltas = table.membership_deltas())
 			{
@@ -51,7 +51,7 @@ namespace jam::net
 								: eWorldMembershipDeltaOp::Upsert,
 							.membership =
 							{
-								.key		  = WorldKey{ delta->key_desc_id(), delta->key_world_id() },
+								.key		  = WorldKey{ delta->key_archetype_key(), delta->key_world_id() },
 								.localWorldId = kInvalidLocalWorldId, // Resolved locally from NetWorldId.
 								.kind		  = static_cast<eWorldKind>(delta->kind()),
 								.role		  = static_cast<eWorldRole>(delta->role()),
@@ -70,7 +70,7 @@ namespace jam::net
 
 					result.worldRuntimeDeltas.push_back(WorldRuntimeDelta
 						{
-							.key     = WorldKey{ delta->key_desc_id(), delta->key_world_id() },
+							.key     = WorldKey{ delta->key_archetype_key(), delta->key_world_id() },
 							.runtime = static_cast<ePhysicalWorldRuntimeState>(delta->runtime()),
 						});
 				}
@@ -199,9 +199,9 @@ namespace jam::net
 		const auto root = fb::CreatefbWorldActionReq(
 			fbb,
 			fbAction,
-			req.source.descId,
+			req.source.archetypeKey.v,
 			req.source.worldId,
-			req.target.descId,
+			req.target.archetypeKey.v,
 			req.target.worldId);
 		fbb.Finish(root);
 

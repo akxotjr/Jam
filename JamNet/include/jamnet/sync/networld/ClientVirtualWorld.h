@@ -1,7 +1,7 @@
 #pragma once
 
 #include "jamnet/runtime/AppRuntimeEvents.h"
-#include "jamnet/runtime/world/VirtualWorld.h"
+#include "jamnet/runtime/world/core/VirtualWorld.h"
 
 namespace jam::net
 {

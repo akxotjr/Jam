@@ -1,6 +1,6 @@
 #pragma once
 
-#include "jamnet/runtime/world/WorldBase.h"
+#include "jamnet/runtime/world/core/WorldBase.h"
 
 namespace jam::net
 {

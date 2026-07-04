@@ -1,6 +1,6 @@
 #pragma once
 #include "jamnet/core/net/Buffer.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 
 
 namespace jam::net
