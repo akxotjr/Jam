@@ -7,8 +7,8 @@
 #include "jamnet/sync/replication/ReplicationTypes.h"
 
 #include "jamnet/runtime/ServerSession.h"
-#include "jamnet/runtime/world/DefaultWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/ServerWorldActionSystem.h"
+#include "jamnet/runtime/world/action/DefaultWorldAssignmentPolicy.h"
+#include "jamnet/runtime/world/action/ServerWorldActionSystem.h"
 
 
 

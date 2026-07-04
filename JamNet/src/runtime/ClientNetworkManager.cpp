@@ -12,7 +12,7 @@
 
 #include "jamnet/runtime/ClientSession.h"
 #include "jamnet/runtime/AppRuntimeEvents.h"
-#include "jamnet/runtime/world/ClientWorldActionSystem.h"
+#include "jamnet/runtime/world/action/ClientWorldActionSystem.h"
 
 namespace jam::net
 {

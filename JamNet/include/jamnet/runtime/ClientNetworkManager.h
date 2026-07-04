@@ -3,8 +3,7 @@
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/NetAddress.h"
 #include "jamnet/core/executor/MailboxRef.h"
-#include "jamnet/runtime/world/WorldDescAsset.h"
-#include "jamnet/runtime/world/WorldDirectory.h"
+#include "jamnet/runtime/world/core/WorldDirectory.h"
 #include "jamnet/sync/networld/ClientPhysicalWorld.h"
 
 
@@ -28,7 +27,9 @@ namespace jam::net
 		using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
 		PhysicsFactory  physicsFactory      = nullptr;
 
-		std::string		worldAssetPath;
+		std::string		sharedDataCatalogPath;
+		std::string		worldTemplatePath;
+		std::string		worldArchetypePath;
 		bool            headlessWorld       = false;
 	};
 

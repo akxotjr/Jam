@@ -1,7 +1,7 @@
 #pragma once
 
-#include "jamnet/runtime/world/WorldActionTypes.h"
-#include "jamnet/runtime/world/PhysicalWorld.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
+#include "jamnet/runtime/world/core/PhysicalWorld.h"
 #include "jamnet/sync/replication/NetActorComponents.h"
 
 namespace jam::net

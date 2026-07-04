@@ -4,8 +4,7 @@
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/NetAddress.h"
 #include "jamnet/core/net/Session.h"
-#include "jamnet/runtime/world/WorldActionTypes.h"
-#include "jamnet/runtime/world/WorldDescAsset.h"
+#include "jamnet/runtime/world/types/WorldActionTypes.h"
 #include "jamnet/runtime/ServerSession.h"
 #include "jamnet/runtime/UserContext.h"
 
@@ -24,8 +23,7 @@ namespace jam::net
 	class WorldBase;
 
 	using PhysicsFactory = std::function<std::unique_ptr<px::IPhysicsFacade>()>;
-	using PhysicsFactoryProvider = std::function<std::unique_ptr<px::IPhysicsFacade>(const std::string& profile)>;
-	using LevelPathResolver = std::function<std::string(const std::string& levelKey)>;
+	using PhysicsFactoryProvider = std::function<std::unique_ptr<px::IPhysicsFacade>(const std::string& physicsAssetPath)>;
 
 
 	struct ServerConfig
@@ -37,7 +35,9 @@ namespace jam::net
 		PhysicsFactory			physicsFactory	= nullptr;
 		PhysicsFactoryProvider	physicsFactoryProvider = nullptr;
 
-		std::string				worldAssetPath;
+		std::string				sharedDataCatalogPath;
+		std::string				worldTemplatePath;
+		std::string				worldArchetypePath;
 	};
 
 	class ServerNetworkManager
@@ -57,8 +57,8 @@ namespace jam::net
 
 		std::shared_ptr<ServerService>		GetService() const { return m_service; }
 
-		PhysicsFactory						GetPhysicsFacotry() const { return m_config.physicsFactory; }
-		PhysicsFactoryProvider				GetPhysicsFacotryProvider() const { return m_config.physicsFactoryProvider; }
+		PhysicsFactory						GetPhysicsFactory() const { return m_config.physicsFactory; }
+		PhysicsFactoryProvider				GetPhysicsFactoryProvider() const { return m_config.physicsFactoryProvider; }
 
 		void								CreateWorld(WorldKey key);
 		void								DestroyWorld(const WorldKey& key);
