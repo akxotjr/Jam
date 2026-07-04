@@ -5,7 +5,6 @@
 
 #include "jampx/PhysicsCore.h"
 #include "jampx/PhysicsFacade.h"
-#include "jampx/prefab/PhysicsPrefabRegistry.h"
 
 #include "ExecutorMetricsReporter.h"
 
@@ -33,7 +32,9 @@ int main()
 
 		ServerConfig serverCfg{};
 		serverCfg.physicsFactory = []() { return std::make_unique<jam::px::PhysicsFacade>(); };
-		serverCfg.worldAssetPath = "C://Users//akxotjr//GameWorkSpace//Jam-dev//TestApp//Contents//world_templates.json";
+		serverCfg.sharedDataCatalogPath = "C://Users//akxotjr//GameWorkSpace//Jam-dev//SharedData//Generated//shared_data_catalog.json";
+		serverCfg.worldTemplatePath = "C://Users//akxotjr//GameWorkSpace//Jam-dev//SharedData//Generated//world_templates.json";
+		serverCfg.worldArchetypePath = "C://Users//akxotjr//GameWorkSpace//Jam-dev//SharedData//Generated//world_archetypes.json";
 
 		auto serverManager = std::make_unique<ServerNetworkManager>(serverCfg);
 
@@ -50,10 +51,6 @@ int main()
 		
 		PHYSICS_CORE_INIT();
 		JAMNET_LOG_INFO("PhysicsCore initialized successfully");
-		
-		PHYSICS_PREFAB_REGISTRY.Init("C://Users//akxotjr//GameWorkSpace//Jam-dev//TestApp//Contents//test_asset.json");
-		JAMNET_LOG_INFO("PhysicsPrefabRegistry initialized successfully");
-
 
 		std::this_thread::sleep_for(500ms);
 
