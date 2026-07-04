@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="pch">
+      <UniqueIdentifier>{0dca6957-d2a7-4fe5-8114-ddaa5a2738b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{5d4f23f6-8098-4f83-b34f-4eb7908b9352}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>pch</Filter>
+    </ClInclude>
+    <ClInclude Include="JamUnityBridge.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="UnityEventQueue.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="UnityClientCore.h">
+      <Filter>src</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <Filter>pch</Filter>
+    </ClCompile>
+    <ClCompile Include="JamUnityBridge.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="UnityEventQueue.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="UnityClientCore.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
