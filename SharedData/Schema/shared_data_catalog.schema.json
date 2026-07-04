@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/shared_data_catalog.schema.json",
+  "title": "Jam Shared Data Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "$defs": {
+    "nonzero_u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 1, "maximum": 18446744073709551615 },
+    "nonempty_string": { "type": "string", "minLength": 1 },
+    "relative_json_path": {
+      "type": "string",
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+\\.json$"
+    },
+    "catalog_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "path"],
+      "description": "Matches jam::net::SharedDataCatalogEntry. The enclosing property name is the runtime/shared-data name.",
+      "properties": {
+        "key": { "$ref": "#/$defs/nonzero_u64" },
+        "path": {
+          "$ref": "#/$defs/relative_json_path",
+          "description": "Relative path to a shared-data json document. Absolute paths and non-json targets are not allowed."
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": { "type": "integer", "x-jam-scalar": "i32", "const": 1 },
+    "actor_archetype_sets": {
+      "type": "object",
+      "description": "Direct map consumed by SharedDataCatalogAsset::actorArchetypeSetsByName / actorArchetypeSetsByKey.",
+      "propertyNames": {
+        "$ref": "#/$defs/nonempty_string"
+      },
+      "additionalProperties": { "$ref": "#/$defs/catalog_entry" },
+      "default": {}
+    },
+    "physics_assets": {
+      "type": "object",
+      "description": "Direct map consumed by SharedDataCatalogAsset::physicsAssetsByName / physicsAssetsByKey.",
+      "propertyNames": {
+        "$ref": "#/$defs/nonempty_string"
+      },
+      "additionalProperties": { "$ref": "#/$defs/catalog_entry" },
+      "default": {}
+    },
+    "actor_levels": {
+      "type": "object",
+      "description": "Direct map consumed by SharedDataCatalogAsset::actorLevelsByName / actorLevelsByKey.",
+      "propertyNames": {
+        "$ref": "#/$defs/nonempty_string"
+      },
+      "additionalProperties": { "$ref": "#/$defs/catalog_entry" },
+      "default": {}
+    }
+  }
+}

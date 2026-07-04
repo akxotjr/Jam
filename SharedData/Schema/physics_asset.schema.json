@@ -1,0 +1,571 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/physics_asset.schema.json",
+  "title": "Jam PhysicsAsset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "integer", "x-jam-scalar": "i32", "const": 1 },
+    "materials": { "$ref": "#/$defs/material_map" },
+    "meshes": { "$ref": "#/$defs/mesh_map" },
+    "shapes": { "$ref": "#/$defs/shape_map" },
+    "dyn_bodies": { "$ref": "#/$defs/dynamic_body_map" },
+    "cct_bodies": { "$ref": "#/$defs/cct_body_map" },
+    "char_move_configs": { "$ref": "#/$defs/character_move_config_map" },
+    "kinematic_driver_configs": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/kinematic_driver_config" },
+      "default": {}
+    },
+    "projectile_configs": { "$ref": "#/$defs/projectile_config_map" },
+    "archetypes": { "$ref": "#/$defs/archetype_map" }
+  },
+  "$defs": {
+    "u32": { "type": "integer", "x-jam-scalar": "u32", "minimum": 0, "maximum": 4294967295 },
+    "u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 0, "maximum": 18446744073709551615 },
+    "i32": { "type": "integer", "x-jam-scalar": "i32", "minimum": -2147483648, "maximum": 2147483647 },
+    "name_ref": {
+      "description": "Canonical authoring name for another physics asset entry.",
+      "type": "string",
+      "minLength": 1
+    },
+    "nonempty_string": { "type": "string", "minLength": 1 },
+    "vec2": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number", "x-jam-scalar": "f32" } },
+    "vec3": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number", "x-jam-scalar": "f32" } },
+    "quat": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number", "x-jam-scalar": "f32" } },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["p", "q"],
+      "properties": { "p": { "$ref": "#/$defs/vec3" }, "q": { "$ref": "#/$defs/quat" } }
+    },
+    "sim_filter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["word0", "word1", "word2", "word3"],
+      "properties": {
+        "word0": { "$ref": "#/$defs/u32" },
+        "word1": { "$ref": "#/$defs/u32" },
+        "word2": { "$ref": "#/$defs/u32" },
+        "word3": { "$ref": "#/$defs/u32" }
+      }
+    },
+    "query_filter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["word0", "word1", "word2", "word3"],
+      "properties": {
+        "word0": { "$ref": "#/$defs/u32" },
+        "word1": { "$ref": "#/$defs/u32" },
+        "word2": { "$ref": "#/$defs/u32" },
+        "word3": { "$ref": "#/$defs/u32" }
+      }
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["static_friction", "dynamic_friction", "restitution"],
+      "properties": {
+        "static_friction": { "type": "number", "default": 0.5 },
+        "dynamic_friction": { "type": "number", "default": 0.5 },
+        "restitution": { "type": "number", "default": 0.1 }
+      }
+    },
+    "mesh_type": { "type": "string", "enum": ["triangle", "convex"] },
+    "mesh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "cooked_path"],
+      "properties": {
+        "type": { "$ref": "#/$defs/mesh_type" },
+        "cooked_path": { "$ref": "#/$defs/nonempty_string" },
+        "src_path": { "type": "string" },
+        "src_mesh_index": { "$ref": "#/$defs/i32", "default": 0 },
+        "src_primitive_index": { "$ref": "#/$defs/i32", "default": 0 }
+      }
+    },
+    "shape_type": { "type": "string", "enum": ["none", "box", "sphere", "capsule", "plane", "triangle_mesh", "convex_mesh"] },
+    "shape_flag": { "type": "string", "enum": ["simulation", "simulation_only", "trigger", "trigger_only", "query_only"] },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "local_pose", "material", "shape_flag", "sim_filter", "qry_filter"],
+      "properties": {
+        "type": { "$ref": "#/$defs/shape_type" },
+        "local_pose": { "$ref": "#/$defs/transform" },
+        "material": { "$ref": "#/$defs/name_ref" },
+        "shape_flag": { "$ref": "#/$defs/shape_flag" },
+        "sim_filter": { "$ref": "#/$defs/sim_filter" },
+        "qry_filter": { "$ref": "#/$defs/query_filter" },
+        "contact_offset": { "type": "number", "default": 0.0 },
+        "rest_offset": { "type": "number", "default": 0.02 },
+        "half_extents": { "$ref": "#/$defs/vec3" },
+        "radius": { "type": "number", "default": 0.5 },
+        "half_height": { "type": "number", "default": 0.5 },
+        "mesh": { "$ref": "#/$defs/name_ref" }
+      }
+    },
+    "dynamic_body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["density"],
+      "properties": {
+        "density": { "type": "number", "default": 1.0 },
+        "linear_velocity": { "$ref": "#/$defs/vec3" },
+        "angular_velocity": { "$ref": "#/$defs/vec3" },
+        "linear_damping": { "type": "number", "default": 0.0 },
+        "angular_damping": { "type": "number", "default": 0.05 }
+      }
+    },
+    "cct_policy": { "type": "string", "enum": ["default"] },
+    "cct_body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["radius", "height", "material", "density", "policy"],
+      "properties": {
+        "radius": { "type": "number", "default": 0.5 },
+        "height": { "type": "number", "default": 0.75 },
+        "material": { "$ref": "#/$defs/name_ref" },
+        "density": { "type": "number", "default": 10.0 },
+        "policy": { "$ref": "#/$defs/cct_policy" },
+        "slope_limit": { "type": "number", "default": 0.707 },
+        "invisible_wall_height": { "type": "number", "default": 0.0 },
+        "max_jump_height": { "type": "number", "default": 0.0 },
+        "contact_offset": { "type": "number", "default": 0.1 },
+        "step_offset": { "type": "number", "default": 0.5 },
+        "scale_coeff": { "type": "number", "default": 0.8 },
+        "volume_growth": { "type": "number", "default": 1.5 }
+      }
+    },
+    "stance_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "standing_height": { "type": "number", "default": 1.0 },
+        "crouch_height": { "type": "number", "default": 0.5 },
+        "crouch_speed_multiplier": { "type": "number", "default": 0.6 },
+        "hold_to_crouch": { "type": "boolean", "default": true },
+        "prone_height": { "type": "number", "default": 0.2 },
+        "prone_speed_multiplier": { "type": "number", "default": 0.0 },
+        "hold_to_prone": { "type": "boolean", "default": false }
+      }
+    },
+    "gait_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "walk_speed_multiplier": { "type": "number", "default": 1.0 },
+        "run_speed_multiplier": { "type": "number", "default": 1.2 },
+        "sprint_speed_multiplier": { "type": "number", "default": 1.4 },
+        "sprint_accel_multiplier": { "type": "number", "default": 1.2 },
+        "sprint_min_speed_to_start": { "type": "number", "default": 0.0 },
+        "sprint_allow_in_air": { "type": "boolean", "default": false }
+      }
+    },
+    "jump_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "speed": { "type": "number", "default": 10.0 },
+        "coyote_time": { "type": "number", "default": 0.1 },
+        "jump_buffer": { "type": "number", "default": 0.1 },
+        "edge_trigger": { "type": "boolean", "default": true }
+      }
+    },
+    "dash_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "speed": { "type": "number", "default": 30.0 },
+        "duration": { "type": "number", "default": 0.2 },
+        "override_locomotion": { "type": "boolean", "default": true },
+        "allow_in_air": { "type": "boolean", "default": true },
+        "end_on_collision": { "type": "boolean", "default": true },
+        "steer_factor": { "type": "number", "default": 0.0 }
+      }
+    },
+    "character_move_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gravity": { "type": "number", "default": 25.0 },
+
+        "ground_accel": { "type": "number", "default": 60.0 },
+        "ground_friction": { "type": "number", "default": 8.0 },
+        "ground_max_speed": { "type": "number", "default": 10.0 },
+
+        "air_accel": { "type": "number", "default": 10.0 },
+        "air_max_speed": { "type": "number", "default": 10.0 },
+
+        "cap_horizontal_only": { "type": "boolean", "default": true },
+        "hard_speed_cap_air": { "type": "number", "default": 7.5 },
+        "soft_cap_start_air": { "type": "number", "default": 7.0 },
+        "soft_cap_strength_air": { "type": "number", "default": 20.0 },
+
+        "stance": { "$ref": "#/$defs/stance_config" },
+        "gait": { "$ref": "#/$defs/gait_config" },
+        "jump": { "$ref": "#/$defs/jump_config" },
+        "dash": { "$ref": "#/$defs/dash_config" }
+      }
+    },
+    "kinematic_common": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "compute_derived_vel": { "type": "boolean", "default": true },
+        "carry_riders": { "type": "boolean", "default": true },
+        "sweep": { "type": "boolean", "default": false },
+        "max_speed": { "type": "number", "default": 1000.0 }
+      }
+    },
+    "ease_type": {
+      "type": "string",
+      "enum": [
+        "linear",
+        "smooth_step",
+        "smoother_step",
+        "in_sine",
+        "out_sine",
+        "in_out_sine",
+        "in_quad",
+        "out_quad",
+        "in_out_quad",
+        "in_cubic",
+        "out_cubic",
+        "in_out_cubic"
+      ]
+    },
+    "ease_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "ease_in_time": { "type": "number", "default": 0.2 }, "ease_out_time": { "type": "number", "default": 0.2 } }
+    },
+
+    "curve_type": { "type": "string", "enum": ["catmull_rom", "b_spline", "bezier"] },
+    "waypoint_loop": { "type": "string", "enum": ["once", "loop", "ping_pong"] },
+    "orbit_plane_mode": { "type": "string", "enum": ["xy", "xz", "yz", "custom"] },
+    "orbit_center_mode": { "type": "string", "enum": ["fixed_point", "follow_target"] },
+    "orbit_radius_mode": { "type": "string", "enum": ["circle", "ellipse"] },
+    "orbit_orientation_mode": { "type": "string", "enum": ["keep_rotation", "face_center", "orient_along_velocity"] },
+    "orbit_end_mode": { "type": "string", "enum": ["loop", "ping_pong", "clamp"] },
+    "follow_offset_space": { "type": "string", "enum": ["target_local", "world"] },
+    "follow_rotation_mode": { "type": "string", "enum": ["keep_world_rotation", "match_target_rotation", "look_at_target", "orient_along_velocity"] },
+
+    "kinematic_waypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pose"],
+      "properties": { "pose": { "$ref": "#/$defs/transform" }, "pause_duration": { "type": "number", "default": 0.0 } }
+    },
+    "waypoint_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "waypoints"],
+      "properties": {
+        "source_type": { "type": "string", "const": "waypoint" },
+        "waypoints": { "type": "array", "items": { "$ref": "#/$defs/kinematic_waypoint" } },
+        "speed": { "type": "number", "default": 5.0 },
+        "loop_mode": { "$ref": "#/$defs/waypoint_loop", "default": "loop" },
+        "use_ease_profile": { "type": "boolean", "default": false },
+        "ease_type": { "$ref": "#/$defs/ease_type", "default": "linear" },
+        "ease_profile": { "$ref": "#/$defs/ease_profile" }
+      }
+    },
+
+    "curve_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "control_points"],
+      "properties": {
+        "source_type": { "type": "string", "const": "curve" },
+        "control_points": { "type": "array", "items": { "$ref": "#/$defs/vec3" } },
+        "type": { "$ref": "#/$defs/curve_type", "default": "catmull_rom" },
+        "speed": { "type": "number", "default": 5.0 },
+        "duration": { "type": "number", "default": 3.0 },
+        "loop": { "type": "boolean", "default": true },
+        "build_segments": { "$ref": "#/$defs/u32", "default": 64 },
+        "use_ease_profile": { "type": "boolean", "default": false },
+        "ease_type": { "$ref": "#/$defs/ease_type", "default": "smooth_step" },
+        "ease_profile": { "$ref": "#/$defs/ease_profile" },
+        "alpha": { "type": "number", "default": 0.5 },
+        "degree": { "$ref": "#/$defs/u32", "default": 3 }
+      }
+    },
+
+    "orbit_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type"],
+      "properties": {
+        "source_type": { "type": "string", "const": "orbit" },
+        "center_mode": { "$ref": "#/$defs/orbit_center_mode", "default": "fixed_point" },
+        "fixed_center": { "$ref": "#/$defs/vec3" },
+        "target_offset": { "$ref": "#/$defs/vec3" },
+        "plane_mode": { "$ref": "#/$defs/orbit_plane_mode", "default": "xz" },
+        "custom_plane_normal": { "$ref": "#/$defs/vec3" },
+        "radius_mode": { "$ref": "#/$defs/orbit_radius_mode", "default": "circle" },
+        "radius": { "type": "number", "default": 3.0 },
+        "ellipse_radius": { "$ref": "#/$defs/vec2" },
+        "initial_angle_rad": { "type": "number", "default": 0.0 },
+        "angular_speed_rad": { "type": "number", "default": 1.0 },
+        "end_mode": { "$ref": "#/$defs/orbit_end_mode", "default": "loop" },
+        "min_angle_rad": { "type": "number", "default": 0.0 },
+        "max_angle_rad": { "type": "number", "default": 6.283185307179586 },
+        "orientation_mode": { "$ref": "#/$defs/orbit_orientation_mode", "default": "orient_along_velocity" },
+        "initial_rotation": { "$ref": "#/$defs/quat" },
+        "use_ease_at_ends": { "type": "boolean", "default": false },
+        "end_ease_profile": { "$ref": "#/$defs/ease_profile" },
+        "compute_derived_velocity": { "type": "boolean", "default": true }
+      }
+    },
+
+    "follow_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "target_id"],
+      "properties": {
+        "source_type": { "type": "string", "const": "follow" },
+        "target_id": { "$ref": "#/$defs/u32" },
+        "offset": { "$ref": "#/$defs/vec3" },
+        "offset_space": { "$ref": "#/$defs/follow_offset_space", "default": "target_local" },
+        "position_follow_speed": { "type": "number", "default": 10.0 },
+        "rotation_follow_speed": { "type": "number", "default": 10.0 },
+        "max_linear_speed": { "type": "number", "default": 1000.0 },
+        "max_angular_speed": { "type": "number", "default": 3.141592653589793 },
+        "rotation_mode": { "$ref": "#/$defs/follow_rotation_mode", "default": "keep_world_rotation" },
+        "snap_if_target_missing": { "type": "boolean", "default": false },
+        "keep_last_pose_if_missing": { "type": "boolean", "default": true },
+        "compute_derived_velocity": { "type": "boolean", "default": true }
+      }
+    },
+
+    "network_pose_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type"],
+      "properties": { "source_type": { "type": "string", "const": "network_pose" }, "compute_derived_velocity": { "type": "boolean", "default": false } }
+    },
+
+    "kinematic_source": {
+      "type": "object",
+      "x-jam-polymorphic": true,
+      "x-jam-base-name": "kinematic_source",
+      "x-jam-discriminator": "source_type",
+      "oneOf": [
+        { "$ref": "#/$defs/waypoint_source" },
+        { "$ref": "#/$defs/curve_source" },
+        { "$ref": "#/$defs/orbit_source" },
+        { "$ref": "#/$defs/follow_source" },
+        { "$ref": "#/$defs/network_pose_source" }
+      ]
+    },
+    "kinematic_driver_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["common", "source"],
+      "properties": { "common": { "$ref": "#/$defs/kinematic_common" }, "source": { "$ref": "#/$defs/kinematic_source" } }
+    },
+    "projectile_kind": { "type": "string", "enum": ["dyn_sim", "analytic", "hitscan"] },
+    "projectile_motion_model": { "type": "string", "enum": ["linear", "ballistic", "homing_steer", "homing_lead", "homing_pn"] },
+    "projectile_hit_model": {
+      "type": "string",
+      "enum": ["raycast_fallback", "shape_sweep", "sphere_sweep", "expanding_shape_sweep", "expanding_sphere_sweep"]
+    },
+    "projectile_motion_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "$ref": "#/$defs/projectile_motion_model", "default": "ballistic" },
+        "initial_velocity": { "$ref": "#/$defs/vec3" },
+        "gravity_scale": { "type": "number", "default": 1.0 }
+      }
+    },
+    "projectile_hit_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "$ref": "#/$defs/projectile_hit_model", "default": "shape_sweep" },
+        "use_shape_sweep": { "type": "boolean", "default": true },
+        "fallback_raycast": { "type": "boolean", "default": true },
+        "request_fd": { "$ref": "#/$defs/query_filter" }
+      }
+    },
+    "projectile_lifetime_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "max_range": { "type": "number", "default": 1000.0 }, "max_lifetime": { "type": "number", "default": 10.0 } }
+    },
+    "projectile_homing_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_id": { "$ref": "#/$defs/u32" },
+        "max_speed": { "type": "number", "default": 120.0 },
+        "acceleration": { "type": "number", "default": 300.0 },
+        "max_turn_rate": { "type": "number", "default": 6.0 },
+        "enable_homing": { "type": "boolean", "default": false },
+        "keep_speed_constant": { "type": "boolean", "default": true },
+        "reacquire_target": { "type": "boolean", "default": false },
+        "keep_last_direction": { "type": "boolean", "default": true },
+        "lead_time_scale": { "type": "number", "default": 1.0 },
+        "max_predict_time": { "type": "number", "default": 0.35 },
+        "navigation_gain": { "type": "number", "default": 3.0 },
+        "max_lateral_accel": { "type": "number", "default": 200.0 }
+      }
+    },
+    "projectile_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "$ref": "#/$defs/projectile_kind", "default": "analytic" },
+        "motion": { "$ref": "#/$defs/projectile_motion_config" },
+        "hit": { "$ref": "#/$defs/projectile_hit_config" },
+        "lifetime": { "$ref": "#/$defs/projectile_lifetime_config" },
+        "homing": { "$ref": "#/$defs/projectile_homing_config" }
+      }
+    },
+    "rigid_behavior_kind": { "type": "string", "enum": ["none", "kinematic_driver", "projectile"] },
+    "rigid_behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": { "kind": { "$ref": "#/$defs/rigid_behavior_kind" }, "config": { "$ref": "#/$defs/name_ref" } }
+    },
+    "controller_type": { "type": "string", "enum": ["none", "player", "ai"] },
+    "rigid_body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shapes"],
+      "properties": {
+        "shapes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/name_ref" } },
+        "dynamic": { "$ref": "#/$defs/name_ref" },
+        "behavior": { "$ref": "#/$defs/rigid_behavior" }
+      }
+    },
+    "character_body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cct"],
+      "properties": {
+        "cct": { "$ref": "#/$defs/name_ref" },
+        "hitboxes": { "type": "array", "items": { "$ref": "#/$defs/name_ref" }, "default": [] },
+        "controller_type": { "$ref": "#/$defs/controller_type", "default": "player" },
+        "move_config": { "$ref": "#/$defs/name_ref" }
+      }
+    },
+    "actor_type": { "type": "string", "enum": ["generic", "character", "projectile"] },
+    "body_type": { "type": "string", "enum": ["rigid_body", "character_body"] },
+    "motion_type": { "type": "string", "enum": ["none", "static", "dynamic", "kinematic", "cct", "remote_cct"] },
+    "motion_flags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["disable_gravity", "enable_ccd", "lock_linear_x", "lock_linear_y", "lock_linear_z", "lock_angular_x", "lock_angular_y", "lock_angular_z"]
+      },
+      "default": []
+    },
+    "spawn_policy": { "type": "string", "enum": ["level_only", "runtime_only", "both"] },
+    "physics_archetype_common": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_type", "motion_type", "motion_flags", "spawn_policy", "allow_replication"],
+      "properties": {
+        "actor_type": { "$ref": "#/$defs/actor_type" },
+        "motion_type": { "$ref": "#/$defs/motion_type" },
+        "motion_flags": { "$ref": "#/$defs/motion_flags" },
+        "spawn_policy": { "$ref": "#/$defs/spawn_policy", "default": "both" },
+        "allow_replication": { "type": "boolean", "default": true }
+      }
+    },
+    "rigid_physics_archetype": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body"],
+      "properties": {
+        "body_type": { "type": "string", "const": "rigid_body" },
+        "body": { "$ref": "#/$defs/rigid_body" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/physics_archetype_common" }
+      ]
+    },
+    "character_physics_archetype": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body"],
+      "properties": {
+        "body_type": { "type": "string", "const": "character_body" },
+        "body": { "$ref": "#/$defs/character_body" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/physics_archetype_common" }
+      ]
+    },
+    "physics_archetype": {
+      "type": "object",
+      "x-jam-polymorphic": true,
+      "x-jam-base-name": "physics_archetype",
+      "x-jam-discriminator": "body_type",
+      "oneOf": [
+        { "$ref": "#/$defs/rigid_physics_archetype" },
+        { "$ref": "#/$defs/character_physics_archetype" }
+      ]
+    },
+    "material_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/material" },
+      "default": {}
+    },
+    "mesh_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/mesh" },
+      "default": {}
+    },
+    "shape_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/shape" },
+      "default": {}
+    },
+    "dynamic_body_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/dynamic_body" },
+      "default": {}
+    },
+    "cct_body_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/cct_body" },
+      "default": {}
+    },
+    "character_move_config_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/character_move_config" },
+      "default": {}
+    },
+    "kinematic_driver_config_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/kinematic_driver_config" },
+      "default": {}
+    },
+    "projectile_config_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/projectile_config" },
+      "default": {}
+    },
+    "archetype_map": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nonempty_string" },
+      "additionalProperties": { "$ref": "#/$defs/physics_archetype" },
+      "default": {}
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/actor_levels.schema.json",
+  "title": "Jam Actor Levels",
+  "description": "Canonical world level-content document resolved by world_archetypes.actor_level_name through shared_data_catalog.actor_levels.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "instances"],
+  "$defs": {
+    "nonempty_string": { "type": "string", "minLength": 1 },
+    "nonzero_u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 1, "maximum": 18446744073709551615 },
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number", "x-jam-scalar": "f32" }
+    },
+    "quat": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number", "x-jam-scalar": "f32" }
+    },
+    "spawn_pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["p", "q"],
+      "properties": {
+        "p": { "$ref": "#/$defs/vec3" },
+        "q": { "$ref": "#/$defs/quat" }
+      }
+    },
+    "actor_level_instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level_actor_id", "actor_archetype", "spawn_pose"],
+      "properties": {
+        "level_actor_id": {
+          "type": "integer",
+          "x-jam-scalar": "u32",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "Stable authored level actor id used to derive level-scoped runtime NetId values."
+        },
+        "actor_archetype": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Canonical actor archetype name resolved from the ActorArchetypeAsset document."
+        },
+        "actor_archetype_key": {
+          "$ref": "#/$defs/nonzero_u64",
+          "description": "Runtime key derived from actor_archetype."
+        },
+        "spawn_pose": {
+          "$ref": "#/$defs/spawn_pose",
+          "description": "Authored spawn pose for this level actor."
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": { "type": "integer", "x-jam-scalar": "i32", "const": 1 },
+    "scene_name": {
+      "$ref": "#/$defs/nonempty_string",
+      "description": "Optional scene/presentation label carried with the actor level document."
+    },
+    "instances": {
+      "type": "array",
+      "description": "Stable authored level actors. Each instance resolves actor_archetype into ActorArchetypeAsset, then into a physics archetype at runtime.",
+      "items": {
+        "$ref": "#/$defs/actor_level_instance"
+      }
+    }
+  }
+}

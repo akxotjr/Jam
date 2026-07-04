@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/world_archetypes.schema.json",
+  "title": "Jam World Archetypes",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "world_archetypes"],
+  "$defs": {
+    "nonzero_u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 1, "maximum": 18446744073709551615 },
+    "nonempty_string": { "type": "string", "minLength": 1 },
+    "world_archetype": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archetype_key",
+        "template_name",
+        "template_key",
+        "presentation_name"
+      ],
+      "properties": {
+        "archetype_key": { "$ref": "#/$defs/nonzero_u64" },
+        "template_name": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Authoring reference string to the canonical world template name."
+        },
+        "template_key": {
+          "$ref": "#/$defs/nonzero_u64",
+          "description": "Runtime key derived from template_name."
+        },
+        "presentation_name": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Client-side world presentation lookup key. This is the canonical presentation binding name used by the client."
+        },
+        "actor_archetypes_name": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Lookup key into shared_data_catalog.actor_archetype_sets. Resolves the ActorArchetypeAsset document."
+        },
+        "actor_level_name": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Canonical level-content lookup key into shared_data_catalog.actor_levels. Resolves the ActorLevelAsset document."
+        },
+        "physics_asset_name": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Lookup key into shared_data_catalog.physics_assets. Resolves the PhysicsAsset document used as spawn backend."
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": { "type": "integer", "x-jam-scalar": "i32" },
+    "world_archetypes": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/nonempty_string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/world_archetype"
+      }
+    }
+  }
+}

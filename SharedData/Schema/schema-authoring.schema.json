@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/schema-authoring.schema.json",
+  "$defs": {
+    "schemaNode": {
+      "type": "object",
+      "properties": {
+        "$schema": { "type": "string" },
+        "$id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "default": {},
+        "type": {
+          "type": "string",
+          "enum": ["object", "array", "string", "integer", "number", "boolean"]
+        },
+        "propertyNames": { "$ref": "#/$defs/schemaNode" },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/schemaNode" }
+        },
+        "$defs": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/schemaNode" }
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "items": { "$ref": "#/$defs/schemaNode" },
+        "minItems": { "type": "integer", "minimum": 0 },
+        "maxItems": { "type": "integer", "minimum": 0 },
+        "minLength": { "type": "integer", "minimum": 0 },
+        "pattern": { "type": "string" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "$ref": { "type": "string" },
+        "enum": { "type": "array" },
+        "const": {},
+        "oneOf": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/schemaNode" }
+        },
+        "allOf": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/schemaNode" }
+        },
+        "if": { "$ref": "#/$defs/schemaNode" },
+        "then": { "$ref": "#/$defs/schemaNode" },
+        "else": { "$ref": "#/$defs/schemaNode" },
+        "additionalProperties": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/schemaNode" }
+          ]
+        },
+        "x-jam-scalar": {
+          "type": "string",
+          "enum": ["f32", "f64", "i32", "i64", "u32", "u64"]
+        },
+        "x-jam-polymorphic": { "type": "boolean" },
+        "x-jam-base-name": { "type": "string" },
+        "x-jam-discriminator": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$ref": "#/$defs/schemaNode"
+}

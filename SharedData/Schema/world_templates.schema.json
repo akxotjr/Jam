@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/world_templates.schema.json",
+  "title": "Jam World Templates",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "world_templates"],
+  "$defs": {
+    "nonempty_string": { "type": "string", "minLength": 1 },
+    "nonnegative_i32": { "type": "integer", "x-jam-scalar": "i32", "minimum": 0 },
+    "nonzero_u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 1, "maximum": 18446744073709551615 },
+    "world_template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "template_key",
+        "kind",
+        "group",
+        "allow_multiple_instance_per_user",
+        "persistent",
+        "destroy_when_empty",
+        "is_private",
+        "max_active_gameplay_memberships",
+        "capacity",
+        "tick_mode"
+      ],
+      "properties": {
+        "template_key": { "$ref": "#/$defs/nonzero_u64" },
+        "kind": { "type": "string", "enum": ["virtual", "physical"] },
+        "group": { "$ref": "#/$defs/nonnegative_i32" },
+        "allow_multiple_instance_per_user": { "type": "boolean" },
+        "persistent": { "type": "boolean" },
+        "destroy_when_empty": { "type": "boolean" },
+        "is_private": { "type": "boolean" },
+        "max_active_gameplay_memberships": { "$ref": "#/$defs/nonnegative_i32" },
+        "capacity": { "$ref": "#/$defs/nonnegative_i32" },
+        "tick_mode": { "type": "string", "enum": ["none", "fixed", "on_demand"] }
+      }
+    }
+  },
+  "properties": {
+    "version": { "type": "integer", "x-jam-scalar": "i32" },
+    "world_templates": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/nonempty_string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/world_template"
+      }
+    }
+  }
+}
