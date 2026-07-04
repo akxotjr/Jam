@@ -1,13 +1,14 @@
-﻿#pragma once
+#pragma once
 
 
 #include "jampx/actor/rigid/RigidBody.h"
 #include "jampx/actor/character/CharacterBody.h"
+#include "jampx/PhysicsDatabase.h"
 
 namespace jam::px
 {
 	class  PhysicsWorld;
-	struct ActorTemplateDef;
+	class PhysicsArchetypeRegistry;
 	struct SpawnDesc;
 	struct ProjectileSpawnDesc;
 
@@ -15,11 +16,11 @@ namespace jam::px
 	class ActorFactory
 	{
 	public:
-		/// @brief Static / Dynamic / Kinematic RigidBody 생성 (prefab + runtime overrides 병합)
+		/// @brief Static / Dynamic / Kinematic RigidBody 생성 (physics archetype + runtime overrides 병합)
 		static std::optional<RigidBody>     CreateRigidBody(
 			PhysicsWorld&				world,
-			TemplateHandle				tpl,
-			const ActorTemplateDef&		tplDef,
+			PhysicsArchetypeKey			key,
+			const PhysicsArchetypeData&	data,
 			const SpawnDesc&			desc,
 			ObjectId					id,
 			const TargetPoseResolver&	resolver = nullptr);
@@ -27,8 +28,8 @@ namespace jam::px
 		/// @brief CCT / RemoteCCT CharacterBody 생성
 		static std::optional<CharacterBody> CreateCharacterBody(
 			PhysicsWorld&				world,
-			TemplateHandle				tpl,
-			const ActorTemplateDef&		tplDef,
+			PhysicsArchetypeKey			key,
+			const PhysicsArchetypeData&	data,
 			const SpawnDesc&			desc,
 			ObjectId					id);
 

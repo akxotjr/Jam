@@ -48,12 +48,10 @@
     <ClCompile Include="src\jampx\PhysicsCore.cpp" />
     <ClCompile Include="src\jampx\PhysicsFacade.cpp" />
     <ClCompile Include="src\jampx\PhysicsWorld.cpp" />
-    <ClCompile Include="src\jampx\prefab\PhysicsPrefabIO.cpp" />
-    <ClCompile Include="src\jampx\prefab\PhysicsPrefabRegistry.cpp" />
-    <ClCompile Include="src\jampx\prefab\PrefabAssetCreator.cpp" />
-    <ClCompile Include="src\jampx\prefab\PrefabCooker.cpp" />
-    <ClCompile Include="src\jampx\prefab\PrefabDocument.cpp" />
-    <ClCompile Include="src\jampx\prefab\PrefabLevelLoader.cpp" />
+    <ClCompile Include="src\jampx\prefab\PhysicsAssetLoader.cpp" />
+    <ClCompile Include="src\jampx\prefab\PhysicsArchetypeRegistry.cpp" />
+    <ClCompile Include="src\jampx\prefab\PxCooker.cpp" />
+    <ClCompile Include="src\jampx\prefab\PxCreator.cpp" />
     <ClCompile Include="src\jampx\ShardPxCpuDispacter.cpp" />
     <ClCompile Include="src\jampx\third_party\tinygltf_impl.cpp" />
   </ItemGroup>
@@ -90,7 +88,7 @@
     <ClInclude Include="include\jampx\geometry\CatmullRom.h" />
     <ClInclude Include="include\jampx\geometry\Curve.h" />
     <ClInclude Include="include\jampx\JamPx.h" />
-    <ClInclude Include="include\jampx\PhysicsAsset.h" />
+    <ClInclude Include="include\jampx\PhysicsDatabase.h" />
     <ClInclude Include="include\jampx\PhysicsCompletionTask.h" />
     <ClInclude Include="include\jampx\PhysicsCore.h" />
     <ClInclude Include="include\jampx\PhysicsFacade.h" />
@@ -100,18 +98,15 @@
     <ClInclude Include="include\jampx\PhysicsUtils.h" />
     <ClInclude Include="include\jampx\PhysicsWorld.h" />
     <ClInclude Include="include\jampx\PhysXTypes.h" />
-    <ClInclude Include="include\jampx\prefab\PhysicsPrefabIO.h" />
-    <ClInclude Include="include\jampx\prefab\PhysicsPrefabRegistry.h" />
-    <ClInclude Include="include\jampx\prefab\PrefabAssetCreator.h" />
-    <ClInclude Include="include\jampx\prefab\PrefabCooker.h" />
-    <ClInclude Include="include\jampx\prefab\PrefabDocument.h" />
-    <ClInclude Include="include\jampx\prefab\PrefabLevelLoader.h" />
+    <ClInclude Include="include\jampx\prefab\PhysicsAssetLoader.h" />
+    <ClInclude Include="include\jampx\prefab\PhysicsArchetypeRegistry.h" />
+    <ClInclude Include="include\jampx\prefab\PxCooker.h" />
+    <ClInclude Include="include\jampx\prefab\PxCreator.h" />
     <ClInclude Include="include\jampx\ShardPxCpuDispacter.h" />
     <ClInclude Include="include\jampx\third_party\tinygltf_impl.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Replication Refactoring Guide.md" />
     <None Include="schema\physics_asset.schema.json" />
     <None Include="schema\physics_prefab.schema.json" />
     <None Include="schema\physics_level.schema.json" />
@@ -241,7 +236,7 @@
       <PreprocessorDefinitions>JAMPX_WITH_EDITOR=1;JAMPX_PREFAB_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_asset.schema.json";JAMPX_LEVEL_SCHEMA_PATH="C://Users//akxotjr//GameWorkSpace//Jam//JamPx//schema//physics_level.schema.json";_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir)api\;$(SolutionDir)JamBase\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)SharedData\Generated\;$(ProjectDir)include\;$(ProjectDir)api\;$(SolutionDir)JamBase\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -260,7 +255,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir)api\;$(SolutionDir)JamBase\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)SharedData\Generated\;$(ProjectDir)include\;$(ProjectDir)api\;$(SolutionDir)JamBase\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>

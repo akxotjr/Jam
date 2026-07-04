@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 #include <nlohmann/json.hpp>
@@ -7,7 +7,7 @@ namespace jam::px
 {
 	using nlohmann::json;
 
-	class PrefabCooker final
+	class PxCooker final
 	{
 	public:
 		

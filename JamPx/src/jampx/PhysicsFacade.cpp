@@ -1,10 +1,10 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/PhysicsFacade.h"
 
 #include <algorithm>
 #include <ranges>
+#include <stdexcept>
 
-#include "jampx/prefab/PhysicsPrefabRegistry.h"
 #include "jampx/actor/ActorFactory.h"
 #include "jampx/actor/rigid/projectile/ProjectileRigidBehavior.h"
 
@@ -12,26 +12,21 @@ namespace jam::px
 {
 	namespace
 	{
-
-		TemplateHandle ToTemplateHandle(PrefabKey k)
-		{
-			return PHYSICS_PREFAB_REGISTRY.FindHandleByKey(k);
-		}
-
 	}
 
 
 	void PhysicsFacade::Init()
 	{
 		if (m_inited.load(std::memory_order_relaxed)) return;
+		if (m_physicsAssetPath.empty())
+			throw std::runtime_error("PhysicsFacade requires physics asset path before Init()");
+
+		m_registry.Init(m_physicsAssetPath);
 
 		m_world = std::make_unique<PhysicsWorld>();
-		m_world->Init(m_dispacter.get());
+		m_world->Init(&m_registry, m_dispacter.get());
 
 		m_taskManager = m_world->GetTaskManager();
-
-		m_levelLoader = std::make_unique<PrefabLevelLoader>();
-		m_levelLoader->SetPhysicsWorld(m_world.get());
 
 		m_inited.store(true, std::memory_order_relaxed);
 	}
@@ -41,6 +36,10 @@ namespace jam::px
 		if (!m_inited.load(std::memory_order_relaxed)) return;
 
 		if (m_world) m_world->Destroy();
+		m_world.reset();
+		m_registry.Shutdown();
+		m_taskManager = nullptr;
+		m_stepPending = false;
 
 		m_inited.store(false, std::memory_order_relaxed);
 	}
@@ -53,64 +52,10 @@ namespace jam::px
 			m_dispacter = std::make_unique<ShardPxCpuDispacter>(*bridge);
 	}
 
-
-	LevelLayerInfo PhysicsFacade::SetLevelPath(const std::string& path)
+	void PhysicsFacade::SetPhysicsAssetPath(const std::string& path)
 	{
-		if (m_levelLoader) return m_levelLoader->SetLevelPath(path);
-		return {};
-	}
-
-	bool PhysicsFacade::LoadLevel(const std::string& layer, INOUT std::vector<LevelInstanceInfo>& instances)
-	{
-		if (!m_levelLoader) return false;
-
-		auto results = m_levelLoader->Load(layer, instances);
-		if (results.empty()) return false;
-
-		for (auto& result : results)
-		{
-			if (result.bodyType != eBodyType::Rigid)
-				return false;
-
-			switch (result.motionType)
-			{
-			case eMotionType::Static:
-			case eMotionType::Dynamic:
-				m_rigidMap.emplace(result.id, std::move(result.body));
-				break;
-
-			case eMotionType::Kinematic:
-				if (result.actorType == eActorType::Projectile)
-					m_projectileMap.emplace(result.id, std::move(result.body));
-				else
-					m_kinematicMap.emplace(result.id, std::move(result.body));
-				break;
-
-			default:
-				return false;
-			}
-		}
-		return true;
-	}
-
-	std::vector<ObjectId> PhysicsFacade::UnloadLevel(const std::string& layer)
-	{
-		if (!m_levelLoader) return {};
-
-		auto ids = m_levelLoader->Unload(layer);
-		for (ObjectId id : ids) Despawn(id);
-
-		return ids;
-	}
-
-	std::vector<ObjectId> PhysicsFacade::UnloadAllLevel()
-	{
-		if (!m_levelLoader) return {};
-
-		auto ids = m_levelLoader->UnloadAll();
-		for (ObjectId id : ids) Despawn(id);
-
-		return ids;
+		JAM_ASSERT(!m_inited.load());
+		m_physicsAssetPath = path;
 	}
 
 	bool PhysicsFacade::IsStepPending() const
@@ -256,9 +201,9 @@ namespace jam::px
 		return eBodyType::None;
 	}
 
-	eBodyType PhysicsFacade::FindBodyType(PrefabKey key) const
+	eBodyType PhysicsFacade::FindBodyType(PhysicsArchetypeKey key) const
 	{
-		return PHYSICS_PREFAB_REGISTRY.GetBodyType(key);
+		return m_registry.GetBodyType(key);
 	}
 
 
@@ -280,14 +225,14 @@ namespace jam::px
 		return eMotionType::None;
 	}
 
-	eMotionType PhysicsFacade::FindMotionType(PrefabKey key) const
+	eMotionType PhysicsFacade::FindMotionType(PhysicsArchetypeKey key) const
 	{
-		return PHYSICS_PREFAB_REGISTRY.GetMotionType(key);
+		return m_registry.GetMotionType(key);
 	}
 
-	bool PhysicsFacade::IsReplayCandidate(PrefabKey key) const
+	bool PhysicsFacade::IsReplayCandidate(PhysicsArchetypeKey key) const
 	{
-		const auto* def = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(key);
+		const auto* def = m_registry.FindArchetype(key);
 		if (!def) return false;
 
 		if (def->bodyType == eBodyType::Character)
@@ -296,10 +241,10 @@ namespace jam::px
 		if (def->bodyType != eBodyType::Rigid || !def->IsRigid())
 			return false;
 
-		const auto& rigidDef = std::get<RigidBodyDef>(def->body);
+		const auto& rigidDef = std::get<RigidBodyData>(def->body);
 		for (ShapeHandle sh : rigidDef.shapes)
 		{
-			const ShapeDef& sd = PHYSICS_PREFAB_REGISTRY.GetShapeDef(sh);
+			const ShapeData& sd = m_registry.GetShapeDef(sh);
 
 			if (sd.simFD.category.has_any(SimCategory::CHARACTER))		return true;
 			if (sd.simFD.mask.has_any(SimCategory::CHARACTER))			return true;
@@ -636,8 +581,8 @@ namespace jam::px
 		if (!m_inited.load(std::memory_order_relaxed) || !m_world)
 			return false;
 
-		const TemplateHandle    tpl    = ToTemplateHandle(desc.prefab);
-		const ActorTemplateDef* tplDef = PHYSICS_PREFAB_REGISTRY.FindTemplateDef(tpl);
+		const PhysicsArchetypeKey archetypeKey = desc.archetype;
+		const PhysicsArchetypeData* tplDef = m_registry.FindArchetype(archetypeKey);
 		if (!tplDef) return false;
 
 		const auto actorType  = tplDef->actorType;
@@ -651,7 +596,7 @@ namespace jam::px
 					return ResolveTargetPose(oid);
 				};
 
-			auto body = ActorFactory::CreateRigidBody(*m_world, tpl, *tplDef, desc, id, resolver);
+			auto body = ActorFactory::CreateRigidBody(*m_world, archetypeKey, *tplDef, desc, id, resolver);
 			if (!body.has_value()) return false;
 
 			switch (motionType)
@@ -674,7 +619,7 @@ namespace jam::px
 		}
 		else if (bodyType == eBodyType::Character)
 		{
-			auto body = ActorFactory::CreateCharacterBody(*m_world, tpl, *tplDef, desc, id);
+			auto body = ActorFactory::CreateCharacterBody(*m_world, archetypeKey, *tplDef, desc, id);
 			if (!body.has_value()) return false;
 
 			if (motionType == eMotionType::CCT)
@@ -689,7 +634,7 @@ namespace jam::px
 			}
 		}
 
-		JAM_ASSERT_MSG(false, "Unknown body type in template: {}", tplDef->name);
+		JAM_ASSERT_MSG(false, "Unknown body type in archetype: {}", tplDef->name);
 		return false;
 	}
 

@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include <jambase/JamAsset.h>
 #include <jambase/JamTypes.h>
 #include <jambase/EnumUtils.h>
 
@@ -10,6 +11,15 @@
 
 namespace jam::px
 {
+	struct PhysicsArchetypeTag;
+
+	using PhysicsArchetypeKey = AssetKey<PhysicsArchetypeTag>;
+
+	inline PhysicsArchetypeKey MakePhysicsArchetypeKey(std::string_view name) noexcept
+	{
+		return MakeAssetKey<PhysicsArchetypeTag>(name);
+	}
+
 	inline constexpr float PI = 3.14159265358979323846f;
 	inline constexpr float TWO_PI = 6.28318530717958647692f;
 	inline constexpr float PI_DIV_TWO = 1.57079632679489661923f;
@@ -437,15 +447,6 @@ namespace jam::px
 
 
 
-	struct PrefabKey
-	{
-		uint64_t value{};
-
-		bool IsValid() const { return value != 0; }
-		constexpr bool operator==(const PrefabKey&) const noexcept = default;
-	};
-
-
 	enum class eSpawnSource : uint8
 	{
 		Level	= 0,
@@ -512,7 +513,7 @@ namespace jam::px
 
 	struct SpawnDesc
 	{
-		PrefabKey			prefab{};
+		PhysicsArchetypeKey	archetype{};
 		Transform			pose{};
 		eSpawnSource		spawnSrc = eSpawnSource::Level;
 
@@ -526,25 +527,6 @@ namespace jam::px
 
 		constexpr bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
 		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterSpawnOverrides>(overrides); }
-	};
-
-
-
-
-
-
-	struct LevelLayerInfo
-	{
-		std::unordered_map<std::string, uint32> countPerLayer;
-		uint32 totalCount = 0;
-	};
-
-	struct LevelInstanceInfo
-	{
-		ObjectId	objectId		= INVALID_OBJ_ID;
-		uint32		levelActorId	= 0;
-		PrefabKey	prefab			= {};
-		RigidState	state			= {};
 	};
 
 

@@ -1,13 +1,14 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/PhysicsWorld.h"
-#include "jampx/prefab/PhysicsPrefabRegistry.h"
+#include "jampx/prefab/PhysicsArchetypeRegistry.h"
 #include "jampx/actor/character/locomotion/CharacterFilter.h"
 
 namespace jam::px
 {
-	void PhysicsWorld::Init(ShardPxCpuDispacter* dispacter)
+	void PhysicsWorld::Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispacter* dispacter)
 	{
 		if (m_scenes[0]) return;
+		m_registry = registry;
 
 		for (int i = 0; i < 2; ++i)
 		{
@@ -38,6 +39,13 @@ namespace jam::px
 			if (m_controllerMgrs[i]) { m_controllerMgrs[i]->release(); m_controllerMgrs[i] = nullptr; }
 			if (m_scenes[i])         { m_scenes[i]->release();         m_scenes[i] = nullptr; }
 		}
+		m_registry = nullptr;
+	}
+
+	PhysicsArchetypeRegistry& PhysicsWorld::Registry() const
+	{
+		JAM_ASSERT(m_registry);
+		return *m_registry;
 	}
 
 	PxScene* PhysicsWorld::GetScene(ePxSceneSlot slot) const
@@ -69,15 +77,15 @@ namespace jam::px
 		scene->fetchResults(true);
 	}
 
-	PxRigidActor* PhysicsWorld::CreateRigidActor(ePxSceneSlot slot, TemplateHandle tpl, const PxTransform& pose, void* userData)
+	PxRigidActor* PhysicsWorld::CreateRigidActor(ePxSceneSlot slot, PhysicsArchetypeKey tpl, const PxTransform& pose, void* userData)
 	{
 		PxScene* scene = GetScene(slot);
 		if (!scene) return nullptr;
 
-		if (!PHYSICS_PREFAB_REGISTRY.HasTemplate(tpl))
+		if (!m_registry || !m_registry->HasArchetype(tpl))
 			return nullptr;
 
-		PxRigidActor* inst = PHYSICS_PREFAB_REGISTRY.Instantiate(tpl, pose, userData);
+		PxRigidActor* inst = m_registry->Instantiate(tpl, pose, userData);
 		if (!inst) return nullptr;
 
 		JAM_VERIFY(scene->addActor(*inst));
@@ -96,7 +104,7 @@ namespace jam::px
 		actor->release();
 	}
 
-	PxCapsuleController* PhysicsWorld::CreateController(ePxSceneSlot slot, const CCTBodyDef& def, const PxVec3& pos, void* userData)
+	PxCapsuleController* PhysicsWorld::CreateController(ePxSceneSlot slot, const CCTBodyData& data, const PxVec3& pos, void* userData)
 	{
 		const int32 idx = E2U(slot);
 		PxControllerManager* mgr = (idx >= 0 && idx < 2) ? m_controllerMgrs[idx] : nullptr;
@@ -105,19 +113,19 @@ namespace jam::px
 		PxCapsuleControllerDesc desc{};
 		desc.upDirection			= PxVec3(0.f, 1.0f, 0.f);
 		desc.position				= PxExtendedVec3(pos.x, pos.y, pos.z);
-		desc.radius					= def.radius;
-		desc.height					= def.height;
-		desc.material				= JAM_PX_MATERIAL(def.material);
-		desc.density				= def.density;
+		desc.radius					= data.radius;
+		desc.height					= data.height;
+		desc.material				= Registry().GetMaterial(data.material);
+		desc.density				= data.density;
 		desc.userData				= userData;
 
-		desc.slopeLimit				= def.slopeLimit;
-		desc.invisibleWallHeight	= def.invisibleWallHeight;
-		desc.maxJumpHeight			= def.maxJumpHeight;
-		desc.contactOffset			= def.contactOffset;
-		desc.stepOffset				= def.stepOffset;
-		desc.scaleCoeff				= def.scaleCoeff;
-		desc.volumeGrowth			= def.volumeGrowth;
+		desc.slopeLimit				= data.slopeLimit;
+		desc.invisibleWallHeight	= data.invisibleWallHeight;
+		desc.maxJumpHeight			= data.maxJumpHeight;
+		desc.contactOffset			= data.contactOffset;
+		desc.stepOffset				= data.stepOffset;
+		desc.scaleCoeff				= data.scaleCoeff;
+		desc.volumeGrowth			= data.volumeGrowth;
 
 		if (!desc.isValid()) return nullptr;
 
@@ -134,9 +142,6 @@ namespace jam::px
 		PxScene* scene = GetScene(ePxSceneSlot::Main);
 		if (!scene) return nullptr;
 
-		std::vector<PxShape*> shapes;
-		JAM_PX_SHAPES(shapeHandles, shapes);
-
 		PxRigidDynamic* hitbox = PX_PHYSICS->createRigidDynamic(PxTransform(pos));
 		if (!hitbox) return nullptr;
 
@@ -145,7 +150,7 @@ namespace jam::px
 
 		for (auto h : shapeHandles)
 		{
-			PxShape* cached = JAM_PX_SHAPE(h);
+			PxShape* cached = Registry().GetShape(h);
 			if (!cached) continue;
 
 			PxShape* shape = physx::PxCloneShape(*PX_PHYSICS, *cached, true);

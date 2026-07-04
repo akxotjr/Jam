@@ -1,6 +1,7 @@
 #pragma once
 #include <variant>
 
+#include <jambase/JamAsset.h>
 
 #include "jampx/PhysXTypes.h"
 #include "jampx/PhysicsFilter.h"
@@ -21,74 +22,18 @@ namespace jam::px
 	struct CharacterMoveConfigTag;
 	struct KinematicDriverConfigTag;
 	struct ProjectileConfigTag;
-	struct ActorTemplateTag;
+	struct PhysicsAssetTag;
 
-
-	using MaterialHandle				= Fnv1aHandle<MaterialTag, uint32>;
-	using MeshHandle					= Fnv1aHandle<MeshTag, uint32>;
-	using ShapeHandle					= Fnv1aHandle<ShapeTag, uint32>;
-		
-	using DynamicBodyHandle				= Fnv1aHandle<DynamicBodyTag, uint32>;
-	using CCTBodyHandle					= Fnv1aHandle<CCTBodyTag, uint32>;
-
-	using CharacterMoveConfigHandle		= Fnv1aHandle<CharacterMoveConfigTag, uint32>;
-	using KinematicDriverConfigHandle	= Fnv1aHandle<KinematicDriverConfigTag, uint32>;
-	using ProjectileConfigHandle		= Fnv1aHandle<ProjectileConfigTag, uint32>;
-
+	using MaterialHandle				= AssetKey<MaterialTag>;
+	using MeshHandle					= AssetKey<MeshTag>;
+	using ShapeHandle					= AssetKey<ShapeTag>;
+	using DynamicBodyHandle				= AssetKey<DynamicBodyTag>;
+	using CCTBodyHandle					= AssetKey<CCTBodyTag>;
+	using CharacterMoveConfigHandle		= AssetKey<CharacterMoveConfigTag>;
+	using KinematicDriverConfigHandle	= AssetKey<KinematicDriverConfigTag>;
+	using ProjectileConfigHandle		= AssetKey<ProjectileConfigTag>;
 	using RigidBehaviorHandle			= std::variant<std::monostate, KinematicDriverConfigHandle, ProjectileConfigHandle>;
-
-	using TemplateHandle				= Fnv1aHandle<ActorTemplateTag, uint32>;
-
-
-	enum class eAssetHandleKind : uint8
-	{
-		None = 0,
-		Template,
-		Material,
-		Mesh,
-		Shape,
-		DynamicBody,
-		CCTBody,
-		CharacterMoveConfig,
-		KinematicDriverConfig,
-		ProjectileConfig,
-	};
-
-	struct AssetHandle
-	{
-		eAssetHandleKind kind = eAssetHandleKind::None;
-		uint32 v = 0;
-
-		bool IsValid() const { return kind != eAssetHandleKind::None && v != 0; }
-	};
-
-
-	template<class THanlde>
-	struct AssetHandleTraits;
-
-	template<> struct AssetHandleTraits<TemplateHandle>					{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::Template; };
-	template<> struct AssetHandleTraits<MaterialHandle>					{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::Material; };
-	template<> struct AssetHandleTraits<MeshHandle>						{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::Mesh; };
-	template<> struct AssetHandleTraits<ShapeHandle>					{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::Shape; };
-	template<> struct AssetHandleTraits<DynamicBodyHandle>				{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::DynamicBody; };
-	template<> struct AssetHandleTraits<CCTBodyHandle>					{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::CCTBody; };
-	template<> struct AssetHandleTraits<CharacterMoveConfigHandle>		{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::CharacterMoveConfig; };
-	template<> struct AssetHandleTraits<KinematicDriverConfigHandle>	{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::KinematicDriverConfig; };
-	template<> struct AssetHandleTraits<ProjectileConfigHandle>			{ static constexpr eAssetHandleKind Kind = eAssetHandleKind::ProjectileConfig; };
-
-	template<class THandle>
-	inline AssetHandle ToAssetHandle(const THandle& h)
-	{
-		return AssetHandle{ AssetHandleTraits<THandle>::Kind, h.v };
-	}
-
-	template<class THandle>
-	inline std::optional<THandle> TryAs(const AssetHandle& h)
-	{
-		if (h.kind != AssetHandleTraits<THandle>::Kind || h.v == 0)
-			return std::nullopt;
-		return THandle::FromU32(h.v);
-	}
+	using PhysicsAssetKey				= AssetKey<PhysicsAssetTag>;
 
 	enum class eShapeType
 	{
@@ -121,17 +66,17 @@ namespace jam::px
 	};
 
 
-	struct MaterialDef
+	struct MaterialData
 	{
 		std::string		name;
 		float			staticFriction			= 0.5f;
 		float			dynamicFriction			= 0.5f;
 		float			restitution				= 0.1f;
 	
-		bool operator==(const MaterialDef&) const = default;
+		bool operator==(const MaterialData&) const = default;
 	};
 
-	struct MeshDef
+	struct MeshData
 	{
 		eMeshType		type					= eMeshType::Triangle;
 		std::string		cookedPath;
@@ -141,10 +86,10 @@ namespace jam::px
 		int32			srcMeshIndex			= 0;	
 		int32			srcPrimitiveIndex		= 0;	
 	
-		bool operator==(const MeshDef&) const = default;
+		bool operator==(const MeshData&) const = default;
 	};
 
-	struct ShapeDef
+	struct ShapeData
 	{
 		eShapeType		type				= eShapeType::None;
 		PxTransform		localPose			= PxTransform(physx::PxIdentity);
@@ -181,7 +126,7 @@ namespace jam::px
 
 
 	// meaningful only eMotionType == Dynamic
-	struct DynamicBodyDef
+	struct DynamicBodyData
 	{
 		float			density				= 1.0f;
 		PxVec3			linearVelocity		= PxVec3(physx::PxZero);
@@ -189,7 +134,7 @@ namespace jam::px
 		float			linearDamping		= 0.0f;
 		float			angularDamping		= 0.05f;
 
-		bool operator==(const DynamicBodyDef&) const = default;
+		bool operator==(const DynamicBodyData&) const = default;
 	};
 
 	enum class eCCTPolicy
@@ -197,7 +142,7 @@ namespace jam::px
 		Default,
 	};
 
-	struct CCTBodyDef
+	struct CCTBodyData
 	{
 		float			radius				= 0.5f;
 		float			height				= 0.75f;
@@ -216,7 +161,7 @@ namespace jam::px
 	};
 
 
-	struct RigidBodyDef
+	struct RigidBodyData
 	{
 		std::vector<ShapeHandle>		shapes;				// at least 1
 		DynamicBodyHandle				dynamic	 = {};		// only meaningful if moitionType is Dynamic/Kinematic
@@ -228,19 +173,19 @@ namespace jam::px
 		const T* GetBehavior() const { return std::get_if<T>(&behavior); }
 	};
 
-	struct CharacterBodyDef
+	struct CharacterBodyData
 	{
 		CCTBodyHandle					cct				= {};
 		std::vector<ShapeHandle>		hitboxes;
 		eCharacterControlType			controllerType	= eCharacterControlType::Player;
 		CharacterMoveConfigHandle		moveConfig		= {};
 
-		bool operator==(const CharacterBodyDef&) const = default;
+		bool operator==(const CharacterBodyData&) const = default;
 		bool HasHitbox() const { return !hitboxes.empty(); }
 	};
 
 
-	struct ActorTemplateDef
+	struct PhysicsArchetypeData
 	{
 		std::string			name;
 		eActorType			actorType			= eActorType::Generic;
@@ -251,53 +196,28 @@ namespace jam::px
 		eSpawnPolicy		spawnPolicy			= eSpawnPolicy::Both;
 		bool				allowReplication	= true;
 
-		std::variant<RigidBodyDef, CharacterBodyDef> body;
+		std::variant<RigidBodyData, CharacterBodyData> body;
 
-		bool IsRigid()		const noexcept { return std::holds_alternative<RigidBodyDef>(body); }
-		bool IsCharacter()	const noexcept { return std::holds_alternative<CharacterBodyDef>(body); }
+		bool IsRigid()		const noexcept { return std::holds_alternative<RigidBodyData>(body); }
+		bool IsCharacter()	const noexcept { return std::holds_alternative<CharacterBodyData>(body); }
 	};
 
 
-	struct PhysicsAsset
+	struct PhysicsDatabase
 	{
 		int32 version = 1;
 
-		std::unordered_map<MaterialHandle, MaterialDef>								materials;
-		std::unordered_map<MeshHandle, MeshDef>										meshes;
-		std::unordered_map<ShapeHandle, ShapeDef>									shapes;
+		std::unordered_map<MaterialHandle, MaterialData>							materials;
+		std::unordered_map<MeshHandle, MeshData>									meshes;
+		std::unordered_map<ShapeHandle, ShapeData>									shapes;
 
-		std::unordered_map<DynamicBodyHandle, DynamicBodyDef>						dynBodies;
-		std::unordered_map<CCTBodyHandle, CCTBodyDef>								cctBodies;
+		std::unordered_map<DynamicBodyHandle, DynamicBodyData>						dynBodies;
+		std::unordered_map<CCTBodyHandle, CCTBodyData>								cctBodies;
 		std::unordered_map<CharacterMoveConfigHandle, CharacterMoveConfig>			charMoveConfigs;
 		std::unordered_map<KinematicDriverConfigHandle, KinematicDriverConfig>		kinematicDriverConfigs;
 		std::unordered_map<ProjectileConfigHandle, ProjectileConfig>				projectileConfigs;
 
-		std::unordered_map<TemplateHandle, ActorTemplateDef>						templates;
+		std::unordered_map<PhysicsArchetypeKey, PhysicsArchetypeData>				archetypes;
 	};
-
-
-
-	struct PhysicsLevelInstanceDef
-	{
-		uint32									levelActorId = 0;		// stable cross server/client id
-		std::string								templateName;
-		PxTransform								pose{ physx::PxIdentity };
-		RigidSpawnOverrides						overrides{};
-	};
-
-	struct PhysicsLevelLayerDef
-	{
-		std::string								name;
-		bool									enabled = true;
-		std::vector<PhysicsLevelInstanceDef>	instances;
-	};
-
-	struct PhysicsLevelAsset
-	{
-		int32									version = 1;
-		std::string								sceneName;
-		std::vector<PhysicsLevelLayerDef>		layers;
-	};
-
 
 } // namespace jam::px

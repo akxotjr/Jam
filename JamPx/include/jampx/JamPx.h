@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <jambase/JamTypes.h>
 #include <jambase/JamMacro.h>
@@ -20,7 +20,7 @@
 #include "jampx/PhysicsFilter.h"
 
 #include "jampx/PhysicsCore.h"
-#include "jampx/prefab/PhysicsPrefabRegistry.h"
+#include "jampx/prefab/PhysicsArchetypeRegistry.h"
 
 
 #include "jampx/PhysicsWorld.h"

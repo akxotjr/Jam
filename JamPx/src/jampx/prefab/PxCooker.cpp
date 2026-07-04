@@ -1,6 +1,5 @@
-﻿#include "pch.h"
-#include "jampx/prefab/PrefabCooker.h"
-#include "jampx/prefab/PhysicsPrefabIO.h"
+#include "pch.h"
+#include "jampx/prefab/PxCooker.h"
 
 #include <algorithm>
 #include <execution>
@@ -475,7 +474,7 @@ namespace jam::px
 	}
 
 
-	void PrefabCooker::CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath, int32 meshIndex, int32 primitiveIndex)
+	void PxCooker::CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath, int32 meshIndex, int32 primitiveIndex)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");
@@ -491,7 +490,7 @@ namespace jam::px
 		CookTriangleMeshToPxtri(params, em, outPxtriPath);
 	}
 
-	void PrefabCooker::CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath)
+	void PxCooker::CookTriangleMesh(const std::string& gltfPath, const std::string& outPxtriPath)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");
@@ -507,7 +506,7 @@ namespace jam::px
 		CookTriangleMeshToPxtri(params, em, outPxtriPath);
 	}
 
-	void PrefabCooker::CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvxPath, int32 meshIndex, int32 primitiveIndex)
+	void PxCooker::CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvxPath, int32 meshIndex, int32 primitiveIndex)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");
@@ -522,7 +521,7 @@ namespace jam::px
 		CookConvexMeshToPxcvx(params, em, outPxcvxPath);
 	}
 
-	void PrefabCooker::CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvcPath)
+	void PxCooker::CookConvexMesh(const std::string& gltfPath, const std::string& outPxcvcPath)
 	{
 		if (gltfPath.empty())
 			throw std::runtime_error("gltfPath is empty");

@@ -1,6 +1,6 @@
-﻿#include "pch.h"
-#include "jampx/prefab/PrefabAssetCreator.h"
-#include "jampx/PhysicsAsset.h"
+#include "pch.h"
+#include "jampx/prefab/PxCreator.h"
+#include "jampx/PhysicsDatabase.h"
 
 #include <fstream>
 
@@ -46,7 +46,7 @@ namespace jam::px
 
 	}
 
-	PxMaterial* PrefabAssetCreator::CreateMaterial(const MaterialDef& def)
+	PxMaterial* PxCreator::CreateMaterial(const MaterialData& def)
 	{
 		auto* mat = PX_PHYSICS->createMaterial(def.staticFriction, def.dynamicFriction, def.restitution);
 		if (!mat) throw std::runtime_error("createMaterial failed");
@@ -54,7 +54,7 @@ namespace jam::px
 		return mat;
 	}
 
-	PxTriangleMesh* PrefabAssetCreator::CreateTriangleMesh(const std::string& path)
+	PxTriangleMesh* PxCreator::CreateTriangleMesh(const std::string& path)
 	{
 		std::vector<uint8> bytes;
 		if (!ReadAllBytes(path, bytes) || bytes.empty())
@@ -68,7 +68,7 @@ namespace jam::px
 		return physics->createTriangleMesh(input);
 	}
 
-	PxConvexMesh* PrefabAssetCreator::CreateConvexMesh(const std::string& path)
+	PxConvexMesh* PxCreator::CreateConvexMesh(const std::string& path)
 	{
 		std::vector<uint8> bytes;
 		if (!ReadAllBytes(path, bytes) || bytes.empty())
@@ -82,7 +82,7 @@ namespace jam::px
 		return physics->createConvexMesh(input);
 	}
 
-	PxShape* PrefabAssetCreator::CreatePrimitiveShape(const ShapeDef& def, const PxMaterial& material, bool exclusive)
+	PxShape* PxCreator::CreatePrimitiveShape(const ShapeData& def, const PxMaterial& material, bool exclusive)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics || !def.material)
@@ -117,7 +117,7 @@ namespace jam::px
 		return shape;
 	}
 
-	PxShape* PrefabAssetCreator::CreateTriangleMeshShape(const ShapeDef& def, const PxMaterial& material, PxTriangleMesh* mesh, bool exclusive)
+	PxShape* PxCreator::CreateTriangleMeshShape(const ShapeData& def, const PxMaterial& material, PxTriangleMesh* mesh, bool exclusive)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
@@ -133,7 +133,7 @@ namespace jam::px
 		return shape;
 	}
 
-	PxShape* PrefabAssetCreator::CreateConvexMeshShape(const ShapeDef& def, const PxMaterial& material, PxConvexMesh* mesh, bool exclusive)
+	PxShape* PxCreator::CreateConvexMeshShape(const ShapeData& def, const PxMaterial& material, PxConvexMesh* mesh, bool exclusive)
 	{
 		PxPhysics* physics = PHYSICS_CORE.Physics();
 		if (!physics)
@@ -151,7 +151,7 @@ namespace jam::px
 	}
 
 
-	PxRigidActor* PrefabAssetCreator::CreateRigidActor(const ActorTemplateDef& def, const std::vector<PxShape*>& shapes)
+	PxRigidActor* PxCreator::CreateRigidActor(const PhysicsArchetypeData& def, const std::vector<PxShape*>& shapes, const DynamicBodyData* dynDef)
 	{
 		PxPhysics* physics = PX_PHYSICS;
 		if (!physics) return nullptr;
@@ -159,7 +159,7 @@ namespace jam::px
 		if (!def.IsRigid() || def.bodyType != eBodyType::Rigid)
 			return nullptr;
 
-		const auto& bodyDef = std::get<RigidBodyDef>(def.body);
+		const auto& bodyDef = std::get<RigidBodyData>(def.body);
 
 		PxRigidActor* actor = nullptr;
 		switch (def.motionType)
@@ -194,10 +194,6 @@ namespace jam::px
 			const bool isKinematic = (def.motionType == eMotionType::Kinematic);
 			if (isKinematic)
 				dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
-
-			const DynamicBodyDef* dynDef = nullptr;
-			if (bodyDef.dynamic)
-				dynDef = &JAM_PX_DYN_DEF(bodyDef.dynamic);
 
 			if (dynDef)
 			{

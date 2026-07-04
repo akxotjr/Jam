@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <atomic>
 #include <unordered_set>
@@ -9,18 +9,11 @@
 #include "jampx/PhysicsWorld.h"
 #include "jampx/actor/rigid/RigidBody.h"
 #include "jampx/actor/character/CharacterBody.h"
-#include "jampx/prefab/PrefabLevelLoader.h"
+#include "jampx/prefab/PhysicsArchetypeRegistry.h"
 
 
 namespace jam::px
 {
-
-	static PrefabKey MakePrefabKey(std::string_view name)
-	{
-		return PrefabKey{ fnv1a<uint64_t>(name) };
-	}
-
-
 	class PhysicsFacade : public IPhysicsFacade
 	{
 	public:
@@ -31,12 +24,7 @@ namespace jam::px
 		void								Shutdown() override;
 
 		void								SetJobBridge(IPhysicsJobBridge* bridge) override;
-
-		LevelLayerInfo						SetLevelPath(const std::string& path) override;
-		bool								LoadLevel(const std::string& layer, INOUT std::vector<LevelInstanceInfo>& instances) override;
-		std::vector<ObjectId>				UnloadLevel(const std::string& layer) override;
-		std::vector<ObjectId>				UnloadAllLevel() override;
-
+		void								SetPhysicsAssetPath(const std::string& path) override;
 		bool								IsStepPending() const override;
 
 		void								Simulate(float dt) override;
@@ -51,12 +39,12 @@ namespace jam::px
 		bool								Despawn(ObjectId id) override;
 
 		eBodyType							GetBodyType(ObjectId id) const override;
-		eBodyType							FindBodyType(PrefabKey key) const override;
+		eBodyType							FindBodyType(PhysicsArchetypeKey key) const override;
 
 		eMotionType							GetMotionType(ObjectId id) const override;
-		eMotionType							FindMotionType(PrefabKey key) const override;
+		eMotionType							FindMotionType(PhysicsArchetypeKey key) const override;
 
-		bool								IsReplayCandidate(PrefabKey key) const override;
+		bool								IsReplayCandidate(PhysicsArchetypeKey key) const override;
 
 		void								PushReplayStates(const std::vector<ActorContext>& contexts) override;
 		void								PullCorrectionState(ObjectId oid, OUT CharacterState& state) override;
@@ -117,10 +105,11 @@ namespace jam::px
 		std::atomic<bool>									m_inited			= false;
 
 		std::unique_ptr<PhysicsWorld>						m_world				= nullptr;
-		std::unique_ptr<PrefabLevelLoader>					m_levelLoader		= nullptr;
+		PhysicsArchetypeRegistry							m_registry			= {};
 
 		PxTaskManager*										m_taskManager		= nullptr;
 		IPhysicsJobBridge*									m_bridge			= nullptr;
+		std::string											m_physicsAssetPath;
 		std::unique_ptr<ShardPxCpuDispacter>				m_dispacter; 
 		PhysicsCompletionTask								m_completionTask;
 		bool												m_stepPending		= false;

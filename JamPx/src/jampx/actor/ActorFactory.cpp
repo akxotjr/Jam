@@ -7,6 +7,7 @@
 #include "jampx/actor/rigid/kinematic/KinematicDrivers.h"
 #include "jampx/actor/rigid/kinematic/KinematicRigidBehavior.h"
 #include "jampx/actor/rigid/projectile/ProjectileRigidBehavior.h"
+#include "jampx/prefab/PhysicsArchetypeRegistry.h"
 
 namespace jam::px
 {
@@ -34,25 +35,25 @@ namespace jam::px
 				ApplyRigidOverrides(*dyn, overrides);
 		}
 
-		eMotionType ResolveMotionType(eSpawnSource spawnSource, const ActorTemplateDef& tplDef)
+		eMotionType ResolveMotionType(eSpawnSource spawnSource, const PhysicsArchetypeData& data)
 		{
 			if (spawnSource != eSpawnSource::Network)
-				return tplDef.motionType;
+				return data.motionType;
 
 			// Network + Rigid(Dynamic/Kinematic) -> Kinematic(NetworkPose 추종)
-			if (tplDef.bodyType == eBodyType::Rigid
-				&& (tplDef.motionType == eMotionType::Dynamic || tplDef.motionType == eMotionType::Kinematic))
+			if (data.bodyType == eBodyType::Rigid
+				&& (data.motionType == eMotionType::Dynamic || data.motionType == eMotionType::Kinematic))
 			{
 				return eMotionType::Kinematic;
 			}
 
 			// Network + Character(CCT) -> RemoteCCT
-			if (tplDef.bodyType == eBodyType::Character && tplDef.motionType == eMotionType::CCT)
+			if (data.bodyType == eBodyType::Character && data.motionType == eMotionType::CCT)
 			{
 				return eMotionType::RemoteCCT;
 			}
 
-			return tplDef.motionType;
+			return data.motionType;
 		}
 
 		std::unique_ptr<IKinematicDriver> CreateKinematicDriver(const KinematicDriverConfig& cfg, const TargetPoseResolver& resolver)
@@ -76,20 +77,21 @@ namespace jam::px
 		}
 
 		std::unique_ptr<IRigidBehavior> CreateRigidBehavior(
-			const ActorTemplateDef& tplDef, 
+			const PhysicsArchetypeRegistry& registry,
+			const PhysicsArchetypeData& data, 
 			const TargetPoseResolver& resolver,
 			const RigidSpawnOverrides* overrides)
 		{
-			if (!tplDef.IsRigid())
+			if (!data.IsRigid())
 				return nullptr;
 
-			const auto& bodyDef = std::get<RigidBodyDef>(tplDef.body);
+			const auto& bodyDef = std::get<RigidBodyData>(data.body);
 			if (!bodyDef.HasBehavior())
 				return nullptr;
 
 			if (const auto* kHandle = bodyDef.GetBehavior<KinematicDriverConfigHandle>())
 			{
-				const KinematicDriverConfig& cfg = JAMPX_KINE_DRIVER_CFG(*kHandle);
+				const KinematicDriverConfig& cfg = registry.GetKinematicDriverConfig(*kHandle);
 
 				auto mainDriver   = CreateKinematicDriver(cfg, resolver);
 				auto replayDriver = CreateKinematicDriver(cfg, resolver);
@@ -99,7 +101,7 @@ namespace jam::px
 			}
 			else if (const auto* pHandle = bodyDef.GetBehavior<ProjectileConfigHandle>())
 			{
-				ProjectileConfig cfg = JAMPX_PROJ_CFG(*pHandle);
+				ProjectileConfig cfg = registry.GetProjectileConfig(*pHandle);
 
 				if (overrides && overrides->mask.has_any(SpawnOverrideMask::LINEAR_VEL))
 					cfg.motion.initialVelocity = ToPhysX(overrides->linearVelocity);
@@ -113,18 +115,18 @@ namespace jam::px
 			return nullptr;
 		}
 
-		eKineDrivenType ResolveKineDrivenType(const ActorTemplateDef& tplDef)
+		eKineDrivenType ResolveKineDrivenType(const PhysicsArchetypeRegistry& registry, const PhysicsArchetypeData& data)
 		{
-			if (!tplDef.IsRigid())
+			if (!data.IsRigid())
 				return eKineDrivenType::None;
 
-			const auto& bodyDef = std::get<RigidBodyDef>(tplDef.body);
+			const auto& bodyDef = std::get<RigidBodyData>(data.body);
 			if (!bodyDef.HasBehavior())
 				return eKineDrivenType::None;
 
 			if (const auto* kHandle = bodyDef.GetBehavior<KinematicDriverConfigHandle>())
 			{
-				const KinematicDriverConfig& cfg = JAMPX_KINE_DRIVER_CFG(*kHandle);
+				const KinematicDriverConfig& cfg = registry.GetKinematicDriverConfig(*kHandle);
 				const PoseSource& src = cfg.source;
 
 				if (std::holds_alternative<WaypointSource>(src))
@@ -143,25 +145,24 @@ namespace jam::px
 				if (std::holds_alternative<FollowSource>(src))
 					return eKineDrivenType::TargetDerived;
 
-				// NetworkPose or unknown -> runtime dynamic
 				return eKineDrivenType::RuntimeDynamic;
 			}
 
 			return eKineDrivenType::None;
 		}
 
-		bool ShouldForceNetworkPoseDriver(eSpawnSource spawnSource, const ActorTemplateDef& tplDef, eMotionType resolvedMotion)
+		bool ShouldForceNetworkPoseDriver(const PhysicsArchetypeRegistry& registry, eSpawnSource spawnSource, const PhysicsArchetypeData& data, eMotionType resolvedMotion)
 		{
 			if (spawnSource != eSpawnSource::Network)		return false;
-			if (tplDef.bodyType != eBodyType::Rigid)		return false;
+			if (data.bodyType != eBodyType::Rigid)		return false;
 			if (resolvedMotion != eMotionType::Kinematic)	return false;
 
-			if (tplDef.motionType == eMotionType::Dynamic)
+			if (data.motionType == eMotionType::Dynamic)
 				return false;
 
-			if (tplDef.motionType == eMotionType::Kinematic)
+			if (data.motionType == eMotionType::Kinematic)
 			{
-				const eKineDrivenType kineType = ResolveKineDrivenType(tplDef);
+				const eKineDrivenType kineType = ResolveKineDrivenType(registry, data);
 				if (IsLocalDrivenKine(kineType))
 					return false;
 
@@ -176,20 +177,22 @@ namespace jam::px
 
 	std::optional<RigidBody> ActorFactory::CreateRigidBody(
 		PhysicsWorld&				world,
-		TemplateHandle				tpl,
-		const ActorTemplateDef&		tplDef,
+		PhysicsArchetypeKey			key,
+		const PhysicsArchetypeData&	data,
 		const SpawnDesc&			desc,
 		ObjectId					id,
 		const TargetPoseResolver&	resolver)
 	{
 		JAM_ASSERT(desc.IsRigid());
 
+		PhysicsArchetypeRegistry& registry = world.Registry();
+
 		void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(id));
 
-		PxRigidActor* mainActor = world.CreateRigidActor(ePxSceneSlot::Main, tpl, ToPhysX(desc.pose), userData);
+		PxRigidActor* mainActor = world.CreateRigidActor(ePxSceneSlot::Main, key, ToPhysX(desc.pose), userData);
 		if (!mainActor) return std::nullopt;
 
-		PxRigidActor* replayActor = world.CreateRigidActor(ePxSceneSlot::Replay, tpl, ToPhysX(desc.pose), userData);
+		PxRigidActor* replayActor = world.CreateRigidActor(ePxSceneSlot::Replay, key, ToPhysX(desc.pose), userData);
 		if (!replayActor)
 		{
 			world.RemoveRigidActor(ePxSceneSlot::Main, mainActor);
@@ -203,10 +206,10 @@ namespace jam::px
 		RigidBody body{ mainActor, replayActor };
 		RigidState s = body.GetMainState();
 
-		const eMotionType resolvedMotion = ResolveMotionType(desc.spawnSrc, tplDef);
+		const eMotionType resolvedMotion = ResolveMotionType(desc.spawnSrc, data);
 		eKineDrivenType kineType = eKineDrivenType::None;
 
-		if (ShouldForceNetworkPoseDriver(desc.spawnSrc, tplDef, resolvedMotion))
+		if (ShouldForceNetworkPoseDriver(registry, desc.spawnSrc, data, resolvedMotion))
 		{
 			if (auto* dyn = mainActor->is<PxRigidDynamic>())
 				dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
@@ -220,12 +223,12 @@ namespace jam::px
 
 			kineType = eKineDrivenType::RuntimeDynamic;
 		}
-		else if (auto behavior = CreateRigidBehavior(tplDef, resolver, &overrides))
+		else if (auto behavior = CreateRigidBehavior(registry, data, resolver, &overrides))
 		{
 			body.AttachBehavior(std::move(behavior));
 
 			if (resolvedMotion == eMotionType::Kinematic)
-				kineType = ResolveKineDrivenType(tplDef);
+				kineType = ResolveKineDrivenType(registry, data);
 
 			if (kineType == eKineDrivenType::TargetDerived)
 			{
@@ -245,18 +248,20 @@ namespace jam::px
 	}
 
 	std::optional<CharacterBody> ActorFactory::CreateCharacterBody(
-		PhysicsWorld&			world,
-		TemplateHandle			tpl,
-		const ActorTemplateDef& tplDef,
-		const SpawnDesc&		desc,
-		ObjectId				id)
+		PhysicsWorld&				world,
+		PhysicsArchetypeKey			key,
+		const PhysicsArchetypeData& data,
+		const SpawnDesc&			desc,
+		ObjectId					id)
 	{
 		JAM_ASSERT(desc.IsCharacter());
 
+		PhysicsArchetypeRegistry& registry = world.Registry();
+
 		void* userData = reinterpret_cast<void*>(static_cast<uintptr_t>(id));
-		const auto& bodyDef = std::get<CharacterBodyDef>(tplDef.body);
-		const auto& cctDef  = JAM_PX_CCT_DEF(bodyDef.cct);
-		const auto& moveCfg = JAM_PX_CHAR_MOVE_CFG(bodyDef.moveConfig);
+		const auto& bodyDef = std::get<CharacterBodyData>(data.body);
+		const auto& cctDef  = registry.GetCCTBodyDef(bodyDef.cct);
+		const auto& moveCfg = registry.GetCharacterMoveConfig(bodyDef.moveConfig);
 
 		PxCapsuleController* mainCCT = world.CreateController(ePxSceneSlot::Main, cctDef, ToPhysX(desc.pose.p), userData);
 		if (!mainCCT) return std::nullopt;
@@ -283,7 +288,7 @@ namespace jam::px
 
 		CharacterBody body{ mainCCT, replayCCT, hitbox, moveCfg };
 
-		const eMotionType resolvedMotion = ResolveMotionType(desc.spawnSrc, tplDef);
+		const eMotionType resolvedMotion = ResolveMotionType(desc.spawnSrc, data);
 
 		if (resolvedMotion == eMotionType::CCT)
 		{

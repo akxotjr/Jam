@@ -57,22 +57,16 @@
     <ClCompile Include="src\jampx\PhysicsWorld.cpp">
       <Filter>01. core</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\prefab\PhysicsPrefabIO.cpp">
+    <ClCompile Include="src\jampx\prefab\PhysicsAssetLoader.cpp">
       <Filter>03. prefab</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\prefab\PhysicsPrefabRegistry.cpp">
+    <ClCompile Include="src\jampx\prefab\PhysicsArchetypeRegistry.cpp">
       <Filter>03. prefab</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\prefab\PrefabAssetCreator.cpp">
+    <ClCompile Include="src\jampx\prefab\PxCooker.cpp">
       <Filter>03. prefab</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\prefab\PrefabDocument.cpp">
-      <Filter>03. prefab</Filter>
-    </ClCompile>
-    <ClCompile Include="src\jampx\prefab\PrefabCooker.cpp">
-      <Filter>03. prefab</Filter>
-    </ClCompile>
-    <ClCompile Include="src\jampx\prefab\PrefabLevelLoader.cpp">
+    <ClCompile Include="src\jampx\prefab\PxCreator.cpp">
       <Filter>03. prefab</Filter>
     </ClCompile>
     <ClCompile Include="src\jampx\third_party\tinygltf_impl.cpp">
@@ -161,22 +155,19 @@
     <ClInclude Include="include\jampx\PhysicsFilter.h">
       <Filter>01. core</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\prefab\PhysicsPrefabIO.h">
+    <ClInclude Include="include\jampx\PhysicsDatabase.h">
       <Filter>03. prefab</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\prefab\PhysicsPrefabRegistry.h">
+    <ClInclude Include="include\jampx\prefab\PhysicsAssetLoader.h">
       <Filter>03. prefab</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\prefab\PrefabAssetCreator.h">
+    <ClInclude Include="include\jampx\prefab\PhysicsArchetypeRegistry.h">
       <Filter>03. prefab</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\prefab\PrefabDocument.h">
+    <ClInclude Include="include\jampx\prefab\PxCooker.h">
       <Filter>03. prefab</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\prefab\PrefabCooker.h">
-      <Filter>03. prefab</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\prefab\PrefabLevelLoader.h">
+    <ClInclude Include="include\jampx\prefab\PxCreator.h">
       <Filter>03. prefab</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\third_party\tinygltf_impl.h">
@@ -217,9 +208,6 @@
     </ClInclude>
     <ClInclude Include="include\jampx\Easing.h">
       <Filter>01. core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\PhysicsAsset.h">
-      <Filter>03. prefab</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\actor\character\CharacterBody.h">
       <Filter>02. actor\character</Filter>
@@ -310,6 +298,5 @@
     <None Include="schema\physics_asset.schema.json">
       <Filter>97. schema</Filter>
     </None>
-    <None Include="Replication Refactoring Guide.md" />
   </ItemGroup>
 </Project>

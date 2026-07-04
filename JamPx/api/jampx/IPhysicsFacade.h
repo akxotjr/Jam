@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <jambase/JamTypes.h>
 
 
@@ -19,11 +19,7 @@ namespace jam::px
 		virtual void					Init() = 0;
 		virtual void					Shutdown() = 0;
 		virtual void					SetJobBridge(IPhysicsJobBridge* bridge) = 0;
-
-		virtual LevelLayerInfo			SetLevelPath(const std::string& path) = 0;
-		virtual bool					LoadLevel(const std::string& layer, INOUT std::vector<LevelInstanceInfo>& instances) = 0;
-		virtual std::vector<ObjectId>	UnloadLevel(const std::string& layer) = 0;
-		virtual std::vector<ObjectId>	UnloadAllLevel() = 0;
+		virtual void					SetPhysicsAssetPath(const std::string& path) = 0;
 
 		virtual bool					IsStepPending() const = 0;
 
@@ -40,12 +36,12 @@ namespace jam::px
 		virtual bool					Despawn(ObjectId id) = 0;
 
 		virtual eBodyType				GetBodyType(ObjectId id) const = 0;
-		virtual eBodyType				FindBodyType(PrefabKey key) const = 0;
+		virtual eBodyType				FindBodyType(PhysicsArchetypeKey key) const = 0;
 
 		virtual eMotionType				GetMotionType(ObjectId id) const = 0;
-		virtual eMotionType				FindMotionType(PrefabKey key) const = 0;
+		virtual eMotionType				FindMotionType(PhysicsArchetypeKey key) const = 0;
 
-		virtual bool					IsReplayCandidate(PrefabKey key) const = 0;
+		virtual bool					IsReplayCandidate(PhysicsArchetypeKey key) const = 0;
 
 		virtual void					PushReplayStates(const std::vector<ActorContext>& contexts) = 0;
 		virtual void					PullCorrectionState(ObjectId oid, OUT CharacterState& state) = 0;
