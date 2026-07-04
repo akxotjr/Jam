@@ -1,0 +1,120 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="AST">
+      <UniqueIdentifier>{e365b6d0-8b95-469b-9552-cddaf8d6b78a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser">
+      <UniqueIdentifier>{0eb78596-3bd5-46c3-8d54-ca65b30b2004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Emit">
+      <UniqueIdentifier>{12303eb7-b0c3-4a1d-b099-69b8b44f12f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Validate">
+      <UniqueIdentifier>{9f707f9f-e0c5-44a4-8174-0212d9909967}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{59cc621f-239f-4afb-956b-99b6dec8450d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="IO">
+      <UniqueIdentifier>{7a6ab2da-3c9d-4e6c-a61d-9e24572680bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Inspect">
+      <UniqueIdentifier>{3b9c9319-84de-4c9c-a2cd-56f4b5b73ab5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Naming">
+      <UniqueIdentifier>{f2356c32-ee4b-4f80-bd9a-77f1daceeb6a}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Core\Diagnostic.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Parser\JsonSchemaParser.cpp">
+      <Filter>Parser</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Naming\NameConverter.cpp">
+      <Filter>Naming</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Emit\CppEmitter.cpp">
+      <Filter>Emit</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Emit\CSharpEmitter.cpp">
+      <Filter>Emit</Filter>
+    </ClCompile>
+    <ClCompile Include="src\IO\FileIO.cpp">
+      <Filter>IO</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Emit\CppTypeMapper.cpp">
+      <Filter>Emit</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Emit\CSharpTypeMapper.cpp">
+      <Filter>Emit</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Inspect\SchemaAstDumper.cpp">
+      <Filter>Inspect</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Validation\JsonSchemaValidator.cpp">
+      <Filter>Validate</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Validation\SchemaSemanticValidator.cpp">
+      <Filter>Validate</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\Core\Diagnostic.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Core\DiagnosticCodes.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\AST\SchemaType.h">
+      <Filter>AST</Filter>
+    </ClInclude>
+    <ClInclude Include="include\AST\SchemaField.h">
+      <Filter>AST</Filter>
+    </ClInclude>
+    <ClInclude Include="include\AST\SchemaObject.h">
+      <Filter>AST</Filter>
+    </ClInclude>
+    <ClInclude Include="include\AST\SchemaDocument.h">
+      <Filter>AST</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Parser\JsonSchemaParser.h">
+      <Filter>Parser</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Emit\EmitOptions.h">
+      <Filter>Emit</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Emit\ICodeEmitter.h">
+      <Filter>Emit</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Naming\NameConverter.h">
+      <Filter>Naming</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Emit\CppEmitter.h">
+      <Filter>Emit</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Emit\CSharpEmitter.h">
+      <Filter>Emit</Filter>
+    </ClInclude>
+    <ClInclude Include="include\IO\FileIO.h">
+      <Filter>IO</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Emit\CppTypeMapper.h">
+      <Filter>Emit</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Emit\CSharpTypeMapper.h">
+      <Filter>Emit</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Inspect\SchemaAstDumper.h">
+      <Filter>Inspect</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Validation\JsonSchemaValidator.h">
+      <Filter>Validate</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Validation\SchemaSemanticValidator.h">
+      <Filter>Validate</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
