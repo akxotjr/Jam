@@ -1,14 +1,15 @@
 #pragma once
-#include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/ReplicationCodec.h"
+#include "jamnet/runtime/protocol/codec/ReplicationCodec.h"
+#include "jamnet/runtime/world/actor/ActorId.h"
 
-#include "jamnet/sync/schema/gen/lifecycle_generated.h"
-#include "jamnet/sync/schema/gen/snapshot_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/lifecycle_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/snapshot_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/baseline_ack_generated.h"
 
 namespace jam::net
 {
 	class ServerAoiSystem;
-	class ServerPhysicalWorld;
+	class ServerWorld;
 	class ServerInputSystem;
 	class ServerPhysicsSystem;
 
@@ -20,9 +21,10 @@ namespace jam::net
 
 	struct CharBaselineState
 	{
-		px::Vec3   pos   = px::Vec3::Zero();
-		float      yaw   = 0.0f;
-		float      pitch = 0.0f;
+		px::Vec3   pos      = px::Vec3::Zero();
+		float      bodyYaw  = 0.0f;
+		float      viewYaw  = 0.0f;
+		float      pitch    = 0.0f;
 	};
 
     struct PendingLifecycleEvent
@@ -37,12 +39,28 @@ namespace jam::net
         bool    alive  = false;
     };
 
+	enum class eReplicationPhase : uint8
+	{
+		AwaitingPlayer = 0,
+		InitialSync,
+		Streaming,
+		NeedsResync,
+	};
+
 	struct ReplicationUserState
 	{
-		std::unordered_set<NetId>                              knownActors;
-		std::unordered_map<NetId, uint32>                      knownFullEpoch;
-		std::unordered_map<NetId, PendingLifecycleEvent>       pendingLifecycle;
-		std::unordered_map<NetId, uint8>                       forceFullStateBudget;
+		eReplicationPhase phase = eReplicationPhase::AwaitingPlayer;
+		struct BaselineDeliveryState
+		{
+			uint32 sentBaselineRev = 0;
+			uint32 ackedBaselineRev = 0;
+			uint32 lastSentTick = 0;
+			uint8 resendCount = 0;
+		};
+
+		std::unordered_set<ActorId>                          knownActors;
+		std::unordered_map<ActorId, BaselineDeliveryState>   baselineDelivery;
+		std::unordered_map<ActorId, PendingLifecycleEvent>   pendingLifecycle;
 	};
 
 	struct SharedRigidState
@@ -54,6 +72,7 @@ namespace jam::net
 		RigidBaselineState      baseline             = {};
 		px::RigidState          lastDeltaSourceState = {};
 		PackedRigidDelta128     packedDelta          = {};
+		PackedRigidFull192      packedFull           = {};
 	};
 
 	struct SharedCharState
@@ -65,6 +84,7 @@ namespace jam::net
 		CharBaselineState       baseline             = {};
 		px::CharacterState      lastDeltaSourceState = {};
 		PackedCharDelta128      packedDelta          = {};
+		PackedCharacterFull160  packedFull           = {};
 	};
 
 
@@ -80,7 +100,10 @@ namespace jam::net
 		void                                        ForceLifecycleSyncForUser(uint64 userId, int32 budget = 5);
 		void                                        MarkActorDirty(entt::entity e, bool forceMeta = false);
 
-		void                                        OnUserEnter(uint64 userId);
+		bool                                        AttachUser(uint64 userId);
+		bool                                        BeginInitialSync(uint64 userId);
+		bool                                        IsAwaitingPlayer(uint64 userId) const;
+		void                                        HandleBaselineFeedback(uint64 userId, const fb::fbBaselineAckBatch& batch);
 		void                                        OnUserLeave(uint64 userId);
 		void                                        OnActorDestroyed(entt::entity e);
 
@@ -88,7 +111,7 @@ namespace jam::net
 		struct Candidate
 		{
 			entt::entity    e = entt::null;
-			NetId           netId = NetId::Invalid();
+			ActorId         actorId = ActorId::Invalid();
 			bool            useFull = false;
 		};
 
@@ -104,7 +127,7 @@ namespace jam::net
         struct ActorFrameCache
         {
             entt::entity    e                 = entt::null;
-            NetId           netId             = NetId::Invalid();
+            ActorId         actorId           = ActorId::Invalid();
             uint32          fullEpoch         = 0;
             px::eBodyType   bodyType          = px::eBodyType::None;
             bool            canReplicate      = false;
@@ -117,79 +140,74 @@ namespace jam::net
 
 
 		flatbuffers::Offset<fb::fbActorMeta>            BuildActorMeta(entt::entity e, uint64 userId);
-		flatbuffers::Offset<fb::fbLifecycleActor>       BuildLifecycleActor(const PendingLifecycleEvent& event, entt::entity e, NetId netId, uint64 userId);
+		flatbuffers::Offset<fb::fbLifecycleActor>       BuildLifecycleActor(const PendingLifecycleEvent& event, entt::entity e, ActorId actorId, uint64 userId);
 		flatbuffers::Offset<fb::fbActorEntity>          BuildFullActorEntity(entt::entity e, uint64 userId);
 		flatbuffers::Offset<fb::fbActorEntity>          BuildDeltaActorEntity(entt::entity e, uint64 userId);
 
 		const ReplicationUserState*                     FindUserState(uint64 userId) const;
 		ReplicationUserState*                           FindUserState(uint64 userId);
 
-        uint32                                          GetActorFullEpoch(entt::entity e, NetId netId);
+        uint32                                          GetActorFullEpoch(entt::entity e, ActorId actorId);
         void                                            RefreshActorFrameCache();
-        const ActorFrameCache*                          FindActorFrameCache(NetId netId) const;
+        const ActorFrameCache*                          FindActorFrameCache(ActorId actorId) const;
         void                                            MarkActorFrameDirty(entt::entity e);
         void                                            UpsertActorFrameCache(entt::entity e, bool isActiveOverride);
-        void                                            AddKnownUserToActor(NetId netId, uint64 userId);
-        void                                            RemoveKnownUserFromActor(NetId netId, uint64 userId);
-        void                                            CompactKnownUsersIfNeeded(NetId netId);
+        void                                            AddKnownUserToActor(ActorId actorId, uint64 userId);
+        void                                            RemoveKnownUserFromActor(ActorId actorId, uint64 userId);
+        void                                            CompactKnownUsersIfNeeded(ActorId actorId);
 
-        void                                            QueueLifecycleCreateForUser(uint64 userId, NetId netId);
-		void                                            QueueLifecycleMetaForUser(uint64 userId, NetId netId);
-		void                                            QueueLifecycleMetaForKnownUser(uint64 userId, NetId netId);
-		void                                            QueueRemovalForUser(uint64 userId, NetId netId, fb::fbRemovalReason reason);
-		void                                            CancelRemovalForUser(uint64 userId, NetId netId);
+        void                                            QueueLifecycleCreateForUser(uint64 userId, ActorId actorId);
+		void                                            QueueLifecycleMetaForUser(uint64 userId, ActorId actorId);
+		void                                            QueueLifecycleMetaForKnownUser(uint64 userId, ActorId actorId);
+		void                                            QueueRemovalForUser(uint64 userId, ActorId actorId, fb::fbRemovalReason reason);
+		void                                            CancelRemovalForUser(uint64 userId, ActorId actorId);
 		void                                            QueueLifecycleForVisibleActors(uint64 userId, bool forceSyncUser);
-		//void                                            QueueLifecycleForStaticActors(uint64 userId, bool forceSyncUser);
 		void                                            EmitPendingLifecyclePackets(uint64 userId, uint32 tick);
-		void                                            CommitPendingLifecycleBatch(uint64 userId, const std::vector<std::pair<NetId, PendingLifecycleEvent>>& sentEvents);
+		void                                            CommitPendingLifecycleBatch(uint64 userId, const std::vector<std::pair<ActorId, PendingLifecycleEvent>>& sentEvents);
 
-		void                                            InvalidateUserCaches(uint64 userId, NetId netId);
-		void                                            InvalidateAllUserCaches(NetId netId);
+		void                                            InvalidateUserCaches(uint64 userId, ActorId actorId);
+		void                                            InvalidateAllUserCaches(ActorId actorId);
 
-		bool                                            IsActorKnownToUser(uint64 userId, NetId netId) const;
-		void                                            MarkActorKnownToUser(uint64 userId, NetId netId);
-		void                                            ForgetActorForUser(uint64 userId, NetId netId);
-		void                                            ForgetActorForAllUsers(NetId netId);
-		bool                                            ShouldForceFullState(uint64 userId, NetId netId) const;
-		void                                            MarkFullStateSent(uint64 userId, NetId netId);
+		bool                                            IsActorKnownToUser(uint64 userId, ActorId actorId) const;
+		void                                            MarkActorKnownToUser(uint64 userId, ActorId actorId);
+		void                                            ForgetActorForUser(uint64 userId, ActorId actorId);
+		void                                            ForgetActorForAllUsers(ActorId actorId);
+		bool                                            CanSendDelta(uint64 userId, ActorId actorId, uint32 fullEpoch) const;
+		bool                                            ShouldSendFull(uint64 userId, ActorId actorId, uint32 fullEpoch);
+		void                                            TryCompleteInitialSync(uint64 userId);
+		void                                            MarkFullStateSent(uint64 userId, ActorId actorId);
 
 	private:
 		entt::registry&                                                             m_world;
 		std::unique_ptr<flatbuffers::FlatBufferBuilder>                             m_fbb;
-		ServerPhysicalWorld*                                                             m_netWorld      = nullptr;
+		ServerWorld*                                                        m_netWorld      = nullptr;
 		ServerInputSystem*                                                          m_inputSys      = nullptr;
 		ServerAoiSystem*                                                            m_aoiSys        = nullptr;
 		ServerPhysicsSystem*                                                        m_physSys       = nullptr;
 
         std::unordered_map<uint64, ReplicationUserState>                            m_userStates;                 // Per-user replication session state.
-        std::unordered_map<NetId, std::vector<KnownUserSlot>>                       m_knownUsersByActor;          // Reverse index from actor to users that know it.
+        std::unordered_map<ActorId, std::vector<KnownUserSlot>>                       m_knownUsersByActor;          // Reverse index from actor to users that know it.
         std::unordered_map<uint64, int32>                                           m_forceLifecycleSyncPerUsers; // Pending forced meta/full sync budget per user.
-        std::unordered_map<NetId, SharedRigidState>                                 m_sharedRigidStates;          // Shared rigid full-baseline/delta cache per actor.
-        std::unordered_map<NetId, SharedCharState>                                  m_sharedCharacterStates;      // Shared character full-baseline/delta cache per actor.
-        std::unordered_map<NetId, ActorFrameCache>                                  m_actorFrameCache;            // Incremental per-actor frame metadata cache.
-        std::unordered_map<entt::entity, NetId>                                     m_actorFrameNetIds;           // Reverse lookup for frame cache cleanup.
+        std::unordered_map<ActorId, SharedRigidState>                                 m_sharedRigidStates;          // Shared rigid full-baseline/delta cache per actor.
+        std::unordered_map<ActorId, SharedCharState>                                  m_sharedCharacterStates;      // Shared character full-baseline/delta cache per actor.
+        std::unordered_map<ActorId, ActorFrameCache>                                  m_actorFrameCache;            // Incremental per-actor frame metadata cache.
+        std::unordered_map<entt::entity, ActorId>                                     m_actorFrameActorIds;           // Reverse lookup for frame cache cleanup.
 
-        std::vector<uint64>                                                         m_usersScratch;               // Reused member list for snapshot iteration.
-        std::vector<uint64>                                                         m_knownUsersScratch;          // Reused alive known-user list for actor fan-out.
-        std::unordered_set<NetId>                                                   m_sentThisTickScratch;        // Dedup of actors already emitted for one user this tick.
+		std::vector<uint64>                                                         m_knownUsersScratch;          // Reused alive known-user list for actor fan-out.
+        std::unordered_set<ActorId>                                                   m_sentThisTickScratch;        // Dedup of actors already emitted for one user this tick.
         std::unordered_set<uint32>                                                  m_enteredScratch;             // AOI entered set for quick full-send checks.
         std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)>     m_candidateBucketsScratch;    // Reused candidate buckets by priority.
         std::vector<Candidate>                                                      m_orderedCandidatesScratch;   // Reused flattened candidate list.
         std::vector<flatbuffers::Offset<fb::fbActorEntity>>                         m_actorOffsScratch;           // Reused FlatBuffer actor offsets for one packet.
+		std::vector<ActorId>															m_fullActorIdsScratch;
         std::vector<entt::entity>                                                   m_dirtyActorFrameScratch;     // Dirty actor list for incremental frame-cache updates.
         std::unordered_set<entt::entity>                                            m_dirtyActorFrameDedup;       // Dedup set backing dirty actor list.
         std::unordered_set<entt::entity>                                            m_prevActiveActors;           // Active actors from previous physics tick.
         std::unordered_set<entt::entity>                                            m_currentActiveActorsScratch; // Active actors from current physics tick.
 
-		uint32                                                                      m_fullCacheTick = 0;
-		std::unordered_map<NetId, PackedRigidFull192>                               m_cachedRigidFull;
-		std::unordered_map<NetId, PackedCharacterFull160>                           m_cachedCharacterFull;
-
 		uint32                                                                      m_tickCounter = 0;
 
-
-		static constexpr uint32                                                     kTargetTickRate = 33;
-		static constexpr uint32                                                     kFullIntervalSec = 5;
-		static constexpr uint32                                                     kFullIntervalTicks = kTargetTickRate * kFullIntervalSec;
+		static constexpr uint32                                                     kBaselineResendTicks = 10;
+		static constexpr uint8                                                      kBaselineResendBudget = 8;
 	};
 }

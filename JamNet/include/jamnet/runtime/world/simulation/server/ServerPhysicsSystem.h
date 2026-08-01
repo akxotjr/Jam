@@ -1,21 +1,28 @@
-﻿#pragma once
+#pragma once
 
-#include <jampx/IPhysicsFacade.h>
+#include <jampx/PhysicsTypes.h>
+
+namespace jam::px
+{
+	class PhysicsFacade;
+}
 
 namespace jam::net
 {
 	class ServerPhysicsSystem
 	{
     public:
-        ServerPhysicsSystem(entt::registry& world, px::IPhysicsFacade* physics);
+        ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics);
 
         void                    Init();
         void                    Tick();
 
+        uint32                  GetCompletedTickCount() const { return m_completedTickCount; }
+        bool                    IsTickFiberRunning() const { return m_tickFiberRunning; }
+
         void                    SpawnActor(entt::entity e, const px::SpawnDesc& desc) const;
         void                    DespawnActor(entt::entity e) const;
-        const std::vector<entt::entity>&
-                                GetLastActiveEntities() const { return m_lastActiveEntities; }
+        const std::vector<entt::entity>& GetLastActiveEntities() const { return m_lastActiveEntities; }
 
     private:
         void                    ApplyInputs() const;
@@ -23,7 +30,7 @@ namespace jam::net
 
         void                    SyncActiveTransforms() const;
         void                    SyncTransforms() const;
-        void                    HandleProjectileLifecycleEvents() const;
+        void                    HandlePhysicsEvents() const;
 
         void					CommitPendingActorOps();
 
@@ -38,18 +45,14 @@ namespace jam::net
 
             eType           type     = eType::Spawn;
             entt::entity    e        = entt::null;
-            //px::eBodyType   bodyType = px::eBodyType::None;
         };
 
     private:
         entt::registry&                     m_world;
-        px::IPhysicsFacade*                 m_physics           = nullptr;
+        px::PhysicsFacade*                  m_physics           = nullptr;
 
-        uint64                              m_awaitSeq          = 0;
         bool                                m_tickFiberRunning  = false;
-        uint32                              m_tickDebt          = 0;
-        uint32                              m_tickDebtCap       = 8;
-        uint32                              m_tickBurstBudget   = 4;
+        uint32                              m_completedTickCount = 0;
 
         mutable std::vector<PendingActorOp> m_pendingActorOps;
         mutable std::vector<entt::entity>   m_lastActiveEntities;

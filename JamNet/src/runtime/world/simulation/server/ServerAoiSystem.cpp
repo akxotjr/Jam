@@ -1,13 +1,15 @@
 #include "pch.h"
-#include "jamnet/sync/replication/ServerAoiSystem.h"
+#include "jamnet/runtime/world/simulation/server/ServerAoiSystem.h"
 
-#include "jamnet/sync/networld/ServerPhysicalWorld.h"
-#include "jamnet/sync/replication/ServerPhysicsSystem.h"
-#include "jamnet/sync/replication/WorldContext.h"
+#include <jampx/PhysicsFacade.h>
+
+#include "jamnet/runtime/world/simulation/common/WorldContext.h"
+#include "jamnet/runtime/world/simulation/server/ServerWorld.h"
+#include "jamnet/runtime/world/simulation/server/ServerPhysicsSystem.h"
 
 namespace jam::net
 {
-	ServerAoiSystem::ServerAoiSystem(entt::registry& world, px::IPhysicsFacade* physics)
+	ServerAoiSystem::ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics)
 		: m_registry(world), m_physics(physics)
 	{
 	}
@@ -140,13 +142,25 @@ namespace jam::net
 		});
 	}
 
+	bool ServerAoiSystem::IsUserReady(uint64 userId) const
+	{
+		const auto it = m_userStates.find(userId);
+		return it != m_userStates.end() && it->second.initialized;
+	}
+
+	bool ServerAoiSystem::IsActorRegistered(entt::entity actor) const
+	{
+		const auto it = m_actorStates.find(actor);
+		return it != m_actorStates.end() && it->second.initialized;
+	}
+
 	void ServerAoiSystem::OnActorSpawned(entt::entity actor)
 	{
 		if (actor == entt::null || !m_registry.valid(actor))
 			return;
 
-		if (const auto* netId = m_registry.try_get<NetId>(actor); netId && m_registry.all_of<ReplicationStaticTag>(actor))
-			SetAlwaysVisible(*netId, true);
+		if (const auto* actorId = m_registry.try_get<ActorId>(actor); actorId && m_registry.all_of<ReplicationStaticTag>(actor))
+			SetAlwaysVisible(*actorId, true);
 
 		m_actorStates.erase(actor);
 		MarkActorDirty(actor);
@@ -155,8 +169,8 @@ namespace jam::net
 	void ServerAoiSystem::OnActorDestroyed(entt::entity actor)
 	{
 		if (m_registry.valid(actor))
-			if (const auto* netId = m_registry.try_get<NetId>(actor); netId)
-				SetAlwaysVisible(*netId, false);
+			if (const auto* actorId = m_registry.try_get<ActorId>(actor); actorId)
+				SetAlwaysVisible(*actorId, false);
 
 		auto stIt = m_actorStates.find(actor);
 		if (stIt != m_actorStates.end() && stIt->second.initialized)
@@ -210,16 +224,16 @@ namespace jam::net
 			return key.actor == actor;
 		});
 
-		if (!m_registry.valid(actor) || !m_registry.all_of<NetId>(actor))
+		if (!m_registry.valid(actor) || !m_registry.all_of<ActorId>(actor))
 			return;
 
-		const NetId netId = m_registry.get<NetId>(actor);
+		const ActorId actorId = m_registry.get<ActorId>(actor);
 		for (uint64 userId : visibleUsers)
 		{
 			if (auto stateIt = m_states.find(userId); stateIt != m_states.end())
 			{
-				if (stateIt->second.visible.erase(netId) > 0)
-					stateIt->second.left.push_back(netId);
+				if (stateIt->second.visible.erase(actorId) > 0)
+					stateIt->second.left.push_back(actorId);
 			}
 
 			if (auto userIt = m_userVisibleActors.find(userId); userIt != m_userVisibleActors.end())
@@ -231,13 +245,13 @@ namespace jam::net
 		}
 	}
 
-	bool ServerAoiSystem::IsVisible(uint64 userId, NetId netId) const
+	bool ServerAoiSystem::IsVisible(uint64 userId, ActorId actorId) const
 	{
-		if (m_alwaysVisible.contains(netId))
+		if (m_alwaysVisible.contains(actorId))
 			return true;
 
 		if (auto it = m_states.find(userId); it != m_states.end())
-			return it->second.visible.contains(netId);
+			return it->second.visible.contains(actorId);
 		return false;
 	}
 
@@ -255,17 +269,17 @@ namespace jam::net
 		return nullptr;
 	}
 
-	void ServerAoiSystem::SetAlwaysVisible(NetId netId, bool always)
+	void ServerAoiSystem::SetAlwaysVisible(ActorId actorId, bool always)
 	{
 		if (always)
-			m_alwaysVisible.insert(netId);
+			m_alwaysVisible.insert(actorId);
 		else
-			m_alwaysVisible.erase(netId);
+			m_alwaysVisible.erase(actorId);
 	}
 
 	void ServerAoiSystem::RefreshContext()
 	{
-		if (auto* nwPtr = m_registry.ctx().find<ServerPhysicalWorld*>(); nwPtr)
+		if (auto* nwPtr = m_registry.ctx().find<ServerWorld*>(); nwPtr)
 			m_world = *nwPtr;
 		if (auto* phys = m_registry.ctx().find<ServerPhysicsSystem>())
 			m_serverPhysics = phys;
@@ -348,7 +362,7 @@ namespace jam::net
 		{
 			if (pending.userId == 0 || pending.actor == entt::null || !m_states.contains(pending.userId))
 				return true;
-			if (!m_registry.valid(pending.actor) || !m_registry.all_of<NetId>(pending.actor))
+			if (!m_registry.valid(pending.actor) || !m_registry.all_of<ActorId>(pending.actor))
 				return true;
 			return false;
 		});
@@ -534,7 +548,7 @@ namespace jam::net
 
 	void ServerAoiSystem::EvaluateVisibility(uint64 userId, entt::entity actor)
 	{
-		if (userId == 0 || actor == entt::null || !m_registry.valid(actor) || !m_registry.all_of<NetId>(actor))
+		if (userId == 0 || actor == entt::null || !m_registry.valid(actor) || !m_registry.all_of<ActorId>(actor))
 			return;
 
 		auto stateIt = m_states.find(userId);
@@ -542,7 +556,7 @@ namespace jam::net
 			return;
 
 		UserAoiState& state = stateIt->second;
-		const NetId netId = m_registry.get<NetId>(actor);
+		const ActorId actorId = m_registry.get<ActorId>(actor);
 		auto& visibleUsers  = m_actorVisibleUsers[actor];
 		auto& visibleActors = m_userVisibleActors[userId];
 		const AoiVisibilityKey visibilityKey = MakeVisibilityKey(userId, actor);
@@ -556,7 +570,7 @@ namespace jam::net
 			visibleActors.push_back(AoiVisibleActorSlot{ e, true });
 		};
 
-		if (m_registry.all_of<ReplicationStaticTag>(actor) || m_alwaysVisible.contains(netId))
+		if (m_registry.all_of<ReplicationStaticTag>(actor) || m_alwaysVisible.contains(actorId))
 		{
 			if (!m_visibleMembership.contains(visibilityKey))
 			{
@@ -566,16 +580,16 @@ namespace jam::net
 				addVisibleActor(actor);
 				m_visibleMembership.emplace(visibilityKey, AoiVisibleMembershipEntry{ actorUserIndex, userActorIndex });
 			}
-			if (state.visible.insert(netId).second)
+			if (state.visible.insert(actorId).second)
 			{
-				state.entered.push_back(netId);
+				state.entered.push_back(actorId);
 			}
 			return;
 		}
 
 		const px::Vec3 userPos    = ResolveUserPosition(userId);
 		const px::Vec3 actorPos   = ResolveActorPosition(actor);
-		const bool	   wasVisible = state.visible.contains(netId);
+		const bool	   wasVisible = state.visible.contains(actorId);
 		const bool	   nowVisible = PassesVisibilityTests(userId, actor, userPos, actorPos, wasVisible);
 
 		if (nowVisible)
@@ -588,16 +602,16 @@ namespace jam::net
 				addVisibleActor(actor);
 				m_visibleMembership.emplace(visibilityKey, AoiVisibleMembershipEntry{ actorUserIndex, userActorIndex });
 			}
-			if (state.visible.insert(netId).second)
+			if (state.visible.insert(actorId).second)
 			{
-				state.entered.push_back(netId);
+				state.entered.push_back(actorId);
 			}
 		}
 		else
 		{
-			const bool erasedVisible = state.visible.erase(netId) > 0;
+			const bool erasedVisible = state.visible.erase(actorId) > 0;
 			if (erasedVisible)
-				state.left.push_back(netId);
+				state.left.push_back(actorId);
 
 			if (erasedVisible || m_visibleMembership.contains(visibilityKey))
 			{

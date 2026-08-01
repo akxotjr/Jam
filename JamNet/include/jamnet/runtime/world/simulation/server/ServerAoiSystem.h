@@ -1,13 +1,17 @@
 #pragma once
 
 #include <jampx/PhysicsTypes.h>
-#include <jampx/IPhysicsFacade.h>
 
-#include "jamnet/sync/replication/NetActorComponents.h"
+#include "jamnet/runtime/world/simulation/common/ActorComponents.h"
+
+namespace jam::px
+{
+	class PhysicsFacade;
+}
 
 namespace jam::net
 {
-	class ServerPhysicalWorld;
+	class ServerWorld;
 	class ServerPhysicsSystem;
 
 	enum class eAoiCondition : uint8
@@ -129,9 +133,9 @@ namespace jam::net
 
 	struct UserAoiState
 	{
-		std::unordered_set<NetId>	visible;		// currently visible set of netIds
-		std::vector<NetId>			entered;		// new netId in this tick
-		std::vector<NetId>			left;			// leave netId in this tick
+		std::unordered_set<ActorId>	visible;		// currently visible actors
+		std::vector<ActorId>			entered;		// actors entered this tick
+		std::vector<ActorId>			left;			// actors left this tick
 	};
 
 	struct AoiConfig
@@ -160,7 +164,7 @@ namespace jam::net
 	class ServerAoiSystem
 	{
 	public:
-		explicit ServerAoiSystem(entt::registry& world, px::IPhysicsFacade* physics);
+		explicit ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics);
 
 		void									Init(const AoiConfig& cfg = {});
 		void									Tick();
@@ -170,11 +174,13 @@ namespace jam::net
 
 		void									OnActorSpawned(entt::entity actor);
 		void									OnActorDestroyed(entt::entity actor);
+		bool									IsUserReady(uint64 userId) const;
+		bool									IsActorRegistered(entt::entity actor) const;
 
-		bool									IsVisible(uint64 userId, NetId netId) const;
+		bool									IsVisible(uint64 userId, ActorId actorId) const;
 		const UserAoiState*						GetState(uint64 userId) const;
 		const std::vector<AoiVisibleActorSlot>* GetVisibleActors(uint64 userId) const;
-		void									SetAlwaysVisible(NetId netId, bool always);
+		void									SetAlwaysVisible(ActorId actorId, bool always);
 
 	private:
 		void                            RefreshContext();
@@ -226,13 +232,13 @@ namespace jam::net
 
 	private:
 		entt::registry&														m_registry;
-		px::IPhysicsFacade*													m_physics          = nullptr;
-		ServerPhysicalWorld*												m_world            = nullptr;
+		px::PhysicsFacade*													m_physics          = nullptr;
+		ServerWorld*												m_world            = nullptr;
 		ServerPhysicsSystem*												m_serverPhysics    = nullptr;
 		AoiConfig															m_cfg              = {};
 
 		std::unordered_map<uint64, UserAoiState>							m_states;
-		std::unordered_set<NetId>											m_alwaysVisible;
+		std::unordered_set<ActorId>											m_alwaysVisible;
 
 		std::unordered_map<entt::entity, AoiActorCellState>					m_actorStates;
 		std::unordered_map<uint64, AoiUserCellState>						m_userStates;

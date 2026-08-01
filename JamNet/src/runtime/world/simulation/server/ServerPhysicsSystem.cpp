@@ -1,21 +1,24 @@
 #include "pch.h"
-#include "jamnet/sync/replication/ServerPhysicsSystem.h"
+#include "jamnet/runtime/world/simulation/server/ServerPhysicsSystem.h"
 
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/ShardExecutor.h"
-#include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/ServerAoiSystem.h"
-#include "jamnet/sync/replication/ServerInputSystem.h"
-#include "jamnet/sync/networld/ServerPhysicalWorld.h"
-#include "jamnet/sync/replication/WorldContext.h"
+#include "jamnet/runtime/world/simulation/common/ActorComponents.h"
+#include "jamnet/runtime/world/simulation/server/ServerInputSystem.h"
+#include "jamnet/runtime/world/simulation/server/ServerAoiSystem.h"
+#include "jamnet/runtime/world/simulation/server/ServerWorld.h"
+#include "jamnet/runtime/world/simulation/common/WorldContext.h"
+
+#include "jampx/PhysicsFacade.h"
+
 
 namespace jam::net
 {
 	namespace
 	{
-		bool TryReadValidatedCharacterState(const px::IPhysicsFacade* physics, px::ObjectId objectId, OUT px::CharacterState& outState)
+		bool TryReadValidatedCharacterState(const px::PhysicsFacade* physics, px::ActorId actorId, OUT px::CharacterState& outState)
 		{
-			if (!physics->GetCharacterState(objectId, outState))
+			if (!physics->GetCharacterState(actorId, outState))
 				return false;
 
 			const bool finite = outState.IsFinite();
@@ -23,9 +26,9 @@ namespace jam::net
 			return finite;
 		}
 
-		bool TryReadValidatedRigidState(const px::IPhysicsFacade* physics, px::ObjectId objectId, OUT px::RigidState& outState)
+		bool TryReadValidatedRigidState(const px::PhysicsFacade* physics, px::ActorId actorId, OUT px::RigidState& outState)
 		{
-			if (!physics->GetRigidState(objectId, outState))
+			if (!physics->GetRigidState(actorId, outState))
 				return false;
 
 			outState.pose.q.Normalize();
@@ -36,14 +39,14 @@ namespace jam::net
 		}
 	}
 
-	ServerPhysicsSystem::ServerPhysicsSystem(entt::registry& world, px::IPhysicsFacade* physics)
+	ServerPhysicsSystem::ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics)
 		: m_world(world), m_physics(physics)
 	{
 	}
 
 	void ServerPhysicsSystem::Init()
 	{
-		m_tickDebt		   = 0;
+		m_completedTickCount = 0;
 		m_tickFiberRunning = false;
 		m_lastActiveEntities.clear();
 	}
@@ -52,61 +55,21 @@ namespace jam::net
 	{
 		if (!m_physics) return;
 
-		auto runOneTick = [this]()
-			{
-				ApplyInputs();
-				Simulate();
-				SyncActiveTransforms();
-			};
-
-		if (m_tickDebt < m_tickDebtCap)
-			++m_tickDebt;
-
-		auto& shard = CurrentShardLocalChecked();
-		auto* sched = shard.scheduler;
-
-		if (!sched)
-		{
-			while (m_tickDebt > 0)
-			{
-				--m_tickDebt;
-				runOneTick();
-			}
-
-			SyncTransforms(); // ?
-			return;
-		}
-
-		if (m_tickFiberRunning)
-			return;
-
 		m_tickFiberRunning = true;
-
-		sched->SpawnFiber(
-			[this]()
-			{
-				try
-				{
-					uint32 burst = 0;
-					while (m_tickDebt > 0 && burst < m_tickBurstBudget)
-					{
-						--m_tickDebt;
-						ApplyInputs();
-						Simulate();
-						SyncActiveTransforms();
-						++burst;
-					}
-				}
-				catch (...)
-				{
-					m_tickFiberRunning = false;
-					throw;
-				}
-
-				m_tickFiberRunning = false;
-			},
-			FiberDesc{ .name = "ServerPhysics.TickFiber" }
-		);
+		try
+		{
+			ApplyInputs();
+			Simulate();
+			SyncActiveTransforms();
+			HandlePhysicsEvents();
+			++m_completedTickCount;
+		}
+		catch (...)
+		{
+			m_tickFiberRunning = false;
+			throw;
+		}
+		m_tickFiberRunning = false;
 	}
 
 	void ServerPhysicsSystem::SpawnActor(entt::entity e, const px::SpawnDesc& desc) const
@@ -114,8 +77,8 @@ namespace jam::net
 		if (!m_physics || !m_world.valid(e))
 			return;
 
-		const px::ObjectId oid = MakeObjectId(e);
-		if (!m_physics->Spawn(oid, desc)) 
+		const px::ActorId physicsActorId = GetPhysicsActorId(m_world, e);
+		if (!m_physics->Spawn(physicsActorId, desc))
 			return;
 
 		if (m_physics->IsStepPending())
@@ -131,21 +94,19 @@ namespace jam::net
 
 		if (auto* cs = m_world.try_get<CharAuthorityState>(e))
 		{
-			if (!TryReadValidatedCharacterState(m_physics, oid, cs->state))
+			if (!TryReadValidatedCharacterState(m_physics, physicsActorId, cs->state))
 			{
 				m_world.remove<PhysicsSpawnedTag>(e);
-
-				// todo
+				m_physics->Despawn(physicsActorId);
 				return;
 			}
 		}
 		else if (auto* rs = m_world.try_get<RigidAuthorityState>(e))
 		{
-			if (!TryReadValidatedRigidState(m_physics, oid, rs->state))
+			if (!TryReadValidatedRigidState(m_physics, physicsActorId, rs->state))
 			{
 				m_world.remove<PhysicsSpawnedTag>(e);
-				
-				//todo
+				m_physics->Despawn(physicsActorId);
 				return;
 			}
 		}
@@ -156,7 +117,7 @@ namespace jam::net
 		if (!m_physics || !m_world.valid(e))
 			return;
 
-		const px::ObjectId id = MakeObjectId(e);
+		const px::ActorId id = GetPhysicsActorId(m_world, e);
 		if (!m_physics->Despawn(id))
 			return;
 
@@ -174,14 +135,14 @@ namespace jam::net
 
 	void ServerPhysicsSystem::ApplyInputs() const
 	{
-		auto view = m_world.view<ControlTag, px::CharacterInput>();
+		auto view = m_world.view<ControlTag, px::CharacterMotorInput>();
 		auto* inputSys = m_world.ctx().find<ServerInputSystem>();
 
 		for (auto e : view)
 		{
 			const auto& control = view.get<ControlTag>(e);
-			auto& input = view.get<px::CharacterInput>(e);
-			m_physics->ApplyCharacterInput(MakeObjectId(e), input);
+			auto& input = view.get<px::CharacterMotorInput>(e);
+			m_physics->ApplyCharacterMotorInput(GetPhysicsActorId(m_world, e), input);
 
 			if (inputSys && control.userId != 0)
 				inputSys->MarkInputApplied(control.userId);
@@ -197,7 +158,8 @@ namespace jam::net
 
 		const bool inFiber = sched && (sched->Current() != 0);
 
-		const uint64 awaitKey = inFiber ? ++m_awaitSeq : 0;
+		auto* executor = static_cast<ShardExecutor*>(CurrentExecutor());
+		const uint64 awaitKey = inFiber && executor ? executor->AllocateAwaitKey() : 0;
 
 		// BeginStep이 true를 반환하면 PhysX Task가 Shard에 제출되었으므로 파이버를 Suspend 합니다.
 		if (m_physics->BeginSimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
@@ -206,7 +168,6 @@ namespace jam::net
 		// 파이버가 Resume 된 후 (또는 동기 실행 시) 결과를 가져옵니다.
 		m_physics->EndSimulate();
 		CommitPendingActorOps();
-		HandleProjectileLifecycleEvents();
 	}
 
 	void ServerPhysicsSystem::SyncActiveTransforms() const
@@ -223,9 +184,13 @@ namespace jam::net
 		px::CharacterState csBuf{};
 		px::RigidState	   rsBuf{};
 
-		for (const px::ObjectId id : activeList)
+		auto* nwPtr = m_world.ctx().find<ServerWorld*>();
+		if (!nwPtr || !*nwPtr)
+			return;
+
+		for (const px::ActorId id : activeList)
 		{
-			const entt::entity e = static_cast<entt::entity>(id);
+			const entt::entity e = (*nwPtr)->ResolveActor(ActorId(id));
 			if (e == entt::null || !m_world.valid(e)) continue;
 
 			if (auto* cs = m_world.try_get<CharAuthorityState>(e))
@@ -253,17 +218,17 @@ namespace jam::net
 	{
 		if (!m_physics) return;
 
-		auto view = m_world.view<NetId, NetActorBodyType, PhysicsSpawnedTag>();
+		auto view = m_world.view<ActorId, ActorBodyType, PhysicsSpawnedTag>();
 
 		for (auto e : view)
 		{
-			const px::ObjectId oid = MakeObjectId(e);
-			const auto bodyType = view.get<NetActorBodyType>(e).body;
+			const px::ActorId physicsActorId = GetPhysicsActorId(m_world, e);
+			const auto bodyType = view.get<ActorBodyType>(e).body;
 
 			if (bodyType == px::eBodyType::Character)
 			{
 				px::CharacterState cs{};
-				if (TryReadValidatedCharacterState(m_physics, oid, cs))
+				if (TryReadValidatedCharacterState(m_physics, physicsActorId, cs))
 				{
 					if (auto* state = m_world.try_get<CharAuthorityState>(e))
 						state->state = cs;
@@ -272,7 +237,7 @@ namespace jam::net
 			else
 			{
 				px::RigidState rs{};
-				if (TryReadValidatedRigidState(m_physics, oid, rs))
+				if (TryReadValidatedRigidState(m_physics, physicsActorId, rs))
 				{
 					if (auto* state = m_world.try_get<RigidAuthorityState>(e))
 						state->state = rs;
@@ -299,7 +264,7 @@ namespace jam::net
 			if (!m_world.valid(op.e))
 				continue;
 
-			const px::ObjectId oid = MakeObjectId(op.e);
+			const px::ActorId physicsActorId = GetPhysicsActorId(m_world, op.e);
 			m_world.emplace_or_replace<PhysicsSpawnedTag>(op.e);
 
 			switch (op.type)
@@ -309,7 +274,7 @@ namespace jam::net
 				bool spawned = false;
 				if (auto* cs = m_world.try_get<CharAuthorityState>(op.e))
 				{
-					if (TryReadValidatedCharacterState(m_physics, oid, csBuf))
+					if (TryReadValidatedCharacterState(m_physics, physicsActorId, csBuf))
 					{
 						cs->state = csBuf;
 						spawned = true;
@@ -319,7 +284,7 @@ namespace jam::net
 				}
 				else if (auto* rs = m_world.try_get<RigidAuthorityState>(op.e))
 				{
-					if (TryReadValidatedRigidState(m_physics, oid, rsBuf))
+					if (TryReadValidatedRigidState(m_physics, physicsActorId, rsBuf))
 					{
 						rs->state = rsBuf;
 						spawned = true;
@@ -332,7 +297,18 @@ namespace jam::net
 					m_world.remove<PhysicsSpawnedTag>(op.e);
 				}
 
-				if (spawned && aoi)
+				if (!spawned)
+				{
+					m_physics->Despawn(physicsActorId);
+					if (auto* serverWorld = m_world.ctx().find<ServerWorld*>(); serverWorld && *serverWorld)
+					{
+						if (const auto* actorId = m_world.try_get<ActorId>(op.e))
+							(*serverWorld)->DespawnActor(*actorId);
+					}
+					break;
+				}
+
+				if (aoi)
 					aoi->OnActorSpawned(op.e);
 				
 				break;
@@ -348,19 +324,20 @@ namespace jam::net
 		}
 	}
 
-	void ServerPhysicsSystem::HandleProjectileLifecycleEvents() const
+	void ServerPhysicsSystem::HandlePhysicsEvents() const
 	{
 		if (!m_physics)
 			return;
 
-		auto* nwPtr = m_world.ctx().find<ServerPhysicalWorld*>();
+		auto* nwPtr = m_world.ctx().find<ServerWorld*>();
 		if (!nwPtr || !*nwPtr)
 			return;
 
-		ServerPhysicalWorld* physicalWorld = *nwPtr;
+		ServerWorld* physicalWorld = *nwPtr;
 		std::unordered_set<uint32> pending;
+		const std::vector<px::PhysicsEvent> events = m_physics->ConsumePhysicsEvents();
 
-		for (const px::PhysicsEvent& evt : m_physics->ConsumePhysicsEvents())
+		for (const px::PhysicsEvent& evt : events)
 		{
 			if (evt.type != px::ePhysicsEventType::ProjectileHit
 				&& evt.type != px::ePhysicsEventType::ProjectileLifetimeExpired)
@@ -368,18 +345,20 @@ namespace jam::net
 				continue;
 			}
 
-			const entt::entity e = static_cast<entt::entity>(evt.sourceId);
+			const entt::entity e = physicalWorld->ResolveActor(ActorId(evt.sourceActorId));
 			if (e == entt::null || !m_world.valid(e))
 				continue;
 
-			const auto* netId = m_world.try_get<NetId>(e);
-			if (!netId || !netId->IsValid())
+			const auto* actorId = m_world.try_get<ActorId>(e);
+			if (!actorId || !actorId->IsValid())
 				continue;
 
-			if (!pending.insert(netId->Raw()).second)
+			if (!pending.insert(actorId->Value()).second)
 				continue;
 
-			physicalWorld->DespawnActorImmediate(*netId, 0);
+			physicalWorld->DespawnActor(*actorId);
 		}
+
+		physicalWorld->DispatchPhysicsEvents(events);
 	}
 }
