@@ -4,6 +4,7 @@
 #include "CodegenCommand.h"
 #include "SchemaDumpCommand.h"
 #include "ValidateCommand.h"
+#include "PhysicsAssetFlattenCommand.h"
 
 namespace 
 {
@@ -20,7 +21,8 @@ namespace
 			<< "  check-codegen - Verify generated code is up to date\n"
 			<< "  schema-dump - Dump parsed schema AST\n"
 			<< "  validate - Validate JSON documents against *.schema.json\n"
-			<< "  validate-schema - Validate schema authoring documents\n";
+			<< "  validate-schema - Validate schema authoring documents\n"
+			<< "  flatten-physics - Flatten Common and world-local physics sources\n";
 	}
 }
 
@@ -57,6 +59,11 @@ int main(int argc, char** argv)
 	if (command == "validate-schema")
 	{
 		return RunValidateSchemaCommand(argc - 2, argv + 2);
+	}
+
+	if (command == "flatten-physics")
+	{
+		return RunPhysicsAssetFlattenCommand(argc - 2, argv + 2);
 	}
 
 	if (command == "docs")

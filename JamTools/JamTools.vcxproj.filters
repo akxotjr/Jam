@@ -24,6 +24,9 @@
     <ClCompile Include="CommandUtils.cpp">
       <Filter>commands</Filter>
     </ClCompile>
+    <ClCompile Include="PhysicsAssetFlattenCommand.cpp">
+      <Filter>commands</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CodegenCommand.h">
@@ -36,6 +39,9 @@
       <Filter>commands</Filter>
     </ClInclude>
     <ClInclude Include="CommandUtils.h">
+      <Filter>commands</Filter>
+    </ClInclude>
+    <ClInclude Include="PhysicsAssetFlattenCommand.h">
       <Filter>commands</Filter>
     </ClInclude>
   </ItemGroup>
