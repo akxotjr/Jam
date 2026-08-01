@@ -1,0 +1,14 @@
+namespace jam.net.fb;
+
+enum fbSocialAudience : ubyte
+{
+	Direct = 0,
+	Group,
+	Global
+}
+
+struct fbSocialAddress
+{
+	audience : fbSocialAudience;
+	scope_id : ulong;
+}

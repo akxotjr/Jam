@@ -1,0 +1,18 @@
+namespace jam.net.fb;
+
+table fbBaselineAck
+{
+	actor_id       : uint;
+	baseline_rev : uint;
+	request_full : bool = false;
+}
+
+table fbBaselineAckBatch
+{
+	world_id          : ulong;
+	world_instance_id : ulong;
+	entries           : [fbBaselineAck];
+}
+
+root_type fbBaselineAckBatch;
+file_identifier "BACK";

@@ -10,6 +10,7 @@ table fbTcpBindRes
 	success		: bool;
 	account_id	: ulong;
 	user_id		: ulong;
+	session_id	: ulong;
 }
 
 table fbUdpBindReq
@@ -23,6 +24,7 @@ table fbUdpBindRes
 	success		: bool;
 	account_id	: ulong;
 	user_id		: ulong;
+	session_id	: ulong;
 }
 
 root_type fbTcpBindReq;

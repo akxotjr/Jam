@@ -1,0 +1,32 @@
+namespace jam.net.fb;
+
+enum fbLocomotionKind : ubyte
+{
+	Stop,
+	Directional,
+	MoveToPosition,
+	FollowActor,
+}
+
+table fbCharacterControlCommand
+{
+	world_id			: ulong;
+	sequence			: uint;
+	control_revision	: uint;
+	view_yaw			: float;
+	view_pitch			: float;
+	continuous_action_flags : uint;
+	edge_action_flags	: uint;
+	locomotion_kind		: fbLocomotionKind;
+	local_x				: float;
+	local_y				: float;
+	target_x			: float;
+	target_y			: float;
+	target_z			: float;
+	target_actor_id		: uint;
+	move_reference_yaw	: float;
+	view_policy			: ubyte;
+}
+
+root_type fbCharacterControlCommand;
+file_identifier "INPT";

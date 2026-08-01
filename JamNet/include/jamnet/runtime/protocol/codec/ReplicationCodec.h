@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "jamnet/sync/replication/BitBuffer.h"
+#include "jamnet/runtime/protocol/codec/BitBuffer.h"
 
 #include <jampx/PhysicsTypes.h>
 
@@ -47,7 +47,7 @@ namespace jam::net
 
 	struct CharacterReplicationConfig
 	{
-		// Full (128 bits)
+		// Full (160 bits)
 
 		static constexpr int32 POS_BITS = ReplicationConfig::POS_BITS;
 		static constexpr int32 YAW_BITS = 16;
@@ -58,13 +58,11 @@ namespace jam::net
 		static constexpr int32 SPEED_BITS = 10;
 		static constexpr float SPEED_MAX = ReplicationConfig::MAX_LIN_SPEED;
 
-		static constexpr int32 FLAGS_BITS_FULL = 14;
-
 		static constexpr int32 MOVE_DIR_BITS = 8;
-		static constexpr int32 FLAGS_BITS_FULL160 = 30;
-		static constexpr int32 FLAGS_BITS_DELTA128 = 30;
+		static constexpr int32 FLAGS_BITS_FULL160 = 14;
+		static constexpr int32 FLAGS_BITS_DELTA128 = 18;
 
-		// Delta (96 bits)
+		// Delta (128 bits)
 
 		static constexpr float DELTA_POS_RANGE = ReplicationConfig::DELTA_POS_RANGE;
 		static constexpr int32 DELTA_POS_BITS = ReplicationConfig::DELTA_POS_BITS;
@@ -75,7 +73,6 @@ namespace jam::net
 		static constexpr float DELTA_YAW_ABS_MAX = px::PI;
 		static constexpr float DELTA_PITCH_ABS_MAX = px::PI_DIV_TWO;
 
-		static constexpr int32 FLAGS_BITS_DELTA = 14;
 	};
 
 	inline uint64 ExtractBits64(uint64 v, int32 bitOffset, int32 bitCount)
@@ -593,12 +590,13 @@ namespace jam::net
 	 *
 	 *  -Layout (bit stream, LSB-first):
 	 *      - pos               (60 = 20 + 20 + 20)
-	 *      - facingYaw         (16)
-	 *      - facingPitch       (16)
+	 *      - bodyYaw           (16)
+	 *      - viewYaw           (16)
+	 *      - viewPitch         (16)
 	 *      - verticalSpeed     (12)
 	 *      - horizontalSpeed   (10)
 	 *      - moveDir           (16 = 8 + 8)
-	 *      - stateFlags        (30)
+	 *      - stateFlags        (14)
 	 */
 
 
@@ -613,8 +611,9 @@ namespace jam::net
 		const uint64 px     = static_cast<uint64>(detail::EncodeWorldPosX20(state.pos.x));
 		const uint64 py     = static_cast<uint64>(detail::EncodeWorldPosY20(state.pos.y));
 		const uint64 pz     = static_cast<uint64>(detail::EncodeWorldPosZ20(state.pos.z));
-		const uint64 yawQ   = static_cast<uint64>(detail::EncodeAngleYaw16Fast(state.facingYaw));
-		const uint64 pitchQ = static_cast<uint64>(detail::EncodeAnglePitch16Fast(state.facingPitch));
+		const uint64 bodyYawQ = static_cast<uint64>(detail::EncodeAngleYaw16Fast(state.bodyYaw));
+		const uint64 yawQ   = static_cast<uint64>(detail::EncodeAngleYaw16Fast(state.viewYaw));
+		const uint64 pitchQ = static_cast<uint64>(detail::EncodeAnglePitch16Fast(state.viewPitch));
 		const uint64 vyQ    = static_cast<uint64>(detail::EncodeVY12Fast(state.verticalSpeed));
 		const uint64 spdQ   = static_cast<uint64>(detail::EncodeSpeed10Fast(state.horizontalSpeed));
 		const uint64 mxQ    = static_cast<uint64>(detail::EncodeMoveDir8Fast(state.moveDir.x));
@@ -624,6 +623,7 @@ namespace jam::net
 		if (!packed.WriteBits(px, CharacterReplicationConfig::POS_BITS)
 			|| !packed.WriteBits(py,     CharacterReplicationConfig::POS_BITS)
 			|| !packed.WriteBits(pz,     CharacterReplicationConfig::POS_BITS)
+			|| !packed.WriteBits(bodyYawQ, CharacterReplicationConfig::YAW_BITS)
 			|| !packed.WriteBits(yawQ,   CharacterReplicationConfig::YAW_BITS)
 			|| !packed.WriteBits(pitchQ, CharacterReplicationConfig::PITCH_BITS)
 			|| !packed.WriteBits(vyQ,    CharacterReplicationConfig::VY_BITS)
@@ -645,6 +645,7 @@ namespace jam::net
 		uint64 pxQ64 = 0;
 		uint64 pyQ64 = 0;
 		uint64 pzQ64 = 0;
+		uint64 bodyYawQ64 = 0;
 		uint64 yawQ64 = 0;
 		uint64 pitchQ64 = 0;
 		uint64 vyQ64 = 0;
@@ -655,6 +656,7 @@ namespace jam::net
 		if (!packed.ReadBits(CharacterReplicationConfig::POS_BITS, pxQ64)
 			|| !packed.ReadBits(CharacterReplicationConfig::POS_BITS, pyQ64)
 			|| !packed.ReadBits(CharacterReplicationConfig::POS_BITS, pzQ64)
+			|| !packed.ReadBits(CharacterReplicationConfig::YAW_BITS, bodyYawQ64)
 			|| !packed.ReadBits(CharacterReplicationConfig::YAW_BITS, yawQ64)
 			|| !packed.ReadBits(CharacterReplicationConfig::PITCH_BITS, pitchQ64)
 			|| !packed.ReadBits(CharacterReplicationConfig::VY_BITS, vyQ64)
@@ -669,6 +671,7 @@ namespace jam::net
 		const uint32 pxQ    = static_cast<uint32>(pxQ64);
 		const uint32 pyQ    = static_cast<uint32>(pyQ64);
 		const uint32 pzQ    = static_cast<uint32>(pzQ64);
+		const uint32 bodyYawQ = static_cast<uint32>(bodyYawQ64);
 		const uint32 yawQ   = static_cast<uint32>(yawQ64);
 		const uint32 pitchQ = static_cast<uint32>(pitchQ64);
 		const uint32 vyQ    = static_cast<uint32>(vyQ64);
@@ -680,8 +683,9 @@ namespace jam::net
 		state.pos.x           = detail::DecodeWorldPosX20(pxQ);
 		state.pos.y           = detail::DecodeWorldPosY20(pyQ);
 		state.pos.z           = detail::DecodeWorldPosZ20(pzQ);
-		state.facingYaw       = detail::DecodeAngleYaw16Fast(yawQ);
-		state.facingPitch     = detail::DecodeAnglePitch16Fast(pitchQ);
+		state.bodyYaw       = detail::DecodeAngleYaw16Fast(bodyYawQ);
+		state.viewYaw       = detail::DecodeAngleYaw16Fast(yawQ);
+		state.viewPitch     = detail::DecodeAnglePitch16Fast(pitchQ);
 		state.verticalSpeed   = detail::DecodeVY12Fast(vyQ);
 		state.horizontalSpeed = detail::DecodeSpeed10Fast(spdQ);
 		state.moveDir.x       = detail::DecodeMoveDir8Fast(mxQ);
@@ -700,21 +704,23 @@ namespace jam::net
 	 *
 	 *  -Layout (bit stream, LSB-first):
 	 *      - delta pos               (36 = 12 + 12 + 12)
-	 *      - delta facingYaw         (12)
-	 *      - delta facingPitch       (12)
+	 *      - delta bodyYaw           (12)
+	 *      - delta viewYaw           (12)
+	 *      - delta viewPitch         (12)
 	 *      - verticalSpeed           (12)
 	 *      - horizontalSpeed         (10)
 	 *      - moveDir                 (16 = 8 + 8)
-	 *      - stateFlags              (30)
+	 *      - stateFlags              (18)
 	 */
 
 
 	using PackedCharDelta128 = BitBuffer<uint64, 2>;
 
-	inline bool PackCharacterDelta128(const px::Vec3& baselinePos, float baselineYaw, float baselinePitch, const px::CharacterState& state, OUT PackedCharDelta128& packed)
+	inline bool PackCharacterDelta128(const px::Vec3& baselinePos, float baselineBodyYaw, float baselineViewYaw, float baselinePitch, const px::CharacterState& state, OUT PackedCharDelta128& packed)
 	{
 		JAM_ASSERT_MSG(baselinePos.IsFinite(),       "PackCharacterDelta128() expects finite baseline position");
-		JAM_ASSERT_MSG(std::isfinite(baselineYaw),   "PackCharacterDelta128() expects finite baseline yaw");
+		JAM_ASSERT_MSG(std::isfinite(baselineBodyYaw), "PackCharacterDelta128() expects finite baseline body yaw");
+		JAM_ASSERT_MSG(std::isfinite(baselineViewYaw), "PackCharacterDelta128() expects finite baseline view yaw");
 		JAM_ASSERT_MSG(std::isfinite(baselinePitch), "PackCharacterDelta128() expects finite baseline pitch");
 		JAM_ASSERT_MSG(state.IsFinite(),             "PackCharacterDelta128() expects validated finite authoritative state");
 
@@ -729,12 +735,14 @@ namespace jam::net
 			return false;
 		}
 
-		const float dyaw     = WrapPi(state.facingYaw - baselineYaw);
-		const float dpitch   = ClampFloat(state.facingPitch - baselinePitch, -px::PI_DIV_TWO, px::PI_DIV_TWO);
+		const float dbodyYaw = WrapPi(state.bodyYaw - baselineBodyYaw);
+		const float dyaw     = WrapPi(state.viewYaw - baselineViewYaw);
+		const float dpitch   = ClampFloat(state.viewPitch - baselinePitch, -px::PI_DIV_TWO, px::PI_DIV_TWO);
 
 		const uint64 dxQ     = static_cast<uint64>(detail::EncodeDeltaPos12(dp.x));
 		const uint64 dyQ     = static_cast<uint64>(detail::EncodeDeltaPos12(dp.y));
 		const uint64 dzQ     = static_cast<uint64>(detail::EncodeDeltaPos12(dp.z));
+		const uint64 dbodyYawQ = static_cast<uint64>(detail::EncodeDeltaYaw12Fast(dbodyYaw));
 		const uint64 dyawQ   = static_cast<uint64>(detail::EncodeDeltaYaw12Fast(dyaw));
 		const uint64 dpitchQ = static_cast<uint64>(detail::EncodeDeltaPitch12Fast(dpitch));
 		const uint64 vyQ     = static_cast<uint64>(detail::EncodeVY12Fast(state.verticalSpeed));
@@ -746,6 +754,7 @@ namespace jam::net
 		if (!packed.WriteBits(dxQ, CharacterReplicationConfig::DELTA_POS_BITS)
 			|| !packed.WriteBits(dyQ, CharacterReplicationConfig::DELTA_POS_BITS)
 			|| !packed.WriteBits(dzQ, CharacterReplicationConfig::DELTA_POS_BITS)
+			|| !packed.WriteBits(dbodyYawQ, CharacterReplicationConfig::DELTA_YAW_BITS)
 			|| !packed.WriteBits(dyawQ, CharacterReplicationConfig::DELTA_YAW_BITS)
 			|| !packed.WriteBits(dpitchQ, CharacterReplicationConfig::DELTA_PITCH_BITS)
 			|| !packed.WriteBits(vyQ, CharacterReplicationConfig::VY_BITS)
@@ -760,16 +769,18 @@ namespace jam::net
 		return (packed.Cursor() == 128);
 	}
 
-	inline bool UnpackCharacterDelta128(const px::Vec3& baselinePos, float baselineFacingYaw, float baselineFacingPitch, uint64 packed0, uint64 packed1, OUT px::CharacterState& state)
+	inline bool UnpackCharacterDelta128(const px::Vec3& baselinePos, float baselineBodyYaw, float baselineViewYaw, float baselinePitch, uint64 packed0, uint64 packed1, OUT px::CharacterState& state)
 	{
-		JAM_ASSERT_MSG(baselinePos.IsFinite(),             "UnpackCharacterDelta128() expects finite baseline position");
-		JAM_ASSERT_MSG(std::isfinite(baselineFacingYaw),   "UnpackCharacterDelta128() expects finite baseline yaw");
-		JAM_ASSERT_MSG(std::isfinite(baselineFacingPitch), "UnpackCharacterDelta128() expects finite baseline yaw");
+		JAM_ASSERT_MSG(baselinePos.IsFinite(),       "UnpackCharacterDelta128() expects finite baseline position");
+		JAM_ASSERT_MSG(std::isfinite(baselineBodyYaw), "UnpackCharacterDelta128() expects finite baseline body yaw");
+		JAM_ASSERT_MSG(std::isfinite(baselineViewYaw), "UnpackCharacterDelta128() expects finite baseline view yaw");
+		JAM_ASSERT_MSG(std::isfinite(baselinePitch), "UnpackCharacterDelta128() expects finite baseline yaw");
 
 		BitBuffer<uint64, 2> buffer(std::array<uint64, 2>{ packed0, packed1 });
 		uint64 dxQ64	 = 0;
 		uint64 dyQ64	 = 0;
 		uint64 dzQ64	 = 0;
+		uint64 dbodyYawQ64 = 0;
 		uint64 dyawQ64	 = 0;
 		uint64 dpitchQ64 = 0;
 		uint64 vyQ64	 = 0;
@@ -780,6 +791,7 @@ namespace jam::net
 		if (!buffer.ReadBits(CharacterReplicationConfig::DELTA_POS_BITS, dxQ64)
 			|| !buffer.ReadBits(CharacterReplicationConfig::DELTA_POS_BITS, dyQ64)
 			|| !buffer.ReadBits(CharacterReplicationConfig::DELTA_POS_BITS, dzQ64)
+			|| !buffer.ReadBits(CharacterReplicationConfig::DELTA_YAW_BITS, dbodyYawQ64)
 			|| !buffer.ReadBits(CharacterReplicationConfig::DELTA_YAW_BITS, dyawQ64)
 			|| !buffer.ReadBits(CharacterReplicationConfig::DELTA_PITCH_BITS, dpitchQ64)
 			|| !buffer.ReadBits(CharacterReplicationConfig::VY_BITS, vyQ64)
@@ -794,6 +806,7 @@ namespace jam::net
 		const uint32 dxQ     = static_cast<uint32>(dxQ64);
 		const uint32 dyQ     = static_cast<uint32>(dyQ64);
 		const uint32 dzQ     = static_cast<uint32>(dzQ64);
+		const uint32 dbodyYawQ = static_cast<uint32>(dbodyYawQ64);
 		const uint32 dyawQ   = static_cast<uint32>(dyawQ64);
 		const uint32 dpitchQ = static_cast<uint32>(dpitchQ64);
 		const uint32 vyQ     = static_cast<uint32>(vyQ64);
@@ -807,8 +820,9 @@ namespace jam::net
 			detail::DecodeDeltaPos12(dyQ),
 			detail::DecodeDeltaPos12(dzQ));
 
-		state.facingYaw       = WrapPi(baselineFacingYaw + detail::DecodeDeltaYaw12Fast(dyawQ));
-		state.facingPitch     = WrapPiHalf(baselineFacingPitch + detail::DecodeDeltaPitch12Fast(dpitchQ));
+		state.bodyYaw		  = WrapPi(baselineBodyYaw + detail::DecodeDeltaYaw12Fast(dbodyYawQ));
+		state.viewYaw		  = WrapPi(baselineViewYaw + detail::DecodeDeltaYaw12Fast(dyawQ));
+		state.viewPitch		  = WrapPiHalf(baselinePitch + detail::DecodeDeltaPitch12Fast(dpitchQ));
 		state.verticalSpeed   = detail::DecodeVY12Fast(vyQ);
 		state.horizontalSpeed = detail::DecodeSpeed10Fast(spdQ);
 		state.moveDir.x       = detail::DecodeMoveDir8Fast(mxQ);

@@ -1,0 +1,121 @@
+include "physics_type.fbs";
+include "snapshot.fbs";
+
+namespace jam.net.fb;
+
+
+
+// UDP: 일반 actor 생성. World runtime identity와 membership만 검증한다.
+table fbSpawnActorReq
+{
+	world_id				: ulong;
+	world_instance_id		: ulong;
+	client_request_id		: uint;
+	owner_user_id			: ulong;
+	controller_user_id		: ulong;
+
+	actor_archetype_key		: ulong;
+	pos						: fbVec3;
+	rot						: fbQuat;
+	spawn_src				: uint;		// 0 : level, 1: runtime, 2: network, 3: tool
+	team_id					: uint;
+	part_id					: uint;
+	role_id					: uint;
+	
+	override_mask 			: uint;		// bitmask for override fields below
+	linear_vel				: fbVec3;
+	angular_vel				: fbVec3;
+	linear_damping			: float;
+	angular_damping			: float;
+	yaw						: float;
+	pitch					: float;
+
+	target_actor_id			: uint;
+}
+
+enum fbSpawnActorFailure : byte
+{
+	None,
+	InvalidCorrelation,
+	StaleRevision,
+	AlreadySpawned,
+	SpawnFailed
+}
+
+table fbSpawnActorRes
+{
+	success				: bool;
+	failure				: fbSpawnActorFailure;
+	client_request_id	: uint;
+	actor_id				: uint;
+}
+
+// TCP: Main 적용 상태를 증명한 user의 player 생성만 허용한다.
+table fbSpawnPlayerReq
+{
+	world_id				: ulong;
+	world_instance_id		: ulong;
+	expected_main_revision	: ulong;
+	client_request_id		: uint;
+	actor_archetype_key		: ulong;
+	pos						: fbVec3;
+	rot						: fbQuat;
+	spawn_src					: uint;
+	team_id					: uint;
+	part_id					: uint;
+	role_id					: uint;
+	override_mask 				: uint;
+	linear_vel					: fbVec3;
+	angular_vel					: fbVec3;
+	linear_damping				: float;
+	angular_damping				: float;
+	yaw						: float;
+	pitch						: float;
+	target_actor_id				: uint;
+}
+
+enum fbSpawnPlayerFailure : byte
+{
+	None,
+	InvalidCorrelation,
+	StaleRevision,
+	AlreadySpawned,
+	SpawnFailed
+}
+
+table fbSpawnPlayerRes
+{
+	success				: bool;
+	failure				: fbSpawnPlayerFailure;
+	client_request_id	: uint;
+	actor_id				: uint;
+}
+
+table fbDespawnActorReq
+{
+	world_id			: ulong;
+	world_instance_id	: ulong;
+	actor_id				: uint;
+}
+
+table fbDespawnActorRes
+{
+	success				: bool;
+}
+
+// TCP: player 소유권과 Main revision을 검증한 뒤 controlled player를 제거한다.
+table fbDespawnPlayerReq
+{
+	world_id				: ulong;
+	world_instance_id		: ulong;
+	expected_main_revision	: ulong;
+	actor_id					: uint;
+}
+
+table fbDespawnPlayerRes
+{
+	success				: bool;
+}
+
+root_type fbSpawnPlayerReq;
+file_identifier "SPLY";

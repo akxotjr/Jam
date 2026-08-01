@@ -91,6 +91,7 @@ struct fbTcpBindResT : public ::flatbuffers::NativeTable {
   bool success = false;
   uint64_t account_id = 0;
   uint64_t user_id = 0;
+  uint64_t session_id = 0;
 };
 
 struct fbTcpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -99,7 +100,8 @@ struct fbTcpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_SUCCESS = 4,
     VT_ACCOUNT_ID = 6,
-    VT_USER_ID = 8
+    VT_USER_ID = 8,
+    VT_SESSION_ID = 10
   };
   bool success() const {
     return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
@@ -110,12 +112,16 @@ struct fbTcpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
+  uint64_t session_id() const {
+    return GetField<uint64_t>(VT_SESSION_ID, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            VerifyField<uint64_t>(verifier, VT_ACCOUNT_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
+           VerifyField<uint64_t>(verifier, VT_SESSION_ID, 8) &&
            verifier.EndTable();
   }
   fbTcpBindResT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -136,6 +142,9 @@ struct fbTcpBindResBuilder {
   void add_user_id(uint64_t user_id) {
     fbb_.AddElement<uint64_t>(fbTcpBindRes::VT_USER_ID, user_id, 0);
   }
+  void add_session_id(uint64_t session_id) {
+    fbb_.AddElement<uint64_t>(fbTcpBindRes::VT_SESSION_ID, session_id, 0);
+  }
   explicit fbTcpBindResBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -151,8 +160,10 @@ inline ::flatbuffers::Offset<fbTcpBindRes> CreatefbTcpBindRes(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     bool success = false,
     uint64_t account_id = 0,
-    uint64_t user_id = 0) {
+    uint64_t user_id = 0,
+    uint64_t session_id = 0) {
   fbTcpBindResBuilder builder_(_fbb);
+  builder_.add_session_id(session_id);
   builder_.add_user_id(user_id);
   builder_.add_account_id(account_id);
   builder_.add_success(success);
@@ -230,6 +241,7 @@ struct fbUdpBindResT : public ::flatbuffers::NativeTable {
   bool success = false;
   uint64_t account_id = 0;
   uint64_t user_id = 0;
+  uint64_t session_id = 0;
 };
 
 struct fbUdpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -238,7 +250,8 @@ struct fbUdpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_SUCCESS = 4,
     VT_ACCOUNT_ID = 6,
-    VT_USER_ID = 8
+    VT_USER_ID = 8,
+    VT_SESSION_ID = 10
   };
   bool success() const {
     return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
@@ -249,12 +262,16 @@ struct fbUdpBindRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t user_id() const {
     return GetField<uint64_t>(VT_USER_ID, 0);
   }
+  uint64_t session_id() const {
+    return GetField<uint64_t>(VT_SESSION_ID, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
            VerifyField<uint64_t>(verifier, VT_ACCOUNT_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_USER_ID, 8) &&
+           VerifyField<uint64_t>(verifier, VT_SESSION_ID, 8) &&
            verifier.EndTable();
   }
   fbUdpBindResT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -275,6 +292,9 @@ struct fbUdpBindResBuilder {
   void add_user_id(uint64_t user_id) {
     fbb_.AddElement<uint64_t>(fbUdpBindRes::VT_USER_ID, user_id, 0);
   }
+  void add_session_id(uint64_t session_id) {
+    fbb_.AddElement<uint64_t>(fbUdpBindRes::VT_SESSION_ID, session_id, 0);
+  }
   explicit fbUdpBindResBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -290,8 +310,10 @@ inline ::flatbuffers::Offset<fbUdpBindRes> CreatefbUdpBindRes(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     bool success = false,
     uint64_t account_id = 0,
-    uint64_t user_id = 0) {
+    uint64_t user_id = 0,
+    uint64_t session_id = 0) {
   fbUdpBindResBuilder builder_(_fbb);
+  builder_.add_session_id(session_id);
   builder_.add_user_id(user_id);
   builder_.add_account_id(account_id);
   builder_.add_success(success);
@@ -338,6 +360,7 @@ inline void fbTcpBindRes::UnPackTo(fbTcpBindResT *_o, const ::flatbuffers::resol
   { auto _e = success(); _o->success = _e; }
   { auto _e = account_id(); _o->account_id = _e; }
   { auto _e = user_id(); _o->user_id = _e; }
+  { auto _e = session_id(); _o->session_id = _e; }
 }
 
 inline ::flatbuffers::Offset<fbTcpBindRes> CreatefbTcpBindRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbTcpBindResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -351,11 +374,13 @@ inline ::flatbuffers::Offset<fbTcpBindRes> fbTcpBindRes::Pack(::flatbuffers::Fla
   auto _success = _o->success;
   auto _account_id = _o->account_id;
   auto _user_id = _o->user_id;
+  auto _session_id = _o->session_id;
   return jam::net::fb::CreatefbTcpBindRes(
       _fbb,
       _success,
       _account_id,
-      _user_id);
+      _user_id,
+      _session_id);
 }
 
 inline fbUdpBindReqT *fbUdpBindReq::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -399,6 +424,7 @@ inline void fbUdpBindRes::UnPackTo(fbUdpBindResT *_o, const ::flatbuffers::resol
   { auto _e = success(); _o->success = _e; }
   { auto _e = account_id(); _o->account_id = _e; }
   { auto _e = user_id(); _o->user_id = _e; }
+  { auto _e = session_id(); _o->session_id = _e; }
 }
 
 inline ::flatbuffers::Offset<fbUdpBindRes> CreatefbUdpBindRes(::flatbuffers::FlatBufferBuilder &_fbb, const fbUdpBindResT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -412,11 +438,13 @@ inline ::flatbuffers::Offset<fbUdpBindRes> fbUdpBindRes::Pack(::flatbuffers::Fla
   auto _success = _o->success;
   auto _account_id = _o->account_id;
   auto _user_id = _o->user_id;
+  auto _session_id = _o->session_id;
   return jam::net::fb::CreatefbUdpBindRes(
       _fbb,
       _success,
       _account_id,
-      _user_id);
+      _user_id,
+      _session_id);
 }
 
 inline const jam::net::fb::fbTcpBindReq *GetfbTcpBindReq(const void *buf) {

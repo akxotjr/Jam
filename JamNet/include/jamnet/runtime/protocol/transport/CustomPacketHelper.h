@@ -1,10 +1,12 @@
 #pragma once
 
 #include "jamnet/core/net/PacketBuilder.h"
-#include "jamnet/runtime/world/types/WorldActionTypes.h"
-#include "jamnet/sync/schema/gen/input_generated.h"
-#include "jamnet/sync/schema/gen/lifecycle_generated.h"
-#include "jamnet/sync/schema/gen/snapshot_generated.h"
+#include "jamnet/runtime/world/lifecycle/WorldIdentity.h"
+#include "jamnet/runtime/protocol/schema/gen/world_assignment_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/input_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/lifecycle_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/snapshot_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/baseline_ack_generated.h"
 
 namespace jam::net
 {
@@ -27,15 +29,26 @@ namespace jam::net
 		// 프레임워크 예약 ID (JamNetSync 전용)
 		// ============================================================
 
-		constexpr uint8 NONE            = 0;   // 미사용
-		constexpr uint8 NOTIFICATION    = 1;   // 서버 푸시 알림 (애플리케이션에서 구현)
-		constexpr uint8 SNAPSHOT        = 2;   // 게임 스냅샷 (JamNetSync 내부용)
-		constexpr uint8 INPUT           = 3;   // 클라이언트 입력 (JamNetSync 내부용)
-		constexpr uint8 LIFECYCLE       = 4;   // 생성/삭제/메타 복제
-		constexpr uint8 WORLD_ASSIGNMENT = 5;  // 월드 할당/전이 결과 푸시
+		constexpr uint8 NONE					= 0;   // 미사용
+		constexpr uint8 NOTIFICATION			= 1;   // 서버 푸시 알림 (애플리케이션에서 구현)
+		constexpr uint8 SNAPSHOT				= 2;   // 게임 스냅샷 (JamNetSync 내부용)
+		constexpr uint8 INPUT					= 3;   // 클라이언트 입력 (JamNetSync 내부용)
+		constexpr uint8 LIFECYCLE				= 4;   // 생성/삭제/메타 복제
+		constexpr uint8 USER_MAIN_WORLD_CHANGED = 5;
+		constexpr uint8 CLIENT_WORLD_PREPARE	= 6;
+		constexpr uint8 CLIENT_WORLD_COMMIT		= 7;
+		constexpr uint8 CLIENT_BARRIER_RESULT	= 8;
+		constexpr uint8 BASELINE_ACK			= 9;
+		constexpr uint8 ENTER_WORLD_REQUEST		= 10;
+		constexpr uint8 LEAVE_WORLD_REQUEST		= 11;
+		constexpr uint8 WORLD_TRANSITION_RESULT = 12;
+
+		constexpr uint8 SOCIAL_COMMAND			= 13;   // client -> server (implementation in application layer)
+		constexpr uint8 SOCIAL_EVENT			= 14;   // server -> client (implementation in application layer)
+
 		constexpr uint8 CONTROL         = LIFECYCLE;   // 하위 호환 별칭
 
-		// 6-15: 향후 프레임워크 확장용 예약
+		// 13-15: 향후 프레임워크 확장용 예약
 	}
 
 	// ============================================================
@@ -79,40 +92,48 @@ namespace jam::net
 	inline void ValidateCustomPacketId(uint8, bool) { /* No-op in release */ }
 #endif
 
-	inline NetWorldId ResolveScopedPacketWorldId(const PacketHeaderView& view)
+	inline WorldId ResolveScopedPacketWorldId(const PacketHeaderView& view)
 	{
 		if (!view.IsValid())
-			return kInvalidNetWorldId;
+			return kInvalidWorldId;
 
 		flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
 		switch (view.Id())
 		{
 		case CustomPacketId::INPUT:
 		{
-			if (!fb::VerifyfbGameInputBuffer(verifier))
-				return kInvalidNetWorldId;
-			if (const auto* input = fb::GetfbGameInput(view.Payload()))
+			if (!fb::VerifyfbCharacterControlCommandBuffer(verifier))
+				return kInvalidWorldId;
+			if (const auto* input = fb::GetfbCharacterControlCommand(view.Payload()))
 				return input->world_id();
-			return kInvalidNetWorldId;
+			return kInvalidWorldId;
 		}
 		case CustomPacketId::SNAPSHOT:
 		{
 			if (!fb::VerifyfbSnapshotBuffer(verifier))
-				return kInvalidNetWorldId;
+				return kInvalidWorldId;
 			if (const auto* snapshot = fb::GetfbSnapshot(view.Payload()))
 				return snapshot->world_id();
-			return kInvalidNetWorldId;
+			return kInvalidWorldId;
 		}
 		case CustomPacketId::LIFECYCLE:
 		{
 			if (!fb::VerifyfbLifecycleBatchBuffer(verifier))
-				return kInvalidNetWorldId;
+				return kInvalidWorldId;
 			if (const auto* lifecycle = fb::GetfbLifecycleBatch(view.Payload()))
 				return lifecycle->world_id();
-			return kInvalidNetWorldId;
+			return kInvalidWorldId;
+		}
+		case CustomPacketId::BASELINE_ACK:
+		{
+			if (!fb::VerifyfbBaselineAckBatchBuffer(verifier))
+				return kInvalidWorldId;
+			if (const auto* ack = fb::GetfbBaselineAckBatch(view.Payload()))
+				return ack->world_id();
+			return kInvalidWorldId;
 		}
 		default:
-			return kInvalidNetWorldId;
+			return kInvalidWorldId;
 		}
 	}
 }

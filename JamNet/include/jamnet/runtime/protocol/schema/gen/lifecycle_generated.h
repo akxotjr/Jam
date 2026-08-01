@@ -63,7 +63,7 @@ inline const char *EnumNamefbLifecycleOp(fbLifecycleOp e) {
 struct fbLifecycleActorT : public ::flatbuffers::NativeTable {
   typedef fbLifecycleActor TableType;
   jam::net::fb::fbLifecycleOp op = jam::net::fb::fbLifecycleOp_Create;
-  uint32_t net_id = 0;
+  uint32_t actor_id = 0;
   std::unique_ptr<jam::net::fb::fbActorMetaT> meta{};
   jam::net::fb::fbRemovalReason remove_reason = jam::net::fb::fbRemovalReason_AoiLeft;
   fbLifecycleActorT() = default;
@@ -77,15 +77,15 @@ struct fbLifecycleActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbLifecycleActorBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_OP = 4,
-    VT_NET_ID = 6,
+    VT_ACTOR_ID = 6,
     VT_META = 8,
     VT_REMOVE_REASON = 10
   };
   jam::net::fb::fbLifecycleOp op() const {
     return static_cast<jam::net::fb::fbLifecycleOp>(GetField<uint8_t>(VT_OP, 0));
   }
-  uint32_t net_id() const {
-    return GetField<uint32_t>(VT_NET_ID, 0);
+  uint32_t actor_id() const {
+    return GetField<uint32_t>(VT_ACTOR_ID, 0);
   }
   const jam::net::fb::fbActorMeta *meta() const {
     return GetPointer<const jam::net::fb::fbActorMeta *>(VT_META);
@@ -97,7 +97,7 @@ struct fbLifecycleActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_OP, 1) &&
-           VerifyField<uint32_t>(verifier, VT_NET_ID, 4) &&
+           VerifyField<uint32_t>(verifier, VT_ACTOR_ID, 4) &&
            VerifyOffset(verifier, VT_META) &&
            verifier.VerifyTable(meta()) &&
            VerifyField<uint8_t>(verifier, VT_REMOVE_REASON, 1) &&
@@ -115,8 +115,8 @@ struct fbLifecycleActorBuilder {
   void add_op(jam::net::fb::fbLifecycleOp op) {
     fbb_.AddElement<uint8_t>(fbLifecycleActor::VT_OP, static_cast<uint8_t>(op), 0);
   }
-  void add_net_id(uint32_t net_id) {
-    fbb_.AddElement<uint32_t>(fbLifecycleActor::VT_NET_ID, net_id, 0);
+  void add_actor_id(uint32_t actor_id) {
+    fbb_.AddElement<uint32_t>(fbLifecycleActor::VT_ACTOR_ID, actor_id, 0);
   }
   void add_meta(::flatbuffers::Offset<jam::net::fb::fbActorMeta> meta) {
     fbb_.AddOffset(fbLifecycleActor::VT_META, meta);
@@ -138,12 +138,12 @@ struct fbLifecycleActorBuilder {
 inline ::flatbuffers::Offset<fbLifecycleActor> CreatefbLifecycleActor(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     jam::net::fb::fbLifecycleOp op = jam::net::fb::fbLifecycleOp_Create,
-    uint32_t net_id = 0,
+    uint32_t actor_id = 0,
     ::flatbuffers::Offset<jam::net::fb::fbActorMeta> meta = 0,
     jam::net::fb::fbRemovalReason remove_reason = jam::net::fb::fbRemovalReason_AoiLeft) {
   fbLifecycleActorBuilder builder_(_fbb);
   builder_.add_meta(meta);
-  builder_.add_net_id(net_id);
+  builder_.add_actor_id(actor_id);
   builder_.add_remove_reason(remove_reason);
   builder_.add_op(op);
   return builder_.Finish();
@@ -247,14 +247,14 @@ inline ::flatbuffers::Offset<fbLifecycleBatch> CreatefbLifecycleBatchDirect(
 
 inline fbLifecycleActorT::fbLifecycleActorT(const fbLifecycleActorT &o)
       : op(o.op),
-        net_id(o.net_id),
+        actor_id(o.actor_id),
         meta((o.meta) ? new jam::net::fb::fbActorMetaT(*o.meta) : nullptr),
         remove_reason(o.remove_reason) {
 }
 
 inline fbLifecycleActorT &fbLifecycleActorT::operator=(fbLifecycleActorT o) FLATBUFFERS_NOEXCEPT {
   std::swap(op, o.op);
-  std::swap(net_id, o.net_id);
+  std::swap(actor_id, o.actor_id);
   std::swap(meta, o.meta);
   std::swap(remove_reason, o.remove_reason);
   return *this;
@@ -270,7 +270,7 @@ inline void fbLifecycleActor::UnPackTo(fbLifecycleActorT *_o, const ::flatbuffer
   (void)_o;
   (void)_resolver;
   { auto _e = op(); _o->op = _e; }
-  { auto _e = net_id(); _o->net_id = _e; }
+  { auto _e = actor_id(); _o->actor_id = _e; }
   { auto _e = meta(); if (_e) { if(_o->meta) { _e->UnPackTo(_o->meta.get(), _resolver); } else { _o->meta = std::unique_ptr<jam::net::fb::fbActorMetaT>(_e->UnPack(_resolver)); } } else if (_o->meta) { _o->meta.reset(); } }
   { auto _e = remove_reason(); _o->remove_reason = _e; }
 }
@@ -284,13 +284,13 @@ inline ::flatbuffers::Offset<fbLifecycleActor> fbLifecycleActor::Pack(::flatbuff
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbLifecycleActorT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _op = _o->op;
-  auto _net_id = _o->net_id;
+  auto _actor_id = _o->actor_id;
   auto _meta = _o->meta ? CreatefbActorMeta(_fbb, _o->meta.get(), _rehasher) : 0;
   auto _remove_reason = _o->remove_reason;
   return jam::net::fb::CreatefbLifecycleActor(
       _fbb,
       _op,
-      _net_id,
+      _actor_id,
       _meta,
       _remove_reason);
 }

@@ -1,0 +1,107 @@
+namespace jam.net.fb;
+
+enum fbWorldDestinationSelector : ubyte
+{
+	DefaultForArchetype = 0,
+	ExplicitInstance = 1,
+	AuthoredDestination = 2
+}
+
+enum fbWorldTransitionFailure : ubyte
+{
+	None = 0,
+	InvalidRequest,
+	StaleRevision,
+	DestinationUnavailable,
+	CapacityExceeded,
+	ClientPrepareFailed,
+	Timeout,
+	Disconnected,
+	RuntimeDestroyed,
+	InternalError
+}
+
+enum fbWorldTransitionKind : ubyte
+{
+	Enter = 0,
+	Leave
+}
+
+enum fbClientServerBarrierKind : ubyte
+{
+	WorldPrepare = 0,
+	WorldResync,
+	ReplicationBaseline,
+	WorldContent
+}
+
+table fbMainPhysicalWorld
+{
+	instance_id: ulong;
+	archetype_key: ulong;
+	runtime_id: ulong;
+}
+
+table fbUserMainPhysicalWorldState
+{
+	main: fbMainPhysicalWorld;
+	revision: ulong;
+}
+
+table fbEnterWorldRequest
+{
+	request_id: uint;
+	archetype_key: ulong;
+	selector: fbWorldDestinationSelector = DefaultForArchetype;
+	explicit_instance_id: ulong;
+	destination_name: string;
+	expected_main_revision: ulong;
+}
+
+table fbLeaveWorldRequest
+{
+	request_id: uint;
+	expected_main_revision: ulong;
+}
+
+table fbWorldTransitionResult
+{
+	request_id: uint;
+	kind: fbWorldTransitionKind = Enter;
+	transition_token: ulong;
+	failure: fbWorldTransitionFailure = None;
+	state: fbUserMainPhysicalWorldState;
+}
+
+table fbUserMainPhysicalWorldChanged
+{
+	state: fbUserMainPhysicalWorldState;
+}
+
+table fbClientWorldPrepare
+{
+	barrier_token: ulong;
+	kind: fbClientServerBarrierKind = WorldPrepare;
+	instance_id: ulong;
+	archetype_key: ulong;
+	runtime_id: ulong;
+	main_revision: ulong;
+	content_revision: ulong;
+}
+
+table fbClientBarrierResult
+{
+	barrier_token: ulong;
+	succeeded: bool;
+	failure: fbWorldTransitionFailure = None;
+}
+
+table fbClientWorldCommit
+{
+	barrier_token: ulong;
+	instance_id: ulong;
+	runtime_id: ulong;
+	main_revision: ulong;
+}
+
+root_type fbEnterWorldRequest;

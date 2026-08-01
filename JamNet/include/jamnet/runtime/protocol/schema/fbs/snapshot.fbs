@@ -61,7 +61,7 @@ enum fbRemovalReason : ubyte
 
 table fbRemovedActor
 {
-	net_id				: uint;
+	actor_id				: uint;
 	reason				: fbRemovalReason = AoiLeft;
 }
 
@@ -85,7 +85,7 @@ table fbActorMeta
 	owner_user_id		: ulong = 0;		
 	controller_user_id	: ulong = 0;		
 	actor_archetype_key	: ulong = 0;
-	spawn_req_id		: uint  = 0;
+	client_request_id	: uint  = 0;
 	packed_id			: uint  = 0;	// team(16) / part(8) / role (8)
 	body_type			: ubyte = 0;
 }
@@ -93,7 +93,7 @@ table fbActorMeta
 
 table fbActorEntity
 {
-	net_id				: uint;
+	actor_id				: uint;
 	baseline_rev		: uint;
 
 	transform_full		: fbTransformFull;

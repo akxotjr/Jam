@@ -1,0 +1,15 @@
+include "social_types.fbs";
+
+namespace jam.net.fb;
+
+table fbSocialMessage
+{
+	message_id	: ulong;
+	sender		: ulong;
+	destination	: fbSocialAddress;
+	content_type	: ushort;
+	payload		: [ubyte];
+}
+
+root_type fbSocialMessage;
+file_identifier "SMSG";

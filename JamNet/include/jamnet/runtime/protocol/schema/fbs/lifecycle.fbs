@@ -12,7 +12,7 @@ enum fbLifecycleOp : ubyte
 table fbLifecycleActor
 {
 	op				: fbLifecycleOp = Create;
-	net_id			: uint;
+	actor_id			: uint;
 	meta			: fbActorMeta;
 	remove_reason	: fbRemovalReason = AoiLeft;
 }

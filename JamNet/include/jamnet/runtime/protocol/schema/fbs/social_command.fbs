@@ -1,0 +1,14 @@
+include "social_types.fbs";
+
+namespace jam.net.fb;
+
+table fbSocialCommand
+{
+	request_id	: uint;
+	destination	: fbSocialAddress;
+	content_type	: ushort;
+	payload		: [ubyte];
+}
+
+root_type fbSocialCommand;
+file_identifier "SCMD";
