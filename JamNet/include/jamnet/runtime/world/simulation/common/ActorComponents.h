@@ -1,9 +1,14 @@
 #pragma once
 
-#include "jamnet/runtime/actor/ActorArchetypeDatabase.h"
+#include "jamnet/runtime/world/actor/ActorArchetypeDatabase.h"
+#include "jamnet/runtime/world/actor/ActorId.h"
+#include "jamnet/runtime/session/ClientRequestId.h"
 
 #include <jampx/PhysicsTypes.h>
 
+#include <deque>
+
+#include <entt/entt.hpp>
 
 namespace jam::net
 {
@@ -12,73 +17,37 @@ namespace jam::net
 	 -----------------------------------------------------------**/
 	 
 
-	/// @brief	
-	struct NetId
+	/// @brief	Returns the opaque JamPx actor key for an ECS actor.
+	///			The raw entt::entity value must never cross this boundary.
+	inline ActorId GetActorIdComponent(const entt::registry& world, entt::entity e) noexcept
 	{
-	private:
-		uint32 v = 0;
-
-		static constexpr uint32 k_levelBit  = 0x80000000u;
-		static constexpr uint32 k_valueMask = 0x7FFFFFFFu;
-
-		explicit constexpr NetId(uint32 raw) noexcept : v(raw) {}
-
-	public:
-		constexpr NetId() noexcept = default;
-		constexpr bool operator==(const NetId&) const noexcept = default;
-
-		constexpr bool   IsValid()   const noexcept { return v != 0; }
-		constexpr bool   IsLevel()   const noexcept { return (v & k_levelBit) != 0; }
-		constexpr bool   IsRuntime() const noexcept { return (v & k_levelBit) == 0; }
-		constexpr uint32 Value()     const noexcept { return v & k_valueMask; }
-		constexpr uint32 Raw()       const noexcept { return v; }
-
-		static constexpr NetId Invalid() noexcept { return NetId(0); }
-
-		static constexpr NetId MakeRaw(uint32 raw) noexcept
-		{
-			return NetId(raw);
-		}
-
-		static constexpr NetId MakeRuntime(uint32 seed) noexcept
-		{
-			const uint32 value = (seed & k_valueMask);
-			return (value == 0) ? Invalid() : NetId(value);
-		}
-
-		static constexpr NetId MakeLevel(uint32 seed) noexcept
-		{
-			const uint32 value = (seed & k_valueMask);
-			return (value == 0) ? Invalid() : NetId(k_levelBit | value);
-		}
-	};
-
-
-	/// @brief	PhysicsFacade(ObjectId) is WorldBase(registry) local Key. 
-	///			rule : ObjectId == entt::entity 
-	inline px::ObjectId MakeObjectId(entt::entity e) noexcept
-	{
-		return static_cast<px::ObjectId>(e);
+		const auto* actorId = world.try_get<ActorId>(e);
+		return actorId ? *actorId : ActorId::Invalid();
 	}
 
-	struct NetPhysicsArchetypeKey
+	inline px::ActorId GetPhysicsActorId(const entt::registry& world, entt::entity e) noexcept
+	{
+		return GetActorIdComponent(world, e).Value();
+	}
+
+	struct PhysicsArchetypeRef
 	{
 		px::PhysicsArchetypeKey		key;
 	};
 
-	struct NetActorArchetypeKey
+	struct ActorArchetypeRef
 	{
 		ActorArchetypeKey		key;
 	};
 
 
-	struct NetActorBodyType
+	struct ActorBodyType
 	{
 		px::eBodyType		body = px::eBodyType::Rigid;
 	};
 
 
-	struct NetTeamPartRole
+	struct ActorTeamPartRole
 	{
 		uint16				team = 0;
 		uint8				part = 0;
@@ -96,9 +65,9 @@ namespace jam::net
 			return Pack(team, part, role);
 		}
 
-		static constexpr NetTeamPartRole FromPacked(uint32 packed) noexcept
+		static constexpr ActorTeamPartRole FromPacked(uint32 packed) noexcept
 		{
-			NetTeamPartRole out{};
+			ActorTeamPartRole out{};
 			out.team = static_cast<uint16>(packed & 0xFFFFu);
 			out.part = static_cast<uint8>((packed >> 16) & 0xFFu);
 			out.role = static_cast<uint8>((packed >> 24) & 0xFFu);
@@ -109,13 +78,10 @@ namespace jam::net
 	/// @brief	Tag of successful spawned in PhysicsFacade
 	struct PhysicsSpawnedTag{};
 
-	/// @brief	Client predict spawn tag. not ensured by server
-	struct NetPendingSpawnTag {};
-
-	/// @brief	Client predict spwan identifier
-	struct NetSpawnRequestId
+	/// @brief Client request correlation replicated in lifecycle metadata.
+	struct ClientRequestCorrelation
 	{
-		uint32					requestId = 0;
+		ClientRequestId			requestId = kInvalidClientRequestId;
 	};
 
 	/// @brief 새로 생성된 액터 표시
@@ -160,7 +126,7 @@ namespace jam::net
 	struct OutOfAoiTag {};
 
 	/// @brief Actor is locally hidden after predicted expiry and waits for authoritative destroy.
-	struct PredictedDespawnTag {};
+	struct LocallyHiddenTag {};
 
 
 
@@ -243,8 +209,8 @@ namespace jam::net
 
 	struct TargetInfo
 	{
-		NetId		 targetNetId = NetId::Invalid();
-		px::ObjectId targetObjId = px::INVALID_OBJ_ID;
+		ActorId		 targetActorId = ActorId::Invalid();
+		px::ActorId resolvedActorId = px::INVALID_ACTOR_ID;
 	};
 
 
@@ -253,6 +219,7 @@ namespace jam::net
 	 -----------------------------------------------------------**/
 
 	struct ReplicationStaticTag {};
+	struct ReplicationDisabledTag {};
 
 	/// @brief PhyiscsFacade 로 받은 ActiveList 에 포함된 경우에만 부착.
 	struct ReplicationActiveTag{};
@@ -268,17 +235,3 @@ namespace jam::net
 	}
 
 } // namespace jam::net
-
-
-
-namespace std
-{
-	template<>
-	struct hash<jam::net::NetId>
-	{
-		size_t operator()(const jam::net::NetId& id) const noexcept
-		{
-			return std::hash<uint32>{}(id.Raw());
-		}
-	};
-} // namespace std

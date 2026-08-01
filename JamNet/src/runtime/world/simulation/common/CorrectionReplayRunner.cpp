@@ -1,26 +1,12 @@
 #include "pch.h"
-#include "jamnet/sync/replication/CorrectionReplayRunner.h"
+#include "jamnet/runtime/world/simulation/common/CorrectionReplayRunner.h"
+#include "jamnet/runtime/world/simulation/common/WorldContext.h"
 
-#include <jampx/IPhysicsFacade.h>
-
-#include "jamnet/sync/replication/WorldContext.h"
-
-#include <cmath>
+#include <jampx/PhysicsFacade.h>
 
 namespace jam::net
 {
-	namespace
-	{
-		float WrapAngleDelta(float delta)
-		{
-			float d = std::fmod(delta, px::TWO_PI);
-			if (d > px::PI)  d -= px::TWO_PI;
-			if (d < -px::PI) d += px::TWO_PI;
-			return d;
-		}
-	}
-
-	CorrectionReplayRunner::CorrectionReplayRunner(px::IPhysicsFacade* physics)
+	CorrectionReplayRunner::CorrectionReplayRunner(px::PhysicsFacade* physics)
 		: m_physics(physics)
 	{
 	}
@@ -32,7 +18,7 @@ namespace jam::net
 			return;
 
 		px::ActorContext localCtx{};
-		localCtx.oid   = MakeObjectId(ctx.local);
+		localCtx.actorId   = GetPhysicsActorId(world, ctx.local);
 		localCtx.state = world.get<CharAuthorityState>(ctx.local).state;
 
 		std::vector<px::ActorContext> one;
@@ -41,7 +27,7 @@ namespace jam::net
 
 		m_physics->PushReplayStates(one);
 
-		auto view = world.view<ReplayRelevantTag, NetActorBodyType>();
+		auto view = world.view<ReplayRelevantTag, ActorBodyType>();
 		for (auto e : view)
 		{
 			if (e == ctx.local) continue;
@@ -56,13 +42,13 @@ namespace jam::net
 
 		for (const entt::entity e : m_relevantEntities)
 		{
-			if (!world.valid(e) || !world.all_of<NetActorBodyType>(e))
+			if (!world.valid(e) || !world.all_of<ActorBodyType>(e))
 				continue;
 
 			px::ActorContext ac{};
-			ac.oid = MakeObjectId(e);
+			ac.actorId = GetPhysicsActorId(world, e);
 
-			const auto body = world.get<NetActorBodyType>(e).body;
+			const auto body = world.get<ActorBodyType>(e).body;
 			if (body == px::eBodyType::Character)
 			{
 				if (world.all_of<CharReplayHistory>(e))
@@ -105,7 +91,6 @@ namespace jam::net
 		if (replayStats.truncated)
 		{
 			correction = live;
-			delta	   = {};
 			replayBuf.Clear();
 			return;
 		}
@@ -129,18 +114,27 @@ namespace jam::net
 				correction = live;
 		}
 
-		if (replayStats.meaningfulInputCount == 0)
-		{
-			delta = {};
-		}
-		else
-		{
-			delta.pos   = correction.pos - preLive.pos;
-			delta.yaw   = WrapAngleDelta(correction.facingYaw - preLive.facingYaw);
-			delta.pitch = correction.facingPitch - preLive.facingPitch;
+		// Local orientation is derived from the latest local control profile and
+		// does not affect capsule movement. Position replay must not replace it
+		// with an older authoritative orientation.
+		correction.bodyYaw = preLive.bodyYaw;
+		correction.viewYaw = preLive.viewYaw;
+		correction.viewPitch = preLive.viewPitch;
 
-			//JAMNET_LOG_DEBUG("[CorrectionReplayRunner] delta pos= ({}, {}, {})", delta.pos.x, delta.pos.y, delta.pos.z);
+		if (!m_physics
+			|| ctx.local == entt::null
+			|| !world.valid(ctx.local)
+			|| !m_physics->SetCharacterState(GetPhysicsActorId(world, ctx.local), correction))
+		{
+			correction = preLive;
+			replayBuf.Clear();
+			return;
 		}
+
+		// Preserve the visual pose that was already being presented. A new logical
+		// correction is accumulated on top of any remaining render-space offset,
+		// then ClientSamplingSystem continues decaying it toward zero.
+		delta.pos = delta.pos + (correction.pos - preLive.pos);
 
 		live = correction; // logical state overwrite
 
@@ -148,4 +142,3 @@ namespace jam::net
 	}
 
 } // namespace jam::net
-

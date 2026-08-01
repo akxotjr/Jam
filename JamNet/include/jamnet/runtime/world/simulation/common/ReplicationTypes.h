@@ -1,7 +1,6 @@
 #pragma once
-#include "jamnet/sync/replication/NetActorComponents.h"
-
-#include <jampx/PhysicsTypes.h>
+#include "jamnet/runtime/world/simulation/common/ActorComponents.h"
+#include "jamnet/runtime/world/simulation/common/CharacterControlTypes.h"
 
 namespace jam::net
 {
@@ -11,14 +10,6 @@ namespace jam::net
 
 	inline constexpr uint64 FULLSNAPSHOT_INTERVAL_NS = 5_s;
 
-
-
-	/// @brief 입력 커맨드 (Client/Server 공통)
-	struct InputCmd
-	{
-		uint32						seq = 0;
-		px::CharacterInput			input{};
-	};
 
 
 	/// @brief Reconiliation 설정
@@ -44,7 +35,7 @@ namespace jam::net
 	struct Candidate
 	{
 		entt::entity	e			= entt::null;
-		NetId			netId		= NetId::Invalid();
+		ActorId			actorId		= ActorId::Invalid();
 		bool			useFull		= false;
 	};
 

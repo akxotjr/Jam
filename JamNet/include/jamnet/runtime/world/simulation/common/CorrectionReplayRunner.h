@@ -1,10 +1,10 @@
 #pragma once
 
-#include "jamnet/sync/replication/IReplayRunner.h"
+#include "jamnet/runtime/world/simulation/common/IReplayRunner.h"
 
 namespace jam::px
 {
-	class IPhysicsFacade;
+	class PhysicsFacade;
 }
 
 namespace jam::net
@@ -12,14 +12,14 @@ namespace jam::net
 	class CorrectionReplayRunner : public IReplayRunner
 	{
 	public:
-		explicit CorrectionReplayRunner(px::IPhysicsFacade* physics);
+		explicit CorrectionReplayRunner(px::PhysicsFacade* physics);
 
 		void		Prepare(entt::registry& world, const ReplayContext& ctx) override;
 		void		Run(entt::registry& world, const ReplayContext& ctx) override;
 		void		Commit(entt::registry& world, const ReplayContext& ctx) override;
 
 	private:
-		px::IPhysicsFacade*				m_physics			= nullptr;
+		px::PhysicsFacade*				m_physics			= nullptr;
 		std::vector<entt::entity>       m_relevantEntities;
 	};
 

@@ -1,5 +1,5 @@
 #pragma once
-#include "jamnet/sync/replication/ReplicationTypes.h"
+#include "jamnet/runtime/world/simulation/common/ReplicationTypes.h"
 
 namespace jam::net
 {
@@ -20,12 +20,12 @@ namespace jam::net
 	struct LocalActorRef
 	{
 		entt::entity	entity = entt::null;
-		NetId			netId = NetId::Invalid();
+		ActorId			actorId = ActorId::Invalid();
 
 		void Clear()
 		{
 			entity = entt::null;
-			netId = NetId::Invalid();
+			actorId = ActorId::Invalid();
 		}
 	};
 
@@ -81,7 +81,7 @@ namespace jam::net
 
 	struct InputHistoryBuffer
 	{
-		InputCmd	current		= {};
+		CharacterControlCommand	current		= {};
 		uint32		maxSamples	= 256;
 
 		InputHistoryBuffer()
@@ -105,7 +105,7 @@ namespace jam::net
 			current = {};
 		}
 
-		void Push(const InputCmd& cmd)
+		void Push(const CharacterControlCommand& cmd)
 		{
 			if (samples.empty())
 				Init(maxSamples);
@@ -127,8 +127,8 @@ namespace jam::net
 		{
 			while (count > 0)
 			{
-				const InputCmd& front = samples[head];
-				if (front.seq > ackSeq)
+				const CharacterControlCommand& front = samples[head];
+				if (front.sequence > ackSeq)
 					break;
 
 				head = (head + 1) % maxSamples;
@@ -141,10 +141,10 @@ namespace jam::net
 		{
 			for (uint32 i = 0; i < count; ++i)
 			{
-				const InputCmd& cmd = samples[(head + i) % maxSamples];
-				if (cmd.seq <= ackSeqExclusive)
+				const CharacterControlCommand& cmd = samples[(head + i) % maxSamples];
+				if (cmd.sequence <= ackSeqExclusive)
 					continue;
-				if (cmd.seq >= currentSeqExclusive)
+				if (cmd.sequence >= currentSeqExclusive)
 					break;
 
 				fn(cmd);
@@ -152,7 +152,7 @@ namespace jam::net
 		}
 
 	private:
-		std::vector<InputCmd>	samples;
+		std::vector<CharacterControlCommand>	samples;
 		uint32					head	= 0;
 		uint32					count	= 0;
 	};
@@ -182,6 +182,18 @@ namespace jam::net
 			samples[idx] = PredictedStateSample{ .inputSeq = inputSeq, .state = state };
 			if (count < maxSamples) ++count;
 			else head = (head + 1) % maxSamples;
+		}
+
+		const px::CharacterState* Find(uint32 inputSeq) const
+		{
+			for (uint32 i = count; i > 0; --i)
+			{
+				const PredictedStateSample& sample = samples[(head + i - 1) % maxSamples];
+				if (sample.inputSeq == inputSeq)
+					return &sample.state;
+			}
+
+			return nullptr;
 		}
 
 		void PruneAck(uint32 ackSeq)
@@ -240,8 +252,6 @@ namespace jam::net
 	struct RenderCorrectionDelta
 	{
 		px::Vec3 pos	= px::Vec3::Zero();
-		float	 yaw	= 0.0f;
-		float	 pitch	= 0.0f;
 	};
 
 	// current input -> main scene -> local char state
