@@ -1,7 +1,8 @@
 #pragma once
 
 #include "PhysicsDatabase.h"
-#include "jampx/ShardPxCpuDispacter.h"
+#include "jampx/ShardPxCpuDispatcher.h"
+#include "jampx/PhysicsSceneSlot.h"
 
 namespace physx
 {
@@ -12,12 +13,6 @@ namespace jam::px
 {
 	class PhysicsArchetypeRegistry;
 
-	enum class ePxSceneSlot : uint8
-	{
-		Main = 0,
-		Replay = 1,
-		Count = 2
-	};
 
 	class PhysicsWorld
 	{
@@ -25,7 +20,7 @@ namespace jam::px
 		PhysicsWorld() = default;
 		~PhysicsWorld() = default;
 
-		void							Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispacter* dispacter);
+		void							Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter);
 		void							Destroy();
 		PhysicsArchetypeRegistry&		Registry() const;
 
@@ -44,7 +39,7 @@ namespace jam::px
 		void							RemoveController(PxController* controller);
 
 		std::vector<SimEvent>			ConsumeSimEvents();
-		std::vector<ObjectId>			ConsumeAdvancdActive();
+		std::vector<ActorId>			ConsumeAdvancdActive();
 
 	private:
 		PhysicsArchetypeRegistry*							m_registry			= nullptr;

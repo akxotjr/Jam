@@ -1,11 +1,13 @@
 #include "pch.h"
 #include "jampx/PhysicsWorld.h"
+
+#include "jampx/PhysicsCore.h"
 #include "jampx/prefab/PhysicsArchetypeRegistry.h"
 #include "jampx/actor/character/locomotion/CharacterFilter.h"
 
 namespace jam::px
 {
-	void PhysicsWorld::Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispacter* dispacter)
+	void PhysicsWorld::Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter)
 	{
 		if (m_scenes[0]) return;
 		m_registry = registry;
@@ -38,7 +40,14 @@ namespace jam::px
 		{
 			if (m_controllerMgrs[i]) { m_controllerMgrs[i]->release(); m_controllerMgrs[i] = nullptr; }
 			if (m_scenes[i])         { m_scenes[i]->release();         m_scenes[i] = nullptr; }
+			m_simCallbacks[i].reset();
 		}
+
+		delete static_cast<CharacterHitReportT<>*>(m_characterReportCB);
+		m_characterReportCB = nullptr;
+		delete static_cast<CharacterBehaviorCallbackT<>*>(m_characterBehaviorCB);
+		m_characterBehaviorCB = nullptr;
+
 		m_registry = nullptr;
 	}
 
@@ -129,11 +138,36 @@ namespace jam::px
 
 		if (!desc.isValid()) return nullptr;
 
-		auto* cct = mgr->createController(desc);
-		if (auto cctType = cct->getType(); cctType != physx::PxControllerShapeType::eCAPSULE)
+		PxController* controller = mgr->createController(desc);
+		if (!controller || controller->getType() != physx::PxControllerShapeType::eCAPSULE)
+		{
+			if (controller)
+				controller->release();
 			return nullptr;
+		}
 
-		return static_cast<PxCapsuleController*>(cct);
+		auto* cct = static_cast<PxCapsuleController*>(controller);
+		PxRigidDynamic* actor = cct->getActor();
+		if (!actor)
+		{
+			cct->release();
+			return nullptr;
+		}
+
+		actor->userData = userData;
+
+		PxShape* shape = nullptr;
+		if (actor->getShapes(&shape, 1) != 1 || !shape)
+		{
+			cct->release();
+			return nullptr;
+		}
+
+		SetShapeFilters(*shape, data.simFD, data.qryFD);
+		if (PxScene* scene = actor->getScene())
+			scene->resetFiltering(*actor);
+
+		return cct;
 	}
 
 	PxRigidDynamic* PhysicsWorld::CreateHitbox(const std::vector<ShapeHandle>& shapeHandles, const PxVec3& pos, void* userData)
@@ -192,7 +226,7 @@ namespace jam::px
 		return m_simCallbacks[0]->ConsumeEvents();
 	}
 
-	std::vector<ObjectId> PhysicsWorld::ConsumeAdvancdActive()
+	std::vector<ActorId> PhysicsWorld::ConsumeAdvancdActive()
 	{
 		// Main scene active list만 반환
 		if (!m_simCallbacks[0]) return {};

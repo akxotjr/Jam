@@ -1,8 +1,12 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/PhysicsCore.h"
+#include "jampx/PhysicsSimFilter.h"
+
+#include <jambase/Logger.h>
 
 #include <stdexcept>
 #include <thread>
+#include <iostream>
 
 
 namespace jam::px
@@ -10,8 +14,18 @@ namespace jam::px
 
 	void PhysicsCore::Init()
 	{
+		if (PxIsFoundationValid())
+		{
+			JAMNET_LOG_CRITICAL("[PhysicsCore::Init] PhysX foundation from a previous runtime is still alive");
+			throw std::runtime_error("PhysicsCore::Init(), previous PhysX foundation is still alive");
+		}
+
         m_foundation = PxCreateFoundation(PX_PHYSICS_VERSION, m_allocator, m_errorCallback);
-        if (!m_foundation) throw std::runtime_error("PhysicsCore::Init(), PxCreateFoundation failed");
+		if (!m_foundation)
+		{
+			JAMNET_LOG_CRITICAL("PhysicsCore::Init(), PxCreateFoundation failed");
+			throw std::runtime_error("PhysicsCore::Init(), PxCreateFoundation failed");
+		}
 
         // PVD (must be created before PxCreatePhysics, and passed into it)
         m_pvd = PxCreatePvd(*m_foundation);
@@ -29,12 +43,19 @@ namespace jam::px
 
         PxTolerancesScale scale{};
         m_physics = PxCreatePhysics(PX_PHYSICS_VERSION, *m_foundation, scale, true, m_pvd);
-        if (!m_physics) throw std::runtime_error("PhysicsCore::Init(), PxCreatePhysics failed");
+		if (!m_physics)
+		{
+			JAMNET_LOG_CRITICAL("PhysicsCore::Init(), PxCreatePhysics failed");
+			throw std::runtime_error("PhysicsCore::Init(), PxCreatePhysics failed");
+		}
 
         const unsigned threads = std::max(1u, std::thread::hardware_concurrency() / 2);
         m_dispatcher = physx::PxDefaultCpuDispatcherCreate(threads);
-        if (!m_dispatcher) throw std::runtime_error("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
-
+		if (!m_dispatcher)
+		{
+			JAMNET_LOG_CRITICAL("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
+			throw std::runtime_error("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
+		}
 	}
 
 	void PhysicsCore::Shutdown()
@@ -54,7 +75,10 @@ namespace jam::px
             m_pvdTransport = nullptr;
         }
 
-        if (m_foundation) { m_foundation->release(); m_foundation = nullptr; }
+		if (m_foundation) { m_foundation->release(); m_foundation = nullptr; }
+
+		if (PxIsFoundationValid())
+			JAMNET_LOG_CRITICAL("[PhysicsCore::Shutdown] PhysX foundation is still alive after release");
 	}
 
 	PxScene* PhysicsCore::CreateScene() const

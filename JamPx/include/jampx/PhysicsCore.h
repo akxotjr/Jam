@@ -1,4 +1,9 @@
-﻿#pragma once
+#pragma once
+
+#include <jambase/JamMacro.h>
+
+#include "jampx/PhysXIncludes.h"
+#include "jampx/PhysXTypes.h"
 
 namespace jam::px
 {
