@@ -6,6 +6,11 @@
 
 namespace jam
 {
+	namespace
+	{
+		inline const RouteDomain kShardAffinityRouteDomain = RouteDomain::From("ShardAffinity");
+	}
+
 	struct GlobalExecutor::IocpDomain
 	{
 		uint32								id = 0;
@@ -67,6 +72,28 @@ namespace jam
 	{
 		Stop();
 		Join();
+
+		{
+			std::scoped_lock lock(m_offloadLifecycleMutex);
+			Job discarded;
+			while (m_offload.try_dequeue(discarded))
+			{
+			}
+		}
+
+		{
+			WRITE_LOCK
+			m_periodics.clear();
+			m_iocpDomains.clear();
+		}
+
+		// ShardLocal owns session/world/user state and shard schedulers own delayed
+		// jobs. Release the stopped directory here so a later Init cannot destroy
+		// state belonging to the previous runtime.
+		m_directory.reset();
+		m_affinitySlots.clear();
+		m_offloadMetricSlots.reset();
+		m_offloadMetricSlotCount = 0;
 	}
 
 	void GlobalExecutor::Start()
@@ -172,6 +199,16 @@ namespace jam
 		return domain ? domain->core : nullptr;
 	}
 
+	RouteKey GlobalExecutor::MakeAffinityRouteKey(uint64 seed) const
+	{
+		return MakeRouteKey(kShardAffinityRouteDomain, seed);
+	}
+
+	std::shared_ptr<ShardExecutor> GlobalExecutor::GetAffinityShard(uint64 seed) const
+	{
+		return GetShard(MakeAffinityRouteKey(seed));
+	}
+
 	RouteAssignment GlobalExecutor::PlaceRoute(RouteKey key, const RoutePlacementOptions& opt) const
 	{
 		return m_directory ? m_directory->PlaceRoute(key, opt) : RouteAssignment{};
@@ -191,6 +228,10 @@ namespace jam
 
 	void GlobalExecutor::Submit(Job j)
 	{
+		std::scoped_lock lock(m_offloadLifecycleMutex);
+		if (!m_running.load(std::memory_order_acquire))
+			return;
+
 		m_offload.enqueue(std::move(j));
 	}
 

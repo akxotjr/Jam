@@ -1,6 +1,10 @@
 #pragma once
 #include "jamnet/core/executor/Lock.h"
 
+#include <queue>
+#include <optional>
+#include <vector>
+
 namespace jam
 {
 	template<typename T>

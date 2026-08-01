@@ -6,6 +6,8 @@
 #include "jamnet/core/executor/WinFiberBackend.h"
 #include "jamnet/core/executor/ExecutorMetrics.h"
 
+#include <queue>
+
 
 namespace jam
 {

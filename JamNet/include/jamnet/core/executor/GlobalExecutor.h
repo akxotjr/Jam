@@ -12,8 +12,14 @@
 
 #include "jamnet/core/net/IocpCore.h"
 
+#include <vector>
+#include <memory>
 #include <condition_variable>
 #include <mutex>
+#include <atomic>
+#include <unordered_map>
+
+#include <concurrentqueue/moodycamel/blockingconcurrentqueue.h>
 
 
 namespace jam
@@ -64,6 +70,8 @@ namespace jam
 
 		RouteKey										MakeRouteKey(RouteDomain domain, uint64 id) const { return m_directory ? m_directory->MakeRouteKey(domain, id) : RouteKey{}; }
 		RouteKey										MakeRouteKey(std::string_view domain, uint64 id) const { return m_directory ? m_directory->MakeRouteKey(domain, id) : RouteKey{}; }
+		RouteKey										MakeAffinityRouteKey(uint64 seed) const;
+		std::shared_ptr<ShardExecutor>					GetAffinityShard(uint64 seed) const;
 		RouteAssignment									PlaceRoute(RouteKey key, const RoutePlacementOptions& opt = {}) const;
 		void											ReleaseRoute(const RouteAssignment& assignment) const;
 		void ReleaseRoute(uint16 shardIndex);
@@ -146,6 +154,7 @@ namespace jam
 
 		// offload (MPMC)	
 		BlockingConcurrentQueue<Job>							m_offload;
+		std::mutex										m_offloadLifecycleMutex;
 
 		// worker
 		std::vector<std::thread>								m_offloadWorkers;

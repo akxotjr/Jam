@@ -174,9 +174,12 @@ namespace jam
 		{
 			if (!ptr || ownerId == kInvalidRuntimeId)
 				return nullptr;
-			if (ptr->GetShardOwnedRuntimeId() != ownerId)
-				return nullptr;
+			// The mailbox outlives the referenced object and is closed before owner
+			// destruction. Check it before dereferencing ptr so copied refs fail
+			// safely after asynchronous teardown.
 			if (!mailbox.IsValid())
+				return nullptr;
+			if (ptr->GetShardOwnedRuntimeId() != ownerId)
 				return nullptr;
 			return ptr;
 		}

@@ -19,8 +19,9 @@ namespace jam
 		template<typename Fn>
 		struct Callable final : ICallable
 		{
-			explicit Callable(Fn&& fn)
-				: m_fn(std::forward<Fn>(fn)) {}
+			template<typename F>
+			explicit Callable(F&& fn)
+				: m_fn(std::forward<F>(fn)) {}
 
 			void Invoke() override
 			{
@@ -106,7 +107,7 @@ namespace jam
 			: m_callback(std::make_shared<Callback>(std::forward<Fn>(f))), m_priority(p) {}
 
 		template<class T, class MemFn, class... Args>
-		Job(std::shared_ptr<T> owner, MemFn mf, Args&&... args, const eJobPriority p = eJobPriority::Normal) requires (std::is_member_function_pointer_v<MemFn>)
+		Job(std::shared_ptr<T> owner, MemFn mf, const eJobPriority p = eJobPriority::Normal, Args&&... args) requires (std::is_member_function_pointer_v<MemFn>)
 		{
 			m_priority = p;
 			auto tup = std::make_tuple(std::forward<Args>(args)...);
@@ -118,7 +119,7 @@ namespace jam
 		}
 
 		template<class T, class MemFn, class... Args>
-		Job(std::weak_ptr<T> owner, MemFn mf, Args&&... args, const eJobPriority p = eJobPriority::Normal) requires (std::is_member_function_pointer_v<MemFn>)
+		Job(std::weak_ptr<T> owner, MemFn mf, const eJobPriority p = eJobPriority::Normal, Args&&... args) requires (std::is_member_function_pointer_v<MemFn>)
 		{
 			m_priority = p;
 			auto tup = std::make_tuple(std::forward<Args>(args)...);

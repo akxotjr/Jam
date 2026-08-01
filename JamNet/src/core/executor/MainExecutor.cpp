@@ -7,12 +7,28 @@ namespace jam
 {
 	void MainExecutor::Init()
 	{
+		std::scoped_lock lock(m_lifecycleMutex);
+		m_accepting.store(false, std::memory_order_release);
+		DiscardPending();
 		m_id = std::this_thread::get_id();
 		InitThreadContext("MainExecutor", this);
+		m_accepting.store(true, std::memory_order_release);
+	}
+
+	void MainExecutor::Shutdown()
+	{
+		std::scoped_lock lock(m_lifecycleMutex);
+		m_accepting.store(false, std::memory_order_release);
+		DiscardPending();
+		m_id = {};
 	}
 
 	void MainExecutor::Submit(Job j)
 	{
+		std::scoped_lock lock(m_lifecycleMutex);
+		if (!m_accepting.load(std::memory_order_acquire))
+			return;
+
 		m_queue.enqueue(std::move(j));
 		m_pending.fetch_add(1, std::memory_order_release);
 	}
@@ -45,5 +61,14 @@ namespace jam
 			m_pending.fetch_sub(1, std::memory_order_release);
 			j.Execute();
 		}
+	}
+
+	void MainExecutor::DiscardPending()
+	{
+		Job discarded;
+		while (m_queue.try_dequeue(discarded))
+		{
+		}
+		m_pending.store(0, std::memory_order_release);
 	}
 }
