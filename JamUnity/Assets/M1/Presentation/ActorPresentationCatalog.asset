@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 93251b7a6d215be47be72322878e83c8, type: 3}
+  m_Name: ActorPresentationCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Actor.Runtime.ActorPresentationCatalog
+  entries:
+  - actorArchetypeName: Box
+    actorArchetypeKey: 1609559789082440018
+    actorPrefab: {fileID: 6788379168228639983, guid: 9d434aebece16934ba5c0106db837bb6, type: 3}
+  - actorArchetypeName: Floor
+    actorArchetypeKey: 13150330638402972445
+    actorPrefab: {fileID: 6933738838538964133, guid: c27a1262b41736b4186eb8467d651f6d, type: 3}
+  - actorArchetypeName: Player
+    actorArchetypeKey: 3692324345213718176
+    actorPrefab: {fileID: 5144145120962176747, guid: 19e534728ba5c8c44ac7024e5deb60fb, type: 3}
+  - actorArchetypeName: Portal
+    actorArchetypeKey: 5188915942283787755
+    actorPrefab: {fileID: 1502510396749813604, guid: 9e42d72afc3686a49b1bfd919aacc060, type: 3}

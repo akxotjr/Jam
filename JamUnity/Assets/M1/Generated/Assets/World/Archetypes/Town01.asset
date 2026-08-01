@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f60defe5023882e41a79d8f2d39c3ef4, type: 3}
+  m_Name: Town01
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.World.WorldArchetypeData
+  assetName: Town01
+  worldTemplate: {fileID: 11400000, guid: a10476efff4ae9644b34ea567bb6bb19, type: 2}
+  physicsAssetDatabase: {fileID: 11400000, guid: 59b5be9777d57ab41b3f3b2fa3b112f2, type: 2}
+  actorLevelName: Town01

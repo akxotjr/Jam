@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 134c929fcbe860949a753a92f09da76f, type: 3}
+  m_Name: Player
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.Physics.PhysicsArchetypeData
+  assetName: Player
+  actorType: 1
+  bodyType: 1
+  motionType: 4
+  motionFlags: 0
+  rigidShapes: []
+  dynamicBody: {fileID: 0}
+  behaviorKind: 0
+  kinematicBehavior: {fileID: 0}
+  projectileBehavior: {fileID: 0}
+  cctBody: {fileID: 11400000, guid: f08eedbfef77b234690f695bd650f3d3, type: 2}
+  hitboxes: []
+  controllerType: 1
+  moveConfig: {fileID: 11400000, guid: a1d1502bd9d3bca49b61c2092a967980, type: 2}

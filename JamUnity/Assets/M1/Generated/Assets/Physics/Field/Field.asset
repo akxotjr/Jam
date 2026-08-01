@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 25e7a7b4f3ea7b9408adc8cc1c0c4293, type: 3}
+  m_Name: Field
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.Physics.PhysicsAssetDatabase
+  sharedDataPath: M1/Physics/Field.physics_asset.json
+  version: 1
+  materials:
+  - {fileID: 11400000, guid: f5e80063f03aaaa42b23f3535a0df515, type: 2}
+  meshes: []
+  shapes:
+  - {fileID: 11400000, guid: b2e07a6277af3cb41bfacdb1a4d6ad44, type: 2}
+  - {fileID: 11400000, guid: 70bfbddd12e7d1446b649ceddfe8aa4b, type: 2}
+  - {fileID: 11400000, guid: d6f7a7a50f75a234dba0c1d3ca34c622, type: 2}
+  dynamicBodies: []
+  cctBodies:
+  - {fileID: 11400000, guid: f08eedbfef77b234690f695bd650f3d3, type: 2}
+  characterMoveConfigs:
+  - {fileID: 11400000, guid: a1d1502bd9d3bca49b61c2092a967980, type: 2}
+  kinematicDriverConfigs: []
+  projectileConfigs: []
+  physicsArchetypes:
+  - {fileID: 11400000, guid: f843d515c81a08f41a1925f5d5f9402b, type: 2}
+  - {fileID: 11400000, guid: 914ca76cede64b24a8da7f3ead84ea3b, type: 2}
+  - {fileID: 11400000, guid: f572650df519653428ead53833fbc417, type: 2}
+  - {fileID: 11400000, guid: 7f912c4f5603a3c418440bbfb06ba596, type: 2}

@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4df779d88c643b46b527a727ba871bb, type: 3}
+  m_Name: Box_Shape
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.Physics.ShapeData
+  assetName: Box_Shape
+  type: 1
+  localPosition: {x: 0, y: 0, z: 0}
+  localRotation: {x: 0, y: 0, z: 0, w: 1}
+  material: {fileID: 11400000, guid: f5e80063f03aaaa42b23f3535a0df515, type: 2}
+  shapeFlag: 0
+  simFilter:
+    category: 1
+    mask: 0
+    userFlags: 0
+    customCategoryBits: 0
+    customMaskBits: 0
+    customUserFlagBits: 0
+    customWord3: 0
+  qryFilter:
+    category: 1
+    channel: 0
+    sublayer: 0
+    tag: 0
+    team: 0
+    part: 0
+    role: 0
+    flags: 0
+    customCategoryBits: 0
+    customFlagBits: 0
+  contactOffset: 0
+  restOffset: 0.02
+  halfExtents: {x: 1, y: 1, z: 1}
+  radius: 0
+  halfHeight: 0
+  mesh: {fileID: 0}

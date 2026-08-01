@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4b7b1ac429a6f641b171290c26cad88, type: 3}
+  m_Name: WorldPresentationDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.World.Presentation.WorldPresentationDatabase
+  entries:
+  - worldArchetypeName: Field01
+    worldArchetypeKey: 2140038526471192876
+    worldPrefab: {fileID: 5080211160214349264, guid: e554a43d2434850489026fcc50ad6970, type: 3}
+  - worldArchetypeName: Field02
+    worldArchetypeKey: 2140041825006077509
+    worldPrefab: {fileID: 2665742596063128455, guid: 0712cd5b58b58854c80816818ecf3c5e, type: 3}
+  - worldArchetypeName: Town01
+    worldArchetypeKey: 10727285285580038842
+    worldPrefab: {fileID: 3304558728053758351, guid: b6a40402d5fc4744fb8ebba6a47abb36, type: 3}

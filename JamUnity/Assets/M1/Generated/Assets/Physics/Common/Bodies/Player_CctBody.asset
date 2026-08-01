@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ab9fddc9fb72134bab0717541b24472, type: 3}
+  m_Name: Player_CctBody
+  m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.Physics.CctBodyData
+  assetName: Player_CctBody
+  radius: 0.5
+  height: 0.75
+  material: {fileID: 11400000, guid: f5e80063f03aaaa42b23f3535a0df515, type: 2}
+  density: 10
+  policy: 0
+  simFilter:
+    category: 4
+    mask: 19
+    userFlags: 0
+    customCategoryBits: 0
+    customMaskBits: 0
+    customUserFlagBits: 0
+    customWord3: 0
+  qryFilter:
+    category: 2
+    channel: 0
+    sublayer: 0
+    tag: 0
+    team: 0
+    part: 0
+    role: 0
+    flags: 0
+    customCategoryBits: 0
+    customFlagBits: 0
+  slopeLimit: 0.707
+  invisibleWallHeight: 0
+  maxJumpHeight: 10
+  contactOffset: 0.1
+  stepOffset: 0.5
+  scaleCoeff: 0.8
+  volumeGrowth: 1.5
