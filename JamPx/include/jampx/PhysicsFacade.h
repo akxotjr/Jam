@@ -1,81 +1,81 @@
 #pragma once
 
-#include <atomic>
-#include <unordered_set>
-
-#include "jampx/PhysicsCompletionTask.h"
 #include "jampx/PhysicsTypes.h"
-#include "jampx/ShardPxCpuDispacter.h"
-#include "jampx/PhysicsWorld.h"
-#include "jampx/actor/rigid/RigidBody.h"
-#include "jampx/actor/character/CharacterBody.h"
-#include "jampx/prefab/PhysicsArchetypeRegistry.h"
 
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace jam::px
 {
-	class PhysicsFacade : public IPhysicsFacade
+	enum class ePxSceneSlot : uint8;
+	class IPhysicsJobBridge;
+
+	class PhysicsFacade
 	{
 	public:
-		PhysicsFacade() = default;
-		~PhysicsFacade() override = default;
+		PhysicsFacade();
+		~PhysicsFacade();
 
-		void								Init() override;
-		void								Shutdown() override;
+		PhysicsFacade(const PhysicsFacade&) = delete;
+		PhysicsFacade& operator=(const PhysicsFacade&) = delete;
 
-		void								SetJobBridge(IPhysicsJobBridge* bridge) override;
-		void								SetPhysicsAssetPath(const std::string& path) override;
-		bool								IsStepPending() const override;
+		void								Init();
+		void								Shutdown();
 
-		void								Simulate(float dt) override;
-		bool								BeginSimulate(float dt, uint64 awaitKey) override;
-		void								EndSimulate() override;
+		void								SetJobBridge(IPhysicsJobBridge* bridge);
+		void								SetPhysicsAssetPath(const std::string& path);
+		bool								IsStepPending() const;
 
-		void								Resimulate(float dt) override;
-		bool								BeginResimulate(float dt, uint64 awaitKey) override;
-		void								EndResimulate() override;
+		void								Simulate(float dt);
+		bool								BeginSimulate(float dt, uint64 awaitKey);
+		void								EndSimulate();
 
-		bool								Spawn(ObjectId id, const SpawnDesc& desc) override;
-		bool								Despawn(ObjectId id) override;
+		void								Resimulate(float dt);
+		bool								BeginResimulate(float dt, uint64 awaitKey);
+		void								EndResimulate();
 
-		eBodyType							GetBodyType(ObjectId id) const override;
-		eBodyType							FindBodyType(PhysicsArchetypeKey key) const override;
+		bool								Spawn(ActorId id, const SpawnDesc& desc);
+		bool								Despawn(ActorId id);
 
-		eMotionType							GetMotionType(ObjectId id) const override;
-		eMotionType							FindMotionType(PhysicsArchetypeKey key) const override;
+		eBodyType							GetBodyType(ActorId id) const;
+		eBodyType							FindBodyType(PhysicsArchetypeKey key) const;
 
-		bool								IsReplayCandidate(PhysicsArchetypeKey key) const override;
+		eMotionType							GetMotionType(ActorId id) const;
+		eMotionType							FindMotionType(PhysicsArchetypeKey key) const;
 
-		void								PushReplayStates(const std::vector<ActorContext>& contexts) override;
-		void								PullCorrectionState(ObjectId oid, OUT CharacterState& state) override;
+		bool								IsReplayCandidate(PhysicsArchetypeKey key) const;
+
+		void								PushReplayStates(const std::vector<ActorContext>& contexts);
+		void								PullCorrectionState(ActorId oid, OUT CharacterState& state);
 		
-		void								PushAuthorityStates(const std::vector<ActorContext>& contexts) override;
-		void								PullProxyStates(OUT std::vector<ActorContext>& contexts) override;
+		void								PushAuthorityStates(const std::vector<ActorContext>& contexts);
+		void								PullProxyStates(OUT std::vector<ActorContext>& contexts);
 
-		void								ApplyCharacterInput(ObjectId id, const CharacterInput& input) override;
-		void								ApplyReplayCharacterInput(ObjectId id, const CharacterInput& input) override;
-		void								PullPredictedState(ObjectId oid, OUT CharacterState& state) override;
-
-
-		bool								GetCharacterState(ObjectId id, CharacterState& state) const override;
-		bool								SetCharacterState(ObjectId id, const CharacterState& state) override;
-
-		bool								GetRigidState(ObjectId id, RigidState& state) const override;
-		bool								SetRigidState(ObjectId id, const RigidState& state) override;
+		void								ApplyCharacterMotorInput(ActorId id, const CharacterMotorInput& input);
+		void								ApplyReplayCharacterMotorInput(ActorId id, const CharacterMotorInput& input);
+		void								PullPredictedState(ActorId id, OUT CharacterState& state);
 
 
+		bool								GetCharacterState(ActorId id, CharacterState& state) const;
+		bool								SetCharacterState(ActorId id, const CharacterState& state);
 
-		bool								RaycastLOS(const Vec3& from, const Vec3& to) const override;
-		HitscanResult						Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const override;
+		bool								GetRigidState(ActorId id, RigidState& state) const;
+		bool								SetRigidState(ActorId id, const RigidState& state);
 
-		std::vector<PhysicsEvent>			ConsumePhysicsEvents() override;
-		std::vector<ObjectId>				PopActiveList() override;
+
+
+		bool								RaycastLOS(const Vec3& from, const Vec3& to) const;
+		HitscanResult						Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const;
+
+		std::vector<PhysicsEvent>			ConsumePhysicsEvents();
+		std::vector<ActorId>				PopActiveList();
 
 	private:
-		void								MarkDirty(ObjectId id);
+		void								MarkDirty(ActorId id);
 		void								FlushPendingSceneOps();
-		bool								SpawnNow(ObjectId id, const SpawnDesc& desc);
-		bool								DespawnNow(ObjectId id);
+		bool								SpawnNow(ActorId id, const SpawnDesc& desc);
+		bool								DespawnNow(ActorId id);
 
 		void								StepCharacters(ePxSceneSlot slot, float dt);
 		void								StepKinematics(ePxSceneSlot slot, float dt);
@@ -84,48 +84,8 @@ namespace jam::px
 		void								SyncKinematics(ePxSceneSlot slot);
 		void								SyncProjectiles(ePxSceneSlot slot);
 
-		std::optional<PxTransform>			ResolveTargetPose(ObjectId oid);
-
 	private:
-		enum class ePendingSceneOpType
-		{
-			Spawn,
-			Despawn,
-		};
-
-		struct PendingSceneOp
-		{
-			ePendingSceneOpType type = ePendingSceneOpType::Spawn;
-			ObjectId			id	 = INVALID_OBJ_ID;
-			SpawnDesc			desc = {};
-		};
-
-
-	private:
-		std::atomic<bool>									m_inited			= false;
-
-		std::unique_ptr<PhysicsWorld>						m_world				= nullptr;
-		PhysicsArchetypeRegistry							m_registry			= {};
-
-		PxTaskManager*										m_taskManager		= nullptr;
-		IPhysicsJobBridge*									m_bridge			= nullptr;
-		std::string											m_physicsAssetPath;
-		std::unique_ptr<ShardPxCpuDispacter>				m_dispacter; 
-		PhysicsCompletionTask								m_completionTask;
-		bool												m_stepPending		= false;
-		std::vector<PendingSceneOp>							m_pendingSceneOps;
-
-		std::unordered_map<ObjectId, RigidBody>				m_rigidMap;			// None / Static / Dynamic -> PhysX Simulate
-		std::unordered_map<ObjectId, RigidBody>				m_kinematicMap;		// Kinematic -> StepKinematics()
-		std::unordered_map<ObjectId, RigidBody>				m_projectileMap;	// Projectiles -> StepProjectiles()
-		std::unordered_map<ObjectId, CharacterBody>			m_cctMap;			// Local/AI character -> MoveCharacters()
-		std::unordered_map<ObjectId, CharacterBody>			m_remoteCctMap;		// Remote character -> SetCharacterState()'s Teleport. no tick
-
-		// ANALYTIC 투사체 히트 등 수동 push 이벤트
-		std::vector<SimEvent>								m_pendingSimEvents;
-
-		// kinematic body / setGlobalPose / character move에 의한 수동 dirty tracking
-		// onAdvance로 검출되지 않는 위치 변경을 보완함
-		std::unordered_set<ObjectId>						m_dirtySet;
+		struct Impl;
+		std::unique_ptr<Impl> m_impl;
 	};
 }
