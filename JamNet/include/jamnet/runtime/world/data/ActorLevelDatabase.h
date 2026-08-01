@@ -2,7 +2,7 @@
 
 #include <jambase/JamTypes.h>
 
-#include <jamnet/runtime/actor/ActorArchetypeDatabase.h>
+#include "jamnet/runtime/world/actor/ActorArchetypeDatabase.h"
 
 #include <jampx/PhysicsTypes.h>
 
@@ -13,7 +13,7 @@ namespace jam::net
 {
 	struct ActorLevelInstanceData
 	{
-		uint32				levelActorId = 0;
+		uint32				actorId = 0;
 		ActorArchetypeKey	actorArchetype{};
 		std::string			actorArchetypeName;
 		px::Transform		pose{};
@@ -25,6 +25,6 @@ namespace jam::net
 		std::string							sceneName;
 		std::vector<ActorLevelInstanceData> instances;
 
-		const ActorLevelInstanceData* Find(uint32 levelActorId) const;
+		const ActorLevelInstanceData* Find(uint32 actorId) const;
 	};
 }

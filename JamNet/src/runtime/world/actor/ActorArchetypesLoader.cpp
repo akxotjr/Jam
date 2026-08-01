@@ -1,75 +1,67 @@
 #include "pch.h"
 
-#include "jambase/JsonFileIO.h"
-#include "jamnet/runtime/actor/ActorArchetypesLoader.h"
+#include "jamnet/runtime/world/actor/ActorArchetypesLoader.h"
 
 #include <Cpp/actor_archetypes.generated.hpp>
-#include <nlohmann/json.hpp>
 #include <stdexcept>
 
 namespace jam::net
 {
 	namespace
 	{
-		void ValidateArchetypeIdentity(const std::string& name, ActorArchetypeKey key)
+		eActorSpawnPolicy ToSpawnPolicy(jam::shared::gen::eActorArchetypeDtoSpawnPolicy policy)
+		{
+			switch (policy)
+			{
+			case jam::shared::gen::eActorArchetypeDtoSpawnPolicy::LevelOnly: return eActorSpawnPolicy::LevelOnly;
+			case jam::shared::gen::eActorArchetypeDtoSpawnPolicy::RuntimeOnly: return eActorSpawnPolicy::RuntimeOnly;
+			case jam::shared::gen::eActorArchetypeDtoSpawnPolicy::Both: return eActorSpawnPolicy::Both;
+			}
+			throw std::runtime_error("unsupported actor spawn policy");
+		}
+
+		void ValidateArchetypeIdentity(const std::string& name)
 		{
 			if (name.empty())
 				throw std::runtime_error("actor archetype name must not be empty");
 
 			const auto expectedKey = MakeActorArchetypeKey(name);
-			if (!key)
-				throw std::runtime_error("actor archetype key must not be zero: " + name);
-			if (expectedKey != key)
-				throw std::runtime_error("actor archetype key mismatch: " + name);
+			if (!expectedKey)
+				throw std::runtime_error("derived actor archetype key must not be zero: " + name);
 		}
 
-		void ValidatePhysicsArchetypeIdentity(const std::string& name, px::PhysicsArchetypeKey key)
+		void ValidatePhysicsArchetypeIdentity(const std::string& name)
 		{
 			if (name.empty())
 				throw std::runtime_error("physics archetype name must not be empty");
 
 			const auto expectedKey = px::MakePhysicsArchetypeKey(name);
-			if (!IsValidAssetKey(key))
-				throw std::runtime_error("physics archetype key must not be zero: " + name);
-			if (expectedKey != key)
-				throw std::runtime_error("physics archetype key mismatch: " + name);
+			if (!IsValidAssetKey(expectedKey))
+				throw std::runtime_error("derived physics archetype key must not be zero: " + name);
 		}
 
 		ActorArchetypeData BuildData(const std::string& name, const jam::shared::gen::ActorArchetypeDto& dto)
 		{
 			ActorArchetypeData data{};
 			data.name = name;
-			data.key = ActorArchetypeKey::FromU64(dto.archetypeKey);
+			data.key = MakeActorArchetypeKey(name);
 			data.physicsArchetypeName = dto.physicsArchetype;
-			if (dto.physicsArchetypeKey != 0)
-				data.physicsArchetype = px::PhysicsArchetypeKey{ dto.physicsArchetypeKey };
-			else if (!data.physicsArchetypeName.empty())
+			data.spawnPolicy = ToSpawnPolicy(dto.spawnPolicy);
+			data.allowReplication = dto.allowReplication;
+			if (!data.physicsArchetypeName.empty())
 				data.physicsArchetype = px::MakePhysicsArchetypeKey(data.physicsArchetypeName);
 
-			ValidateArchetypeIdentity(data.name, data.key);
+			ValidateArchetypeIdentity(data.name);
 			if (!data.physicsArchetypeName.empty())
-				ValidatePhysicsArchetypeIdentity(data.physicsArchetypeName, data.physicsArchetype);
+				ValidatePhysicsArchetypeIdentity(data.physicsArchetypeName);
 
 			return data;
 		}
 	}
 
-	ActorArchetypesLoader::json ActorArchetypesLoader::LoadJson(const std::string& path)
-	{
-		return JsonFileIO::Load(path, "failed to open actor archetype file for read: ",
-			[](const json&)
-			{
-			});
-	}
-
 	jam::shared::gen::ActorArchetypesRootDto ActorArchetypesLoader::LoadDto(const std::string& path)
 	{
 		return jam::shared::gen::LoadActorArchetypesRootDto(path);
-	}
-
-	jam::shared::gen::ActorArchetypesRootDto ActorArchetypesLoader::LoadDtoFromJson(const json& json)
-	{
-		return jam::shared::gen::DeserializeActorArchetypesRootDto(json);
 	}
 
 	ActorArchetypeDatabase ActorArchetypesLoader::Load(const std::string& path)

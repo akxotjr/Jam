@@ -1,27 +1,24 @@
 #include "pch.h"
 #include "jamnet/runtime/world/data/ActorLevelsLoader.h"
-
-#include "jambase/JsonFileIO.h"
+#include "jamnet/runtime/world/actor/ActorDirectory.h"
 
 #include <Cpp/actor_levels.generated.hpp>
 
-#include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace jam::net
 {
 	namespace
 	{
-		void ValidateActorArchetypeIdentity(const std::string& name, ActorArchetypeKey key)
+		void ValidateActorArchetypeIdentity(const std::string& name)
 		{
 			if (name.empty())
 				throw std::runtime_error("actor level actor_archetype must not be empty");
 
 			const auto expectedKey = MakeActorArchetypeKey(name);
-			if (!key)
-				throw std::runtime_error("actor level actor_archetype_key must not be zero: " + name);
-			if (expectedKey != key)
-				throw std::runtime_error("actor level actor_archetype key mismatch: " + name);
+			if (!expectedKey)
+				throw std::runtime_error("derived actor level actor_archetype key must not be zero: " + name);
 		}
 
 		float RequireComponent(const std::vector<float>& values, size_t index, const char* fieldName, size_t expectedCount)
@@ -50,35 +47,20 @@ namespace jam::net
 		ActorLevelInstanceData BuildInstance(const jam::shared::gen::ActorLevelInstanceDto& dto)
 		{
 			ActorLevelInstanceData data{};
-			data.levelActorId = dto.levelActorId;
+			data.actorId = dto.actorId;
 			data.actorArchetypeName = dto.actorArchetype;
-			if (dto.actorArchetypeKey != 0)
-				data.actorArchetype = ActorArchetypeKey::FromU64(dto.actorArchetypeKey);
-			else if (!data.actorArchetypeName.empty())
+			if (!data.actorArchetypeName.empty())
 				data.actorArchetype = MakeActorArchetypeKey(data.actorArchetypeName);
 			data.pose = BuildTransform(dto.spawnPose);
 
-			ValidateActorArchetypeIdentity(data.actorArchetypeName, data.actorArchetype);
+			ValidateActorArchetypeIdentity(data.actorArchetypeName);
 			return data;
 		}
-	}
-
-	ActorLevelsLoader::json ActorLevelsLoader::LoadJson(const std::string& path)
-	{
-		return JsonFileIO::Load(path, "failed to open actor level file for read: ",
-			[](const json&)
-			{
-			});
 	}
 
 	jam::shared::gen::ActorLevelsRootDto ActorLevelsLoader::LoadDto(const std::string& path)
 	{
 		return jam::shared::gen::LoadActorLevelsRootDto(path);
-	}
-
-	jam::shared::gen::ActorLevelsRootDto ActorLevelsLoader::LoadDtoFromJson(const json& json)
-	{
-		return jam::shared::gen::DeserializeActorLevelsRootDto(json);
 	}
 
 	ActorLevelDatabase ActorLevelsLoader::Load(const std::string& path)
@@ -95,8 +77,18 @@ namespace jam::net
 
 		database.sceneName = dto.sceneName;
 		database.instances.reserve(dto.instances.size());
+		std::unordered_set<uint32> actorIds;
 		for (const auto& instanceDto : dto.instances)
-			database.instances.push_back(BuildInstance(instanceDto));
+		{
+			ActorLevelInstanceData instance = BuildInstance(instanceDto);
+			if (!ActorDirectory::IsInitialId(ActorId(instance.actorId)))
+				throw std::runtime_error("actor level actor_id must be a canonical generation-1 ActorId");
+
+			if (!actorIds.insert(instance.actorId).second)
+				throw std::runtime_error("actor level contains duplicate actor_id: " + std::to_string(instance.actorId));
+
+			database.instances.push_back(std::move(instance));
+		}
 
 		return database;
 	}

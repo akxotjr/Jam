@@ -11,6 +11,19 @@
 
 namespace jam::net
 {
+	enum class eActorSpawnPolicy : uint8
+	{
+		LevelOnly,
+		RuntimeOnly,
+		Both,
+	};
+
+	enum class eActorSpawnSource : uint8
+	{
+		Level,
+		Runtime,
+	};
+
 	struct ActorArchetypeTag;
 	using ActorArchetypeKey = AssetKey<ActorArchetypeTag>;
 
@@ -25,6 +38,15 @@ namespace jam::net
 		std::string				name;
 		px::PhysicsArchetypeKey	physicsArchetype{};
 		std::string				physicsArchetypeName;
+		eActorSpawnPolicy		spawnPolicy = eActorSpawnPolicy::Both;
+		bool					allowReplication = true;
+
+		bool AllowsSpawn(eActorSpawnSource source) const noexcept
+		{
+			return spawnPolicy == eActorSpawnPolicy::Both
+				|| (source == eActorSpawnSource::Level && spawnPolicy == eActorSpawnPolicy::LevelOnly)
+				|| (source == eActorSpawnSource::Runtime && spawnPolicy == eActorSpawnPolicy::RuntimeOnly);
+		}
 	};
 
 	struct ActorArchetypeDatabase

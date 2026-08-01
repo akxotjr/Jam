@@ -2,7 +2,6 @@
 
 #include "jamnet/runtime/world/data/ActorLevelDatabase.h"
 
-#include <nlohmann/json_fwd.hpp>
 #include <string>
 
 namespace jam::shared::gen
@@ -19,11 +18,7 @@ namespace jam::net
 
 	struct ActorLevelsLoader
 	{
-		using json = nlohmann::json;
-
-		static json LoadJson(const std::string& path);
 		static jam::shared::gen::ActorLevelsRootDto LoadDto(const std::string& path);
-		static jam::shared::gen::ActorLevelsRootDto LoadDtoFromJson(const json& json);
 		static ActorLevelDatabase Load(const std::string& path);
 	};
 }

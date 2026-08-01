@@ -1,78 +1,55 @@
 #include "pch.h"
 
-#include "jambase/JsonFileIO.h"
 #include "jamnet/runtime/world/data/WorldArchetypesLoader.h"
 
 #include <Cpp/world_archetypes.generated.hpp>
 
-#include <nlohmann/json.hpp>
 #include <stdexcept>
 
 namespace jam::net
 {
 	namespace
 	{
-		void ValidateWorldArchetypeIdentity(const std::string& name, WorldArchetypeKey key)
+		void ValidateWorldArchetypeIdentity(const std::string& name)
 		{
 			if (name.empty())
 				throw std::runtime_error("world archetype name must not be empty");
 
 			const auto expectedKey = MakeWorldArchetypeKey(name);
 			if (!IsValidAssetKey(expectedKey))
-				throw std::runtime_error("world archetype key must not be zero: " + name);
-			if (expectedKey != key)
-				throw std::runtime_error("world archetype key mismatch: " + name);
+				throw std::runtime_error("derived world archetype key must not be zero: " + name);
 		}
 
-		void ValidateWorldTemplateIdentity(const std::string& name, WorldTemplateKey key)
+		void ValidateWorldTemplateIdentity(const std::string& name)
 		{
 			if (name.empty())
 				throw std::runtime_error("world template name must not be empty");
 
 			const WorldTemplateKey expectedKey = MakeWorldTemplateKey(name);
-			if (!IsValidAssetKey(key))
-				throw std::runtime_error("world template key must not be zero: " + name);
-			if (expectedKey != key)
-				throw std::runtime_error("world template key mismatch: " + name);
+			if (!IsValidAssetKey(expectedKey))
+				throw std::runtime_error("derived world template key must not be zero: " + name);
 		}
 
 		WorldArchetypeData BuildData(const std::string& name, const jam::shared::gen::WorldArchetypeDto& dto)
 		{
 			WorldArchetypeData data{};
 			data.name = name;
-			data.archetypeKey = WorldArchetypeKey::FromU64(dto.archetypeKey);
+			data.archetypeKey = MakeWorldArchetypeKey(name);
 			data.templateName = dto.templateName;
-			data.templateKey = WorldTemplateKey::FromU64(dto.templateKey);
-			data.presentationName = dto.presentationName;
-			data.actorArchetypesName = dto.actorArchetypesName;
+			data.templateKey = MakeWorldTemplateKey(data.templateName);
 			data.actorLevelName = dto.actorLevelName;
 			data.physicsAssetName = dto.physicsAssetName;
 
-			ValidateWorldArchetypeIdentity(data.name, data.archetypeKey);
-			ValidateWorldTemplateIdentity(data.templateName, data.templateKey);
-			if (data.presentationName.empty())
-				throw std::runtime_error("world archetype entry requires non-empty presentation_name: " + name);
+			ValidateWorldArchetypeIdentity(data.name);
+			ValidateWorldTemplateIdentity(data.templateName);
 
 			return data;
 		}
 	}
 
-	WorldArchetypesLoader::json WorldArchetypesLoader::LoadJson(const std::string& path)
-	{
-		return JsonFileIO::Load(path, "failed to open world archetype file for read: ",
-			[](const json&)
-			{
-			});
-	}
-
 	jam::shared::gen::WorldArchetypesRootDto WorldArchetypesLoader::LoadDto(const std::string& path)
 	{
 		return jam::shared::gen::LoadWorldArchetypesRootDto(path);
-	}
-
-	jam::shared::gen::WorldArchetypesRootDto WorldArchetypesLoader::LoadDtoFromJson(const json& json)
-	{
-		return jam::shared::gen::DeserializeWorldArchetypesRootDto(json);
 	}
 
 	WorldArchetypeDatabase WorldArchetypesLoader::Load(const std::string& path)

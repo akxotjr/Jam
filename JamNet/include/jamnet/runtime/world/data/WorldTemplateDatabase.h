@@ -1,9 +1,10 @@
 #pragma once
 
-#include "jamnet/runtime/world/types/WorldTemplateKey.h"
+#include "jamnet/runtime/world/lifecycle/WorldTemplateKey.h"
+#include "jamnet/runtime/world/lifecycle/WorldActionTypes.h"
+
 #include <unordered_map>
 
-#include "jamnet/runtime/world/types/WorldActionTypes.h"
 
 namespace jam::net
 {

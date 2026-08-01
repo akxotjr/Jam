@@ -3,7 +3,7 @@
 #include <jambase/JamTypes.h>
 #include <jambase/JamAsset.h>
 
-#include "jamnet/runtime/world/types/WorldTemplateKey.h"
+#include "jamnet/runtime/world/lifecycle/WorldTemplateKey.h"
 
 #include <string>
 #include <string_view>
@@ -27,8 +27,6 @@ namespace jam::net
 		WorldTemplateKey	templateKey = {};
 		std::string			templateName;
 
-		std::string			presentationName;
-		std::string			actorArchetypesName;
 		std::string			actorLevelName;
 		std::string			physicsAssetName;
 

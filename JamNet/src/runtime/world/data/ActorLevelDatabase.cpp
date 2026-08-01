@@ -4,11 +4,11 @@
 
 namespace jam::net
 {
-	const ActorLevelInstanceData* ActorLevelDatabase::Find(uint32 levelActorId) const
+	const ActorLevelInstanceData* ActorLevelDatabase::Find(uint32 actorId) const
 	{
 		for (const auto& instance : instances)
 		{
-			if (instance.levelActorId == levelActorId)
+			if (instance.actorId == actorId)
 				return &instance;
 		}
 

@@ -1,35 +1,31 @@
 #pragma once
 
-#include "jamnet/runtime/world/data/SharedDataCatalog.h"
+#include "jamnet/runtime/world/lifecycle/WorldIdentity.h"
+#include "jamnet/runtime/world/lifecycle/WorldActionTypes.h"
+#include "jamnet/runtime/world/data/SharedDataManifest.h"
 #include "jamnet/runtime/world/data/WorldArchetypeDatabase.h"
 #include "jamnet/runtime/world/data/WorldTemplateDatabase.h"
 
 #include <string>
-#include <string_view>
+
 
 namespace jam::net
 {
 	class WorldConfigResolver
 	{
 	public:
-		void BindContentRootPath(std::string_view contentRootPath) { m_contentRootPath = std::string(contentRootPath); }
-		void BindContentRootFromDataPath(std::string_view dataPath);
-		void BindSharedDataCatalog(const SharedDataCatalog* catalog) { m_catalog = catalog; }
-		void BindWorldArchetypeDatabase(const WorldArchetypeDatabase* database) { m_archetypes = database; }
-		void BindWorldTemplateDatabase(const WorldTemplateDatabase* database) { m_templates = database; }
+		WorldConfigResolver(const SharedDataManifest* manifest, WorldTemplateDatabase* tmplDB, WorldArchetypeDatabase* archDB);
+		~WorldConfigResolver() = default;
 
-		WorldConfig ResolveWorldConfig(const WorldKey& key) const;
+		WorldConfig ResolveWorldConfig(const WorldInstanceRef& instance) const;
 
 	private:
-		std::string ResolveActorArchetypeSetPath(std::string_view name) const;
-		std::string ResolveActorLevelPath(std::string_view name) const;
-		std::string ResolvePhysicsAssetPath(std::string_view name) const;
-		std::string ResolveCatalogEntryPath(const SharedDataCatalogEntry* entry) const;
+		std::string ResolveActorLevelPath(const std::string& name) const;
+		std::string ResolvePhysicsAssetPath(const std::string& name) const;
 
 	private:
-		std::string					  m_contentRootPath;
-		const SharedDataCatalog* m_catalog		= nullptr;
-		const WorldArchetypeDatabase*	  m_archetypes  = nullptr;
-		const WorldTemplateDatabase*	  m_templates	= nullptr;
+		const SharedDataManifest*	  m_manifest	= nullptr;
+		const WorldArchetypeDatabase* m_archetypes  = nullptr;
+		const WorldTemplateDatabase*  m_templates	= nullptr;
 	};
 }

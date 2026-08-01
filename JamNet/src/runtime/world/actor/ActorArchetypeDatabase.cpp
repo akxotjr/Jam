@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "jamnet/runtime/actor/ActorArchetypeDatabase.h"
+#include "jamnet/runtime/world/actor/ActorArchetypeDatabase.h"
 
 namespace jam::net
 {

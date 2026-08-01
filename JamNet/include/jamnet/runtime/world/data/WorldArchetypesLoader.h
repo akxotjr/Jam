@@ -2,7 +2,6 @@
 
 #include "jamnet/runtime/world/data/WorldArchetypeDatabase.h"
 
-#include <nlohmann/json_fwd.hpp>
 #include <string>
 
 namespace jam::shared::gen
@@ -19,11 +18,7 @@ namespace jam::net
 
 	struct WorldArchetypesLoader
 	{
-		using json = nlohmann::json;
-
-		static json LoadJson(const std::string& path);
 		static jam::shared::gen::WorldArchetypesRootDto LoadDto(const std::string& path);
-		static jam::shared::gen::WorldArchetypesRootDto LoadDtoFromJson(const json& json);
 		static WorldArchetypeDatabase Load(const std::string& path);
 	};
 }

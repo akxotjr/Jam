@@ -4,92 +4,63 @@
 
 namespace jam::net
 {
-	namespace
+
+
+	WorldConfigResolver::WorldConfigResolver(const SharedDataManifest* manifest, WorldTemplateDatabase* tmplDB, WorldArchetypeDatabase* archDB)
 	{
-		std::string ParentPathOf(std::string_view path)
-		{
-			const size_t pos = path.find_last_of("/\\");
-			return pos == std::string_view::npos ? std::string{} : std::string(path.substr(0, pos));
-		}
-
-		std::string JoinPath(std::string_view root, std::string_view relative)
-		{
-			if (relative.empty())
-				return {};
-			if (root.empty())
-				return std::string(relative);
-
-			std::string result(root);
-			if (result.back() != '/' && result.back() != '\\')
-				result.push_back('/');
-			result.append(relative);
-			return result;
-		}
+		m_manifest   = manifest;
+		m_templates  = tmplDB;
+		m_archetypes = archDB;
 	}
 
-	void WorldConfigResolver::BindContentRootFromDataPath(std::string_view dataPath)
-	{
-		m_contentRootPath = ParentPathOf(dataPath);
-	}
 
-	WorldConfig WorldConfigResolver::ResolveWorldConfig(const WorldKey& key) const
+	WorldConfig WorldConfigResolver::ResolveWorldConfig(const WorldInstanceRef& instance) const
 	{
-		if (!key.IsValid() || !m_archetypes || !m_templates)
+		if (!instance.IsValid() || !m_archetypes || !m_templates)
 			return {};
 
-		const auto* archetype = m_archetypes->Find(key.archetypeKey);
-		if (!archetype)
+		const auto* worldArchetypeData = m_archetypes->Find(instance.archetypeKey);
+		if (!worldArchetypeData)
 			return {};
 
-		const auto* tmpl = m_templates->Find(archetype->templateKey);
+		const auto* tmpl = m_templates->Find(worldArchetypeData->templateKey);
 		if (!tmpl)
 			return {};
 
 		WorldConfig config{};
-		config.key = key;
-		config.templateData = *tmpl;
+		config.world.instance	= instance;
+		config.templateData		= *tmpl;
 
-		if (!archetype->actorArchetypesName.empty())
+		if (!m_manifest || m_manifest->actorArchetypeDatabasePath.empty())
+			return {};
+
+		if (!worldArchetypeData->actorLevelName.empty())
 		{
-			config.templateData.actorArchetypeSetPath = ResolveActorArchetypeSetPath(archetype->actorArchetypesName);
-			if (config.templateData.actorArchetypeSetPath.empty())
+			config.actorLevelPath = ResolveActorLevelPath(worldArchetypeData->actorLevelName);
+			if (config.actorLevelPath.empty())
 				return {};
 		}
 
-		if (!archetype->actorLevelName.empty())
+		if (!worldArchetypeData->physicsAssetName.empty())
 		{
-			config.templateData.actorLevelPath = ResolveActorLevelPath(archetype->actorLevelName);
-			if (config.templateData.actorLevelPath.empty())
-				return {};
-		}
-
-		if (!archetype->physicsAssetName.empty())
-		{
-			config.templateData.physicsAssetPath = ResolvePhysicsAssetPath(archetype->physicsAssetName);
-			if (config.templateData.physicsAssetPath.empty())
+			config.physicsAssetPath = ResolvePhysicsAssetPath(worldArchetypeData->physicsAssetName);
+			if (config.physicsAssetPath.empty())
 				return {};
 		}
 
 		return config;
 	}
 
-	std::string WorldConfigResolver::ResolveActorArchetypeSetPath(std::string_view name) const
+	std::string WorldConfigResolver::ResolveActorLevelPath(const std::string& name) const
 	{
-		return ResolveCatalogEntryPath(name.empty() || !m_catalog ? nullptr : m_catalog->FindActorArchetypeSet(name));
+		if (!m_manifest) return "";
+		return m_manifest->actorLevelDatabasePaths.contains(name) ? m_manifest->actorLevelDatabasePaths.at(name) : "";
 	}
 
-	std::string WorldConfigResolver::ResolvePhysicsAssetPath(std::string_view name) const
+	std::string WorldConfigResolver::ResolvePhysicsAssetPath(const std::string& name) const
 	{
-		return ResolveCatalogEntryPath(name.empty() || !m_catalog ? nullptr : m_catalog->FindPhysicsAsset(name));
+		if (!m_manifest) return "";
+		return m_manifest->physicsAssetDatabasePaths.contains(name) ? m_manifest->physicsAssetDatabasePaths.at(name) : "";
 	}
 
-	std::string WorldConfigResolver::ResolveActorLevelPath(std::string_view name) const
-	{
-		return ResolveCatalogEntryPath(name.empty() || !m_catalog ? nullptr : m_catalog->FindActorLevel(name));
-	}
-
-	std::string WorldConfigResolver::ResolveCatalogEntryPath(const SharedDataCatalogEntry* entry) const
-	{
-		return entry ? JoinPath(m_contentRootPath, entry->path) : std::string{};
-	}
 }
