@@ -1,14 +1,16 @@
-﻿#pragma once
+#pragma once
 
 #include "jampx/IPhysicsJobBridge.h"
+#include "jampx/PhysXIncludes.h"
+#include "jampx/PhysXTypes.h"
 
 namespace jam::px
 {
-	class ShardPxCpuDispacter final : public PxCpuDispatcher
+	class ShardPxCpuDispatcher final : public PxCpuDispatcher
 	{
 
 	public:
-		explicit ShardPxCpuDispacter(IPhysicsJobBridge& bridge);
+		explicit ShardPxCpuDispatcher(IPhysicsJobBridge& bridge);
 
 		void				submitTask(PxBaseTask& task) override;
 		PxU32				getWorkerCount() const override { return 1; }

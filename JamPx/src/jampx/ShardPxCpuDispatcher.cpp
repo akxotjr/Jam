@@ -1,16 +1,16 @@
-﻿#include "pch.h"
-#include "jampx/ShardPxCpuDispacter.h"
+#include "pch.h"
+#include "jampx/ShardPxCpuDispatcher.h"
 
 
 namespace jam::px
 {
-	ShardPxCpuDispacter::ShardPxCpuDispacter(IPhysicsJobBridge& bridge)
+	ShardPxCpuDispatcher::ShardPxCpuDispatcher(IPhysicsJobBridge& bridge)
 		: m_bridge(bridge)
 	{
 	}
 
 
-	void ShardPxCpuDispacter::submitTask(physx::PxBaseTask& task)
+	void ShardPxCpuDispatcher::submitTask(physx::PxBaseTask& task)
 	{
 		if (m_bridge.IsInFiberContext())
 		{
