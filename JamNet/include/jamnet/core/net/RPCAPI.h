@@ -1,11 +1,11 @@
 #pragma once
 
-#include "SessionShardState.h"
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/net/RPC.h"
 #include "jamnet/core/net/Session.h"
+#include "jamnet/core/net/Service.h"
 
 namespace jam::net
 {
@@ -20,16 +20,16 @@ namespace jam::net
 		const SessionId sessionId = session->GetSessionId();
 		if (sessionId == kInvalidSessionId)
 			return false;
+		auto service = session->GetServiceRef();
+		if (!service)
+			return false;
+		const EndpointHandle endpoint = session->GetEndpointHandle();
+		const uint32 generation = session->GetServiceGeneration();
 
 		auto fnsp = std::make_shared<FnT>(std::forward<Fn>(fn));
-		auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId));
-		if (!shard)
-			return false;
-
-		shard->Submit(Job([sessionId, fnsp]() mutable
+		session->Submit(Job([service, sessionId, endpoint, generation, fnsp]() mutable
 			{
-				auto& state = GetOrCreateSessionShardState();
-				Session* session = state.FindSession(sessionId);
+				Session* session = service->FindOwnedSession(sessionId, endpoint, generation);
 				if (!session)
 					return;
 
@@ -218,21 +218,21 @@ namespace jam::net
 			onNull();
 			return;
 		}
+		auto service = session->GetServiceRef();
+		if (!service)
+		{
+			onNull();
+			return;
+		}
+		const EndpointHandle endpoint = session->GetEndpointHandle();
+		const uint32 generation = session->GetServiceGeneration();
 
 		auto fnsp		= std::make_shared<FnT>(std::forward<Fn>(fn));
 		auto onNullsp	= std::make_shared<OnNullT>(std::forward<OnNull>(onNull));
-		auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId));
-		if (!shard)
-		{
-			(*onNullsp)();
-			return;
-		}
-
-		shard->Submit(Job([sessionId, fnsp, onNullsp]() mutable
+		session->Submit(Job([service, sessionId, endpoint, generation, fnsp, onNullsp]() mutable
 			{
 				auto& L = CurrentShardLocalChecked();
-				auto& state = GetOrCreateSessionShardState(L);
-				Session* session = state.FindSession(sessionId);
+				Session* session = service->FindOwnedSession(sessionId, endpoint, generation);
 				if (!session)
 				{
 					(*onNullsp)();
@@ -255,7 +255,16 @@ namespace jam::net
 
 				FiberDesc desc{};
 				desc.name = "RPCAPI.RunOnSessionFiber";
-				scheduler->PostSpawn([fnsp, e]() mutable { (*fnsp)(e); }, desc);
+				scheduler->PostSpawn([service, sessionId, endpoint, generation, fnsp, onNullsp]() mutable
+					{
+						Session* current = service->FindOwnedSession(sessionId, endpoint, generation);
+						if (!current || current->GetEntity() == entt::null)
+						{
+							(*onNullsp)();
+							return;
+						}
+						(*fnsp)(current->GetEntity());
+					}, desc);
 			}, eJobPriority::Control));
 	}
 

@@ -1,5 +1,10 @@
 #pragma once
+
+#include <jambase/JamMacro.h>
+#include <jambase/JamAssert.h>
 #include <jambase/CacheLine.h>
+
+#include <vector>
 #include <array>
 #include <atomic>
 

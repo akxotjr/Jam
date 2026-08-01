@@ -19,16 +19,22 @@ namespace jam::net
 	namespace
 	{
 		inline constexpr uint64 kClientBindRetryDelayNs = 500_ms;
-		inline const RouteDomain kBoundSessionRouteDomain = RouteDomain::From("BoundSession");
 
 		RouteKey MakeBoundSessionRouteKey(uint64 accountId)
 		{
-			return GLOBAL_EXEC.MakeRouteKey(kBoundSessionRouteDomain, accountId);
+			return GLOBAL_EXEC.MakeAffinityRouteKey(accountId);
 		}
 
 		void SendUdpBindResponse(Session& session, bool success, uint64 accountId, RuntimeId userId)
 		{
-			const UDP_BIND_RES_DATA res{ .accountId = accountId, .userId = userId, .success = static_cast<uint8>(success ? 1 : 0) };
+			const SessionId sessionId = success ? session.GetSessionId() : kInvalidSessionId;
+			const UDP_BIND_RES_DATA res
+			{
+				.accountId	= accountId,
+				.userId		= userId,
+				.sessionId	= sessionId,
+				.success	= static_cast<uint8>(success ? 1 : 0),
+			};
 			auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_RES, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &res, sizeof(res));
 			session.Send(pkt);
 		}
@@ -52,7 +58,7 @@ namespace jam::net
 
 	bool UdpSession::Connect()
 	{
-		auto* service = GetService();
+		auto service = GetServiceRef();
 		if (!service)
 			return false;
 
@@ -95,10 +101,11 @@ namespace jam::net
 
 		const EndpointHandle endpointHandle = GetEndpointHandle();
 		const SessionId sessionId = GetSessionId();
-		Post(Job([endpointHandle, sessionId, packet]
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		Post(Job([service, endpointHandle, sessionId, generation, packet]
 			{
-				auto& state = GetOrCreateSessionShardState();
-				auto* self = static_cast<UdpSession*>(state.FindSessionAny(sessionId, endpointHandle));
+				auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(sessionId, endpointHandle, generation)) : nullptr;
 				if (!self)
 					return;
 
@@ -172,7 +179,7 @@ namespace jam::net
 
 	bool UdpSession::RegisterConnect()
 	{
-		auto* service = GetService();
+		auto service = GetServiceRef();
 		if (!service || !service->GetIocpCore())
 			return false;
 
@@ -185,7 +192,7 @@ namespace jam::net
 
 	bool UdpSession::RegisterDisconnect()
 	{
-		auto* service = GetService();
+		auto service = GetServiceRef();
 		if (!service || !service->GetIocpCore())
 			return false;
 
@@ -218,9 +225,22 @@ namespace jam::net
 
 	void UdpSession::ProcessDisconnect()
 	{
-		if (const entt::entity e = GetEntity(); e != entt::null)
+		if (GetEntity() != entt::null)
 		{
-			DisconnectHandshake(e);
+			auto service = GetServiceRef();
+			const SessionId sessionId = GetSessionId();
+			const EndpointHandle endpoint = GetEndpointHandle();
+			const uint32 generation = GetServiceGeneration();
+			Post(Job([service, sessionId, endpoint, generation]
+				{
+					auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
+					if (!self)
+						return;
+
+					const entt::entity entity = self->GetEntity();
+					if (entity != entt::null)
+						DisconnectHandshake(entity);
+				}, eJobPriority::Control));
 			return;
 		}
 
@@ -284,7 +304,7 @@ namespace jam::net
 			{
 				m_clientBind.active = false;
 				++m_clientBind.timerToken;
-				if (!res->success)
+				if (!res->success || res->sessionId == kInvalidSessionId)
 				{
 					m_clientBind.active = false;
 					m_clientBind.bound  = false;
@@ -294,10 +314,10 @@ namespace jam::net
 				}
 
 				m_clientBind.bound = true;
-				IssueSessionId();
-				if (GetSessionId() == kInvalidSessionId)
+				if (!AdoptAuthoritativeSessionId(res->sessionId))
 				{
-					JAMNET_LOG_ERROR("[UdpSession] Failed to issue bound session id. accountId={}, userId={}", m_accountId, m_userId);
+					JAMNET_LOG_ERROR("[UdpSession] Failed to adopt authoritative session id. accountId={}, userId={}, sessionId={}",
+						m_accountId, m_userId, res->sessionId);
 					m_clientBind.active = false;
 					m_clientBind.bound  = false;
 					Disconnect();
@@ -383,11 +403,24 @@ namespace jam::net
 		if (!m_releaseQueued.exchange(false, std::memory_order_acq_rel))
 			return;
 
-		auto* service = GetService();
+		auto service = GetServiceRef();
 		if (!service)
 			return;
 
-		service->ReleaseUdpSession(this);
+		const SessionId sessionId = GetSessionId();
+		const EndpointHandle endpoint = GetEndpointHandle();
+		const uint32 generation = GetServiceGeneration();
+		Job release([service, sessionId, endpoint, generation]
+			{
+				auto* self = static_cast<UdpSession*>(service->FindOwnedSession(sessionId, endpoint, generation));
+				if (self)
+					service->ReleaseUdpSession(self);
+			}, eJobPriority::Control);
+
+		if (service->GetServiceType() == eServiceType::CLIENT)
+			std::static_pointer_cast<ClientService>(service)->GetPrincipalShard()->Submit(std::move(release));
+		else
+			Submit(std::move(release));
 	}
 
 	void UdpSession::ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns)
@@ -428,10 +461,11 @@ namespace jam::net
 	{
 		const uint32 token = ++m_prebindTimerToken;
 		const EndpointHandle endpointHandle = GetEndpointHandle();
-		SubmitAfter(Job([endpointHandle, token]()
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, endpointHandle, generation, token]()
 			{
-				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
-				auto* self = static_cast<UdpSession*>(state.FindPreboundSession(endpointHandle));
+				auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(kInvalidSessionId, endpointHandle, generation)) : nullptr;
 				if (!self)
 					return;
 				if (!self->IsPreBindPhase())
@@ -488,7 +522,7 @@ namespace jam::net
 		++m_clientBind.timerToken;
 		SetSessionState(eSessionState::Disconnected);
 		NotifyLinkTerminatedIfEstablished();
-		OnDisconnected();
+		NotifyDisconnectedOnce();
 		MarkClosing();
 		m_releaseQueued.store(true, std::memory_order_release);
 		if (GetPendingDispatchCount() == 0)
@@ -519,10 +553,11 @@ namespace jam::net
 	{
 		const uint32 token = ++m_clientBind.timerToken;
 		const EndpointHandle endpointHandle = GetEndpointHandle();
-		SubmitAfter(Job([endpointHandle, token]()
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, endpointHandle, generation, token]()
 			{
-				auto& state = GetOrCreateSessionShardState();
-				auto* self = static_cast<UdpSession*>(state.FindPreboundSession(endpointHandle));
+				auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(kInvalidSessionId, endpointHandle, generation)) : nullptr;
 				if (!self)
 					return;
 				if (!self->m_clientBind.active || self->m_clientBind.bound || self->m_clientBind.timerToken != token)

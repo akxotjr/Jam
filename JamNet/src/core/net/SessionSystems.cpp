@@ -10,7 +10,7 @@
 
 #include "jamnet/core/net/SessionSystems.h"
 
-#include "jamnet/runtime/schema/RPCSchemaIds.h"
+#include "jamnet/runtime/protocol/schema/RPCSchemaIds.h"
 
 
 namespace jam::net
@@ -106,6 +106,8 @@ namespace jam::net
 
 			auto& info = R.get<SessionInfo>(e);
 			info.state = SessionInfo::DISCONNECTED;
+			if (info.session)
+				info.session->CompleteProtocolDisconnect();
 
 		}
 
@@ -696,6 +698,17 @@ namespace jam::net
 				return true;
 			if (handshake->state == HandshakeState::DISCONNECT_FIN_SENT || handshake->state == HandshakeState::CLOSING)
 			{
+				if (auto* udp = dynamic_cast<UdpSession*>(info->session))
+				{
+					udp->SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_ACK));
+					JAMNET_LOG_DEBUG("[Handshake] UDP DISCONNECT_FINACK received; DISCONNECT_ACK submitted. entity={}", static_cast<uint32>(ctx.e));
+					handshake->state            = HandshakeState::DISCONNECTED;
+					handshake->lastTime_ns      = 0;
+					info->state                 = SessionInfo::DISCONNECTED;
+					ctx.L.defers.emplace_back([e = ctx.e](entt::registry& rr) { NotifyTerminated(rr, e); });
+					return true;
+				}
+
 				EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_ACK, TransmissionWaitingQueue::CONTROL);
 
 				handshake->state                = HandshakeState::TIME_WAIT;
@@ -713,6 +726,7 @@ namespace jam::net
 			// 수동 종료측(상대 FIN에 FINACK 보낸 후) ACK 받으면 종료 완료
 			if (handshake->state == HandshakeState::DISCONNECT_FINACK_SENT)
 			{
+				JAMNET_LOG_DEBUG("[Handshake] DISCONNECT_ACK received. entity={}", static_cast<uint32>(ctx.e));
 				handshake->state = HandshakeState::DISCONNECTED;
 				info->state      = SessionInfo::DISCONNECTED;
 

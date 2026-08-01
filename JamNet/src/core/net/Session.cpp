@@ -9,18 +9,6 @@
 
 namespace jam::net
 {
-	namespace
-	{
-		inline const RouteDomain kClientPrincipalRouteDomain = RouteDomain::From("ClientPrincipal");
-
-		RouteKey MakeClientPrincipalRouteKey(uint64 accountId)
-		{
-			return GLOBAL_EXEC.MakeRouteKey(kClientPrincipalRouteDomain, accountId);
-		}
-
-	}
-
-
 	void Session::Init(const NetAddress& remoteAddr)
 	{
 		if (!remoteAddr.IsValid())
@@ -29,7 +17,7 @@ namespace jam::net
 		m_endpointId = MakeEndpointId(remoteAddr);
 
 		if (IsClientSide() && m_accountId != 0)
-			m_key = MakeClientPrincipalRouteKey(m_accountId);
+			m_key = GLOBAL_EXEC.MakeAffinityRouteKey(m_accountId);
 		else
 			m_key = IsTcp() ? MakeTcpRouteKey(remoteAddr) : MakeUdpRouteKey(remoteAddr);
 
@@ -59,6 +47,11 @@ namespace jam::net
 	bool Session::MatchesEndpointHandle(const EndpointHandle& handle) const
 	{
 		return handle.IsValid() && m_endpointId == handle.endpointId && m_key == handle.routeKey;
+	}
+
+	std::shared_ptr<Service> Session::GetServiceRef() const
+	{
+		return m_service ? m_service->shared_from_this() : nullptr;
 	}
 
 	void Session::Post(Job j) const
@@ -222,6 +215,12 @@ namespace jam::net
 		OnLinkTerminated();
 	}
 
+	void Session::NotifyDisconnectedOnce()
+	{
+		if (!m_disconnectedNotified.exchange(true, std::memory_order_acq_rel))
+			OnDisconnected();
+	}
+
 	void Session::FinalizeShardOwnedClose()
 	{
 		m_closed.store(true, std::memory_order_release);
@@ -234,8 +233,29 @@ namespace jam::net
 		}
 	}
 
+	void Session::CompleteProtocolDisconnect()
+	{
+		if (m_protocolDisconnectCompleted.exchange(true, std::memory_order_acq_rel))
+			return;
+
+		// Disconnect observers may start cross-shard teardown. Reject transport work
+		// before they remove world/user/session relationships.
+		MarkClosing();
+		SetSessionState(eSessionState::Disconnected);
+		m_clientBind.active = false;
+		++m_clientBind.timerToken;
+		NotifyLinkTerminatedIfEstablished();
+		NotifyDisconnectedOnce();
+
+		m_releaseQueued.store(true, std::memory_order_release);
+		if (GetPendingDispatchCount() == 0)
+			OnPendingDispatchDrained();
+	}
+
 	void Session::IssueSessionId()
 	{
+		if (!IsServerSide())
+			return;
 		if (m_sessionId != kInvalidSessionId || m_userId == kInvalidRuntimeId)
 			return;
 
@@ -274,6 +294,32 @@ namespace jam::net
 			CreateEntity();
 
 		NotifyLinkEstablishedIfReady();
+	}
+
+	bool Session::AdoptAuthoritativeSessionId(SessionId sessionId)
+	{
+		if (!IsClientSide() || sessionId == kInvalidSessionId || m_sessionId != kInvalidSessionId
+			|| m_userId == kInvalidRuntimeId)
+			return false;
+
+		const auto shard = m_shard.lock();
+		if (!shard)
+			return false;
+
+		m_sessionId = sessionId;
+		m_mailboxRef = shard->CreateMailboxRef(m_sessionId);
+		if (!m_mailboxRef.IsValid())
+		{
+			m_sessionId = kInvalidSessionId;
+			return false;
+		}
+
+		SetSessionState(eSessionState::Bound);
+		if (GetEntity() == entt::null)
+			CreateEntity();
+
+		NotifyLinkEstablishedIfReady();
+		return true;
 	}
 
 

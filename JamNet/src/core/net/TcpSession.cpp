@@ -20,16 +20,22 @@ namespace jam::net
 	namespace
 	{
 		inline constexpr uint64 kClientBindRetryDelayNs = 1000_ms;
-		inline const RouteDomain kBoundSessionRouteDomain = RouteDomain::From("BoundSession");
 
 		RouteKey MakeBoundSessionRouteKey(uint64 accountId)
 		{
-			return GLOBAL_EXEC.MakeRouteKey(kBoundSessionRouteDomain, accountId);
+			return GLOBAL_EXEC.MakeAffinityRouteKey(accountId);
 		}
 
 		void SendTcpBindResponse(Session& session, bool success, uint64 accountId, RuntimeId userId)
 		{
-			const TCP_BIND_RES_DATA res{ .accountId = accountId, .userId = userId, .success = static_cast<uint8>(success ? 1 : 0) };
+			const SessionId sessionId = success ? session.GetSessionId() : kInvalidSessionId;
+			const TCP_BIND_RES_DATA res
+			{
+				.accountId = accountId,
+				.userId = userId,
+				.sessionId = sessionId,
+				.success = static_cast<uint8>(success ? 1 : 0),
+			};
 			auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_RES, PacketFlags::NONE, eChannel::TCP_DEFAULT, &res, sizeof(res));
 			session.Send(pkt);
 		}
@@ -71,11 +77,12 @@ namespace jam::net
 		if (IsClosing())
 			return;
 
-		MarkClosing();
 		const bool posted = RegisterDisconnect();
+		MarkClosing();
 
 		if (!posted)
 		{
+			SocketUtils::Close(m_socket);
 			m_releaseQueued.store(true, std::memory_order_release);
 			if (GetPendingDispatchCount() == 0)
 				OnPendingDispatchDrained();
@@ -97,10 +104,11 @@ namespace jam::net
 
 		const EndpointHandle endpointHandle = GetEndpointHandle();
 		const SessionId sessionId = GetSessionId();
-		Post(Job([endpointHandle, sessionId, packet]
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		Post(Job([service, endpointHandle, sessionId, generation, packet]
 			{
-				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
-				auto* self = static_cast<TcpSession*>(state.FindSessionAny(sessionId, endpointHandle));
+				auto* self = service ? static_cast<TcpSession*>(service->FindOwnedSession(sessionId, endpointHandle, generation)) : nullptr;
 				if (!self) return;
 
 				const entt::entity e = self->GetEntity();
@@ -313,14 +321,6 @@ namespace jam::net
 		++m_clientBind.timerToken;
 		NotifyLinkTerminatedIfEstablished();
 
-		Post(Job([sessionId = GetSessionId()]
-			{
-				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
-				auto* self  = static_cast<TcpSession*>(state.FindSession(sessionId));
-				if (!self) return;
-
-				self->OnDisconnected();
-			}, eJobPriority::Control));
 		m_releaseQueued.store(true, std::memory_order_release);
 	}
 
@@ -329,11 +329,27 @@ namespace jam::net
 		if (!m_releaseQueued.exchange(false, std::memory_order_acq_rel))
 			return;
 
-		auto* service = GetService();
+		auto service = GetServiceRef();
 		if (!service)
 			return;
 
-		service->ReleaseTcpSession(this);
+		const SessionId sessionId = GetSessionId();
+		const EndpointHandle endpoint = GetEndpointHandle();
+		const uint32 generation = GetServiceGeneration();
+		Job release([service, sessionId, endpoint, generation]
+			{
+				auto* self = static_cast<TcpSession*>(service->FindOwnedSession(sessionId, endpoint, generation));
+				if (!self)
+					return;
+
+				self->NotifyDisconnectedOnce();
+				service->ReleaseTcpSession(self);
+			}, eJobPriority::Control);
+
+		if (service->GetServiceType() == eServiceType::CLIENT)
+			std::static_pointer_cast<ClientService>(service)->GetPrincipalShard()->Submit(std::move(release));
+		else
+			Submit(std::move(release));
 	}
 
 	void TcpSession::ProcessRecv(TcpRecvEvent* ev, int32 bytes)
@@ -373,10 +389,11 @@ namespace jam::net
 
 			const EndpointHandle endpointHandle = GetEndpointHandle();
 			const SessionId sessionId = GetSessionId();
-			Post(Job([endpointHandle, sessionId, packet = std::move(pkt)]() mutable
+			const uint32 generation = GetServiceGeneration();
+			auto service = GetServiceRef();
+			Post(Job([service, endpointHandle, sessionId, generation, packet = std::move(pkt)]() mutable
 				{
-					auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
-					auto* self = static_cast<TcpSession*>(state.FindSessionAny(sessionId, endpointHandle));
+					auto* self = service ? static_cast<TcpSession*>(service->FindOwnedSession(sessionId, endpointHandle, generation)) : nullptr;
 					if (!self) return;
 
 					PacketHeaderView directView = PacketHeaderView::Parse(packet->Head(), packet->Size());
@@ -565,7 +582,7 @@ namespace jam::net
 			{
 				m_clientBind.active = false;
 				++m_clientBind.timerToken;
-				if (!res->success || res->userId == 0)
+				if (!res->success || res->userId == 0 || res->sessionId == kInvalidSessionId)
 				{
 					m_clientBind.active = false;
 					m_clientBind.bound  = false;
@@ -576,10 +593,9 @@ namespace jam::net
 
 				m_userId = res->userId;
 				m_clientBind.bound = true;
-				IssueSessionId();
-				if (GetSessionId() == kInvalidSessionId)
+				if (!AdoptAuthoritativeSessionId(res->sessionId))
 				{
-					JAMNET_LOG_ERROR("[TcpSession] Failed to issue bound session id. accountId={}, userId={}", m_accountId, m_userId);
+					JAMNET_LOG_ERROR("[TcpSession] Failed to adopt authoritative session id. accountId={}, userId={}, sessionId={}", m_accountId, m_userId, res->sessionId);
 					m_clientBind.active = false;
 					m_clientBind.bound  = false;
 					Disconnect();
@@ -680,10 +696,11 @@ namespace jam::net
 	{
 		const uint32 token = ++m_clientBind.timerToken;
 		const EndpointHandle endpointHandle = GetEndpointHandle();
-		SubmitAfter(Job([endpointHandle, token]()
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, endpointHandle, generation, token]()
 			{
-				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
-				auto* self = static_cast<TcpSession*>(state.FindPreboundSession(endpointHandle));
+				auto* self = service ? static_cast<TcpSession*>(service->FindOwnedSession(kInvalidSessionId, endpointHandle, generation)) : nullptr;
 				if (!self)
 					return;
 				if (!self->m_clientBind.active || self->m_clientBind.bound || self->m_clientBind.timerToken != token)

@@ -24,6 +24,7 @@ namespace jam::net
 		UdpIngressRouteKind  kind		= UdpIngressRouteKind::None;
 		RouteKey			 routeKey	= {};
 		SessionId			 sessionId	= kInvalidSessionId;
+		uint32				 generation	= 0;
 	};
 
 	class UdpRouter final : public IocpObject
@@ -33,9 +34,11 @@ namespace jam::net
 
 		struct RoutingSlot
 		{
-			std::atomic<uint64> key		= 0;
-			std::atomic<uint64> value	= 0;
-			std::atomic<uint8>  kind	= static_cast<uint8>(UdpIngressRouteKind::None);
+			std::atomic<uint64> key			= 0;
+			std::atomic<uint32> sequence	= 0;
+			std::atomic<uint64> value		= 0;
+			std::atomic<uint32> generation	= 0;
+			std::atomic<uint8>  kind		= static_cast<uint8>(UdpIngressRouteKind::None);
 		};
 
 	public:
@@ -57,18 +60,18 @@ namespace jam::net
 
 		void					HandleError(int32 errorCode);
 
-		void					RegisterIngressPrebindRoute(uint64 endpointId, RouteKey ownerRouteKey);
+		void					RegisterIngressPrebindRoute(uint64 endpointId, RouteKey ownerRouteKey, uint32 generation = 0);
 		void					PromoteIngressToBound(uint64 endpointId, SessionId sessionId);
 		void					ClearIngressRoute(uint64 endpointId);
 		bool					TryGetIngressRoute(uint64 endpointId, UdpIngressRoute& out) const;
 
 	private:
 		static size_t			StartIngressIndex(uint64 endpointId);
-		void					UpsertIngressRoute(uint64 endpointId, UdpIngressRouteKind kind, uint64 value);
+		void					UpsertIngressRoute(uint64 endpointId, UdpIngressRouteKind kind, uint64 value, uint32 generation = 0);
 
 	private:
-		inline static constexpr uint64 kEmptyIngressKey = 0;
-		inline static constexpr uint64 kTombstoneIngressKey = std::numeric_limits<uint64>::max();
+		static constexpr uint64 kEmptyIngressKey = 0;
+		static constexpr uint64 kTombstoneIngressKey = std::numeric_limits<uint64>::max();
 
 		Service*				m_service		= nullptr;
 

@@ -22,7 +22,7 @@ namespace jam::net
 		return static_cast<size_t>((endpointId * 11400714819323198485ull) & (INGRESS_TABLE_CAPACITY - 1));
 	}
 
-	void UdpRouter::UpsertIngressRoute(uint64 endpointId, UdpIngressRouteKind kind, uint64 value)
+	void UdpRouter::UpsertIngressRoute(uint64 endpointId, UdpIngressRouteKind kind, uint64 value, uint32 generation)
 	{
 		if (endpointId == kEmptyIngressKey || endpointId == kTombstoneIngressKey)
 			return;
@@ -32,24 +32,28 @@ namespace jam::net
 		{
 			auto& slot = m_ingressRoutes[idx];
 			uint64 key = slot.key.load(std::memory_order_acquire);
-			if (key == endpointId)
+			if (key == endpointId || key == kEmptyIngressKey || key == kTombstoneIngressKey)
 			{
-				slot.value.store(value, std::memory_order_release);
-				slot.kind.store(static_cast<uint8>(kind), std::memory_order_release);
-				return;
-			}
-
-			if (key == kEmptyIngressKey || key == kTombstoneIngressKey)
-			{
-				uint64 expected = key;
-				if (!slot.key.compare_exchange_strong(expected, endpointId, std::memory_order_acq_rel))
+				uint32 sequence = slot.sequence.load(std::memory_order_acquire);
+				if ((sequence & 1u) != 0 || !slot.sequence.compare_exchange_strong(sequence, sequence + 1, std::memory_order_acq_rel))
 				{
 					--probe;
 					continue;
 				}
 
-				slot.value.store(value, std::memory_order_release);
-				slot.kind.store(static_cast<uint8>(kind), std::memory_order_release);
+				key = slot.key.load(std::memory_order_acquire);
+				if (key != endpointId && key != kEmptyIngressKey && key != kTombstoneIngressKey)
+				{
+					slot.sequence.store(sequence + 2, std::memory_order_release);
+					--probe;
+					continue;
+				}
+
+				slot.key.store(endpointId, std::memory_order_relaxed);
+				slot.value.store(value, std::memory_order_relaxed);
+				slot.generation.store(generation, std::memory_order_relaxed);
+				slot.kind.store(static_cast<uint8>(kind), std::memory_order_relaxed);
+				slot.sequence.store(sequence + 2, std::memory_order_release);
 				return;
 			}
 		}
@@ -301,31 +305,33 @@ namespace jam::net
 			}
 		}
 
-		const auto shard = GLOBAL_EXEC.GetShard(routeKey);
+		auto service = m_service->shared_from_this();
+		const auto shard = service->GetServiceType() == eServiceType::CLIENT ? std::static_pointer_cast<ClientService>(service)->GetPrincipalShard() : GLOBAL_EXEC.GetShard(routeKey);
 		if (!shard) return;
 
-		shard->Submit(Job([this, routeKey, remoteAddr, endpointId, numOfBytes, pkt = std::move(packet), ingressRecvTime_ns]() mutable
+		const uint32 routeGeneration = ingressRoute.generation;
+		shard->Submit(Job([service = std::move(service), routeKey, remoteAddr, endpointId, routeGeneration, numOfBytes, pkt = std::move(packet), ingressRecvTime_ns]() mutable
 			{
-				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
 				const EndpointHandle handle{ routeKey, endpointId };
 
-				UdpSession* session = nullptr;
-				if (auto* found = static_cast<UdpSession*>(state.FindPreboundSession(handle)))
-					session = found;
+				UdpSession* session = static_cast<UdpSession*>(service->FindOwnedSession(kInvalidSessionId, handle, routeGeneration));
 
 				if (!session)
 				{
-					if (m_service->GetServiceType() != eServiceType::SERVER)
+					if (!service->IsRunning())
 						return;
+					if (service->GetServiceType() != eServiceType::SERVER)
+						return;
+					auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
 
-					auto owner = m_service->MakeUdpSession(remoteAddr);
+					auto owner = service->MakeUdpSession(remoteAddr);
 					if (!owner) return;
 					session = owner.get();
 
 					if (state.AttachPreboundSession(std::move(owner)))
 					{
-						m_service->m_udpSessionCount.fetch_add(1, std::memory_order_relaxed);
-						m_service->m_sessionCount.fetch_add(1, std::memory_order_relaxed);
+						service->m_udpSessionCount.fetch_add(1, std::memory_order_relaxed);
+						service->m_sessionCount.fetch_add(1, std::memory_order_relaxed);
 					}
 					else
 					{
@@ -352,7 +358,7 @@ namespace jam::net
 		}
 	}
 
-	void UdpRouter::RegisterIngressPrebindRoute(uint64 endpointId, RouteKey ownerRouteKey)
+	void UdpRouter::RegisterIngressPrebindRoute(uint64 endpointId, RouteKey ownerRouteKey, uint32 generation)
 	{
 		if (!IsValidRouteKey(ownerRouteKey))
 		{
@@ -360,7 +366,7 @@ namespace jam::net
 			return;
 		}
 
-		UpsertIngressRoute(endpointId, UdpIngressRouteKind::PrebindRoute, ownerRouteKey.value());
+		UpsertIngressRoute(endpointId, UdpIngressRouteKind::PrebindRoute, ownerRouteKey.value(), generation);
 	}
 
 	void UdpRouter::PromoteIngressToBound(uint64 endpointId, SessionId sessionId)
@@ -389,9 +395,26 @@ namespace jam::net
 			if (key != endpointId)
 				continue;
 
-			slot.kind.store(static_cast<uint8>(UdpIngressRouteKind::None), std::memory_order_release);
-			slot.value.store(0, std::memory_order_release);
-			slot.key.store(kTombstoneIngressKey, std::memory_order_release);
+			uint32 sequence = slot.sequence.load(std::memory_order_acquire);
+			if ((sequence & 1u) != 0 ||
+				!slot.sequence.compare_exchange_strong(sequence, sequence + 1, std::memory_order_acq_rel))
+			{
+				--probe;
+				continue;
+			}
+
+			if (slot.key.load(std::memory_order_acquire) != endpointId)
+			{
+				slot.sequence.store(sequence + 2, std::memory_order_release);
+				--probe;
+				continue;
+			}
+
+			slot.kind.store(static_cast<uint8>(UdpIngressRouteKind::None), std::memory_order_relaxed);
+			slot.value.store(0, std::memory_order_relaxed);
+			slot.generation.store(0, std::memory_order_relaxed);
+			slot.key.store(kTombstoneIngressKey, std::memory_order_relaxed);
+			slot.sequence.store(sequence + 2, std::memory_order_release);
 			return;
 		}
 	}
@@ -411,14 +434,29 @@ namespace jam::net
 			if (key != endpointId)
 				continue;
 
-			const auto kind = static_cast<UdpIngressRouteKind>(slot.kind.load(std::memory_order_acquire));
+			const uint32 sequence = slot.sequence.load(std::memory_order_acquire);
+			if ((sequence & 1u) != 0)
+			{
+				--probe;
+				continue;
+			}
+
+			const auto kind = static_cast<UdpIngressRouteKind>(slot.kind.load(std::memory_order_relaxed));
 			if (kind == UdpIngressRouteKind::None)
 				return false;
 
-			const uint64 value = slot.value.load(std::memory_order_acquire);
+			const uint64 value = slot.value.load(std::memory_order_relaxed);
+			const uint32 generation = slot.generation.load(std::memory_order_relaxed);
+			if (slot.sequence.load(std::memory_order_acquire) != sequence ||
+				slot.key.load(std::memory_order_acquire) != endpointId)
+			{
+				--probe;
+				continue;
+			}
 			out.kind      = kind;
 			out.routeKey  = (kind == UdpIngressRouteKind::PrebindRoute) ? RouteKey(value) : RouteKey{};
 			out.sessionId = (kind == UdpIngressRouteKind::BoundSession) ? static_cast<SessionId>(value) : kInvalidSessionId;
+			out.generation = generation;
 			return true;
 		}
 

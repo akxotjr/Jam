@@ -1,4 +1,7 @@
 #pragma once
+
+#include <jambase/Logger.h>
+
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/PacketStructure.h"
 

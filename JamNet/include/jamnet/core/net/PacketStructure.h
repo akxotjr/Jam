@@ -114,21 +114,23 @@ namespace jam::net
 	struct TCP_BIND_RES_DATA
 	{
 		uint64 accountId = 0;
-		uint64 userId = 0;
-		uint8  success = 0;
+		uint64 userId	 = 0;
+		uint64 sessionId = 0;
+		uint8  success	 = 0;
 	};
 
 	struct UDP_BIND_REQ_DATA
 	{
 		uint64 accountId = 0;
-		uint64 userId = 0;
+		uint64 userId	 = 0;
 	};
 
 	struct UDP_BIND_RES_DATA
 	{
 		uint64 accountId = 0;
-		uint64 userId = 0;
-		uint8  success = 0;
+		uint64 userId	 = 0;
+		uint64 sessionId = 0;
+		uint8  success	 = 0;
 	};
 #pragma pack(pop)
 

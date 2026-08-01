@@ -126,6 +126,7 @@ namespace jam::net
 
 		uint64							GetEndpointId()		const { return m_endpointId; }
 		SessionId						GetSessionId()		const { return m_sessionId; }
+		uint32							GetServiceGeneration() const { return m_serviceGeneration; }
 		RouteKey						GetRouteKey()		const { return m_key; }
 		EndpointHandle					GetEndpointHandle() const { return EndpointHandle{ m_key, m_endpointId }; }
 		void							SetRouteKey(RouteKey key) { m_key = key; }
@@ -133,6 +134,7 @@ namespace jam::net
 		bool							IsConnected() { return m_state.load(std::memory_order_relaxed) != eSessionState::Disconnected; }
 
 		Service*						GetService() const { return m_service; }
+		std::shared_ptr<Service>		GetServiceRef() const;
 		void							SetService(Service* service) { m_service = service; }
 
 		NetAddress						GetRemoteNetAddress() { return m_remoteAddress; }
@@ -159,6 +161,9 @@ namespace jam::net
 		void							SetUserId(RuntimeId userId) { m_userId = userId; OnSessionPrincipalUpdated(); }
 		RuntimeId						GetUserId() const { return m_userId; }
 
+		void							FinalizeShardOwnedClose();
+		void							CompleteProtocolDisconnect();
+
 		static uint64					MakeEndpointId(const NetAddress& addr);
 		static RouteKey					MakeTcpRouteKey(const NetAddress& remoteAddr);
 		static RouteKey					MakeUdpRouteKey(const NetAddress& remoteAddr);
@@ -168,6 +173,7 @@ namespace jam::net
 		virtual void					OnSessionPrincipalUpdated() {}
 
 		void							IssueSessionId();
+		bool							AdoptAuthoritativeSessionId(SessionId sessionId);
 
 		bool							TryBeginServerBind();
 		void							EndServerBind();
@@ -175,7 +181,7 @@ namespace jam::net
 
 		void							NotifyLinkEstablishedIfReady();
 		void							NotifyLinkTerminatedIfEstablished();
-		void							FinalizeShardOwnedClose();
+		void							NotifyDisconnectedOnce();
 
 	protected:   
 		SOCKET							m_socket		= INVALID_SOCKET;
@@ -188,12 +194,15 @@ namespace jam::net
 		uint64							m_accountId		= 0;
 		RuntimeId						m_userId		= kInvalidRuntimeId;
 		SessionId						m_sessionId		= kInvalidSessionId;
+		uint32							m_serviceGeneration = 0;
 
 		std::atomic<eSessionState>		m_state			= eSessionState::Disconnected;
 
 		bool							m_isReady		= false;
 		std::atomic<bool>				m_releaseQueued = false;
 		bool							m_linkEstablishedNotified = false;
+		std::atomic<bool>				m_protocolDisconnectCompleted = false;
+		std::atomic<bool>				m_disconnectedNotified = false;
 
 		BindRetryState					m_clientBind	= {};
 
@@ -207,6 +216,8 @@ namespace jam::net
 		std::atomic<bool>				m_closed			= false;
 
 		std::function<void()>			m_onShardOwnedClosed = {};
+
+		friend class ClientService;
 	};
 }
 
