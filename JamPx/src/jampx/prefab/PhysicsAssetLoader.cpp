@@ -196,30 +196,6 @@ namespace jam::px
 			throw std::runtime_error("unsupported character motion type");
 		}
 
-		eSpawnPolicy ToSpawnPolicy(jam::shared::gen::eRigidPhysicsArchetypeDtoSpawnPolicy policy)
-		{
-			switch (policy)
-			{
-			case jam::shared::gen::eRigidPhysicsArchetypeDtoSpawnPolicy::LevelOnly: return eSpawnPolicy::LevelOnly;
-			case jam::shared::gen::eRigidPhysicsArchetypeDtoSpawnPolicy::RuntimeOnly: return eSpawnPolicy::RuntimeOnly;
-			case jam::shared::gen::eRigidPhysicsArchetypeDtoSpawnPolicy::Both: return eSpawnPolicy::Both;
-			}
-
-			throw std::runtime_error("unsupported rigid spawn policy");
-		}
-
-		eSpawnPolicy ToSpawnPolicy(jam::shared::gen::eCharacterPhysicsArchetypeDtoSpawnPolicy policy)
-		{
-			switch (policy)
-			{
-			case jam::shared::gen::eCharacterPhysicsArchetypeDtoSpawnPolicy::LevelOnly: return eSpawnPolicy::LevelOnly;
-			case jam::shared::gen::eCharacterPhysicsArchetypeDtoSpawnPolicy::RuntimeOnly: return eSpawnPolicy::RuntimeOnly;
-			case jam::shared::gen::eCharacterPhysicsArchetypeDtoSpawnPolicy::Both: return eSpawnPolicy::Both;
-			}
-
-			throw std::runtime_error("unsupported character spawn policy");
-		}
-
 		template <typename TFlags>
 		MotionFlag::Flags ToMotionFlagsImpl(const TFlags& flags)
 		{
@@ -511,6 +487,8 @@ namespace jam::px
 			data.material = MakeNamedHandle<MaterialHandle>(cctDto.material);
 			data.density = cctDto.density;
 			data.policy = eCCTPolicy::Default;
+			data.simFD = ToSimFD(cctDto.simFilter);
+			data.qryFD = ToQueryFD(cctDto.qryFilter);
 			data.slopeLimit = cctDto.slopeLimit;
 			data.invisibleWallHeight = cctDto.invisibleWallHeight;
 			data.maxJumpHeight = cctDto.maxJumpHeight;
@@ -639,7 +617,7 @@ namespace jam::px
 			else if (const auto* follow = dynamic_cast<const jam::shared::gen::FollowSourceDto*>(kinematicDto.source.get()))
 			{
 				FollowSource source{};
-				source.targetId = follow->targetId;
+				source.targetActorId = follow->targetId;
 				if (!follow->offset.empty())
 					source.offset = ToVec3(follow->offset, "follow.offset");
 				source.offsetSpace = ToFollowOffsetSpace(follow->offsetSpace);
@@ -681,7 +659,7 @@ namespace jam::px
 			data.hit.requestFd = ToRequestQueryFD(projectileDto.hit.requestFd);
 			data.lifetime.maxRange = projectileDto.lifetime.maxRange;
 			data.lifetime.maxLifetime = projectileDto.lifetime.maxLifetime;
-			data.homing.targetId = projectileDto.homing.targetId;
+			data.homing.targetActorId = projectileDto.homing.targetId;
 			data.homing.maxSpeed = projectileDto.homing.maxSpeed;
 			data.homing.acceleration = projectileDto.homing.acceleration;
 			data.homing.maxTurnRate = projectileDto.homing.maxTurnRate;
@@ -710,9 +688,6 @@ namespace jam::px
 				data.bodyType = eBodyType::Rigid;
 				data.motionType = ToMotionType(rigid->motionType);
 				data.motionFlags = ToMotionFlags(rigid->motionFlags);
-				data.spawnPolicy = ToSpawnPolicy(rigid->spawnPolicy);
-				data.allowReplication = rigid->allowReplication;
-
 				RigidBodyData body{};
 				for (const auto& shapeName : rigid->body.shapes)
 					body.shapes.push_back(MakeNamedHandle<ShapeHandle>(shapeName));
@@ -740,9 +715,6 @@ namespace jam::px
 				data.bodyType = eBodyType::Character;
 				data.motionType = ToMotionType(character->motionType);
 				data.motionFlags = ToMotionFlags(character->motionFlags);
-				data.spawnPolicy = ToSpawnPolicy(character->spawnPolicy);
-				data.allowReplication = character->allowReplication;
-
 				if (character->body.cct.empty())
 					throw std::runtime_error("character archetype requires cct: " + name);
 

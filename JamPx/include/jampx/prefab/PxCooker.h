@@ -1,12 +1,11 @@
 #pragma once
 
+#include <jambase/JamTypes.h>
+
 #include <string>
-#include <nlohmann/json.hpp>
 
 namespace jam::px
 {
-	using nlohmann::json;
-
 	class PxCooker final
 	{
 	public:

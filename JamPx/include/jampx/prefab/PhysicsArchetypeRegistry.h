@@ -54,6 +54,5 @@ namespace jam::px
 		std::unordered_map<MeshHandle, PxTriangleMesh*>			m_triMeshCache;
 		std::unordered_map<MeshHandle, PxConvexMesh*>			m_cvxMeshCache;
 		std::unordered_map<ShapeHandle, PxShape*>				m_shapeCache;
-		std::unordered_map<PhysicsArchetypeKey, PxRigidActor*>	m_rigidCache;
 	};
 }

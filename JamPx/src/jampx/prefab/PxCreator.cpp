@@ -1,8 +1,11 @@
 #include "pch.h"
 #include "jampx/prefab/PxCreator.h"
+
+#include "jampx/PhysicsCore.h"
 #include "jampx/PhysicsDatabase.h"
 
 #include <fstream>
+
 
 
 namespace jam::px

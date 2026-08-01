@@ -3,6 +3,7 @@
 
 #include <ranges>
 
+#include "jampx/PhysicsCore.h"
 #include "jampx/prefab/PhysicsAssetLoader.h"
 #include "jampx/prefab/PxCreator.h"
 
@@ -26,11 +27,6 @@ namespace jam::px
 
 	void PhysicsArchetypeRegistry::Clear()
 	{
-		// actor 먼저 정리 (shape ref 보유 가능)
-		for (auto& r : m_rigidCache | std::views::values)
-			if (r) r->release();
-		m_rigidCache.clear();
-
 		for (auto& s : m_shapeCache | std::views::values)
 			if (s) s->release();
 		m_shapeCache.clear();
@@ -57,10 +53,6 @@ namespace jam::px
 	void PhysicsArchetypeRegistry::Load()
 	{
 		// Keep configured asset identity/path. Only runtime caches and loaded asset are rebuilt here.
-		for (auto& r : m_rigidCache | std::views::values)
-			if (r) r->release();
-		m_rigidCache.clear();
-
 		for (auto& s : m_shapeCache | std::views::values)
 			if (s) s->release();
 		m_shapeCache.clear();
@@ -146,28 +138,8 @@ namespace jam::px
 			m_shapeCache.emplace(h, shape);
 		}
 
-		// rigid archetype stage
 		for (const auto& [key, archetypeDef] : m_db.archetypes)
-		{
 			m_nameToKey[archetypeDef.name] = key;
-
-			if (!archetypeDef.IsRigid()) continue;
-			if (archetypeDef.spawnPolicy != eSpawnPolicy::LevelOnly) continue;
-
-			const auto& rigidDef = std::get<RigidBodyData>(archetypeDef.body);
-			if (rigidDef.shapes.empty())
-				throw std::runtime_error("rigid archetype has no shapes: " + archetypeDef.name);
-
-			std::vector<PxShape*> shapes;
-			GetShapes(rigidDef.shapes, shapes);
-
-			const DynamicBodyData* dynDef = rigidDef.dynamic ? &GetDynamicBodyDef(rigidDef.dynamic) : nullptr;
-			PxRigidActor* actor = PxCreator::CreateRigidActor(archetypeDef, shapes, dynDef);
-			if (!actor)
-				throw std::runtime_error("CreateRigidActor failed: " + archetypeDef.name);
-
-			m_rigidCache.emplace(key, actor);
-		}
 	}
 
 	bool PhysicsArchetypeRegistry::HasArchetype(PhysicsArchetypeKey key) const
