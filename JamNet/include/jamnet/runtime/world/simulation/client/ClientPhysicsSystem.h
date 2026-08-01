@@ -1,10 +1,11 @@
-﻿#pragma once
-#include "jamnet/sync/replication/ReplicationTypes.h"
-#include "jamnet/sync/replication/IReplayRunner.h"
+#pragma once
+#include "jamnet/runtime/world/simulation/common/ReplicationTypes.h"
+#include "jamnet/runtime/world/simulation/common/IReplayRunner.h"
+#include "jamnet/runtime/world/simulation/common/CharacterControlResolver.h"
 
 namespace jam::px
 {
-    class IPhysicsFacade;
+    class PhysicsFacade;
 }
 
 namespace jam::net
@@ -13,11 +14,14 @@ namespace jam::net
 	class ClientPhysicsSystem
     {
     public:
-        ClientPhysicsSystem(entt::registry& world, px::IPhysicsFacade* physics);
+        ClientPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics);
         ~ClientPhysicsSystem() = default;
 
         void                                Init();
         void                                Tick();
+
+        uint32                              GetCompletedTickCount() const { return m_completedTickCount; }
+        bool                                IsTickFiberRunning() const { return m_tickFiberRunning; }
 
 		void                                SpawnActor(entt::entity e, bool isLocal) const;
         void                                DespawnActor(entt::entity e) const;
@@ -34,9 +38,9 @@ namespace jam::net
 
 		void                                Rewind(const ReplayContext& ctx);
 		void                                Replay(const ReplayContext& ctx);
-        void                                ApplyInput(const InputCmd& cmd, bool useReplayState = false);
-        px::CharacterInput                  ResolveInputForSimulation(const px::CharacterInput& input, const px::CharacterState* selfState, bool useReplayState) const;
-        bool                                TryResolveTargetPos(uint32 targetNetIdRaw, OUT px::Vec3& outPos, bool useReplayState) const;
+		void                                ApplyInput(const CharacterControlCommand& cmd, bool useReplayState = false);
+		px::CharacterMotorInput                  ResolveInputForSimulation(const CharacterControlIntent& intent, const px::CharacterState* selfState, bool useReplayState) const;
+        bool                                TryResolveTargetPos(uint32 targetActorIdRaw, OUT px::Vec3& outPos, bool useReplayState) const;
 
         void                                Simulate();
         void                                Resimulate();
@@ -62,18 +66,16 @@ namespace jam::net
 
     private:
         entt::registry&                     m_world;
-        px::IPhysicsFacade*                 m_physics           = nullptr;
+        px::PhysicsFacade*                  m_physics           = nullptr;
         std::unique_ptr<IReplayRunner>      m_replayRunner      = nullptr;
 
         uint64                              m_userId            = 0;
         ReconcileConfig                     m_config            = {};
+		CharacterControlResolveConfig		m_controlResolveConfig = {};
 
         bool                                m_tickFiberRunning  = false;
-        uint64                              m_awaitSeq          = 0;
 
-        uint32                              m_tickDebt          = 0;
-        uint32                              m_tickDebtCap       = 8; // 누적 가능한 최대 미처리 tick 수
-        uint32                              m_tickBurstBudget   = 4; // 한 fiber에서 처리할 최대 tick 수
+        uint32                              m_completedTickCount = 0;
 
         std::vector<px::ActorContext>       m_pushContexts;
         std::vector<px::ActorContext>       m_pullContexts;
@@ -81,4 +83,3 @@ namespace jam::net
         mutable std::vector<PendingActorOp> m_pendingActorOps;
     };
 }
-

@@ -1,7 +1,8 @@
 #pragma once
-#include "jamnet/sync/replication/ReplicationTypes.h"
-#include "jamnet/sync/schema/gen/lifecycle_generated.h"
-#include "jamnet/sync/schema/gen/snapshot_generated.h"
+#include "jamnet/runtime/world/simulation/common/ReplicationTypes.h"
+#include "jamnet/runtime/protocol/schema/gen/lifecycle_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/snapshot_generated.h"
+#include "jamnet/runtime/protocol/schema/gen/baseline_ack_generated.h"
 
 #include <map>
 #include <optional>
@@ -9,7 +10,7 @@
 
 namespace jam::net
 {
-    class ClientPhysicalWorld;
+    class ClientWorld;
     class ClientPhysicsSystem;
     struct EstimatedServerTick;
     struct LocalActorRef;
@@ -17,7 +18,7 @@ namespace jam::net
 
     struct Replica
     {
-        NetId           netId           = NetId::Invalid();
+        ActorId           actorId           = ActorId::Invalid();
         entt::entity    e               = entt::null;
         uint64          lastSeenTick    = 0;
         uint32          baselineRev     = 0;
@@ -26,7 +27,8 @@ namespace jam::net
         bool            hasBaseline     = false;
         px::Vec3        baselinePos     = px::Vec3::Zero();
         px::Quat        baselineRot     = px::Quat::Identity();
-        float           baselineYaw     = 0.0f;
+		float           baselineBodyYaw = 0.0f;
+		float           baselineViewYaw = 0.0f;
         float           baselinePitch   = 0.0f;
 
         bool            spawnEventFired = false;
@@ -78,7 +80,7 @@ namespace jam::net
             return count;
         }
 
-        bool ContainsNetId(uint32 rawNetId) const
+        bool ContainsActorId(uint32 rawActorId) const
         {
             for (const auto& chunk : chunks)
             {
@@ -87,7 +89,7 @@ namespace jam::net
 
                 for (const auto& entPtr : chunk->snapshot.entities)
                 {
-                    if (entPtr && entPtr->net_id == rawNetId)
+                    if (entPtr && entPtr->actor_id == rawActorId)
                         return true;
                 }
             }
@@ -114,25 +116,25 @@ namespace jam::net
         void                                EnqueueLifecycle(fb::fbLifecycleBatchT batch);
         void                                EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs);
 
-        bool                                IsLocalActor(NetId netId) const { return netId == m_localNetId; }
+        bool                                IsLocalActor(ActorId actorId) const { return actorId == m_localActorId; }
 
         uint64                              GetLastServerTick() const { return m_lastServerTick; }
         uint32                              GetLastInputAck() const { return m_lastInputAck; }
 
-        NetId                               GetLocalNetId() const { return m_localNetId; }
-        void                                SetLocalNetId(NetId netId) { m_localNetId = netId; }
+        ActorId                               GetLocalActorId() const { return m_localActorId; }
+        void                                SetLocalActorId(ActorId actorId) { m_localActorId = actorId; }
         entt::entity                        GetLocalEntity() const { return m_localEntity; }
 
     private:
         void                                ProcessLifecycleActor(const fb::fbLifecycleActorT& actor);
-        void                                ApplyActorMeta(NetId netId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica);
+        void                                ApplyActorMeta(ActorId actorId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica);
         void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
-        entt::entity                        ResolveEntityForSnapshot(NetId netId);
+        entt::entity                        ResolveEntityForSnapshot(ActorId actorId);
         void                                PreserveDeferredBaselineSnapshots(const PendingSnapshotBatch& batch);
         void                                StoreDeferredBaselineSnapshot(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
-        void                                ApplyDeferredBaselineSnapshot(NetId netId);
+        void                                ApplyDeferredBaselineSnapshot(ActorId actorId);
         bool                                HasBaselinePayload(const fb::fbActorEntityT& ent) const;
-        bool                                NeedsBaseline(NetId netId) const;
+        bool                                NeedsBaseline(ActorId actorId) const;
         
 		void                                ApplyRigidFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformFull* tf, uint32 baselineRev);
         void                                ApplyRigidDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformDelta* tf, uint32 baselineRev);
@@ -141,19 +143,22 @@ namespace jam::net
         void                                ApplyCharacterFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterFull160* ch, uint32 baselineRev, uint32 inputEpoch);
         void                                ApplyCharacterDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterDelta128* ch, uint32 baselineRev, uint32 inputEpoch);
 
-		Replica&                            GetOrCreateReplica(NetId netId, bool* created = nullptr);
+		Replica&                            GetOrCreateReplica(ActorId actorId, bool* created = nullptr);
         void                                PruneOldReplicas(uint64 serverTick, uint64 forgetAfterTicks = 300);
-        void                                UpdateUniqueLocalFromMeta(NetId netId, const fb::fbActorMetaT& meta, Replica& replica);
+        void                                UpdateUniqueLocalFromMeta(ActorId actorId, const fb::fbActorMetaT& meta, Replica& replica);
 
         void                                ResolveDeferredTargetBindingsAndSpawn();
-        bool                                TryResolveTargetObjId(NetId targetNetId, OUT px::ObjectId& outObjId);
-        uint32                              GetCurrentLocalCommandEpoch() const;
-        void                                SetLocalActorRef(NetId netId, entt::entity entity);
+        bool                                TryResolveTargetActorId(ActorId targetActorId, OUT px::ActorId& outActorId);
+		uint32                              GetCurrentLocalControlRevision() const;
+        void                                SetLocalActorRef(ActorId actorId, entt::entity entity);
         void                                ClearLocalActorRef();
+		void                                QueueBaselineAck(ActorId actorId, uint32 baselineRev);
+		void                                QueueFullRequest(ActorId actorId, uint32 baselineRev);
+		void                                FlushBaselineFeedback();
 
     private:
         entt::registry&                     m_world;
-        ClientPhysicalWorld*                m_netWorld            = nullptr;
+        ClientWorld*                m_netWorld            = nullptr;
         ClientPhysicsSystem*                m_clientPhysics       = nullptr;
         EstimatedServerTick*                m_estimatedServerTick = nullptr;
         LocalActorRef*                      m_localActorRef       = nullptr;
@@ -161,12 +166,12 @@ namespace jam::net
 
         uint64                              m_userId            = 0;
 
-        std::unordered_map<NetId, Replica>  m_replicas;
-        std::unordered_map<NetId, DeferredBaselineSnapshot> m_deferredBaselineSnapshots;
+        std::unordered_map<ActorId, Replica>  m_replicas;
+        std::unordered_map<ActorId, DeferredBaselineSnapshot> m_deferredBaselineSnapshots;
         std::deque<PendingLifecycleBatch>   m_pendingLifecycle;
         std::map<uint64, PendingSnapshotBatch> m_pendingSnapshotBatches;
 
-        NetId                               m_localNetId        = NetId::Invalid();
+        ActorId                               m_localActorId        = ActorId::Invalid();
         entt::entity                        m_localEntity       = entt::null;
 
 		uint64                              m_lastServerTick    = 0;
@@ -174,5 +179,11 @@ namespace jam::net
         uint64                              m_latestQueuedSnapshotTick = 0;
         uint64                              m_lastAppliedSnapshotTick = 0;
         uint32                              m_lastInputAck      = 0;
+		struct PendingBaselineFeedback
+		{
+			uint32 baselineRev = 0;
+			bool requestFull = false;
+		};
+		std::unordered_map<ActorId, PendingBaselineFeedback> m_pendingBaselineFeedback;
 	};
 }
