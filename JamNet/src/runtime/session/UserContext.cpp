@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "jamnet/core/executor/ShardExecutor.h"
-#include "jamnet/runtime/UserContext.h"
+#include "jamnet/runtime/session/UserContext.h"
 
 namespace jam::net
 {
@@ -92,39 +92,39 @@ namespace jam::net
 		return (ctx && ctx->accountId == accountId) ? ctx : nullptr;
 	}
 
-	UserContext* UserShardState::FindPrimaryUserContext()
-	{
-		for (auto& entry : usersById.entries)
-		{
-			if (entry.occupied && entry.value.accountId != kInvalidAccountId)
-				return &entry.value;
-		}
-		return nullptr;
-	}
+	//UserContext* UserShardState::FindPrimaryUserContext()
+	//{
+	//	for (auto& entry : usersById.entries)
+	//	{
+	//		if (entry.occupied && entry.value.accountId != kInvalidAccountId)
+	//			return &entry.value;
+	//	}
+	//	return nullptr;
+	//}
 
-	const UserContext* UserShardState::FindPrimaryUserContext() const
-	{
-		for (const auto& entry : usersById.entries)
-		{
-			if (entry.occupied && entry.value.accountId != kInvalidAccountId)
-				return &entry.value;
-		}
-		return nullptr;
-	}
+	//const UserContext* UserShardState::FindPrimaryUserContext() const
+	//{
+	//	for (const auto& entry : usersById.entries)
+	//	{
+	//		if (entry.occupied && entry.value.accountId != kInvalidAccountId)
+	//			return &entry.value;
+	//	}
+	//	return nullptr;
+	//}
 
-	UserContext* UserShardState::EnsurePrimaryUserContext(AccountId accountId)
-	{
-		if (accountId == kInvalidAccountId)
-			return nullptr;
+	//UserContext* UserShardState::EnsurePrimaryUserContext(AccountId accountId)
+	//{
+	//	if (accountId == kInvalidAccountId)
+	//		return nullptr;
 
-		if (auto* existing = FindUserContextByAccount(accountId))
-			return existing;
+	//	if (auto* existing = FindUserContextByAccount(accountId))
+	//		return existing;
 
-		if (auto* primary = FindPrimaryUserContext())
-			return primary->accountId == accountId ? primary : nullptr;
+	//	if (auto* primary = FindPrimaryUserContext())
+	//		return primary->accountId == accountId ? primary : nullptr;
 
-		return AllocUserContext(accountId);
-	}
+	//	return AllocUserContext(accountId);
+	//}
 
 	UserContext* UserShardState::EnsureUserContext(AccountId accountId)
 	{
@@ -137,14 +137,14 @@ namespace jam::net
 		return AllocUserContext(accountId);
 	}
 
-	void UserShardState::RemovePrimaryUserContext(AccountId accountId)
-	{
-		if (accountId == kInvalidAccountId)
-			return;
+	//void UserShardState::RemovePrimaryUserContext(AccountId accountId)
+	//{
+	//	if (accountId == kInvalidAccountId)
+	//		return;
 
-		if (auto* ctx = FindUserContextByAccount(accountId))
-			FreeUserContext(ctx->userId);
-	}
+	//	if (auto* ctx = FindUserContextByAccount(accountId))
+	//		FreeUserContext(ctx->userId);
+	//}
 
 	UserShardState& GetOrCreateUserShardState(ShardLocal& local)
 	{
