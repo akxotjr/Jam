@@ -52,13 +52,10 @@
     <ClCompile Include="src\jampx\prefab\PhysicsArchetypeRegistry.cpp" />
     <ClCompile Include="src\jampx\prefab\PxCooker.cpp" />
     <ClCompile Include="src\jampx\prefab\PxCreator.cpp" />
-    <ClCompile Include="src\jampx\ShardPxCpuDispacter.cpp" />
+    <ClCompile Include="src\jampx\ShardPxCpuDispatcher.cpp" />
     <ClCompile Include="src\jampx\third_party\tinygltf_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="api\jampx\IPhysicsFacade.h" />
-    <ClInclude Include="api\jampx\IPhysicsJobBridge.h" />
-    <ClInclude Include="api\jampx\PhysicsTypes.h" />
     <ClInclude Include="include\jampx\actor\ActorFactory.h" />
     <ClInclude Include="include\jampx\actor\character\CharacterBody.h" />
     <ClInclude Include="include\jampx\actor\character\CharacterMovementTypes.h" />
@@ -87,22 +84,25 @@
     <ClInclude Include="include\jampx\geometry\BSpline.h" />
     <ClInclude Include="include\jampx\geometry\CatmullRom.h" />
     <ClInclude Include="include\jampx\geometry\Curve.h" />
-    <ClInclude Include="include\jampx\JamPx.h" />
+    <ClInclude Include="include\jampx\IPhysicsJobBridge.h" />
     <ClInclude Include="include\jampx\PhysicsDatabase.h" />
     <ClInclude Include="include\jampx\PhysicsCompletionTask.h" />
     <ClInclude Include="include\jampx\PhysicsCore.h" />
     <ClInclude Include="include\jampx\PhysicsFacade.h" />
     <ClInclude Include="include\jampx\PhysicsFilter.h" />
     <ClInclude Include="include\jampx\PhysicsQueryFilter.h" />
+    <ClInclude Include="include\jampx\PhysicsSceneSlot.h" />
     <ClInclude Include="include\jampx\PhysicsSimFilter.h" />
+    <ClInclude Include="include\jampx\PhysicsTypes.h" />
     <ClInclude Include="include\jampx\PhysicsUtils.h" />
     <ClInclude Include="include\jampx\PhysicsWorld.h" />
+    <ClInclude Include="include\jampx\PhysXIncludes.h" />
     <ClInclude Include="include\jampx\PhysXTypes.h" />
     <ClInclude Include="include\jampx\prefab\PhysicsAssetLoader.h" />
     <ClInclude Include="include\jampx\prefab\PhysicsArchetypeRegistry.h" />
     <ClInclude Include="include\jampx\prefab\PxCooker.h" />
     <ClInclude Include="include\jampx\prefab\PxCreator.h" />
-    <ClInclude Include="include\jampx\ShardPxCpuDispacter.h" />
+    <ClInclude Include="include\jampx\ShardPxCpuDispatcher.h" />
     <ClInclude Include="include\jampx\third_party\tinygltf_impl.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>

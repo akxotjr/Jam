@@ -1,9 +1,11 @@
 #pragma once
 
-#include <variant>
+#include <jambase/JamTypes.h>
+#include <jambase/JamMacro.h>
+#include <jambase/JamAssert.h>
 
-#define PX_PHYSX_STATIC_LIB
-#include <physx/PxPhysicsAPI.h>
+#include "jampx/PhysXIncludes.h"
+#include "jampx/PhysXTypes.h"
 
-
-#include "jampx/JamPx.h"
+#include "jampx/PhysicsTypes.h"
+#include "jampx/PhysicsUtils.h"

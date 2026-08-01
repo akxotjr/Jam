@@ -28,9 +28,6 @@
     <Filter Include="03. prefab">
       <UniqueIdentifier>{69fdd930-a4c0-42c3-bcb8-7a794716c5f7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="00. api">
-      <UniqueIdentifier>{e3739d8f-11f8-4e37-bc37-dd54277e1ca4}</UniqueIdentifier>
-    </Filter>
     <Filter Include="99. pch">
       <UniqueIdentifier>{ba26a8a6-7b02-4155-bd2e-09893d7e1819}</UniqueIdentifier>
     </Filter>
@@ -78,7 +75,7 @@
     <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp">
       <Filter>01. core</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\ShardPxCpuDispacter.cpp">
+    <ClCompile Include="src\jampx\ShardPxCpuDispatcher.cpp">
       <Filter>01. core</Filter>
     </ClCompile>
     <ClCompile Include="src\jampx\geometry\Curve.cpp">
@@ -143,9 +140,6 @@
     <ClInclude Include="include\jampx\PhysicsWorld.h">
       <Filter>01. core</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\JamPx.h">
-      <Filter>01. core</Filter>
-    </ClInclude>
     <ClInclude Include="include\jampx\PhysicsCore.h">
       <Filter>01. core</Filter>
     </ClInclude>
@@ -182,7 +176,7 @@
     <ClInclude Include="include\jampx\PhysicsCompletionTask.h">
       <Filter>01. core</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\ShardPxCpuDispacter.h">
+    <ClInclude Include="include\jampx\ShardPxCpuDispatcher.h">
       <Filter>01. core</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\PhysicsSimFilter.h">
@@ -278,14 +272,17 @@
     <ClInclude Include="include\jampx\actor\ActorFactory.h">
       <Filter>02. actor</Filter>
     </ClInclude>
-    <ClInclude Include="api\jampx\IPhysicsFacade.h">
-      <Filter>00. api</Filter>
+    <ClInclude Include="include\jampx\PhysicsTypes.h">
+      <Filter>01. core</Filter>
     </ClInclude>
-    <ClInclude Include="api\jampx\IPhysicsJobBridge.h">
-      <Filter>00. api</Filter>
+    <ClInclude Include="include\jampx\IPhysicsJobBridge.h">
+      <Filter>01. core</Filter>
     </ClInclude>
-    <ClInclude Include="api\jampx\PhysicsTypes.h">
-      <Filter>00. api</Filter>
+    <ClInclude Include="include\jampx\PhysXIncludes.h">
+      <Filter>01. core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jampx\PhysicsSceneSlot.h">
+      <Filter>01. core</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
