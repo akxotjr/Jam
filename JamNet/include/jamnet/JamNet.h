@@ -39,52 +39,12 @@
 #include "jamnet/core/net/NetRuntime.h"
 
 
-// -- Sync --
-
-// WorldBase
-#include "jamnet/sync/networld/ClientPhysicalWorld.h"
-#include "jamnet/runtime/world/core/WorldBase.h"
-#include "jamnet/sync/networld/ServerPhysicalWorld.h"
-
-// bridge
-#include "jamnet/sync/physics/ShardJobBridge.h"
-
-// replication
-#include "jamnet/sync/replication/ClientInputSystem.h"
-#include "jamnet/sync/replication/ClientPhysicsSystem.h"
-#include "jamnet/sync/replication/ClientReplaySystem.h"
-#include "jamnet/sync/replication/ClientReplicationSystem.h"
-#include "jamnet/sync/replication/ClientSamplingSystem.h"
-#include "jamnet/sync/replication/CorrectionReplayRunner.h"
-#include "jamnet/sync/replication/IReplayRunner.h"
-#include "jamnet/sync/replication/NetActorComponents.h"
-#include "jamnet/sync/replication/WorldContext.h"
-#include "jamnet/runtime/AppRuntimeEvents.h"
-#include "jamnet/sync/replication/ReplicationTypes.h"
-#include "jamnet/sync/replication/ReplicationCodec.h"
-#include "jamnet/sync/replication/ServerInputSystem.h"
-#include "jamnet/sync/replication/ServerPhysicsSystem.h"
-#include "jamnet/sync/replication/ServerAoiSystem.h"
-#include "jamnet/sync/replication/ServerReplicationSystem.h"
-
-// transport
-#include "jamnet/sync/transport/CustomPacketHelper.h"
-#include "jamnet/sync/transport/ITransportEndpoint.h"
-
-
 // -- Runtime --
 
-#include "jamnet/runtime/ClientSession.h"
-#include "jamnet/runtime/ClientNetworkManager.h"
-#include "jamnet/runtime/ClientRuntime.h"
-
-#include "jamnet/runtime/ServerSession.h"
-#include "jamnet/runtime/ServerNetworkManager.h"
-
-#include "jamnet/runtime/world/action/DefaultWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/action/ClientWorldActionSystem.h"
-#include "jamnet/runtime/world/action/ServerWorldActionSystem.h"
-#include "jamnet/runtime/world/action/IWorldAssignmentPolicy.h"
-#include "jamnet/runtime/world/action/IWorldActionSystem.h"
-#include "jamnet/runtime/world/types/WorldActionTypes.h"
-#include "jamnet/runtime/world/core/WorldDirectory.h"
+#include "jamnet/runtime/application/ClientRuntime.h"
+#include "jamnet/runtime/application/ServerNetworkManager.h"
+#include "jamnet/runtime/social/SocialTypes.h"
+#include "jamnet/runtime/social/ISocialDelivery.h"
+#include "jamnet/runtime/social/IServerSocialContent.h"
+#include "jamnet/runtime/world/simulation/server/IServerWorldContent.h"
+#include "jamnet/runtime/world/simulation/server/ServerWorld.h"

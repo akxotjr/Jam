@@ -19,74 +19,59 @@
     <Filter Include="core\net">
       <UniqueIdentifier>{f893f741-d76e-4022-8411-dfe24b46e14e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="sync">
-      <UniqueIdentifier>{6295b8a9-d2bc-4217-98dc-4e2a6c79c4c6}</UniqueIdentifier>
-    </Filter>
     <Filter Include="runtime">
       <UniqueIdentifier>{7376cd94-42b1-4caf-8b19-61fb5183ee44}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="runtime\schema">
-      <UniqueIdentifier>{51444c64-2f1a-4b33-9e2c-9217e528d865}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="runtime\schema\gen">
-      <UniqueIdentifier>{9de4b35a-1033-4924-a02d-1809dd7f8dae}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="runtime\schema\fbs">
-      <UniqueIdentifier>{beca7572-1c73-473f-865b-0a61a190b094}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sync\transport">
-      <UniqueIdentifier>{b5157f31-547e-4fdd-bd7a-6e60c4048d49}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sync\replication">
-      <UniqueIdentifier>{f9ed3469-fc55-4d14-8d2b-ae1a8d1f4dd2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sync\schema">
-      <UniqueIdentifier>{ffd21c84-2bb7-4144-8376-85af60ade18a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sync\schema\gen">
-      <UniqueIdentifier>{36950184-71ef-4f4d-be08-d62e6972ef2f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sync\schema\fbs">
-      <UniqueIdentifier>{a6f8bf54-8227-42aa-abc8-35a519341e41}</UniqueIdentifier>
     </Filter>
     <Filter Include="runtime\world">
       <UniqueIdentifier>{e7d0d2aa-17ff-4b0f-ae6b-60de80fd176c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\world\types">
-      <UniqueIdentifier>{b1c6a7b5-2bc2-4dc8-bbab-03ca6e711001}</UniqueIdentifier>
-    </Filter>
     <Filter Include="runtime\world\data">
       <UniqueIdentifier>{6fec970e-9d52-472a-aa67-c37f12f5b002}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\world\core">
-      <UniqueIdentifier>{a41562d7-0975-4415-b25e-5f1bb8f4d003}</UniqueIdentifier>
+    <Filter Include="runtime\application">
+      <UniqueIdentifier>{e784dccf-cfa8-416e-8b77-64200d3e53fc}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\world\action">
-      <UniqueIdentifier>{4c7b4512-bfaf-42d2-9103-9a6374645004}</UniqueIdentifier>
+    <Filter Include="runtime\session">
+      <UniqueIdentifier>{2b19bb81-bd6e-49e4-8184-b448c1301c9a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="sync\physics">
-      <UniqueIdentifier>{127e16be-cdd8-46f5-83db-2a0395181ea6}</UniqueIdentifier>
+    <Filter Include="runtime\world\actor">
+      <UniqueIdentifier>{8ac24e3e-c109-4611-8573-600ae5cab657}</UniqueIdentifier>
     </Filter>
-    <Filter Include="sync\replication\client system">
-      <UniqueIdentifier>{dd060cde-7ff5-48bd-81f5-3bfe92b2b39f}</UniqueIdentifier>
+    <Filter Include="runtime\world\lifecycle">
+      <UniqueIdentifier>{3c37aec5-fb7d-4378-9bb4-c8946d34509c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="sync\replication\server system">
-      <UniqueIdentifier>{d0260de9-9b39-4168-85f0-0e1e0c133fa7}</UniqueIdentifier>
+    <Filter Include="runtime\world\simulation">
+      <UniqueIdentifier>{551eac04-5a45-4807-8850-d58421b12377}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\net">
-      <UniqueIdentifier>{33f03d8a-e017-45d2-bf95-097a3048afad}</UniqueIdentifier>
+    <Filter Include="runtime\world\simulation\common">
+      <UniqueIdentifier>{a1f34537-0a7d-40db-8578-b460269ceff4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="sync\world">
-      <UniqueIdentifier>{1bcc8473-bf68-4ff0-ad96-b804d8ad1186}</UniqueIdentifier>
+    <Filter Include="runtime\world\simulation\client">
+      <UniqueIdentifier>{c57c7489-60ab-4ae5-88df-27a63a9fd38a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\user">
-      <UniqueIdentifier>{f8fcb582-0b5a-4988-93cd-1e3497056196}</UniqueIdentifier>
+    <Filter Include="runtime\world\simulation\server">
+      <UniqueIdentifier>{32bd4d01-08f8-48df-ad3f-bbcef0f7fc5f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\client">
-      <UniqueIdentifier>{74b4f3ee-720e-4c55-b1ad-4a7cf850c332}</UniqueIdentifier>
+    <Filter Include="runtime\protocol">
+      <UniqueIdentifier>{7e8e00cb-31b0-437a-a50a-00b1383d9c87}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\actor">
-      <UniqueIdentifier>{7b3ebb0a-4f26-4e00-93c2-0cbbc338dc4a}</UniqueIdentifier>
+    <Filter Include="runtime\protocol\transport">
+      <UniqueIdentifier>{a3dc214a-f3b8-42c2-8939-df46c61f48c5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\protocol\codec">
+      <UniqueIdentifier>{aaf16440-0356-4532-b8af-54ff90944936}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\protocol\schema">
+      <UniqueIdentifier>{db765c06-3de6-4d12-b4ac-5e3ac7c37400}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\protocol\schema\fbs">
+      <UniqueIdentifier>{26c03ad2-7bfb-49ae-808d-6acdd094fe69}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\protocol\schema\gen">
+      <UniqueIdentifier>{a791fb57-b918-4c36-baeb-56f73c3f1dab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\social">
+      <UniqueIdentifier>{05b64c2e-2952-47f5-bfca-9de09d7fe29f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -231,104 +216,8 @@
     <ClInclude Include="include\jamnet\core\utils\Clock.h">
       <Filter>core\utils</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\schema\gen\snapshot_generated.h">
-      <Filter>sync\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\schema\gen\actor_control_generated.h">
-      <Filter>sync\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\schema\gen\actor_spawn_generated.h">
-      <Filter>sync\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\schema\gen\input_generated.h">
-      <Filter>sync\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\NetActorComponents.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ReplicationTypes.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ReplicationCodec.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\networld\ServerPhysicalWorld.h">
-      <Filter>sync\world</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\networld\ServerVirtualWorld.h">
-      <Filter>sync\world</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\networld\ClientPhysicalWorld.h">
-      <Filter>sync\world</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\transport\ITransportEndpoint.h">
-      <Filter>sync\transport</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\schema\gen\physics_type_generated.h">
-      <Filter>sync\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\transport\CustomPacketHelper.h">
-      <Filter>sync\transport</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\action\IWorldAssignmentPolicy.h">
-      <Filter>runtime\world\action</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\action\DefaultWorldAssignmentPolicy.h">
-      <Filter>runtime\world\action</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\types\WorldActionTypes.h">
-      <Filter>runtime\world\types</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\core\WorldDirectory.h">
-      <Filter>runtime\world\core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\action\IWorldActionSystem.h">
-      <Filter>runtime\world\action</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ReplicationEvents.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\WorldContext.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\physics\ShardJobBridge.h">
-      <Filter>sync\physics</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\IReplayRunner.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientInputSystem.h">
-      <Filter>sync\replication\client system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientPhysicsSystem.h">
-      <Filter>sync\replication\client system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientReplaySystem.h">
-      <Filter>sync\replication\client system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientReplicationSystem.h">
-      <Filter>sync\replication\client system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ClientSamplingSystem.h">
-      <Filter>sync\replication\client system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerReplicationSystem.h">
-      <Filter>sync\replication\server system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerInputSystem.h">
-      <Filter>sync\replication\server system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerPhysicsSystem.h">
-      <Filter>sync\replication\server system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\CorrectionReplayRunner.h">
-      <Filter>sync\replication\client system</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\core\executor\SeqLock.h">
       <Filter>core\executor</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\schema\gen\lifecycle_generated.h">
-      <Filter>sync\schema\gen</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\executor\ExecutorMetrics.h">
       <Filter>core\executor</Filter>
@@ -339,9 +228,6 @@
     <ClInclude Include="include\jamnet\core\net\NetworkProfile.h">
       <Filter>core\net</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\schema\RPCSchemaIds.h">
-      <Filter>runtime\schema</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\core\net\Buffer.h">
       <Filter>core\net</Filter>
     </ClInclude>
@@ -351,44 +237,11 @@
     <ClInclude Include="include\jamnet\JamNet.h">
       <Filter>Header</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\ServerAoiSystem.h">
-      <Filter>sync\replication\server system</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\replication\BitBuffer.h">
-      <Filter>sync\replication</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\core\net\SessionShardState.h">
       <Filter>core\net</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\net\PacketWireTime.h">
       <Filter>core\net</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\schema\gen\binding_handshake_generated.h">
-      <Filter>runtime\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\schema\gen\world_assignment_generated.h">
-      <Filter>runtime\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\core\WorldBase.h">
-      <Filter>runtime\world\core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\core\PhysicalWorld.h">
-      <Filter>runtime\world\core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\core\VirtualWorld.h">
-      <Filter>runtime\world\core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ClientNetworkManager.h">
-      <Filter>runtime\net</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ClientSession.h">
-      <Filter>runtime\net</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ServerNetworkManager.h">
-      <Filter>runtime\net</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ServerSession.h">
-      <Filter>runtime\net</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\data\ActorLevelDatabase.h">
       <Filter>runtime\world\data</Filter>
@@ -396,10 +249,10 @@
     <ClInclude Include="include\jamnet\runtime\world\data\ActorLevelsLoader.h">
       <Filter>runtime\world\data</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\data\SharedDataCatalog.h">
+    <ClInclude Include="include\jamnet\runtime\world\data\SharedDataManifest.h">
       <Filter>runtime\world\data</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\data\SharedDataCatalogLoader.h">
+    <ClInclude Include="include\jamnet\runtime\world\data\SharedDataManifestLoader.h">
       <Filter>runtime\world\data</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\data\WorldArchetypeDatabase.h">
@@ -408,32 +261,20 @@
     <ClInclude Include="include\jamnet\runtime\world\data\WorldArchetypesLoader.h">
       <Filter>runtime\world\data</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\data\WorldConfigResolver.h">
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldInstanceDatabase.h">
       <Filter>runtime\world\data</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\data\WorldDataBootstrap.h">
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldInstancesLoader.h">
+      <Filter>runtime\world\data</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\data\WorldConfigResolver.h">
       <Filter>runtime\world\data</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\data\WorldTemplateDatabase.h">
       <Filter>runtime\world\data</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\types\WorldTemplateKey.h">
-      <Filter>runtime\world\types</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\data\WorldTemplatesLoader.h">
       <Filter>runtime\world\data</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\UserContext.h">
-      <Filter>runtime\user</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\core\WorldShardState.h">
-      <Filter>runtime\world\core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\action\WorldTransferSubsystem.h">
-      <Filter>runtime\world\action</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\core\executor\ShardInvoke.h">
-      <Filter>core\executor</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\executor\AtomicSnapshot.h">
       <Filter>core\executor</Filter>
@@ -447,35 +288,197 @@
     <ClInclude Include="include\jamnet\core\executor\ShardOwnedObject.h">
       <Filter>core\executor</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\action\ClientWorldActionSystem.h">
-      <Filter>runtime\world\action</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\action\ServerWorldActionSystem.h">
-      <Filter>runtime\world\action</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\sync\networld\ClientVirtualWorld.h">
-      <Filter>sync\world</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\AppRuntimeEvents.h">
-      <Filter>runtime\client</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\ClientRuntime.h">
-      <Filter>runtime\client</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\IClientNetworkController.h">
-      <Filter>runtime\client</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\IClientNetworkView.h">
-      <Filter>runtime\client</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\core\utils\ScopedTimer.h">
       <Filter>core\utils</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\actor\ActorArchetypesLoader.h">
-      <Filter>runtime\actor</Filter>
+    <ClInclude Include="include\jamnet\runtime\application\ServerNetworkManager.h">
+      <Filter>runtime\application</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\actor\ActorArchetypeDatabase.h">
-      <Filter>runtime\actor</Filter>
+    <ClInclude Include="include\jamnet\runtime\application\AppRuntimeEvents.h">
+      <Filter>runtime\application</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\application\ClientNetworkManager.h">
+      <Filter>runtime\application</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\application\ClientRuntime.h">
+      <Filter>runtime\application</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\session\UserContext.h">
+      <Filter>runtime\session</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\session\ClientPrincipalState.h">
+      <Filter>runtime\session</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\session\ClientRequestId.h">
+      <Filter>runtime\session</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\session\ClientSession.h">
+      <Filter>runtime\session</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\session\ServerSession.h">
+      <Filter>runtime\session</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\actor\ActorActionTypes.h">
+      <Filter>runtime\world\actor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\actor\ActorArchetypeDatabase.h">
+      <Filter>runtime\world\actor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\actor\ActorArchetypesLoader.h">
+      <Filter>runtime\world\actor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\actor\ActorDirectory.h">
+      <Filter>runtime\world\actor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\actor\ActorId.h">
+      <Filter>runtime\world\actor</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\ClientMainWorldState.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\ServerWorldTransitionCoordinator.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldActionTypes.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldBase.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldDirectory.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldIdentity.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldRuntimeLifecycle.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldShardState.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldTemplateKey.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldTransitionTypes.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\BitBuffer.h">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\ReplicationCodec.h">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\RPCSchemaIds.h">
+      <Filter>runtime\protocol\schema</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\world_assignment_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\actor_spawn_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\baseline_ack_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\binding_handshake_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\input_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\lifecycle_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\physics_type_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\snapshot_generated.h">
+      <Filter>runtime\protocol\schema\gen</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\transport\WireBarrier.h">
+      <Filter>runtime\protocol\transport</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\transport\CustomPacketHelper.h">
+      <Filter>runtime\protocol\transport</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientWorld.h">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientCharacterControlCoordinator.h">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientInputSystem.h">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientPhysicsSystem.h">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientReplaySystem.h">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientReplicationSystem.h">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientSamplingSystem.h">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\WorldContext.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\ActorComponents.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\CharacterControlResolver.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\CharacterControlTypes.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\CorrectionReplayRunner.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\IReplayRunner.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\PhysicalWorld.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\ReplicationTypes.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\common\ShardJobBridge.h">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerWorld.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\IServerWorldContent.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerAoiSystem.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerInputSystem.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerPhysicsSystem.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerReplicationSystem.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\social\SocialTypes.h">
+      <Filter>runtime\social</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\social\IServerSocialContent.h">
+      <Filter>runtime\social</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\social\ISocialDelivery.h">
+      <Filter>runtime\social</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\social\SocialService.h">
+      <Filter>runtime\social</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -590,54 +593,6 @@
     <ClCompile Include="src\core\utils\Clock.cpp">
       <Filter>core\utils</Filter>
     </ClCompile>
-    <ClCompile Include="src\sync\networld\ServerPhysicalWorld.cpp">
-      <Filter>sync\world</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\networld\ServerVirtualWorld.cpp">
-      <Filter>sync\world</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\networld\ClientPhysicalWorld.cpp">
-      <Filter>sync\world</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\action\DefaultWorldAssignmentPolicy.cpp">
-      <Filter>runtime\world\action</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\action\ServerWorldActionSystem.cpp">
-      <Filter>runtime\world\action</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\core\WorldDirectory.cpp">
-      <Filter>runtime\world\core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\physics\ShardJobBridge.cpp">
-      <Filter>sync\physics</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientInputSystem.cpp">
-      <Filter>sync\replication\client system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientPhysicsSystem.cpp">
-      <Filter>sync\replication\client system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientReplaySystem.cpp">
-      <Filter>sync\replication\client system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientReplicationSystem.cpp">
-      <Filter>sync\replication\client system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ClientSamplingSystem.cpp">
-      <Filter>sync\replication\client system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerInputSystem.cpp">
-      <Filter>sync\replication\server system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerPhysicsSystem.cpp">
-      <Filter>sync\replication\server system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerReplicationSystem.cpp">
-      <Filter>sync\replication\server system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\CorrectionReplayRunner.cpp">
-      <Filter>sync\replication\client system</Filter>
-    </ClCompile>
     <ClCompile Include="src\core\net\NetworkProfile.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
@@ -647,35 +602,8 @@
     <ClCompile Include="src\core\net\TcpRecvAssembler.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
-    <ClCompile Include="src\sync\replication\ServerAoiSystem.cpp">
-      <Filter>sync\replication\server system</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\replication\BitBuffer.cpp">
-      <Filter>sync\replication</Filter>
-    </ClCompile>
     <ClCompile Include="src\core\net\PacketWireTime.cpp">
       <Filter>core\net</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\core\PhysicalWorld.cpp">
-      <Filter>runtime\world\core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\core\VirtualWorld.cpp">
-      <Filter>runtime\world\core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\core\WorldBase.cpp">
-      <Filter>runtime\world\core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ClientNetworkManager.cpp">
-      <Filter>runtime\net</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ClientSession.cpp">
-      <Filter>runtime\net</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ServerNetworkManager.cpp">
-      <Filter>runtime\net</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ServerSession.cpp">
-      <Filter>runtime\net</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\data\ActorLevelDatabase.cpp">
       <Filter>runtime\world\data</Filter>
@@ -683,10 +611,10 @@
     <ClCompile Include="src\runtime\world\data\ActorLevelsLoader.cpp">
       <Filter>runtime\world\data</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\data\SharedDataCatalog.cpp">
+    <ClCompile Include="src\runtime\world\data\SharedDataManifest.cpp">
       <Filter>runtime\world\data</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\data\SharedDataCatalogLoader.cpp">
+    <ClCompile Include="src\runtime\world\data\SharedDataManifestLoader.cpp">
       <Filter>runtime\world\data</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\data\WorldArchetypeDatabase.cpp">
@@ -695,10 +623,13 @@
     <ClCompile Include="src\runtime\world\data\WorldArchetypesLoader.cpp">
       <Filter>runtime\world\data</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\data\WorldConfigResolver.cpp">
+    <ClCompile Include="src\runtime\world\data\WorldInstanceDatabase.cpp">
       <Filter>runtime\world\data</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\data\WorldDataBootstrap.cpp">
+    <ClCompile Include="src\runtime\world\data\WorldInstancesLoader.cpp">
+      <Filter>runtime\world\data</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\data\WorldConfigResolver.cpp">
       <Filter>runtime\world\data</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\data\WorldTemplateDatabase.cpp">
@@ -707,61 +638,145 @@
     <ClCompile Include="src\runtime\world\data\WorldTemplatesLoader.cpp">
       <Filter>runtime\world\data</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\action\WorldTransferSubsystem.cpp">
-      <Filter>runtime\world\action</Filter>
-    </ClCompile>
     <ClCompile Include="src\core\executor\MailboxRef.cpp">
       <Filter>core\executor</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\action\ClientWorldActionSystem.cpp">
-      <Filter>runtime\world\action</Filter>
-    </ClCompile>
-    <ClCompile Include="src\sync\networld\ClientVirtualWorld.cpp">
-      <Filter>sync\world</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\UserContext.cpp">
-      <Filter>runtime\user</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\ClientRuntime.cpp">
-      <Filter>runtime\client</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\core\WorldShardState.cpp">
-      <Filter>runtime\world\core</Filter>
     </ClCompile>
     <ClCompile Include="src\core\net\SessionShardState.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\actor\ActorArchetypeDatabase.cpp">
-      <Filter>runtime\actor</Filter>
+    <ClCompile Include="src\runtime\application\ServerNetworkManager.cpp">
+      <Filter>runtime\application</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\actor\ActorArchetypesLoader.cpp">
-      <Filter>runtime\actor</Filter>
+    <ClCompile Include="src\runtime\application\ClientNetworkManager.cpp">
+      <Filter>runtime\application</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\application\ClientRuntime.cpp">
+      <Filter>runtime\application</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\session\UserContext.cpp">
+      <Filter>runtime\session</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\session\ClientSession.cpp">
+      <Filter>runtime\session</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\session\ServerSession.cpp">
+      <Filter>runtime\session</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\actor\ActorDirectory.cpp">
+      <Filter>runtime\world\actor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\actor\ActorArchetypeDatabase.cpp">
+      <Filter>runtime\world\actor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\actor\ActorArchetypesLoader.cpp">
+      <Filter>runtime\world\actor</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\lifecycle\WorldRuntimeLifecycle.cpp">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\lifecycle\WorldShardState.cpp">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\lifecycle\ClientMainWorldState.cpp">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\lifecycle\ServerWorldTransitionCoordinator.cpp">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\lifecycle\WorldBase.cpp">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\lifecycle\WorldDirectory.cpp">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\protocol\transport\WireBarrier.cpp">
+      <Filter>runtime\protocol\transport</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\client\ClientWorld.cpp">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\client\ClientCharacterControlCoordinator.cpp">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\client\ClientInputSystem.cpp">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\client\ClientPhysicsSystem.cpp">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\client\ClientReplaySystem.cpp">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\client\ClientReplicationSystem.cpp">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\client\ClientSamplingSystem.cpp">
+      <Filter>runtime\world\simulation\client</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\common\CharacterControlResolver.cpp">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\common\CorrectionReplayRunner.cpp">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\common\PhysicalWorld.cpp">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\common\ShardJobBridge.cpp">
+      <Filter>runtime\world\simulation\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\server\ServerWorld.cpp">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\server\ServerAoiSystem.cpp">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\server\ServerInputSystem.cpp">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\server\ServerPhysicsSystem.cpp">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\server\ServerReplicationSystem.cpp">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\social\SocialService.cpp">
+      <Filter>runtime\social</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="include\jamnet\sync\schema\fbs\actor_control.fbs">
-      <Filter>sync\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\actor_spawn.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\sync\schema\fbs\actor_spawn.fbs">
-      <Filter>sync\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\baseline_ack.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\sync\schema\fbs\input.fbs">
-      <Filter>sync\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\binding_handshake.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\sync\schema\fbs\physics_type.fbs">
-      <Filter>sync\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\input.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\sync\schema\fbs\snapshot.fbs">
-      <Filter>sync\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\lifecycle.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\schema\fbs\binding_handshake.fbs">
-      <Filter>runtime\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\physics_type.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\schema\fbs\world_assignment.fbs">
-      <Filter>runtime\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\snapshot.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
-    <CustomBuild Include="include\jamnet\sync\schema\fbs\lifecycle.fbs">
-      <Filter>sync\schema\fbs</Filter>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\world_assignment.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_types.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_message.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_command.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
     </CustomBuild>
   </ItemGroup>
 </Project>
