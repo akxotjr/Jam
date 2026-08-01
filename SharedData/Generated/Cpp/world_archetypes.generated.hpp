@@ -21,12 +21,8 @@ namespace jam::shared::gen
 
     struct WorldArchetypeDto
     {
-        std::string actorArchetypesName = {};
         std::string actorLevelName = {};
-        uint64_t archetypeKey = {};
         std::string physicsAssetName = {};
-        std::string presentationName = {};
-        uint64_t templateKey = {};
         std::string templateName = {};
     };
 
@@ -44,27 +40,18 @@ namespace jam::shared::gen
 
     inline void from_json(const nlohmann::json& j, WorldArchetypeDto& v)
     {
-        if (j.contains("actor_archetypes_name"))
-            j.at("actor_archetypes_name").get_to(v.actorArchetypesName);
         if (j.contains("actor_level_name"))
             j.at("actor_level_name").get_to(v.actorLevelName);
-        j.at("archetype_key").get_to(v.archetypeKey);
         if (j.contains("physics_asset_name"))
             j.at("physics_asset_name").get_to(v.physicsAssetName);
-        j.at("presentation_name").get_to(v.presentationName);
-        j.at("template_key").get_to(v.templateKey);
         j.at("template_name").get_to(v.templateName);
     }
 
     inline void to_json(nlohmann::json& j, const WorldArchetypeDto& v)
     {
         j = nlohmann::json::object();
-        j["actor_archetypes_name"] = v.actorArchetypesName;
         j["actor_level_name"] = v.actorLevelName;
-        j["archetype_key"] = v.archetypeKey;
         j["physics_asset_name"] = v.physicsAssetName;
-        j["presentation_name"] = v.presentationName;
-        j["template_key"] = v.templateKey;
         j["template_name"] = v.templateName;
     }
 

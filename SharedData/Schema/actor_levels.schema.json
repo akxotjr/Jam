@@ -2,13 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "jam://schema/actor_levels.schema.json",
   "title": "Jam Actor Levels",
-  "description": "Canonical world level-content document resolved by world_archetypes.actor_level_name through shared_data_catalog.actor_levels.",
+  "description": "Canonical world level-content document resolved by world_archetypes.actor_level_name through shared_data_manifest.content.actor_level_set.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "instances"],
   "$defs": {
     "nonempty_string": { "type": "string", "minLength": 1 },
-    "nonzero_u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 1, "maximum": 18446744073709551615 },
     "vec3": {
       "type": "array",
       "minItems": 3,
@@ -33,22 +32,18 @@
     "actor_level_instance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["level_actor_id", "actor_archetype", "spawn_pose"],
+      "required": ["actor_id", "actor_archetype", "spawn_pose"],
       "properties": {
-        "level_actor_id": {
+        "actor_id": {
           "type": "integer",
           "x-jam-scalar": "u32",
-          "minimum": 0,
-          "maximum": 4294967295,
-          "description": "Stable authored level actor id used to derive level-scoped runtime NetId values."
+          "minimum": 1048577,
+          "maximum": 2097151,
+          "description": "Canonical generation-1 ActorId shared by server and client."
         },
         "actor_archetype": {
           "$ref": "#/$defs/nonempty_string",
           "description": "Canonical actor archetype name resolved from the ActorArchetypeAsset document."
-        },
-        "actor_archetype_key": {
-          "$ref": "#/$defs/nonzero_u64",
-          "description": "Runtime key derived from actor_archetype."
         },
         "spawn_pose": {
           "$ref": "#/$defs/spawn_pose",

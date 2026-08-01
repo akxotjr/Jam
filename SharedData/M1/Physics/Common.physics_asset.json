@@ -1,0 +1,213 @@
+{
+  "version": 1,
+  "archetypes": {
+    "Floor": {
+      "actor_type": "generic",
+      "motion_flags": [],
+      "motion_type": "static",
+      "body": {
+        "dynamic": "",
+        "shapes": [
+          "Floor_Shape"
+        ]
+      },
+      "body_type": "rigid_body"
+    },
+    "Player": {
+      "actor_type": "character",
+      "motion_flags": [],
+      "motion_type": "cct",
+      "body": {
+        "cct": "Player_CctBody",
+        "controller_type": "player",
+        "hitboxes": [],
+        "move_config": "Player_MoveConfig"
+      },
+      "body_type": "character_body"
+    },
+    "Portal": {
+      "actor_type": "generic",
+      "motion_flags": [
+        "disable_gravity"
+      ],
+      "motion_type": "static",
+      "body": {
+        "dynamic": "",
+        "shapes": [
+          "Portal_Shape"
+        ]
+      },
+      "body_type": "rigid_body"
+    }
+  },
+  "cct_bodies": {
+    "Player_CctBody": {
+      "contact_offset": 0.1,
+      "density": 10,
+      "height": 0.75,
+      "invisible_wall_height": 0,
+      "material": "Default_Mat",
+      "max_jump_height": 10,
+      "policy": "default",
+      "qry_filter": {
+        "word0": 2,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "radius": 0.5,
+      "scale_coeff": 0.8,
+      "sim_filter": {
+        "word0": 4,
+        "word1": 19,
+        "word2": 0,
+        "word3": 0
+      },
+      "slope_limit": 0.707,
+      "step_offset": 0.5,
+      "volume_growth": 1.5
+    }
+  },
+  "char_move_configs": {
+    "Player_MoveConfig": {
+      "air_accel": 10,
+      "air_max_speed": 10,
+      "cap_horizontal_only": true,
+      "dash": {
+        "allow_in_air": true,
+        "duration": 0.2,
+        "end_on_collision": true,
+        "override_locomotion": true,
+        "speed": 30,
+        "steer_factor": 0
+      },
+      "gait": {
+        "run_speed_multiplier": 1.2,
+        "sprint_accel_multiplier": 1.2,
+        "sprint_allow_in_air": false,
+        "sprint_min_speed_to_start": 0,
+        "sprint_speed_multiplier": 1.4,
+        "walk_speed_multiplier": 1
+      },
+      "gravity": 25,
+      "ground_accel": 35,
+      "ground_friction": 8,
+      "ground_max_speed": 5,
+      "hard_speed_cap_air": 7.5,
+      "jump": {
+        "coyote_time": 0.1,
+        "edge_trigger": true,
+        "jump_buffer": 0.1,
+        "speed": 10
+      },
+      "soft_cap_start_air": 7,
+      "soft_cap_strength_air": 20,
+      "stance": {
+        "crouch_height": 0.5,
+        "crouch_speed_multiplier": 0.6,
+        "hold_to_crouch": true,
+        "hold_to_prone": false,
+        "prone_height": 0.2,
+        "prone_speed_multiplier": 0,
+        "standing_height": 1
+      }
+    }
+  },
+  "dyn_bodies": {},
+  "kinematic_driver_configs": {},
+  "materials": {
+    "Default_Mat": {
+      "dynamic_friction": 0.5,
+      "restitution": 0.1,
+      "static_friction": 0.5
+    }
+  },
+  "meshes": {},
+  "projectile_configs": {},
+  "shapes": {
+    "Floor_Shape": {
+      "contact_offset": 0,
+      "half_extents": [
+        100,
+        0.5,
+        100
+      ],
+      "half_height": 0,
+      "local_pose": {
+        "p": [
+          0,
+          0,
+          0
+        ],
+        "q": [
+          0,
+          0,
+          0,
+          1
+        ]
+      },
+      "material": "Default_Mat",
+      "mesh": "",
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "radius": 0,
+      "rest_offset": 0.02,
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "type": "box"
+    },
+    "Portal_Shape": {
+      "contact_offset": 0,
+      "half_extents": [
+        1.5,
+        2,
+        1
+      ],
+      "half_height": 0.5,
+      "local_pose": {
+        "p": [
+          0,
+          0,
+          0
+        ],
+        "q": [
+          0,
+          0,
+          0,
+          1
+        ]
+      },
+      "material": "Default_Mat",
+      "mesh": "",
+      "qry_filter": {
+        "word0": 8,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "radius": 0.5,
+      "rest_offset": 0.02,
+      "shape_flag": "trigger_only",
+      "sim_filter": {
+        "word0": 16,
+        "word1": 4,
+        "word2": 3,
+        "word3": 0
+      },
+      "type": "box"
+    }
+  },
+  "composition": {
+    "scope": "common",
+    "includes": []
+  }
+}

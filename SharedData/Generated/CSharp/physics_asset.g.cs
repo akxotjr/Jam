@@ -12,12 +12,10 @@ using Newtonsoft.Json.Linq;
 
 namespace JamUnity.SharedData.Generated
 {
-    [JsonConverter(typeof(PhysicsArchetypeDtoJsonConverter))]
     public abstract class PhysicsArchetypeDto
     {
     }
 
-    [JsonConverter(typeof(KinematicSourceDtoJsonConverter))]
     public abstract class KinematicSourceDto
     {
     }
@@ -87,17 +85,6 @@ namespace JamUnity.SharedData.Generated
         Cct,
         [EnumMember(Value = "remote_cct")]
         RemoteCct
-    }
-
-    [JsonConverter(typeof(StringEnumConverter))]
-    public enum eCharacterPhysicsArchetypeDtoSpawnPolicy
-    {
-        [EnumMember(Value = "level_only")]
-        LevelOnly,
-        [EnumMember(Value = "runtime_only")]
-        RuntimeOnly,
-        [EnumMember(Value = "both")]
-        Both
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
@@ -274,14 +261,12 @@ namespace JamUnity.SharedData.Generated
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum ePhysicsArchetypeCommonDtoSpawnPolicy
+    public enum ePhysicsAssetCompositionDtoScope
     {
-        [EnumMember(Value = "level_only")]
-        LevelOnly,
-        [EnumMember(Value = "runtime_only")]
-        RuntimeOnly,
-        [EnumMember(Value = "both")]
-        Both
+        [EnumMember(Value = "common")]
+        Common,
+        [EnumMember(Value = "world")]
+        World
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
@@ -386,17 +371,6 @@ namespace JamUnity.SharedData.Generated
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum eRigidPhysicsArchetypeDtoSpawnPolicy
-    {
-        [EnumMember(Value = "level_only")]
-        LevelOnly,
-        [EnumMember(Value = "runtime_only")]
-        RuntimeOnly,
-        [EnumMember(Value = "both")]
-        Both
-    }
-
-    [JsonConverter(typeof(StringEnumConverter))]
     public enum eShapeDtoShapeFlag
     {
         [EnumMember(Value = "simulation")]
@@ -475,7 +449,7 @@ namespace JamUnity.SharedData.Generated
         [JsonProperty("version", Required = Required.Always)]
         public int version { get; set; }
 
-        [JsonProperty("archetypes")]
+        [JsonProperty("archetypes", ItemConverterType = typeof(PhysicsArchetypeDtoJsonConverter))]
         public Dictionary<string, PhysicsArchetypeDto> archetypes { get; set; } = new();
 
         [JsonProperty("cct_bodies")]
@@ -483,6 +457,9 @@ namespace JamUnity.SharedData.Generated
 
         [JsonProperty("char_move_configs")]
         public Dictionary<string, CharacterMoveConfigDto> charMoveConfigs { get; set; } = new();
+
+        [JsonProperty("composition")]
+        public PhysicsAssetCompositionDto composition { get; set; } = new();
 
         [JsonProperty("dyn_bodies")]
         public Dictionary<string, DynamicBodyDto> dynBodies { get; set; } = new();
@@ -527,11 +504,17 @@ namespace JamUnity.SharedData.Generated
         [JsonProperty("policy", Required = Required.Always)]
         public eCctBodyDtoPolicy policy { get; set; }
 
+        [JsonProperty("qry_filter", Required = Required.Always)]
+        public QueryFilterDto qryFilter { get; set; } = new();
+
         [JsonProperty("radius", Required = Required.Always)]
         public float radius { get; set; }
 
         [JsonProperty("scale_coeff")]
         public float scaleCoeff { get; set; }
+
+        [JsonProperty("sim_filter", Required = Required.Always)]
+        public SimFilterDto simFilter { get; set; } = new();
 
         [JsonProperty("slope_limit")]
         public float slopeLimit { get; set; }
@@ -611,17 +594,11 @@ namespace JamUnity.SharedData.Generated
         [JsonProperty("actor_type", Required = Required.Always)]
         public eCharacterPhysicsArchetypeDtoActorType actorType { get; set; }
 
-        [JsonProperty("allow_replication", Required = Required.Always)]
-        public bool allowReplication { get; set; }
-
         [JsonProperty("motion_flags", Required = Required.Always)]
         public List<eCharacterPhysicsArchetypeDtoMotionFlags> motionFlags { get; set; } = new();
 
         [JsonProperty("motion_type", Required = Required.Always)]
         public eCharacterPhysicsArchetypeDtoMotionType motionType { get; set; }
-
-        [JsonProperty("spawn_policy", Required = Required.Always)]
-        public eCharacterPhysicsArchetypeDtoSpawnPolicy spawnPolicy { get; set; }
 
         [JsonProperty("body", Required = Required.Always)]
         public CharacterBodyDto body { get; set; } = new();
@@ -821,6 +798,7 @@ namespace JamUnity.SharedData.Generated
         [JsonProperty("common", Required = Required.Always)]
         public KinematicCommonDto common { get; set; } = new();
 
+        [JsonConverter(typeof(KinematicSourceDtoJsonConverter))]
         [JsonProperty("source", Required = Required.Always)]
         public KinematicSourceDto source { get; set; }
 
@@ -944,17 +922,21 @@ namespace JamUnity.SharedData.Generated
         [JsonProperty("actor_type", Required = Required.Always)]
         public ePhysicsArchetypeCommonDtoActorType actorType { get; set; }
 
-        [JsonProperty("allow_replication", Required = Required.Always)]
-        public bool allowReplication { get; set; }
-
         [JsonProperty("motion_flags", Required = Required.Always)]
         public List<ePhysicsArchetypeCommonDtoMotionFlags> motionFlags { get; set; } = new();
 
         [JsonProperty("motion_type", Required = Required.Always)]
         public ePhysicsArchetypeCommonDtoMotionType motionType { get; set; }
 
-        [JsonProperty("spawn_policy", Required = Required.Always)]
-        public ePhysicsArchetypeCommonDtoSpawnPolicy spawnPolicy { get; set; }
+    }
+
+    public sealed class PhysicsAssetCompositionDto
+    {
+        [JsonProperty("includes")]
+        public List<string> includes { get; set; } = new();
+
+        [JsonProperty("scope", Required = Required.Always)]
+        public ePhysicsAssetCompositionDtoScope scope { get; set; }
 
     }
 
@@ -1100,17 +1082,11 @@ namespace JamUnity.SharedData.Generated
         [JsonProperty("actor_type", Required = Required.Always)]
         public eRigidPhysicsArchetypeDtoActorType actorType { get; set; }
 
-        [JsonProperty("allow_replication", Required = Required.Always)]
-        public bool allowReplication { get; set; }
-
         [JsonProperty("motion_flags", Required = Required.Always)]
         public List<eRigidPhysicsArchetypeDtoMotionFlags> motionFlags { get; set; } = new();
 
         [JsonProperty("motion_type", Required = Required.Always)]
         public eRigidPhysicsArchetypeDtoMotionType motionType { get; set; }
-
-        [JsonProperty("spawn_policy", Required = Required.Always)]
-        public eRigidPhysicsArchetypeDtoSpawnPolicy spawnPolicy { get; set; }
 
         [JsonProperty("body", Required = Required.Always)]
         public RigidBodyDto body { get; set; } = new();

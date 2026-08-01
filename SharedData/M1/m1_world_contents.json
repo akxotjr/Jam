@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "worlds": {
+    "Town01": {
+      "player_actor_archetype": "Player",
+      "default_player_spawn": "default",
+      "player_spawns": {
+        "default": {
+          "p": [0.0, 0.0, 0.0],
+          "q": [0.0, 0.0, 0.0, 1.0]
+        },
+        "from-field-01": {
+          "p": [0.0, 0.0, -3.0],
+          "q": [0.0, 0.0, 0.0, 1.0]
+        }
+      },
+      "portals": [
+        {
+          "actor_id": 1048578,
+          "destination_world_archetype": "Field01",
+          "destination_selector": "authored_destination",
+          "explicit_instance_id": 0,
+          "destination_name": "field-01",
+          "arrival_spawn": "from-town"
+        }
+      ]
+    },
+    "Field01": {
+      "player_actor_archetype": "Player",
+      "default_player_spawn": "default",
+      "player_spawns": {
+        "default": {
+          "p": [0.0, 0.0, -4.0],
+          "q": [0.0, 0.0, 0.0, 1.0]
+        },
+        "from-town": {
+          "p": [0.0, 0.0, -4.0],
+          "q": [0.0, 0.0, 0.0, 1.0]
+        },
+        "from-field-02": {
+          "p": [4.0, 0.0, 0.0],
+          "q": [0.0, 0.0, 0.0, 1.0]
+        }
+      },
+      "portals": [
+        {
+          "actor_id": 1048581,
+          "destination_world_archetype": "Town01",
+          "destination_selector": "authored_destination",
+          "explicit_instance_id": 0,
+          "destination_name": "town-01",
+          "arrival_spawn": "from-field-01"
+        },
+        {
+          "actor_id": 1048582,
+          "destination_world_archetype": "Field02",
+          "destination_selector": "authored_destination",
+          "explicit_instance_id": 0,
+          "destination_name": "field-02",
+          "arrival_spawn": "from-field-01"
+        }
+      ]
+    },
+    "Field02": {
+      "player_actor_archetype": "Player",
+      "default_player_spawn": "default",
+      "player_spawns": {
+        "default": {
+          "p": [0.0, 0.0, 0.0],
+          "q": [0.0, 0.0, 0.0, 1.0]
+        },
+        "from-field-01": {
+          "p": [0.0, 0.0, -4.0],
+          "q": [0.0, 0.0, 0.0, 1.0]
+        }
+      },
+      "portals": [
+        {
+          "actor_id": 1048582,
+          "destination_world_archetype": "Field01",
+          "destination_selector": "authored_destination",
+          "explicit_instance_id": 0,
+          "destination_name": "field-01",
+          "arrival_spawn": "from-field-02"
+        }
+      ]
+    }
+  }
+}

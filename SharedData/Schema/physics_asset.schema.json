@@ -7,6 +7,7 @@
   "required": ["version"],
   "properties": {
     "version": { "type": "integer", "x-jam-scalar": "i32", "const": 1 },
+    "composition": { "$ref": "#/$defs/physics_asset_composition" },
     "materials": { "$ref": "#/$defs/material_map" },
     "meshes": { "$ref": "#/$defs/mesh_map" },
     "shapes": { "$ref": "#/$defs/shape_map" },
@@ -23,6 +24,25 @@
     "archetypes": { "$ref": "#/$defs/archetype_map" }
   },
   "$defs": {
+    "physics_asset_scope": {
+      "type": "string",
+      "enum": ["common", "world"]
+    },
+    "physics_asset_composition": {
+      "description": "Authoring-only composition metadata. Source documents declare their ownership scope and included source assets; flattened runtime documents omit this field.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope"],
+      "properties": {
+        "scope": { "$ref": "#/$defs/physics_asset_scope" },
+        "includes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonempty_string" },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
     "u32": { "type": "integer", "x-jam-scalar": "u32", "minimum": 0, "maximum": 4294967295 },
     "u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 0, "maximum": 18446744073709551615 },
     "i32": { "type": "integer", "x-jam-scalar": "i32", "minimum": -2147483648, "maximum": 2147483647 },
@@ -123,13 +143,15 @@
     "cct_body": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["radius", "height", "material", "density", "policy"],
+      "required": ["radius", "height", "material", "density", "policy", "sim_filter", "qry_filter"],
       "properties": {
         "radius": { "type": "number", "default": 0.5 },
         "height": { "type": "number", "default": 0.75 },
         "material": { "$ref": "#/$defs/name_ref" },
         "density": { "type": "number", "default": 10.0 },
         "policy": { "$ref": "#/$defs/cct_policy" },
+        "sim_filter": { "$ref": "#/$defs/sim_filter" },
+        "qry_filter": { "$ref": "#/$defs/query_filter" },
         "slope_limit": { "type": "number", "default": 0.707 },
         "invisible_wall_height": { "type": "number", "default": 0.0 },
         "max_jump_height": { "type": "number", "default": 0.0 },
@@ -466,22 +488,17 @@
       },
       "default": []
     },
-    "spawn_policy": { "type": "string", "enum": ["level_only", "runtime_only", "both"] },
     "physics_archetype_common": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["actor_type", "motion_type", "motion_flags", "spawn_policy", "allow_replication"],
+      "required": ["actor_type", "motion_type", "motion_flags"],
       "properties": {
         "actor_type": { "$ref": "#/$defs/actor_type" },
         "motion_type": { "$ref": "#/$defs/motion_type" },
-        "motion_flags": { "$ref": "#/$defs/motion_flags" },
-        "spawn_policy": { "$ref": "#/$defs/spawn_policy", "default": "both" },
-        "allow_replication": { "type": "boolean", "default": true }
+        "motion_flags": { "$ref": "#/$defs/motion_flags" }
       }
     },
     "rigid_physics_archetype": {
       "type": "object",
-      "additionalProperties": false,
       "required": ["body"],
       "properties": {
         "body_type": { "type": "string", "const": "rigid_body" },
@@ -493,7 +510,6 @@
     },
     "character_physics_archetype": {
       "type": "object",
-      "additionalProperties": false,
       "required": ["body"],
       "properties": {
         "body_type": { "type": "string", "const": "character_body" },

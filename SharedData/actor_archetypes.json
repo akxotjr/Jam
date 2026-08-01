@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "archetypes": {
+    "Floor": {
+      "physics_archetype": "Floor",
+      "spawn_policy": "level_only",
+      "allow_replication": false
+    },
+    "Player": {
+      "physics_archetype": "Player",
+      "spawn_policy": "runtime_only",
+      "allow_replication": true
+    },
+    "Portal": {
+      "physics_archetype": "Portal",
+      "spawn_policy": "level_only",
+      "allow_replication": false
+    },
+    "Box": {
+      "physics_archetype": "Box",
+      "spawn_policy": "level_only",
+      "allow_replication": false
+    }
+  }
+}

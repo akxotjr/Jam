@@ -22,13 +22,20 @@ namespace jam::shared::gen
     template<typename TBase>
     nlohmann::json FromPolymorphic(const std::unique_ptr<TBase>& value);
 
-    struct MeshDto;
+    struct QueryFilterDto;
+    struct ProjectileHitConfigDto;
+    struct ProjectileHomingConfigDto;
+    struct ProjectileLifetimeConfigDto;
+    struct ProjectileMotionConfigDto;
+    struct ProjectileConfigDto;
+    struct PhysicsAssetCompositionDto;
     struct RigidBehaviorDto;
     struct RigidBodyDto;
     struct RigidPhysicsArchetypeDto;
     struct MaterialDto;
     struct CharacterBodyDto;
     struct CharacterPhysicsArchetypeDto;
+    struct SimFilterDto;
     struct CctBodyDto;
     struct StanceConfigDto;
     struct JumpConfigDto;
@@ -46,13 +53,7 @@ namespace jam::shared::gen
     struct OrbitSourceDto;
     struct FollowSourceDto;
     struct KinematicDriverConfigDto;
-    struct QueryFilterDto;
-    struct ProjectileHitConfigDto;
-    struct ProjectileHomingConfigDto;
-    struct ProjectileLifetimeConfigDto;
-    struct ProjectileMotionConfigDto;
-    struct ProjectileConfigDto;
-    struct SimFilterDto;
+    struct MeshDto;
     struct ShapeDto;
     struct PhysicsAssetRootDto;
     struct PhysicsArchetypeCommonDto;
@@ -67,10 +68,35 @@ namespace jam::shared::gen
         virtual ~KinematicSourceDto() = default;
     };
 
-    enum class eMeshDtoType
+    enum class eProjectileHitConfigDtoModel
     {
-        Triangle,
-        Convex
+        RaycastFallback,
+        ShapeSweep,
+        SphereSweep,
+        ExpandingShapeSweep,
+        ExpandingSphereSweep
+    };
+
+    enum class eProjectileMotionConfigDtoModel
+    {
+        Linear,
+        Ballistic,
+        HomingSteer,
+        HomingLead,
+        HomingPn
+    };
+
+    enum class eProjectileConfigDtoKind
+    {
+        DynSim,
+        Analytic,
+        Hitscan
+    };
+
+    enum class ePhysicsAssetCompositionDtoScope
+    {
+        Common,
+        World
     };
 
     enum class eRigidBehaviorDtoKind
@@ -109,13 +135,6 @@ namespace jam::shared::gen
         RemoteCct
     };
 
-    enum class eRigidPhysicsArchetypeDtoSpawnPolicy
-    {
-        LevelOnly,
-        RuntimeOnly,
-        Both
-    };
-
     enum class eCharacterBodyDtoControllerType
     {
         None,
@@ -150,13 +169,6 @@ namespace jam::shared::gen
         Kinematic,
         Cct,
         RemoteCct
-    };
-
-    enum class eCharacterPhysicsArchetypeDtoSpawnPolicy
-    {
-        LevelOnly,
-        RuntimeOnly,
-        Both
     };
 
     enum class eCctBodyDtoPolicy
@@ -258,29 +270,10 @@ namespace jam::shared::gen
         OrientAlongVelocity
     };
 
-    enum class eProjectileHitConfigDtoModel
+    enum class eMeshDtoType
     {
-        RaycastFallback,
-        ShapeSweep,
-        SphereSweep,
-        ExpandingShapeSweep,
-        ExpandingSphereSweep
-    };
-
-    enum class eProjectileMotionConfigDtoModel
-    {
-        Linear,
-        Ballistic,
-        HomingSteer,
-        HomingLead,
-        HomingPn
-    };
-
-    enum class eProjectileConfigDtoKind
-    {
-        DynSim,
-        Analytic,
-        Hitscan
+        Triangle,
+        Convex
     };
 
     enum class eShapeDtoShapeFlag
@@ -332,20 +325,64 @@ namespace jam::shared::gen
         RemoteCct
     };
 
-    enum class ePhysicsArchetypeCommonDtoSpawnPolicy
+    struct QueryFilterDto
     {
-        LevelOnly,
-        RuntimeOnly,
-        Both
+        uint32_t word0 = {};
+        uint32_t word1 = {};
+        uint32_t word2 = {};
+        uint32_t word3 = {};
     };
 
-    struct MeshDto
+    struct ProjectileHitConfigDto
     {
-        std::string cookedPath = {};
-        int32_t srcMeshIndex = {};
-        std::string srcPath = {};
-        int32_t srcPrimitiveIndex = {};
-        eMeshDtoType type = {};
+        bool fallbackRaycast = {};
+        eProjectileHitConfigDtoModel model = {};
+        QueryFilterDto requestFd = {};
+        bool useShapeSweep = {};
+    };
+
+    struct ProjectileHomingConfigDto
+    {
+        float acceleration = {};
+        bool enableHoming = {};
+        bool keepLastDirection = {};
+        bool keepSpeedConstant = {};
+        float leadTimeScale = {};
+        float maxLateralAccel = {};
+        float maxPredictTime = {};
+        float maxSpeed = {};
+        float maxTurnRate = {};
+        float navigationGain = {};
+        bool reacquireTarget = {};
+        uint32_t targetId = {};
+    };
+
+    struct ProjectileLifetimeConfigDto
+    {
+        float maxLifetime = {};
+        float maxRange = {};
+    };
+
+    struct ProjectileMotionConfigDto
+    {
+        float gravityScale = {};
+        std::vector<float> initialVelocity = {};
+        eProjectileMotionConfigDtoModel model = {};
+    };
+
+    struct ProjectileConfigDto
+    {
+        ProjectileHitConfigDto hit = {};
+        ProjectileHomingConfigDto homing = {};
+        eProjectileConfigDtoKind kind = {};
+        ProjectileLifetimeConfigDto lifetime = {};
+        ProjectileMotionConfigDto motion = {};
+    };
+
+    struct PhysicsAssetCompositionDto
+    {
+        std::vector<std::string> includes = {};
+        ePhysicsAssetCompositionDtoScope scope = {};
     };
 
     struct RigidBehaviorDto
@@ -364,10 +401,8 @@ namespace jam::shared::gen
     struct RigidPhysicsArchetypeDto : PhysicsArchetypeDto
     {
         eRigidPhysicsArchetypeDtoActorType actorType = {};
-        bool allowReplication = {};
         std::vector<eRigidPhysicsArchetypeDtoMotionFlags> motionFlags = {};
         eRigidPhysicsArchetypeDtoMotionType motionType = {};
-        eRigidPhysicsArchetypeDtoSpawnPolicy spawnPolicy = {};
         RigidBodyDto body = {};
         std::string bodyType = {};
     };
@@ -390,12 +425,18 @@ namespace jam::shared::gen
     struct CharacterPhysicsArchetypeDto : PhysicsArchetypeDto
     {
         eCharacterPhysicsArchetypeDtoActorType actorType = {};
-        bool allowReplication = {};
         std::vector<eCharacterPhysicsArchetypeDtoMotionFlags> motionFlags = {};
         eCharacterPhysicsArchetypeDtoMotionType motionType = {};
-        eCharacterPhysicsArchetypeDtoSpawnPolicy spawnPolicy = {};
         CharacterBodyDto body = {};
         std::string bodyType = {};
+    };
+
+    struct SimFilterDto
+    {
+        uint32_t word0 = {};
+        uint32_t word1 = {};
+        uint32_t word2 = {};
+        uint32_t word3 = {};
     };
 
     struct CctBodyDto
@@ -407,8 +448,10 @@ namespace jam::shared::gen
         std::string material = {};
         float maxJumpHeight = {};
         eCctBodyDtoPolicy policy = {};
+        QueryFilterDto qryFilter = {};
         float radius = {};
         float scaleCoeff = {};
+        SimFilterDto simFilter = {};
         float slopeLimit = {};
         float stepOffset = {};
         float volumeGrowth = {};
@@ -584,66 +627,13 @@ namespace jam::shared::gen
         std::unique_ptr<KinematicSourceDto> source = {};
     };
 
-    struct QueryFilterDto
+    struct MeshDto
     {
-        uint32_t word0 = {};
-        uint32_t word1 = {};
-        uint32_t word2 = {};
-        uint32_t word3 = {};
-    };
-
-    struct ProjectileHitConfigDto
-    {
-        bool fallbackRaycast = {};
-        eProjectileHitConfigDtoModel model = {};
-        QueryFilterDto requestFd = {};
-        bool useShapeSweep = {};
-    };
-
-    struct ProjectileHomingConfigDto
-    {
-        float acceleration = {};
-        bool enableHoming = {};
-        bool keepLastDirection = {};
-        bool keepSpeedConstant = {};
-        float leadTimeScale = {};
-        float maxLateralAccel = {};
-        float maxPredictTime = {};
-        float maxSpeed = {};
-        float maxTurnRate = {};
-        float navigationGain = {};
-        bool reacquireTarget = {};
-        uint32_t targetId = {};
-    };
-
-    struct ProjectileLifetimeConfigDto
-    {
-        float maxLifetime = {};
-        float maxRange = {};
-    };
-
-    struct ProjectileMotionConfigDto
-    {
-        float gravityScale = {};
-        std::vector<float> initialVelocity = {};
-        eProjectileMotionConfigDtoModel model = {};
-    };
-
-    struct ProjectileConfigDto
-    {
-        ProjectileHitConfigDto hit = {};
-        ProjectileHomingConfigDto homing = {};
-        eProjectileConfigDtoKind kind = {};
-        ProjectileLifetimeConfigDto lifetime = {};
-        ProjectileMotionConfigDto motion = {};
-    };
-
-    struct SimFilterDto
-    {
-        uint32_t word0 = {};
-        uint32_t word1 = {};
-        uint32_t word2 = {};
-        uint32_t word3 = {};
+        std::string cookedPath = {};
+        int32_t srcMeshIndex = {};
+        std::string srcPath = {};
+        int32_t srcPrimitiveIndex = {};
+        eMeshDtoType type = {};
     };
 
     struct ShapeDto
@@ -668,6 +658,7 @@ namespace jam::shared::gen
         std::unordered_map<std::string, std::unique_ptr<PhysicsArchetypeDto>> archetypes = {};
         std::unordered_map<std::string, CctBodyDto> cctBodies = {};
         std::unordered_map<std::string, CharacterMoveConfigDto> charMoveConfigs = {};
+        PhysicsAssetCompositionDto composition = {};
         std::unordered_map<std::string, DynamicBodyDto> dynBodies = {};
         std::unordered_map<std::string, KinematicDriverConfigDto> kinematicDriverConfigs = {};
         std::unordered_map<std::string, MaterialDto> materials = {};
@@ -679,10 +670,8 @@ namespace jam::shared::gen
     struct PhysicsArchetypeCommonDto
     {
         ePhysicsArchetypeCommonDtoActorType actorType = {};
-        bool allowReplication = {};
         std::vector<ePhysicsArchetypeCommonDtoMotionFlags> motionFlags = {};
         ePhysicsArchetypeCommonDtoMotionType motionType = {};
-        ePhysicsArchetypeCommonDtoSpawnPolicy spawnPolicy = {};
     };
 
     template<>
@@ -694,8 +683,14 @@ namespace jam::shared::gen
     template<>
     nlohmann::json FromPolymorphic<KinematicSourceDto>(const std::unique_ptr<KinematicSourceDto>& value);
 
-    inline void from_json(const nlohmann::json& j, eMeshDtoType& v);
-    inline void to_json(nlohmann::json& j, const eMeshDtoType& v);
+    inline void from_json(const nlohmann::json& j, eProjectileHitConfigDtoModel& v);
+    inline void to_json(nlohmann::json& j, const eProjectileHitConfigDtoModel& v);
+    inline void from_json(const nlohmann::json& j, eProjectileMotionConfigDtoModel& v);
+    inline void to_json(nlohmann::json& j, const eProjectileMotionConfigDtoModel& v);
+    inline void from_json(const nlohmann::json& j, eProjectileConfigDtoKind& v);
+    inline void to_json(nlohmann::json& j, const eProjectileConfigDtoKind& v);
+    inline void from_json(const nlohmann::json& j, ePhysicsAssetCompositionDtoScope& v);
+    inline void to_json(nlohmann::json& j, const ePhysicsAssetCompositionDtoScope& v);
     inline void from_json(const nlohmann::json& j, eRigidBehaviorDtoKind& v);
     inline void to_json(nlohmann::json& j, const eRigidBehaviorDtoKind& v);
     inline void from_json(const nlohmann::json& j, eRigidPhysicsArchetypeDtoActorType& v);
@@ -704,8 +699,6 @@ namespace jam::shared::gen
     inline void to_json(nlohmann::json& j, const eRigidPhysicsArchetypeDtoMotionFlags& v);
     inline void from_json(const nlohmann::json& j, eRigidPhysicsArchetypeDtoMotionType& v);
     inline void to_json(nlohmann::json& j, const eRigidPhysicsArchetypeDtoMotionType& v);
-    inline void from_json(const nlohmann::json& j, eRigidPhysicsArchetypeDtoSpawnPolicy& v);
-    inline void to_json(nlohmann::json& j, const eRigidPhysicsArchetypeDtoSpawnPolicy& v);
     inline void from_json(const nlohmann::json& j, eCharacterBodyDtoControllerType& v);
     inline void to_json(nlohmann::json& j, const eCharacterBodyDtoControllerType& v);
     inline void from_json(const nlohmann::json& j, eCharacterPhysicsArchetypeDtoActorType& v);
@@ -714,8 +707,6 @@ namespace jam::shared::gen
     inline void to_json(nlohmann::json& j, const eCharacterPhysicsArchetypeDtoMotionFlags& v);
     inline void from_json(const nlohmann::json& j, eCharacterPhysicsArchetypeDtoMotionType& v);
     inline void to_json(nlohmann::json& j, const eCharacterPhysicsArchetypeDtoMotionType& v);
-    inline void from_json(const nlohmann::json& j, eCharacterPhysicsArchetypeDtoSpawnPolicy& v);
-    inline void to_json(nlohmann::json& j, const eCharacterPhysicsArchetypeDtoSpawnPolicy& v);
     inline void from_json(const nlohmann::json& j, eCctBodyDtoPolicy& v);
     inline void to_json(nlohmann::json& j, const eCctBodyDtoPolicy& v);
     inline void from_json(const nlohmann::json& j, eWaypointSourceDtoEaseType& v);
@@ -740,12 +731,8 @@ namespace jam::shared::gen
     inline void to_json(nlohmann::json& j, const eFollowSourceDtoOffsetSpace& v);
     inline void from_json(const nlohmann::json& j, eFollowSourceDtoRotationMode& v);
     inline void to_json(nlohmann::json& j, const eFollowSourceDtoRotationMode& v);
-    inline void from_json(const nlohmann::json& j, eProjectileHitConfigDtoModel& v);
-    inline void to_json(nlohmann::json& j, const eProjectileHitConfigDtoModel& v);
-    inline void from_json(const nlohmann::json& j, eProjectileMotionConfigDtoModel& v);
-    inline void to_json(nlohmann::json& j, const eProjectileMotionConfigDtoModel& v);
-    inline void from_json(const nlohmann::json& j, eProjectileConfigDtoKind& v);
-    inline void to_json(nlohmann::json& j, const eProjectileConfigDtoKind& v);
+    inline void from_json(const nlohmann::json& j, eMeshDtoType& v);
+    inline void to_json(nlohmann::json& j, const eMeshDtoType& v);
     inline void from_json(const nlohmann::json& j, eShapeDtoShapeFlag& v);
     inline void to_json(nlohmann::json& j, const eShapeDtoShapeFlag& v);
     inline void from_json(const nlohmann::json& j, eShapeDtoType& v);
@@ -756,10 +743,20 @@ namespace jam::shared::gen
     inline void to_json(nlohmann::json& j, const ePhysicsArchetypeCommonDtoMotionFlags& v);
     inline void from_json(const nlohmann::json& j, ePhysicsArchetypeCommonDtoMotionType& v);
     inline void to_json(nlohmann::json& j, const ePhysicsArchetypeCommonDtoMotionType& v);
-    inline void from_json(const nlohmann::json& j, ePhysicsArchetypeCommonDtoSpawnPolicy& v);
-    inline void to_json(nlohmann::json& j, const ePhysicsArchetypeCommonDtoSpawnPolicy& v);
-    inline void from_json(const nlohmann::json& j, MeshDto& v);
-    inline void to_json(nlohmann::json& j, const MeshDto& v);
+    inline void from_json(const nlohmann::json& j, QueryFilterDto& v);
+    inline void to_json(nlohmann::json& j, const QueryFilterDto& v);
+    inline void from_json(const nlohmann::json& j, ProjectileHitConfigDto& v);
+    inline void to_json(nlohmann::json& j, const ProjectileHitConfigDto& v);
+    inline void from_json(const nlohmann::json& j, ProjectileHomingConfigDto& v);
+    inline void to_json(nlohmann::json& j, const ProjectileHomingConfigDto& v);
+    inline void from_json(const nlohmann::json& j, ProjectileLifetimeConfigDto& v);
+    inline void to_json(nlohmann::json& j, const ProjectileLifetimeConfigDto& v);
+    inline void from_json(const nlohmann::json& j, ProjectileMotionConfigDto& v);
+    inline void to_json(nlohmann::json& j, const ProjectileMotionConfigDto& v);
+    inline void from_json(const nlohmann::json& j, ProjectileConfigDto& v);
+    inline void to_json(nlohmann::json& j, const ProjectileConfigDto& v);
+    inline void from_json(const nlohmann::json& j, PhysicsAssetCompositionDto& v);
+    inline void to_json(nlohmann::json& j, const PhysicsAssetCompositionDto& v);
     inline void from_json(const nlohmann::json& j, RigidBehaviorDto& v);
     inline void to_json(nlohmann::json& j, const RigidBehaviorDto& v);
     inline void from_json(const nlohmann::json& j, RigidBodyDto& v);
@@ -772,6 +769,8 @@ namespace jam::shared::gen
     inline void to_json(nlohmann::json& j, const CharacterBodyDto& v);
     inline void from_json(const nlohmann::json& j, CharacterPhysicsArchetypeDto& v);
     inline void to_json(nlohmann::json& j, const CharacterPhysicsArchetypeDto& v);
+    inline void from_json(const nlohmann::json& j, SimFilterDto& v);
+    inline void to_json(nlohmann::json& j, const SimFilterDto& v);
     inline void from_json(const nlohmann::json& j, CctBodyDto& v);
     inline void to_json(nlohmann::json& j, const CctBodyDto& v);
     inline void from_json(const nlohmann::json& j, StanceConfigDto& v);
@@ -806,20 +805,8 @@ namespace jam::shared::gen
     inline void to_json(nlohmann::json& j, const FollowSourceDto& v);
     inline void from_json(const nlohmann::json& j, KinematicDriverConfigDto& v);
     inline void to_json(nlohmann::json& j, const KinematicDriverConfigDto& v);
-    inline void from_json(const nlohmann::json& j, QueryFilterDto& v);
-    inline void to_json(nlohmann::json& j, const QueryFilterDto& v);
-    inline void from_json(const nlohmann::json& j, ProjectileHitConfigDto& v);
-    inline void to_json(nlohmann::json& j, const ProjectileHitConfigDto& v);
-    inline void from_json(const nlohmann::json& j, ProjectileHomingConfigDto& v);
-    inline void to_json(nlohmann::json& j, const ProjectileHomingConfigDto& v);
-    inline void from_json(const nlohmann::json& j, ProjectileLifetimeConfigDto& v);
-    inline void to_json(nlohmann::json& j, const ProjectileLifetimeConfigDto& v);
-    inline void from_json(const nlohmann::json& j, ProjectileMotionConfigDto& v);
-    inline void to_json(nlohmann::json& j, const ProjectileMotionConfigDto& v);
-    inline void from_json(const nlohmann::json& j, ProjectileConfigDto& v);
-    inline void to_json(nlohmann::json& j, const ProjectileConfigDto& v);
-    inline void from_json(const nlohmann::json& j, SimFilterDto& v);
-    inline void to_json(nlohmann::json& j, const SimFilterDto& v);
+    inline void from_json(const nlohmann::json& j, MeshDto& v);
+    inline void to_json(nlohmann::json& j, const MeshDto& v);
     inline void from_json(const nlohmann::json& j, ShapeDto& v);
     inline void to_json(nlohmann::json& j, const ShapeDto& v);
     inline void from_json(const nlohmann::json& j, PhysicsAssetRootDto& v);
@@ -827,25 +814,105 @@ namespace jam::shared::gen
     inline void from_json(const nlohmann::json& j, PhysicsArchetypeCommonDto& v);
     inline void to_json(nlohmann::json& j, const PhysicsArchetypeCommonDto& v);
 
-    inline void from_json(const nlohmann::json& j, eMeshDtoType& v)
+    inline void from_json(const nlohmann::json& j, eProjectileHitConfigDtoModel& v)
     {
         const std::string s = j.get<std::string>();
 
-        if (s == "triangle") { v = eMeshDtoType::Triangle; return; }
-        if (s == "convex") { v = eMeshDtoType::Convex; return; }
+        if (s == "raycast_fallback") { v = eProjectileHitConfigDtoModel::RaycastFallback; return; }
+        if (s == "shape_sweep") { v = eProjectileHitConfigDtoModel::ShapeSweep; return; }
+        if (s == "sphere_sweep") { v = eProjectileHitConfigDtoModel::SphereSweep; return; }
+        if (s == "expanding_shape_sweep") { v = eProjectileHitConfigDtoModel::ExpandingShapeSweep; return; }
+        if (s == "expanding_sphere_sweep") { v = eProjectileHitConfigDtoModel::ExpandingSphereSweep; return; }
 
-        throw std::runtime_error("Unknown enum value for eMeshDtoType: " + s);
+        throw std::runtime_error("Unknown enum value for eProjectileHitConfigDtoModel: " + s);
     }
 
-    inline void to_json(nlohmann::json& j, const eMeshDtoType& v)
+    inline void to_json(nlohmann::json& j, const eProjectileHitConfigDtoModel& v)
     {
         switch (v)
         {
-        case eMeshDtoType::Triangle: j = "triangle"; return;
-        case eMeshDtoType::Convex: j = "convex"; return;
+        case eProjectileHitConfigDtoModel::RaycastFallback: j = "raycast_fallback"; return;
+        case eProjectileHitConfigDtoModel::ShapeSweep: j = "shape_sweep"; return;
+        case eProjectileHitConfigDtoModel::SphereSweep: j = "sphere_sweep"; return;
+        case eProjectileHitConfigDtoModel::ExpandingShapeSweep: j = "expanding_shape_sweep"; return;
+        case eProjectileHitConfigDtoModel::ExpandingSphereSweep: j = "expanding_sphere_sweep"; return;
         }
 
-        throw std::runtime_error("Unknown eMeshDtoType enum state.");
+        throw std::runtime_error("Unknown eProjectileHitConfigDtoModel enum state.");
+    }
+
+
+    inline void from_json(const nlohmann::json& j, eProjectileMotionConfigDtoModel& v)
+    {
+        const std::string s = j.get<std::string>();
+
+        if (s == "linear") { v = eProjectileMotionConfigDtoModel::Linear; return; }
+        if (s == "ballistic") { v = eProjectileMotionConfigDtoModel::Ballistic; return; }
+        if (s == "homing_steer") { v = eProjectileMotionConfigDtoModel::HomingSteer; return; }
+        if (s == "homing_lead") { v = eProjectileMotionConfigDtoModel::HomingLead; return; }
+        if (s == "homing_pn") { v = eProjectileMotionConfigDtoModel::HomingPn; return; }
+
+        throw std::runtime_error("Unknown enum value for eProjectileMotionConfigDtoModel: " + s);
+    }
+
+    inline void to_json(nlohmann::json& j, const eProjectileMotionConfigDtoModel& v)
+    {
+        switch (v)
+        {
+        case eProjectileMotionConfigDtoModel::Linear: j = "linear"; return;
+        case eProjectileMotionConfigDtoModel::Ballistic: j = "ballistic"; return;
+        case eProjectileMotionConfigDtoModel::HomingSteer: j = "homing_steer"; return;
+        case eProjectileMotionConfigDtoModel::HomingLead: j = "homing_lead"; return;
+        case eProjectileMotionConfigDtoModel::HomingPn: j = "homing_pn"; return;
+        }
+
+        throw std::runtime_error("Unknown eProjectileMotionConfigDtoModel enum state.");
+    }
+
+
+    inline void from_json(const nlohmann::json& j, eProjectileConfigDtoKind& v)
+    {
+        const std::string s = j.get<std::string>();
+
+        if (s == "dyn_sim") { v = eProjectileConfigDtoKind::DynSim; return; }
+        if (s == "analytic") { v = eProjectileConfigDtoKind::Analytic; return; }
+        if (s == "hitscan") { v = eProjectileConfigDtoKind::Hitscan; return; }
+
+        throw std::runtime_error("Unknown enum value for eProjectileConfigDtoKind: " + s);
+    }
+
+    inline void to_json(nlohmann::json& j, const eProjectileConfigDtoKind& v)
+    {
+        switch (v)
+        {
+        case eProjectileConfigDtoKind::DynSim: j = "dyn_sim"; return;
+        case eProjectileConfigDtoKind::Analytic: j = "analytic"; return;
+        case eProjectileConfigDtoKind::Hitscan: j = "hitscan"; return;
+        }
+
+        throw std::runtime_error("Unknown eProjectileConfigDtoKind enum state.");
+    }
+
+
+    inline void from_json(const nlohmann::json& j, ePhysicsAssetCompositionDtoScope& v)
+    {
+        const std::string s = j.get<std::string>();
+
+        if (s == "common") { v = ePhysicsAssetCompositionDtoScope::Common; return; }
+        if (s == "world") { v = ePhysicsAssetCompositionDtoScope::World; return; }
+
+        throw std::runtime_error("Unknown enum value for ePhysicsAssetCompositionDtoScope: " + s);
+    }
+
+    inline void to_json(nlohmann::json& j, const ePhysicsAssetCompositionDtoScope& v)
+    {
+        switch (v)
+        {
+        case ePhysicsAssetCompositionDtoScope::Common: j = "common"; return;
+        case ePhysicsAssetCompositionDtoScope::World: j = "world"; return;
+        }
+
+        throw std::runtime_error("Unknown ePhysicsAssetCompositionDtoScope enum state.");
     }
 
 
@@ -961,30 +1028,6 @@ namespace jam::shared::gen
     }
 
 
-    inline void from_json(const nlohmann::json& j, eRigidPhysicsArchetypeDtoSpawnPolicy& v)
-    {
-        const std::string s = j.get<std::string>();
-
-        if (s == "level_only") { v = eRigidPhysicsArchetypeDtoSpawnPolicy::LevelOnly; return; }
-        if (s == "runtime_only") { v = eRigidPhysicsArchetypeDtoSpawnPolicy::RuntimeOnly; return; }
-        if (s == "both") { v = eRigidPhysicsArchetypeDtoSpawnPolicy::Both; return; }
-
-        throw std::runtime_error("Unknown enum value for eRigidPhysicsArchetypeDtoSpawnPolicy: " + s);
-    }
-
-    inline void to_json(nlohmann::json& j, const eRigidPhysicsArchetypeDtoSpawnPolicy& v)
-    {
-        switch (v)
-        {
-        case eRigidPhysicsArchetypeDtoSpawnPolicy::LevelOnly: j = "level_only"; return;
-        case eRigidPhysicsArchetypeDtoSpawnPolicy::RuntimeOnly: j = "runtime_only"; return;
-        case eRigidPhysicsArchetypeDtoSpawnPolicy::Both: j = "both"; return;
-        }
-
-        throw std::runtime_error("Unknown eRigidPhysicsArchetypeDtoSpawnPolicy enum state.");
-    }
-
-
     inline void from_json(const nlohmann::json& j, eCharacterBodyDtoControllerType& v)
     {
         const std::string s = j.get<std::string>();
@@ -1094,30 +1137,6 @@ namespace jam::shared::gen
         }
 
         throw std::runtime_error("Unknown eCharacterPhysicsArchetypeDtoMotionType enum state.");
-    }
-
-
-    inline void from_json(const nlohmann::json& j, eCharacterPhysicsArchetypeDtoSpawnPolicy& v)
-    {
-        const std::string s = j.get<std::string>();
-
-        if (s == "level_only") { v = eCharacterPhysicsArchetypeDtoSpawnPolicy::LevelOnly; return; }
-        if (s == "runtime_only") { v = eCharacterPhysicsArchetypeDtoSpawnPolicy::RuntimeOnly; return; }
-        if (s == "both") { v = eCharacterPhysicsArchetypeDtoSpawnPolicy::Both; return; }
-
-        throw std::runtime_error("Unknown enum value for eCharacterPhysicsArchetypeDtoSpawnPolicy: " + s);
-    }
-
-    inline void to_json(nlohmann::json& j, const eCharacterPhysicsArchetypeDtoSpawnPolicy& v)
-    {
-        switch (v)
-        {
-        case eCharacterPhysicsArchetypeDtoSpawnPolicy::LevelOnly: j = "level_only"; return;
-        case eCharacterPhysicsArchetypeDtoSpawnPolicy::RuntimeOnly: j = "runtime_only"; return;
-        case eCharacterPhysicsArchetypeDtoSpawnPolicy::Both: j = "both"; return;
-        }
-
-        throw std::runtime_error("Unknown eCharacterPhysicsArchetypeDtoSpawnPolicy enum state.");
     }
 
 
@@ -1439,83 +1458,25 @@ namespace jam::shared::gen
     }
 
 
-    inline void from_json(const nlohmann::json& j, eProjectileHitConfigDtoModel& v)
+    inline void from_json(const nlohmann::json& j, eMeshDtoType& v)
     {
         const std::string s = j.get<std::string>();
 
-        if (s == "raycast_fallback") { v = eProjectileHitConfigDtoModel::RaycastFallback; return; }
-        if (s == "shape_sweep") { v = eProjectileHitConfigDtoModel::ShapeSweep; return; }
-        if (s == "sphere_sweep") { v = eProjectileHitConfigDtoModel::SphereSweep; return; }
-        if (s == "expanding_shape_sweep") { v = eProjectileHitConfigDtoModel::ExpandingShapeSweep; return; }
-        if (s == "expanding_sphere_sweep") { v = eProjectileHitConfigDtoModel::ExpandingSphereSweep; return; }
+        if (s == "triangle") { v = eMeshDtoType::Triangle; return; }
+        if (s == "convex") { v = eMeshDtoType::Convex; return; }
 
-        throw std::runtime_error("Unknown enum value for eProjectileHitConfigDtoModel: " + s);
+        throw std::runtime_error("Unknown enum value for eMeshDtoType: " + s);
     }
 
-    inline void to_json(nlohmann::json& j, const eProjectileHitConfigDtoModel& v)
+    inline void to_json(nlohmann::json& j, const eMeshDtoType& v)
     {
         switch (v)
         {
-        case eProjectileHitConfigDtoModel::RaycastFallback: j = "raycast_fallback"; return;
-        case eProjectileHitConfigDtoModel::ShapeSweep: j = "shape_sweep"; return;
-        case eProjectileHitConfigDtoModel::SphereSweep: j = "sphere_sweep"; return;
-        case eProjectileHitConfigDtoModel::ExpandingShapeSweep: j = "expanding_shape_sweep"; return;
-        case eProjectileHitConfigDtoModel::ExpandingSphereSweep: j = "expanding_sphere_sweep"; return;
+        case eMeshDtoType::Triangle: j = "triangle"; return;
+        case eMeshDtoType::Convex: j = "convex"; return;
         }
 
-        throw std::runtime_error("Unknown eProjectileHitConfigDtoModel enum state.");
-    }
-
-
-    inline void from_json(const nlohmann::json& j, eProjectileMotionConfigDtoModel& v)
-    {
-        const std::string s = j.get<std::string>();
-
-        if (s == "linear") { v = eProjectileMotionConfigDtoModel::Linear; return; }
-        if (s == "ballistic") { v = eProjectileMotionConfigDtoModel::Ballistic; return; }
-        if (s == "homing_steer") { v = eProjectileMotionConfigDtoModel::HomingSteer; return; }
-        if (s == "homing_lead") { v = eProjectileMotionConfigDtoModel::HomingLead; return; }
-        if (s == "homing_pn") { v = eProjectileMotionConfigDtoModel::HomingPn; return; }
-
-        throw std::runtime_error("Unknown enum value for eProjectileMotionConfigDtoModel: " + s);
-    }
-
-    inline void to_json(nlohmann::json& j, const eProjectileMotionConfigDtoModel& v)
-    {
-        switch (v)
-        {
-        case eProjectileMotionConfigDtoModel::Linear: j = "linear"; return;
-        case eProjectileMotionConfigDtoModel::Ballistic: j = "ballistic"; return;
-        case eProjectileMotionConfigDtoModel::HomingSteer: j = "homing_steer"; return;
-        case eProjectileMotionConfigDtoModel::HomingLead: j = "homing_lead"; return;
-        case eProjectileMotionConfigDtoModel::HomingPn: j = "homing_pn"; return;
-        }
-
-        throw std::runtime_error("Unknown eProjectileMotionConfigDtoModel enum state.");
-    }
-
-
-    inline void from_json(const nlohmann::json& j, eProjectileConfigDtoKind& v)
-    {
-        const std::string s = j.get<std::string>();
-
-        if (s == "dyn_sim") { v = eProjectileConfigDtoKind::DynSim; return; }
-        if (s == "analytic") { v = eProjectileConfigDtoKind::Analytic; return; }
-        if (s == "hitscan") { v = eProjectileConfigDtoKind::Hitscan; return; }
-
-        throw std::runtime_error("Unknown enum value for eProjectileConfigDtoKind: " + s);
-    }
-
-    inline void to_json(nlohmann::json& j, const eProjectileConfigDtoKind& v)
-    {
-        switch (v)
-        {
-        case eProjectileConfigDtoKind::DynSim: j = "dyn_sim"; return;
-        case eProjectileConfigDtoKind::Analytic: j = "analytic"; return;
-        case eProjectileConfigDtoKind::Hitscan: j = "hitscan"; return;
-        }
-
-        throw std::runtime_error("Unknown eProjectileConfigDtoKind enum state.");
+        throw std::runtime_error("Unknown eMeshDtoType enum state.");
     }
 
 
@@ -1667,50 +1628,158 @@ namespace jam::shared::gen
     }
 
 
-    inline void from_json(const nlohmann::json& j, ePhysicsArchetypeCommonDtoSpawnPolicy& v)
+    inline void from_json(const nlohmann::json& j, QueryFilterDto& v)
     {
-        const std::string s = j.get<std::string>();
-
-        if (s == "level_only") { v = ePhysicsArchetypeCommonDtoSpawnPolicy::LevelOnly; return; }
-        if (s == "runtime_only") { v = ePhysicsArchetypeCommonDtoSpawnPolicy::RuntimeOnly; return; }
-        if (s == "both") { v = ePhysicsArchetypeCommonDtoSpawnPolicy::Both; return; }
-
-        throw std::runtime_error("Unknown enum value for ePhysicsArchetypeCommonDtoSpawnPolicy: " + s);
+        j.at("word0").get_to(v.word0);
+        j.at("word1").get_to(v.word1);
+        j.at("word2").get_to(v.word2);
+        j.at("word3").get_to(v.word3);
     }
 
-    inline void to_json(nlohmann::json& j, const ePhysicsArchetypeCommonDtoSpawnPolicy& v)
-    {
-        switch (v)
-        {
-        case ePhysicsArchetypeCommonDtoSpawnPolicy::LevelOnly: j = "level_only"; return;
-        case ePhysicsArchetypeCommonDtoSpawnPolicy::RuntimeOnly: j = "runtime_only"; return;
-        case ePhysicsArchetypeCommonDtoSpawnPolicy::Both: j = "both"; return;
-        }
-
-        throw std::runtime_error("Unknown ePhysicsArchetypeCommonDtoSpawnPolicy enum state.");
-    }
-
-
-    inline void from_json(const nlohmann::json& j, MeshDto& v)
-    {
-        j.at("cooked_path").get_to(v.cookedPath);
-        if (j.contains("src_mesh_index"))
-            j.at("src_mesh_index").get_to(v.srcMeshIndex);
-        if (j.contains("src_path"))
-            j.at("src_path").get_to(v.srcPath);
-        if (j.contains("src_primitive_index"))
-            j.at("src_primitive_index").get_to(v.srcPrimitiveIndex);
-        j.at("type").get_to(v.type);
-    }
-
-    inline void to_json(nlohmann::json& j, const MeshDto& v)
+    inline void to_json(nlohmann::json& j, const QueryFilterDto& v)
     {
         j = nlohmann::json::object();
-        j["cooked_path"] = v.cookedPath;
-        j["src_mesh_index"] = v.srcMeshIndex;
-        j["src_path"] = v.srcPath;
-        j["src_primitive_index"] = v.srcPrimitiveIndex;
-        j["type"] = v.type;
+        j["word0"] = v.word0;
+        j["word1"] = v.word1;
+        j["word2"] = v.word2;
+        j["word3"] = v.word3;
+    }
+
+    inline void from_json(const nlohmann::json& j, ProjectileHitConfigDto& v)
+    {
+        if (j.contains("fallback_raycast"))
+            j.at("fallback_raycast").get_to(v.fallbackRaycast);
+        if (j.contains("model"))
+            j.at("model").get_to(v.model);
+        if (j.contains("request_fd"))
+            j.at("request_fd").get_to(v.requestFd);
+        if (j.contains("use_shape_sweep"))
+            j.at("use_shape_sweep").get_to(v.useShapeSweep);
+    }
+
+    inline void to_json(nlohmann::json& j, const ProjectileHitConfigDto& v)
+    {
+        j = nlohmann::json::object();
+        j["fallback_raycast"] = v.fallbackRaycast;
+        j["model"] = v.model;
+        j["request_fd"] = v.requestFd;
+        j["use_shape_sweep"] = v.useShapeSweep;
+    }
+
+    inline void from_json(const nlohmann::json& j, ProjectileHomingConfigDto& v)
+    {
+        if (j.contains("acceleration"))
+            j.at("acceleration").get_to(v.acceleration);
+        if (j.contains("enable_homing"))
+            j.at("enable_homing").get_to(v.enableHoming);
+        if (j.contains("keep_last_direction"))
+            j.at("keep_last_direction").get_to(v.keepLastDirection);
+        if (j.contains("keep_speed_constant"))
+            j.at("keep_speed_constant").get_to(v.keepSpeedConstant);
+        if (j.contains("lead_time_scale"))
+            j.at("lead_time_scale").get_to(v.leadTimeScale);
+        if (j.contains("max_lateral_accel"))
+            j.at("max_lateral_accel").get_to(v.maxLateralAccel);
+        if (j.contains("max_predict_time"))
+            j.at("max_predict_time").get_to(v.maxPredictTime);
+        if (j.contains("max_speed"))
+            j.at("max_speed").get_to(v.maxSpeed);
+        if (j.contains("max_turn_rate"))
+            j.at("max_turn_rate").get_to(v.maxTurnRate);
+        if (j.contains("navigation_gain"))
+            j.at("navigation_gain").get_to(v.navigationGain);
+        if (j.contains("reacquire_target"))
+            j.at("reacquire_target").get_to(v.reacquireTarget);
+        if (j.contains("target_id"))
+            j.at("target_id").get_to(v.targetId);
+    }
+
+    inline void to_json(nlohmann::json& j, const ProjectileHomingConfigDto& v)
+    {
+        j = nlohmann::json::object();
+        j["acceleration"] = v.acceleration;
+        j["enable_homing"] = v.enableHoming;
+        j["keep_last_direction"] = v.keepLastDirection;
+        j["keep_speed_constant"] = v.keepSpeedConstant;
+        j["lead_time_scale"] = v.leadTimeScale;
+        j["max_lateral_accel"] = v.maxLateralAccel;
+        j["max_predict_time"] = v.maxPredictTime;
+        j["max_speed"] = v.maxSpeed;
+        j["max_turn_rate"] = v.maxTurnRate;
+        j["navigation_gain"] = v.navigationGain;
+        j["reacquire_target"] = v.reacquireTarget;
+        j["target_id"] = v.targetId;
+    }
+
+    inline void from_json(const nlohmann::json& j, ProjectileLifetimeConfigDto& v)
+    {
+        if (j.contains("max_lifetime"))
+            j.at("max_lifetime").get_to(v.maxLifetime);
+        if (j.contains("max_range"))
+            j.at("max_range").get_to(v.maxRange);
+    }
+
+    inline void to_json(nlohmann::json& j, const ProjectileLifetimeConfigDto& v)
+    {
+        j = nlohmann::json::object();
+        j["max_lifetime"] = v.maxLifetime;
+        j["max_range"] = v.maxRange;
+    }
+
+    inline void from_json(const nlohmann::json& j, ProjectileMotionConfigDto& v)
+    {
+        if (j.contains("gravity_scale"))
+            j.at("gravity_scale").get_to(v.gravityScale);
+        if (j.contains("initial_velocity"))
+            j.at("initial_velocity").get_to(v.initialVelocity);
+        if (j.contains("model"))
+            j.at("model").get_to(v.model);
+    }
+
+    inline void to_json(nlohmann::json& j, const ProjectileMotionConfigDto& v)
+    {
+        j = nlohmann::json::object();
+        j["gravity_scale"] = v.gravityScale;
+        j["initial_velocity"] = v.initialVelocity;
+        j["model"] = v.model;
+    }
+
+    inline void from_json(const nlohmann::json& j, ProjectileConfigDto& v)
+    {
+        if (j.contains("hit"))
+            j.at("hit").get_to(v.hit);
+        if (j.contains("homing"))
+            j.at("homing").get_to(v.homing);
+        if (j.contains("kind"))
+            j.at("kind").get_to(v.kind);
+        if (j.contains("lifetime"))
+            j.at("lifetime").get_to(v.lifetime);
+        if (j.contains("motion"))
+            j.at("motion").get_to(v.motion);
+    }
+
+    inline void to_json(nlohmann::json& j, const ProjectileConfigDto& v)
+    {
+        j = nlohmann::json::object();
+        j["hit"] = v.hit;
+        j["homing"] = v.homing;
+        j["kind"] = v.kind;
+        j["lifetime"] = v.lifetime;
+        j["motion"] = v.motion;
+    }
+
+    inline void from_json(const nlohmann::json& j, PhysicsAssetCompositionDto& v)
+    {
+        if (j.contains("includes"))
+            j.at("includes").get_to(v.includes);
+        j.at("scope").get_to(v.scope);
+    }
+
+    inline void to_json(nlohmann::json& j, const PhysicsAssetCompositionDto& v)
+    {
+        j = nlohmann::json::object();
+        j["includes"] = v.includes;
+        j["scope"] = v.scope;
     }
 
     inline void from_json(const nlohmann::json& j, RigidBehaviorDto& v)
@@ -1747,10 +1816,8 @@ namespace jam::shared::gen
     inline void from_json(const nlohmann::json& j, RigidPhysicsArchetypeDto& v)
     {
         j.at("actor_type").get_to(v.actorType);
-        j.at("allow_replication").get_to(v.allowReplication);
         j.at("motion_flags").get_to(v.motionFlags);
         j.at("motion_type").get_to(v.motionType);
-        j.at("spawn_policy").get_to(v.spawnPolicy);
         j.at("body").get_to(v.body);
         if (j.contains("body_type"))
             j.at("body_type").get_to(v.bodyType);
@@ -1760,10 +1827,8 @@ namespace jam::shared::gen
     {
         j = nlohmann::json::object();
         j["actor_type"] = v.actorType;
-        j["allow_replication"] = v.allowReplication;
         j["motion_flags"] = v.motionFlags;
         j["motion_type"] = v.motionType;
-        j["spawn_policy"] = v.spawnPolicy;
         j["body"] = v.body;
         j["body_type"] = v.bodyType;
     }
@@ -1806,10 +1871,8 @@ namespace jam::shared::gen
     inline void from_json(const nlohmann::json& j, CharacterPhysicsArchetypeDto& v)
     {
         j.at("actor_type").get_to(v.actorType);
-        j.at("allow_replication").get_to(v.allowReplication);
         j.at("motion_flags").get_to(v.motionFlags);
         j.at("motion_type").get_to(v.motionType);
-        j.at("spawn_policy").get_to(v.spawnPolicy);
         j.at("body").get_to(v.body);
         if (j.contains("body_type"))
             j.at("body_type").get_to(v.bodyType);
@@ -1819,12 +1882,27 @@ namespace jam::shared::gen
     {
         j = nlohmann::json::object();
         j["actor_type"] = v.actorType;
-        j["allow_replication"] = v.allowReplication;
         j["motion_flags"] = v.motionFlags;
         j["motion_type"] = v.motionType;
-        j["spawn_policy"] = v.spawnPolicy;
         j["body"] = v.body;
         j["body_type"] = v.bodyType;
+    }
+
+    inline void from_json(const nlohmann::json& j, SimFilterDto& v)
+    {
+        j.at("word0").get_to(v.word0);
+        j.at("word1").get_to(v.word1);
+        j.at("word2").get_to(v.word2);
+        j.at("word3").get_to(v.word3);
+    }
+
+    inline void to_json(nlohmann::json& j, const SimFilterDto& v)
+    {
+        j = nlohmann::json::object();
+        j["word0"] = v.word0;
+        j["word1"] = v.word1;
+        j["word2"] = v.word2;
+        j["word3"] = v.word3;
     }
 
     inline void from_json(const nlohmann::json& j, CctBodyDto& v)
@@ -1839,9 +1917,11 @@ namespace jam::shared::gen
         if (j.contains("max_jump_height"))
             j.at("max_jump_height").get_to(v.maxJumpHeight);
         j.at("policy").get_to(v.policy);
+        j.at("qry_filter").get_to(v.qryFilter);
         j.at("radius").get_to(v.radius);
         if (j.contains("scale_coeff"))
             j.at("scale_coeff").get_to(v.scaleCoeff);
+        j.at("sim_filter").get_to(v.simFilter);
         if (j.contains("slope_limit"))
             j.at("slope_limit").get_to(v.slopeLimit);
         if (j.contains("step_offset"))
@@ -1860,8 +1940,10 @@ namespace jam::shared::gen
         j["material"] = v.material;
         j["max_jump_height"] = v.maxJumpHeight;
         j["policy"] = v.policy;
+        j["qry_filter"] = v.qryFilter;
         j["radius"] = v.radius;
         j["scale_coeff"] = v.scaleCoeff;
+        j["sim_filter"] = v.simFilter;
         j["slope_limit"] = v.slopeLimit;
         j["step_offset"] = v.stepOffset;
         j["volume_growth"] = v.volumeGrowth;
@@ -2316,161 +2398,26 @@ namespace jam::shared::gen
             j["source"] = FromPolymorphic<KinematicSourceDto>(v.source);
     }
 
-    inline void from_json(const nlohmann::json& j, QueryFilterDto& v)
+    inline void from_json(const nlohmann::json& j, MeshDto& v)
     {
-        j.at("word0").get_to(v.word0);
-        j.at("word1").get_to(v.word1);
-        j.at("word2").get_to(v.word2);
-        j.at("word3").get_to(v.word3);
+        j.at("cooked_path").get_to(v.cookedPath);
+        if (j.contains("src_mesh_index"))
+            j.at("src_mesh_index").get_to(v.srcMeshIndex);
+        if (j.contains("src_path"))
+            j.at("src_path").get_to(v.srcPath);
+        if (j.contains("src_primitive_index"))
+            j.at("src_primitive_index").get_to(v.srcPrimitiveIndex);
+        j.at("type").get_to(v.type);
     }
 
-    inline void to_json(nlohmann::json& j, const QueryFilterDto& v)
+    inline void to_json(nlohmann::json& j, const MeshDto& v)
     {
         j = nlohmann::json::object();
-        j["word0"] = v.word0;
-        j["word1"] = v.word1;
-        j["word2"] = v.word2;
-        j["word3"] = v.word3;
-    }
-
-    inline void from_json(const nlohmann::json& j, ProjectileHitConfigDto& v)
-    {
-        if (j.contains("fallback_raycast"))
-            j.at("fallback_raycast").get_to(v.fallbackRaycast);
-        if (j.contains("model"))
-            j.at("model").get_to(v.model);
-        if (j.contains("request_fd"))
-            j.at("request_fd").get_to(v.requestFd);
-        if (j.contains("use_shape_sweep"))
-            j.at("use_shape_sweep").get_to(v.useShapeSweep);
-    }
-
-    inline void to_json(nlohmann::json& j, const ProjectileHitConfigDto& v)
-    {
-        j = nlohmann::json::object();
-        j["fallback_raycast"] = v.fallbackRaycast;
-        j["model"] = v.model;
-        j["request_fd"] = v.requestFd;
-        j["use_shape_sweep"] = v.useShapeSweep;
-    }
-
-    inline void from_json(const nlohmann::json& j, ProjectileHomingConfigDto& v)
-    {
-        if (j.contains("acceleration"))
-            j.at("acceleration").get_to(v.acceleration);
-        if (j.contains("enable_homing"))
-            j.at("enable_homing").get_to(v.enableHoming);
-        if (j.contains("keep_last_direction"))
-            j.at("keep_last_direction").get_to(v.keepLastDirection);
-        if (j.contains("keep_speed_constant"))
-            j.at("keep_speed_constant").get_to(v.keepSpeedConstant);
-        if (j.contains("lead_time_scale"))
-            j.at("lead_time_scale").get_to(v.leadTimeScale);
-        if (j.contains("max_lateral_accel"))
-            j.at("max_lateral_accel").get_to(v.maxLateralAccel);
-        if (j.contains("max_predict_time"))
-            j.at("max_predict_time").get_to(v.maxPredictTime);
-        if (j.contains("max_speed"))
-            j.at("max_speed").get_to(v.maxSpeed);
-        if (j.contains("max_turn_rate"))
-            j.at("max_turn_rate").get_to(v.maxTurnRate);
-        if (j.contains("navigation_gain"))
-            j.at("navigation_gain").get_to(v.navigationGain);
-        if (j.contains("reacquire_target"))
-            j.at("reacquire_target").get_to(v.reacquireTarget);
-        if (j.contains("target_id"))
-            j.at("target_id").get_to(v.targetId);
-    }
-
-    inline void to_json(nlohmann::json& j, const ProjectileHomingConfigDto& v)
-    {
-        j = nlohmann::json::object();
-        j["acceleration"] = v.acceleration;
-        j["enable_homing"] = v.enableHoming;
-        j["keep_last_direction"] = v.keepLastDirection;
-        j["keep_speed_constant"] = v.keepSpeedConstant;
-        j["lead_time_scale"] = v.leadTimeScale;
-        j["max_lateral_accel"] = v.maxLateralAccel;
-        j["max_predict_time"] = v.maxPredictTime;
-        j["max_speed"] = v.maxSpeed;
-        j["max_turn_rate"] = v.maxTurnRate;
-        j["navigation_gain"] = v.navigationGain;
-        j["reacquire_target"] = v.reacquireTarget;
-        j["target_id"] = v.targetId;
-    }
-
-    inline void from_json(const nlohmann::json& j, ProjectileLifetimeConfigDto& v)
-    {
-        if (j.contains("max_lifetime"))
-            j.at("max_lifetime").get_to(v.maxLifetime);
-        if (j.contains("max_range"))
-            j.at("max_range").get_to(v.maxRange);
-    }
-
-    inline void to_json(nlohmann::json& j, const ProjectileLifetimeConfigDto& v)
-    {
-        j = nlohmann::json::object();
-        j["max_lifetime"] = v.maxLifetime;
-        j["max_range"] = v.maxRange;
-    }
-
-    inline void from_json(const nlohmann::json& j, ProjectileMotionConfigDto& v)
-    {
-        if (j.contains("gravity_scale"))
-            j.at("gravity_scale").get_to(v.gravityScale);
-        if (j.contains("initial_velocity"))
-            j.at("initial_velocity").get_to(v.initialVelocity);
-        if (j.contains("model"))
-            j.at("model").get_to(v.model);
-    }
-
-    inline void to_json(nlohmann::json& j, const ProjectileMotionConfigDto& v)
-    {
-        j = nlohmann::json::object();
-        j["gravity_scale"] = v.gravityScale;
-        j["initial_velocity"] = v.initialVelocity;
-        j["model"] = v.model;
-    }
-
-    inline void from_json(const nlohmann::json& j, ProjectileConfigDto& v)
-    {
-        if (j.contains("hit"))
-            j.at("hit").get_to(v.hit);
-        if (j.contains("homing"))
-            j.at("homing").get_to(v.homing);
-        if (j.contains("kind"))
-            j.at("kind").get_to(v.kind);
-        if (j.contains("lifetime"))
-            j.at("lifetime").get_to(v.lifetime);
-        if (j.contains("motion"))
-            j.at("motion").get_to(v.motion);
-    }
-
-    inline void to_json(nlohmann::json& j, const ProjectileConfigDto& v)
-    {
-        j = nlohmann::json::object();
-        j["hit"] = v.hit;
-        j["homing"] = v.homing;
-        j["kind"] = v.kind;
-        j["lifetime"] = v.lifetime;
-        j["motion"] = v.motion;
-    }
-
-    inline void from_json(const nlohmann::json& j, SimFilterDto& v)
-    {
-        j.at("word0").get_to(v.word0);
-        j.at("word1").get_to(v.word1);
-        j.at("word2").get_to(v.word2);
-        j.at("word3").get_to(v.word3);
-    }
-
-    inline void to_json(nlohmann::json& j, const SimFilterDto& v)
-    {
-        j = nlohmann::json::object();
-        j["word0"] = v.word0;
-        j["word1"] = v.word1;
-        j["word2"] = v.word2;
-        j["word3"] = v.word3;
+        j["cooked_path"] = v.cookedPath;
+        j["src_mesh_index"] = v.srcMeshIndex;
+        j["src_path"] = v.srcPath;
+        j["src_primitive_index"] = v.srcPrimitiveIndex;
+        j["type"] = v.type;
     }
 
     inline void from_json(const nlohmann::json& j, ShapeDto& v)
@@ -2525,6 +2472,8 @@ namespace jam::shared::gen
             j.at("cct_bodies").get_to(v.cctBodies);
         if (j.contains("char_move_configs"))
             j.at("char_move_configs").get_to(v.charMoveConfigs);
+        if (j.contains("composition"))
+            j.at("composition").get_to(v.composition);
         if (j.contains("dyn_bodies"))
             j.at("dyn_bodies").get_to(v.dynBodies);
         if (j.contains("kinematic_driver_configs"))
@@ -2548,6 +2497,7 @@ namespace jam::shared::gen
             j["archetypes"][key] = item ? FromPolymorphic<PhysicsArchetypeDto>(item) : nlohmann::json(nullptr);
         j["cct_bodies"] = v.cctBodies;
         j["char_move_configs"] = v.charMoveConfigs;
+        j["composition"] = v.composition;
         j["dyn_bodies"] = v.dynBodies;
         j["kinematic_driver_configs"] = v.kinematicDriverConfigs;
         j["materials"] = v.materials;
@@ -2559,20 +2509,16 @@ namespace jam::shared::gen
     inline void from_json(const nlohmann::json& j, PhysicsArchetypeCommonDto& v)
     {
         j.at("actor_type").get_to(v.actorType);
-        j.at("allow_replication").get_to(v.allowReplication);
         j.at("motion_flags").get_to(v.motionFlags);
         j.at("motion_type").get_to(v.motionType);
-        j.at("spawn_policy").get_to(v.spawnPolicy);
     }
 
     inline void to_json(nlohmann::json& j, const PhysicsArchetypeCommonDto& v)
     {
         j = nlohmann::json::object();
         j["actor_type"] = v.actorType;
-        j["allow_replication"] = v.allowReplication;
         j["motion_flags"] = v.motionFlags;
         j["motion_type"] = v.motionType;
-        j["spawn_policy"] = v.spawnPolicy;
     }
 
     template<>

@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/M1/m1_world_contents.schema.json",
+  "title": "M1 World Contents",
+  "description": "M1-specific authored content used to materialize players and configure portals for each world archetype.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "worlds"],
+  "$defs": {
+    "nonempty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "vec3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "number",
+        "x-jam-scalar": "f32"
+      }
+    },
+    "quat": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "number",
+        "x-jam-scalar": "f32"
+      }
+    },
+    "spawn_pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["p", "q"],
+      "properties": {
+        "p": {
+          "$ref": "#/$defs/vec3"
+        },
+        "q": {
+          "$ref": "#/$defs/quat"
+        }
+      }
+    },
+    "destination_selector": {
+      "type": "string",
+      "enum": [
+        "default_for_archetype",
+        "explicit_instance",
+        "authored_destination"
+      ]
+    },
+    "portal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actor_id",
+        "destination_world_archetype",
+        "destination_selector",
+        "explicit_instance_id",
+        "destination_name",
+        "arrival_spawn"
+      ],
+      "properties": {
+        "actor_id": {
+          "type": "integer",
+          "x-jam-scalar": "u32",
+          "minimum": 1048577,
+          "maximum": 2097151,
+          "description": "Stable authored ActorId of the portal actor in the source actor level."
+        },
+        "destination_world_archetype": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Target world archetype name."
+        },
+        "destination_selector": {
+          "$ref": "#/$defs/destination_selector"
+        },
+        "explicit_instance_id": {
+          "type": "integer",
+          "x-jam-scalar": "u64",
+          "minimum": 0,
+          "description": "Target instance id when destination_selector is explicit_instance; otherwise zero."
+        },
+        "destination_name": {
+          "type": "string",
+          "description": "Authored destination name when destination_selector is authored_destination; otherwise empty."
+        },
+        "arrival_spawn": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Player spawn key resolved from the target world's player_spawns map."
+        }
+      }
+    },
+    "world_contents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "player_actor_archetype",
+        "default_player_spawn",
+        "player_spawns",
+        "portals"
+      ],
+      "properties": {
+        "player_actor_archetype": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Runtime actor archetype used to materialize a controlled player in this world."
+        },
+        "default_player_spawn": {
+          "$ref": "#/$defs/nonempty_string",
+          "description": "Spawn key used for an initial entry without an explicit arrival spawn."
+        },
+        "player_spawns": {
+          "type": "object",
+          "description": "Named server-authoritative player arrival poses.",
+          "propertyNames": {
+            "$ref": "#/$defs/nonempty_string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/spawn_pose"
+          }
+        },
+        "portals": {
+          "type": "array",
+          "description": "Portal definitions whose actor ids belong to this world's actor level.",
+          "items": {
+            "$ref": "#/$defs/portal"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": {
+      "type": "integer",
+      "x-jam-scalar": "i32",
+      "const": 1
+    },
+    "worlds": {
+      "type": "object",
+      "description": "M1 content indexed by canonical world archetype name.",
+      "propertyNames": {
+        "$ref": "#/$defs/nonempty_string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/world_contents"
+      }
+    }
+  }
+}

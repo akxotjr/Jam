@@ -29,8 +29,7 @@ namespace jam::shared::gen
     struct ActorLevelInstanceDto
     {
         std::string actorArchetype = {};
-        uint64_t actorArchetypeKey = {};
-        uint32_t levelActorId = {};
+        uint32_t actorId = {};
         SpawnPoseDto spawnPose = {};
     };
 
@@ -65,9 +64,7 @@ namespace jam::shared::gen
     inline void from_json(const nlohmann::json& j, ActorLevelInstanceDto& v)
     {
         j.at("actor_archetype").get_to(v.actorArchetype);
-        if (j.contains("actor_archetype_key"))
-            j.at("actor_archetype_key").get_to(v.actorArchetypeKey);
-        j.at("level_actor_id").get_to(v.levelActorId);
+        j.at("actor_id").get_to(v.actorId);
         j.at("spawn_pose").get_to(v.spawnPose);
     }
 
@@ -75,8 +72,7 @@ namespace jam::shared::gen
     {
         j = nlohmann::json::object();
         j["actor_archetype"] = v.actorArchetype;
-        j["actor_archetype_key"] = v.actorArchetypeKey;
-        j["level_actor_id"] = v.levelActorId;
+        j["actor_id"] = v.actorId;
         j["spawn_pose"] = v.spawnPose;
     }
 

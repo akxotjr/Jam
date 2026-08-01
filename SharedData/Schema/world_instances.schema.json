@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/world_instances.schema.json",
+  "title": "Jam World Instances",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "world_instances"],
+  "$defs": {
+    "world_instance": {
+      "type": "object",
+      "additionalProperties": false,
+				"required": ["archetype", "startup", "lifecycle"],
+      "properties": {
+        "archetype": { "type": "string", "minLength": 1 },
+        "startup": { "type": "string", "enum": ["bootstrap", "on_demand"] },
+				"lifecycle": { "type": "string", "enum": ["persistent", "destroy_when_empty"] },
+				"default": { "type": "boolean", "default": false }
+      }
+    }
+  },
+  "properties": {
+    "version": { "type": "integer", "x-jam-scalar": "i32", "const": 1 },
+    "world_instances": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/world_instance" }
+    }
+  }
+}

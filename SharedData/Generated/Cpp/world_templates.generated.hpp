@@ -19,19 +19,6 @@ namespace jam::shared::gen
     struct WorldTemplateDto;
     struct WorldTemplatesRootDto;
 
-    enum class eWorldTemplateDtoKind
-    {
-        Virtual,
-        Physical
-    };
-
-    enum class eWorldTemplateDtoTickMode
-    {
-        None,
-        Fixed,
-        OnDemand
-    };
-
     struct WorldTemplateDto
     {
         bool allowMultipleInstancePerUser = {};
@@ -39,11 +26,7 @@ namespace jam::shared::gen
         bool destroyWhenEmpty = {};
         int32_t group = {};
         bool isPrivate = {};
-        eWorldTemplateDtoKind kind = {};
-        int32_t maxActiveGameplayMemberships = {};
         bool persistent = {};
-        uint64_t templateKey = {};
-        eWorldTemplateDtoTickMode tickMode = {};
     };
 
     struct WorldTemplatesRootDto
@@ -53,60 +36,10 @@ namespace jam::shared::gen
     };
 
 
-    inline void from_json(const nlohmann::json& j, eWorldTemplateDtoKind& v);
-    inline void to_json(nlohmann::json& j, const eWorldTemplateDtoKind& v);
-    inline void from_json(const nlohmann::json& j, eWorldTemplateDtoTickMode& v);
-    inline void to_json(nlohmann::json& j, const eWorldTemplateDtoTickMode& v);
     inline void from_json(const nlohmann::json& j, WorldTemplateDto& v);
     inline void to_json(nlohmann::json& j, const WorldTemplateDto& v);
     inline void from_json(const nlohmann::json& j, WorldTemplatesRootDto& v);
     inline void to_json(nlohmann::json& j, const WorldTemplatesRootDto& v);
-
-    inline void from_json(const nlohmann::json& j, eWorldTemplateDtoKind& v)
-    {
-        const std::string s = j.get<std::string>();
-
-        if (s == "virtual") { v = eWorldTemplateDtoKind::Virtual; return; }
-        if (s == "physical") { v = eWorldTemplateDtoKind::Physical; return; }
-
-        throw std::runtime_error("Unknown enum value for eWorldTemplateDtoKind: " + s);
-    }
-
-    inline void to_json(nlohmann::json& j, const eWorldTemplateDtoKind& v)
-    {
-        switch (v)
-        {
-        case eWorldTemplateDtoKind::Virtual: j = "virtual"; return;
-        case eWorldTemplateDtoKind::Physical: j = "physical"; return;
-        }
-
-        throw std::runtime_error("Unknown eWorldTemplateDtoKind enum state.");
-    }
-
-
-    inline void from_json(const nlohmann::json& j, eWorldTemplateDtoTickMode& v)
-    {
-        const std::string s = j.get<std::string>();
-
-        if (s == "none") { v = eWorldTemplateDtoTickMode::None; return; }
-        if (s == "fixed") { v = eWorldTemplateDtoTickMode::Fixed; return; }
-        if (s == "on_demand") { v = eWorldTemplateDtoTickMode::OnDemand; return; }
-
-        throw std::runtime_error("Unknown enum value for eWorldTemplateDtoTickMode: " + s);
-    }
-
-    inline void to_json(nlohmann::json& j, const eWorldTemplateDtoTickMode& v)
-    {
-        switch (v)
-        {
-        case eWorldTemplateDtoTickMode::None: j = "none"; return;
-        case eWorldTemplateDtoTickMode::Fixed: j = "fixed"; return;
-        case eWorldTemplateDtoTickMode::OnDemand: j = "on_demand"; return;
-        }
-
-        throw std::runtime_error("Unknown eWorldTemplateDtoTickMode enum state.");
-    }
-
 
     inline void from_json(const nlohmann::json& j, WorldTemplateDto& v)
     {
@@ -115,11 +48,7 @@ namespace jam::shared::gen
         j.at("destroy_when_empty").get_to(v.destroyWhenEmpty);
         j.at("group").get_to(v.group);
         j.at("is_private").get_to(v.isPrivate);
-        j.at("kind").get_to(v.kind);
-        j.at("max_active_gameplay_memberships").get_to(v.maxActiveGameplayMemberships);
         j.at("persistent").get_to(v.persistent);
-        j.at("template_key").get_to(v.templateKey);
-        j.at("tick_mode").get_to(v.tickMode);
     }
 
     inline void to_json(nlohmann::json& j, const WorldTemplateDto& v)
@@ -130,11 +59,7 @@ namespace jam::shared::gen
         j["destroy_when_empty"] = v.destroyWhenEmpty;
         j["group"] = v.group;
         j["is_private"] = v.isPrivate;
-        j["kind"] = v.kind;
-        j["max_active_gameplay_memberships"] = v.maxActiveGameplayMemberships;
         j["persistent"] = v.persistent;
-        j["template_key"] = v.templateKey;
-        j["tick_mode"] = v.tickMode;
     }
 
     inline void from_json(const nlohmann::json& j, WorldTemplatesRootDto& v)

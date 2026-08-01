@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "world_templates": {
+    "Town": {
+      "group": 1,
+      "allow_multiple_instance_per_user": false,
+      "persistent": true,
+      "destroy_when_empty": false,
+      "is_private": false,
+      "capacity": 100
+    },
+    "Field": {
+      "group": 1,
+      "allow_multiple_instance_per_user": false,
+      "persistent": true,
+      "destroy_when_empty": true,
+      "is_private": false,
+      "capacity": 32
+    }
+  }
+}

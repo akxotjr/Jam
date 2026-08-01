@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "instances": [
+    {
+      "actor_archetype": "Floor",
+      "actor_id": 1048577,
+      "spawn_pose": {
+        "p": [
+          0.0,
+          -0.5,
+          0.0
+        ],
+        "q": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "actor_archetype": "Box",
+      "actor_id": 1048578,
+      "spawn_pose": {
+        "p": [
+          -10.0,
+          1.0,
+          10.0
+        ],
+        "q": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "actor_archetype": "Box",
+      "actor_id": 1048579,
+      "spawn_pose": {
+        "p": [
+          -10.0,
+          1.0,
+          -10.0
+        ],
+        "q": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "actor_archetype": "Box",
+      "actor_id": 1048580,
+      "spawn_pose": {
+        "p": [
+          10.0,
+          1.0,
+          10.0
+        ],
+        "q": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "actor_archetype": "Box",
+      "actor_id": 1048581,
+      "spawn_pose": {
+        "p": [
+          10.0,
+          1.0,
+          -10.0
+        ],
+        "q": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "actor_archetype": "Portal",
+      "actor_id": 1048582,
+      "spawn_pose": {
+        "p": [
+          0.0,
+          1.0,
+          10.0
+        ],
+        "q": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "scene_name": "Field02"
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam://schema/shared_data_manifest.schema.json",
+  "title": "Jam Shared Data Manifest",
+  "description": "Unified bootstrap entry for shared data. bootstrap is eagerly loaded to resolve world/template selection, while content is name-indexed and intended for archetype-scoped loading after world assembly decisions are known.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "bootstrap", "content"],
+  "$defs": {
+    "nonempty_string": { "type": "string", "minLength": 1 },
+    "version_i32": { "type": "integer", "x-jam-scalar": "i32", "const": 1 },
+    "relative_json_path": {
+      "type": "string",
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+\\.json$"
+    },
+    "bootstrap_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "description": "Global bootstrap document path. These entries are read eagerly during client/server shared-data initialization.",
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_json_path",
+          "description": "Relative path to a bootstrap shared-data json document."
+        }
+      }
+    },
+    "content_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "description": "Named content document entry. The enclosing property name is the canonical shared-data lookup name.",
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_json_path",
+          "description": "Relative path to a named shared-data json document."
+        }
+      }
+    },
+    "content_entry_map": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/nonempty_string"
+      },
+      "additionalProperties": { "$ref": "#/$defs/content_entry" },
+      "default": {}
+    },
+    "bootstrap_root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["world_templates", "world_archetypes", "world_instances", "actor_archetypes"],
+      "description": "Global bootstrap inputs that are loaded before world selection and before any per-archetype content resolution.",
+      "properties": {
+        "world_templates": {
+          "$ref": "#/$defs/bootstrap_entry",
+          "description": "Canonical world template root document."
+        },
+        "world_archetypes": {
+          "$ref": "#/$defs/bootstrap_entry",
+          "description": "Canonical world archetype root document."
+        },
+        "world_instances": {
+          "$ref": "#/$defs/bootstrap_entry",
+          "description": "Canonical logical world instance root document."
+        },
+        "actor_archetypes": {
+          "$ref": "#/$defs/bootstrap_entry",
+          "description": "Canonical global actor archetype root document."
+        }
+      }
+    },
+    "content_root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["physics_asset_set", "actor_level_set"],
+      "description": "Named content documents resolved after a world archetype has been selected. These entries are intended for archetype-scoped loading and caching.",
+      "properties": {
+        "physics_asset_set": {
+          "$ref": "#/$defs/content_entry_map",
+          "description": "Name-indexed physics asset documents."
+        },
+        "actor_level_set": {
+          "$ref": "#/$defs/content_entry_map",
+          "description": "Name-indexed level-content documents."
+        }
+      }
+    }
+  },
+  "properties": {
+    "version": { "$ref": "#/$defs/version_i32" },
+    "bootstrap": { "$ref": "#/$defs/bootstrap_root" },
+    "content": { "$ref": "#/$defs/content_root" }
+  }
+}

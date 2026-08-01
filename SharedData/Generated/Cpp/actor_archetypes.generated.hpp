@@ -19,11 +19,18 @@ namespace jam::shared::gen
     struct ActorArchetypeDto;
     struct ActorArchetypesRootDto;
 
+    enum class eActorArchetypeDtoSpawnPolicy
+    {
+        LevelOnly,
+        RuntimeOnly,
+        Both
+    };
+
     struct ActorArchetypeDto
     {
-        uint64_t archetypeKey = {};
+        bool allowReplication = {};
         std::string physicsArchetype = {};
-        uint64_t physicsArchetypeKey = {};
+        eActorArchetypeDtoSpawnPolicy spawnPolicy = {};
     };
 
     struct ActorArchetypesRootDto
@@ -33,26 +40,51 @@ namespace jam::shared::gen
     };
 
 
+    inline void from_json(const nlohmann::json& j, eActorArchetypeDtoSpawnPolicy& v);
+    inline void to_json(nlohmann::json& j, const eActorArchetypeDtoSpawnPolicy& v);
     inline void from_json(const nlohmann::json& j, ActorArchetypeDto& v);
     inline void to_json(nlohmann::json& j, const ActorArchetypeDto& v);
     inline void from_json(const nlohmann::json& j, ActorArchetypesRootDto& v);
     inline void to_json(nlohmann::json& j, const ActorArchetypesRootDto& v);
 
+    inline void from_json(const nlohmann::json& j, eActorArchetypeDtoSpawnPolicy& v)
+    {
+        const std::string s = j.get<std::string>();
+
+        if (s == "level_only") { v = eActorArchetypeDtoSpawnPolicy::LevelOnly; return; }
+        if (s == "runtime_only") { v = eActorArchetypeDtoSpawnPolicy::RuntimeOnly; return; }
+        if (s == "both") { v = eActorArchetypeDtoSpawnPolicy::Both; return; }
+
+        throw std::runtime_error("Unknown enum value for eActorArchetypeDtoSpawnPolicy: " + s);
+    }
+
+    inline void to_json(nlohmann::json& j, const eActorArchetypeDtoSpawnPolicy& v)
+    {
+        switch (v)
+        {
+        case eActorArchetypeDtoSpawnPolicy::LevelOnly: j = "level_only"; return;
+        case eActorArchetypeDtoSpawnPolicy::RuntimeOnly: j = "runtime_only"; return;
+        case eActorArchetypeDtoSpawnPolicy::Both: j = "both"; return;
+        }
+
+        throw std::runtime_error("Unknown eActorArchetypeDtoSpawnPolicy enum state.");
+    }
+
+
     inline void from_json(const nlohmann::json& j, ActorArchetypeDto& v)
     {
-        j.at("archetype_key").get_to(v.archetypeKey);
+        j.at("allow_replication").get_to(v.allowReplication);
         if (j.contains("physics_archetype"))
             j.at("physics_archetype").get_to(v.physicsArchetype);
-        if (j.contains("physics_archetype_key"))
-            j.at("physics_archetype_key").get_to(v.physicsArchetypeKey);
+        j.at("spawn_policy").get_to(v.spawnPolicy);
     }
 
     inline void to_json(nlohmann::json& j, const ActorArchetypeDto& v)
     {
         j = nlohmann::json::object();
-        j["archetype_key"] = v.archetypeKey;
+        j["allow_replication"] = v.allowReplication;
         j["physics_archetype"] = v.physicsArchetype;
-        j["physics_archetype_key"] = v.physicsArchetypeKey;
+        j["spawn_policy"] = v.spawnPolicy;
     }
 
     inline void from_json(const nlohmann::json& j, ActorArchetypesRootDto& v)

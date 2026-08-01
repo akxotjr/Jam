@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "composition": {
+    "scope": "world",
+    "includes": [
+      "Common"
+    ]
+  },
+  "materials": {},
+  "meshes": {},
+  "shapes": {
+    "Box_Shape": {
+      "contact_offset": 0,
+      "half_extents": [
+        1,
+        1,
+        1
+      ],
+      "half_height": 0,
+      "local_pose": {
+        "p": [
+          0,
+          0,
+          0
+        ],
+        "q": [
+          0,
+          0,
+          0,
+          1
+        ]
+      },
+      "material": "Default_Mat",
+      "mesh": "",
+      "qry_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "radius": 0,
+      "rest_offset": 0.02,
+      "shape_flag": "simulation",
+      "sim_filter": {
+        "word0": 1,
+        "word1": 0,
+        "word2": 0,
+        "word3": 0
+      },
+      "type": "box"
+    }
+  },
+  "dyn_bodies": {},
+  "cct_bodies": {},
+  "char_move_configs": {},
+  "kinematic_driver_configs": {},
+  "projectile_configs": {},
+  "archetypes": {
+    "Box": {
+      "actor_type": "generic",
+      "motion_flags": [],
+      "motion_type": "static",
+      "body": {
+        "dynamic": "",
+        "shapes": [
+          "Box_Shape"
+        ]
+      },
+      "body_type": "rigid_body"
+    }
+  }
+}

@@ -6,24 +6,27 @@
   "additionalProperties": false,
   "required": ["version", "archetypes"],
   "$defs": {
-    "u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 0, "maximum": 18446744073709551615 },
     "nonempty_string": { "type": "string", "minLength": 1 },
-    "nonzero_u64": { "type": "integer", "x-jam-scalar": "u64", "minimum": 1, "maximum": 18446744073709551615 },
+    "spawn_policy": {
+      "type": "string",
+      "enum": ["level_only", "runtime_only", "both"]
+    },
     "actor_archetype": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "archetype_key"
-      ],
+      "required": ["spawn_policy", "allow_replication"],
       "properties": {
-        "archetype_key": { "$ref": "#/$defs/nonzero_u64" },
         "physics_archetype": {
           "$ref": "#/$defs/nonempty_string",
           "description": "Authoring reference string to the physics actor archetype name."
         },
-        "physics_archetype_key": {
-          "$ref": "#/$defs/u64",
-          "description": "Runtime key for the referenced physics actor archetype."
+        "spawn_policy": {
+          "$ref": "#/$defs/spawn_policy",
+          "description": "Allowed creation source for this logical actor archetype."
+        },
+        "allow_replication": {
+          "type": "boolean",
+          "description": "Whether instances of this logical actor archetype may participate in replication."
         }
       }
     }
