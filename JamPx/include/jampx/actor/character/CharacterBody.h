@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include "jampx/PhysicsSceneSlot.h"
 #include "jampx/actor/character/locomotion/LocomotionComponent.h"
 #include "jampx/actor/character/controller/ICharacterController.h"
 
@@ -36,10 +37,10 @@ namespace jam::px
 		void                            ApplyAuthorityToReplay(const CharacterState& s);
 		void                            ApplyAuthorityToBoth(const CharacterState& s);
 
-		void							SetPlayerInput(const CharacterInput& input);
-		void							SetReplayInput(const CharacterInput& input);
-		void                            SetFacing(float yaw, float pitch);
-		void                            SetReplayFacing(float yaw, float pitch);
+		void							SetPlayerInput(const CharacterMotorInput& input);
+		void							SetReplayInput(const CharacterMotorInput& input);
+		void                            SetView(float yaw, float pitch);
+		void                            SetReplayView(float yaw, float pitch);
 
 		const CharacterMoveConfig&		GetConfig() const;
 		void                            SetConfig(const CharacterMoveConfig& cfg);
@@ -61,7 +62,7 @@ namespace jam::px
 
 	private:
 		void							RebuildMoveStateFromAuthority(LocomotionComponent* mover, const CharacterState& s);
-		void							SetFacingOn(LocomotionComponent* mover, CharacterState& state, float yaw, float pitch);
+		void							SetViewOn(CharacterState& state, float yaw, float pitch);
 
 
 	private:

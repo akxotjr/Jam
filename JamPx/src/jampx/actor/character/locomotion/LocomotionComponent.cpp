@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/character/locomotion/LocomotionComponent.h"
 #include "jampx/actor/character/locomotion/DefaultQuakeAccelerator.h"
 
@@ -93,7 +93,7 @@ namespace jam::px
 		if (!m_motor) return;
 
 		state.pos				= m_state.position;
-		state.facingYaw			= m_state.bodyYaw;
+		state.bodyYaw			= m_state.bodyYaw;
 		state.moveDir			= HorizontalDir(m_state.velocity);
 		state.verticalSpeed		= m_state.velocity.y;
 		state.horizontalSpeed	= HorizontalSpeed(m_state.velocity);

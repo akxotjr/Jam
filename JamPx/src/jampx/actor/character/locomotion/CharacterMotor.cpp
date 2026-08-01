@@ -1,8 +1,7 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/character/locomotion/CharacterMotor.h"
 
-//#include <iostream>
-
+#include "jampx/PhysicsFilter.h"
 #include "jampx/actor/character/locomotion/CharacterFilter.h"
 
 namespace jam::px

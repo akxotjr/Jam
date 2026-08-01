@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/character/controller/AIDecisionModels.h"
 
 
@@ -20,11 +20,11 @@ namespace jam::px
 			Vec3 lookDir = ctx.targetPos - ctx.selfPos;
 			lookDir.y = 0.f;
 
-			desired.facingYaw = (lookDir.MagnitudeSquared() > EPSILON) ? std::atan2(lookDir.x, lookDir.z) : ctx.selfYaw;
+			desired.viewYaw = (lookDir.MagnitudeSquared() > EPSILON) ? std::atan2(lookDir.x, lookDir.z) : ctx.selfYaw;
 		}
 		else if (m_cfg.keepCurrentForwardIfNoTarget)
 		{
-			desired.facingYaw = ctx.selfYaw;
+			desired.viewYaw = ctx.selfYaw;
 		}
 
 		return eAIDecisionStatus::Running;
@@ -53,10 +53,10 @@ namespace jam::px
 
 		if (m_cfg.faceTarget)
 		{
-			Vec3 lookDir = ctx.targetPos - ctx.selfPos;
-			lookDir.y = 0.f;
+			Vec3 viewDir = ctx.targetPos - ctx.selfPos;
+			viewDir.y = 0.f;
 
-			desired.facingYaw = (lookDir.MagnitudeSquared() > EPSILON) ? std::atan2(lookDir.x, lookDir.z) : ctx.selfYaw;
+			desired.viewYaw = (viewDir.MagnitudeSquared() > EPSILON) ? std::atan2(viewDir.x, viewDir.z) : ctx.selfYaw;
 		}
 
 		if (dist <= m_cfg.stopDistance)
@@ -132,7 +132,7 @@ namespace jam::px
 		desired.moveDir   = toPoint.GetNormalized();
 
 		if (m_cfg.faceMoveDirection)
-			desired.facingYaw = std::atan2(desired.moveDir.x, desired.moveDir.z);
+			desired.viewYaw = std::atan2(desired.moveDir.x, desired.moveDir.z);
 
 		return eAIDecisionStatus::Running;
 	}

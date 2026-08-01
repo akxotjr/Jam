@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include "jampx/PhysicsQueryFilter.h"
 #include "jampx/actor/character/CharacterMovementTypes.h"
 
 namespace physx

@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/character/CharacterBody.h"
 #include "jampx/actor/character/controller/PlayerControllerComponent.h"
 
@@ -14,8 +14,9 @@ namespace jam::px
 			constexpr float spdEps	 = EPS_3;
 
 			if ((prev.pos - now.pos).MagnitudeSquared() > (posEps * posEps))		return true;
-			if (std::fabs(prev.facingYaw - now.facingYaw) > yawEps)					return true;
-			if (std::fabs(prev.facingPitch - now.facingPitch) > pitchEps)			return true;
+			if (std::fabs(prev.bodyYaw - now.bodyYaw) > yawEps)					return true;
+			if (std::fabs(prev.viewYaw - now.viewYaw) > yawEps)					return true;
+			if (std::fabs(prev.viewPitch - now.viewPitch) > pitchEps)			return true;
 			if (std::fabs(prev.verticalSpeed - now.verticalSpeed) > spdEps)			return true;
 			if (std::fabs(prev.horizontalSpeed - now.horizontalSpeed) > spdEps)		return true;
 			if ((prev.moveDir - now.moveDir).MagnitudeSquared() > (EPS_2 * EPS_2))	return true;
@@ -51,9 +52,11 @@ namespace jam::px
 
 		m_mainMover->Tick(dt, intent);
 
-		const float savedPitch = m_mainState.facingPitch;
+		const float savedViewYaw = m_mainState.viewYaw;
+		const float savedPitch = m_mainState.viewPitch;
 		m_mainMover->GetCharacterState(m_mainState);
-		m_mainState.facingPitch = savedPitch;
+		m_mainState.viewYaw = savedViewYaw;
+		m_mainState.viewPitch = savedPitch;
 
 		return IsMeaningFulChanged(prev, m_mainState);
 	}
@@ -65,9 +68,11 @@ namespace jam::px
 
 		m_replayMover->Tick(dt, intent);
 
-		const float savedPitch = m_replayState.facingPitch;
+		const float savedViewYaw = m_replayState.viewYaw;
+		const float savedPitch = m_replayState.viewPitch;
 		m_replayMover->GetCharacterState(m_replayState);
-		m_replayState.facingPitch = savedPitch;
+		m_replayState.viewYaw = savedViewYaw;
+		m_replayState.viewPitch = savedPitch;
 	}
 
 
@@ -89,39 +94,42 @@ namespace jam::px
 		ApplyAuthorityToReplay(s);
 	}
 
-	void CharacterBody::SetPlayerInput(const CharacterInput& input)
+	void CharacterBody::SetPlayerInput(const CharacterMotorInput& input)
 	{
 		if (auto* brain = dynamic_cast<PlayerControllerComponent*>(m_brain.get()))
 			brain->SetInput(input);
 
-		SetFacing(input.facingYaw, input.facingPitch);
+		if (m_mainMover)
+			m_mainMover->SetBodyYaw(input.bodyYaw);
+		m_mainState.bodyYaw = input.bodyYaw;
+		SetView(input.viewYaw, input.viewPitch);
 	}
 
-	void CharacterBody::SetReplayInput(const CharacterInput& input)
+	void CharacterBody::SetReplayInput(const CharacterMotorInput& input)
 	{
 		if (auto* brain = dynamic_cast<PlayerControllerComponent*>(m_brain.get()))
 			brain->SetInput(input);
 
-		SetReplayFacing(input.facingYaw, input.facingPitch);
+		if (m_replayMover)
+			m_replayMover->SetBodyYaw(input.bodyYaw);
+		m_replayState.bodyYaw = input.bodyYaw;
+		SetReplayView(input.viewYaw, input.viewPitch);
 	}
 
-	void CharacterBody::SetFacing(float yaw, float pitch)
+	void CharacterBody::SetView(float yaw, float pitch)
 	{
-		SetFacingOn(m_mainMover.get(), m_mainState, yaw, pitch);
+		SetViewOn(m_mainState, yaw, pitch);
 	}
 
-	void CharacterBody::SetReplayFacing(float yaw, float pitch)
+	void CharacterBody::SetReplayView(float yaw, float pitch)
 	{
-		SetFacingOn(m_replayMover.get(), m_replayState, yaw, pitch);
+		SetViewOn(m_replayState, yaw, pitch);
 	}
 
-	void CharacterBody::SetFacingOn(LocomotionComponent* mover, CharacterState& state, float yaw, float pitch)
+	void CharacterBody::SetViewOn(CharacterState& state, float yaw, float pitch)
 	{
-		state.facingYaw   = yaw;
-		state.facingPitch = pitch;
-
-		if (mover)
-			mover->SetBodyYaw(yaw);
+		state.viewYaw   = yaw;
+		state.viewPitch = pitch;
 	}
 
 	const CharacterMoveConfig& CharacterBody::GetConfig() const
@@ -157,7 +165,7 @@ namespace jam::px
 
 		CharacterMoveState mv = mover->GetMoveState();
 		mv.position = s.pos;
-		mv.bodyYaw  = s.facingYaw;
+		mv.bodyYaw  = s.bodyYaw;
 
 		const float hSpd = s.horizontalSpeed;
 		mv.velocity.x = s.moveDir.x * hSpd;

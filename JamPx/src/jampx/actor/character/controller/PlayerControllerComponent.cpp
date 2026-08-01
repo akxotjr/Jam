@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/character/controller/PlayerControllerComponent.h"
 
 namespace jam::px
@@ -6,7 +6,7 @@ namespace jam::px
 	MoveIntent PlayerControllerComponent::BuildIntent(float dt)
 	{
 		MoveIntent intent{};
-		intent.moveYaw = m_input.facingYaw;
+		intent.moveYaw = m_input.moveReferenceYaw;
 
 		float x = 0.f, y = 0.f;
 

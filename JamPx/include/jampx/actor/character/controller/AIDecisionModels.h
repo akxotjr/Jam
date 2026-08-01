@@ -1,4 +1,7 @@
-﻿#pragma once
+#pragma once
+
+#include <jambase/JamMacro.h>
+
 #include "jampx/actor/character/controller/IAIDecisionModel.h"
 
 
