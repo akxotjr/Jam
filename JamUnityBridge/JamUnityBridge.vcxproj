@@ -137,7 +137,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamPx\api\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -163,7 +163,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamPx\api\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamBase\include\</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -182,7 +182,6 @@
     <ClInclude Include="JamUnityBridge.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="UnityClientCore.h" />
-    <ClInclude Include="UnityEventQueue.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="JamUnityBridge.cpp" />
@@ -193,7 +192,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="UnityClientCore.cpp" />
-    <ClCompile Include="UnityEventQueue.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

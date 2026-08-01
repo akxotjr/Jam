@@ -15,9 +15,6 @@
     <ClInclude Include="JamUnityBridge.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="UnityEventQueue.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="UnityClientCore.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -27,9 +24,6 @@
       <Filter>pch</Filter>
     </ClCompile>
     <ClCompile Include="JamUnityBridge.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="UnityEventQueue.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="UnityClientCore.cpp">

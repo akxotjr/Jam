@@ -1,66 +1,37 @@
 #pragma once
 
 #include <memory>
-#include <set>
+#include <vector>
 
 #include "JamUnityBridge.h"
-#include "UnityEventQueue.h"
-#include "jamnet/core/executor/GlobalEventBus.h"
 #include "jamnet/core/net/NetRuntime.h"
-#include "jamnet/runtime/ClientRuntime.h"
+#include "jamnet/runtime/application/ClientRuntime.h"
 
 class UnityClientCore
 {
 public:
-	bool Initialize(const JUClientConfig& config);
-	void Shutdown();
+	bool			Initialize(const JAM_ClientConfig& config);
+	void			Shutdown();
+	bool			Connect();
+	void			Disconnect();
+	JAM_eResult		Pump(const JAM_ClientPumpOptions* options, JAM_ClientPumpResult& outResult);
 
-	void Pump(float deltaTime);
-	void SubmitInput(const JUInputCommand& command);
-	void RequestClickMove(const JUClickMoveCommand& command);
-
-	bool IsConnected() const;
-	JUNetworkPhase GetNetworkPhase() const;
-	uint64_t GetUserId() const;
-	jam::net::LocalWorldId GetMainLocalWorldId() const { return m_mainWorld; }
-	uint64_t GetMainWorldArchetypeKey() const { return m_mainWorldArchetypeKey.v; }
-	int32_t CopyActorFrame(JUActorState* outActors, int32_t actorCapacity, JUActorFrame* outFrame) const;
-
-	UnityEventQueue& GetEventQueue() { return m_eventQueue; }
+	JAM_eResult		GetNetworkState(JAM_NetworkState& outState) const;
+	JAM_eResult		GetAccountId(uint64_t& outAccountId) const;
+	JAM_eResult		GetUserId(uint64_t& outUserId) const;
+	JAM_eResult		GetMainWorldRef(JAM_WorldRuntimeRef& outWorldRef) const;
+	JAM_eResult		GetActorPresentationFramePair(uint64_t worldId, JAM_ActorState* outPreviousActors, int32_t previousCapacity, JAM_ActorFrame* outPreviousFrame, JAM_ActorState* outCurrentActors, int32_t currentCapacity, JAM_ActorFrame* outCurrentFrame, JAM_FrameCopyInfo& outInfo) const;
+	JAM_eResult		RequestWorldAction(const JAM_WorldActionCommand& command, JAM_ClientRequestSubmission& outSubmission);
+	JAM_eResult		RequestActorAction(const JAM_ActorActionCommand& command, JAM_ClientRequestSubmission& outSubmission);
+	JAM_eResult		RequestSocialCommand(const JAM_SocialCommand& command, JAM_ClientRequestSubmission& outSubmission);
+	JAM_eResult		SubmitCharacterControl(const JAM_CharacterControlIntent& intent);
+	JAM_eResult		PollEvent(JAM_ClientEvent& outEvent);
 
 private:
-	void RegisterRuntimeSubscriptions();
-	void UnregisterRuntimeSubscriptions();
-
-	void HandleNetworkState(const jam::net::NetworkStateEvent& evt);
-	void HandleWorldMembership(const jam::net::WorldMembershipEvent& evt);
-	void HandleActorLifecycle(const jam::net::ActorLifecycleEvent& evt);
-	void HandleClickMoveResolved(const jam::net::ClickMoveResolvedEvent& evt);
-
-	void RequestAutoAssignIfReady();
-	void SpawnPlayerIfNeeded();
+	static int32_t	CopyFrameView(const jam::net::ActorPresentationFrameView& frame, JAM_ActorState* outActors, int32_t actorCapacity, JAM_ActorFrame* outFrame);
 
 private:
 	std::unique_ptr<jam::net::NetRuntime>		m_netRuntime;
 	std::unique_ptr<jam::net::ClientRuntime>	m_runtime;
-
-	jam::GlobalEventBus::Subscription			m_subNetworkState;
-	jam::GlobalEventBus::Subscription			m_subWorldMembership;
-	jam::GlobalEventBus::Subscription			m_subActorLifecycle;
-	jam::GlobalEventBus::Subscription			m_subClickMoveResolved;
-
-	UnityEventQueue								m_eventQueue;
-
-	uint64_t									m_accountId = 0;
-	uint32_t									m_instanceId = 0;
-	jam::net::WorldArchetypeKey					m_autoAssignArchetypeKey = {};
-	bool										m_autoAssignOnReady = true;
-	bool										m_autoAssignRequested = false;
-	bool										m_physicsInitialized = false;
-
-	jam::net::LocalWorldId						m_mainWorld = jam::net::kInvalidLocalWorldId;
-	jam::net::WorldArchetypeKey					m_mainWorldArchetypeKey = {};
-	jam::px::ObjectId							m_localObjectId = jam::px::INVALID_OBJ_ID;
-	uint32_t									m_nextSpawnReqId = 1;
-	std::set<uint32_t>							m_pendingPlayerSpawnReqIds;
+	std::vector<uint8_t>						m_eventPayload;
 };

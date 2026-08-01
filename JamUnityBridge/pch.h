@@ -50,14 +50,8 @@
 #include <jambase/Logger.h>
 #include <jambase/JamAssert.h>
 
-#define PX_PHYSX_STATIC_LIB
-#include <physx/PxPhysicsAPI.h>
 
 #include "jamnet/core/utils/TimeUnits.h"
 #include "jamnet/core/utils/Clock.h"
-
-using namespace physx;
-
-#include "jampx/JamPx.h"
 
 #endif

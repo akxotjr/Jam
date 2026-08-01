@@ -2,400 +2,433 @@
 #include "UnityClientCore.h"
 
 #include "jamnet/core/executor/MainExecutor.h"
-#include "jampx/PhysicsCore.h"
-#include "jampx/PhysicsFacade.h"
 
 #include <algorithm>
-#include <cmath>
+#include <filesystem>
+#include <string>
+#include <utility>
 
 namespace
 {
 	using namespace jam;
 
-	JUNetworkPhase ToUnity(net::eNetworkPhase phase)
+	JAM_eNetworkPhase ToUnity(net::eNetworkPhase phase)
 	{
-		switch (phase)
+		return static_cast<JAM_eNetworkPhase>(phase);
+	}
+
+	JAM_Vec3 ToUnity(const px::Vec3& value)
+	{
+		return { .x = value.x, .y = value.y, .z = value.z };
+	}
+
+	JAM_Quat ToUnity(const px::Quat& value)
+	{
+		return { .x = value.x, .y = value.y, .z = value.z, .w = value.w };
+	}
+
+	px::Vec3 ToPx(const JAM_Vec3& value)
+	{
+		return { value.x, value.y, value.z };
+	}
+
+	px::Quat ToPx(const JAM_Quat& value)
+	{
+		return { value.x, value.y, value.z, value.w };
+	}
+
+	JAM_eResult ToUnity(net::eClientRequestAdmission admission)
+	{
+		switch (admission)
 		{
-		case net::eNetworkPhase::Disconnected: return JUNetworkPhase::Disconnected;
-		case net::eNetworkPhase::Connecting: return JUNetworkPhase::Connecting;
-		case net::eNetworkPhase::Ready: return JUNetworkPhase::Ready;
-		case net::eNetworkPhase::Degraded: return JUNetworkPhase::Degraded;
-		default: return JUNetworkPhase::Disconnected;
+		case net::eClientRequestAdmission::Accepted:		return JAM_eResult::Ok;
+		case net::eClientRequestAdmission::NotInitialized:	return JAM_eResult::NotInitialized;
+		case net::eClientRequestAdmission::NotConnected:	return JAM_eResult::NotConnected;
+		case net::eClientRequestAdmission::InvalidArgument: return JAM_eResult::InvalidArgument;
+
+		default: return JAM_eResult::InternalError;
 		}
 	}
 
-	JUWorldMembershipChange ToUnity(net::eWorldMembershipChange change)
+	JAM_ClientRequestSubmission ToUnity(const net::ClientRequestSubmission& submission)
 	{
-		switch (change)
-		{
-		case net::eWorldMembershipChange::Joined: return JUWorldMembershipChange::Joined;
-		case net::eWorldMembershipChange::Left: return JUWorldMembershipChange::Left;
-		case net::eWorldMembershipChange::Promoted: return JUWorldMembershipChange::Promoted;
-		case net::eWorldMembershipChange::Transferred: return JUWorldMembershipChange::Transferred;
-		case net::eWorldMembershipChange::Updated: return JUWorldMembershipChange::Updated;
-		default: return JUWorldMembershipChange::Updated;
-		}
-	}
-
-	JUVec3 ToUnity(const px::Vec3& v)
-	{
-		return JUVec3{ v.x, v.y, v.z };
-	}
-
-	JUQuat ToUnity(const px::Quat& q)
-	{
-		return JUQuat{ q.x, q.y, q.z, q.w };
-	}
-
-	px::Vec3 ToPx(const JUVec3& v)
-	{
-		return px::Vec3{ v.x, v.y, v.z };
-	}
-
-	uint32_t ToPxInputFlags(uint32_t flags)
-	{
-		uint32_t out = px::INPUT_NONE;
-		if (flags & JU_INPUT_FORWARD) out |= px::INPUT_FORWARD;
-		if (flags & JU_INPUT_BACKWARD) out |= px::INPUT_BACKWARD;
-		if (flags & JU_INPUT_LEFT) out |= px::INPUT_LEFT;
-		if (flags & JU_INPUT_RIGHT) out |= px::INPUT_RIGHT;
-		if (flags & JU_INPUT_CROUCH) out |= px::INPUT_CROUCH;
-		if (flags & JU_INPUT_PRONE) out |= px::INPUT_PRONE;
-		if (flags & JU_INPUT_RUN) out |= px::INPUT_RUN;
-		if (flags & JU_INPUT_SPRINT) out |= px::INPUT_SPRINT;
-		if (flags & JU_INPUT_JUMP) out |= px::INPUT_JUMP;
-		if (flags & JU_INPUT_DASH) out |= px::INPUT_DASH;
-		return out;
+		return {
+			.admission = static_cast<JAM_eClientRequestAdmission>(submission.admission),
+			.receipt = { 
+				.requestId	= submission.receipt.requestId, 
+				.kind		= static_cast<JAM_eClientRequestKind>(submission.receipt.kind) 
+			},
+		};
 	}
 }
 
-bool UnityClientCore::Initialize(const JUClientConfig& config)
+bool UnityClientCore::Initialize(const JAM_ClientConfig& config)
 {
 	if (m_runtime)
 		return true;
 
-	m_accountId = config.accountId;
-	m_instanceId = config.instanceId;
-	m_autoAssignArchetypeKey = jam::net::WorldArchetypeKey::FromU64(config.autoAssignArchetypeKey);
-	m_autoAssignOnReady = config.autoAssignOnReady != 0;
+	net::RuntimeConfig runtimeConfig{};
+	runtimeConfig.geConfig.autoTune  = true;
+	runtimeConfig.geConfig.layoutCfg = { .mode = Balance, .reservedThreads = 1, .profile = CoreProfileClient };
 
-	jam::net::RuntimeConfig runtimeConfig{};
-	runtimeConfig.geConfig.autoTune = true;
-	runtimeConfig.geConfig.layoutCfg = { .mode = jam::Balance, .reservedThreads = 1, .profile = jam::CoreProfileClient };
-	m_netRuntime = std::make_unique<jam::net::NetRuntime>(runtimeConfig);
+	m_netRuntime = std::make_unique<net::NetRuntime>(runtimeConfig);
 
-	if (!config.headlessWorld)
-	{
-		PHYSICS_CORE_INIT();
-		m_physicsInitialized = true;
-	}
+	net::ClientConfig clientConfig{};
+	clientConfig.accountId		  = config.accountId;
+	clientConfig.serverTcpAddress = net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.tcpPort);
+	clientConfig.serverUdpAddress = net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.udpPort);
 
-	jam::net::ClientConfig clientConfig{};
-	clientConfig.accountId				= config.accountId;
-	clientConfig.serverTcpAddress		= jam::net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.tcpPort);
-	clientConfig.serverUdpAddress		= jam::net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.udpPort);
-	clientConfig.headlessWorld			= config.headlessWorld != 0;
-	clientConfig.sharedDataCatalogPath	= config.sharedDataCatalogAssetPath ? config.sharedDataCatalogAssetPath : "";
-	clientConfig.worldTemplatePath		= config.worldTemplateAssetPath ? config.worldTemplateAssetPath : "";
-	clientConfig.worldArchetypePath		= config.worldArchetypeAssetPath ? config.worldArchetypeAssetPath : "";
-	if (!clientConfig.headlessWorld)
-		clientConfig.physicsFactory = [] { return std::make_unique<jam::px::PhysicsFacade>(); };
+	const std::filesystem::path sharedDataManifestPath = config.sharedDataManifestPath ? config.sharedDataManifestPath : "";
+	clientConfig.sharedDataManifestPath = sharedDataManifestPath.empty()
+		? std::string{}
+		: std::filesystem::absolute(sharedDataManifestPath).lexically_normal().string();
+	clientConfig.headlessMode = config.headlessMode != 0;
 
-	m_runtime = std::make_unique<jam::net::ClientRuntime>(clientConfig);
-	RegisterRuntimeSubscriptions();
-
-	if (!m_runtime->Connect())
-	{
-		Shutdown();
-		return false;
-	}
-
+	m_runtime = std::make_unique<net::ClientRuntime>(clientConfig);
 	return true;
 }
 
 void UnityClientCore::Shutdown()
 {
 	if (m_runtime)
-	{
-		UnregisterRuntimeSubscriptions();
-		m_runtime->Disconnect();
-		m_runtime.reset();
-	}
-
-	m_pendingPlayerSpawnReqIds.clear();
-	m_localObjectId = jam::px::INVALID_OBJ_ID;
-	m_mainWorld = jam::net::kInvalidLocalWorldId;
-	m_mainWorldArchetypeKey = {};
-	m_autoAssignRequested = false;
-	m_eventQueue.Clear();
-
-	if (m_physicsInitialized)
-	{
-		PHYSICS_CORE_SHUTDOWN();
-		m_physicsInitialized = false;
-	}
-
+		m_runtime->Shutdown();
+	m_runtime.reset();
+	m_eventPayload.clear();
 	m_netRuntime.reset();
 }
 
-void UnityClientCore::Pump(float deltaTime)
+bool UnityClientCore::Connect()
 {
-	(void)deltaTime;
+	return m_runtime && m_runtime->Connect();
+}
+
+void UnityClientCore::Disconnect()
+{
+	if (m_runtime)
+		m_runtime->Disconnect();
+}
+
+JAM_eResult UnityClientCore::Pump(const JAM_ClientPumpOptions* options, JAM_ClientPumpResult& outResult)
+{
+	outResult = { .structSize = sizeof(JAM_ClientPumpResult) };
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+
 	MAIN_EXEC.PumpOnce();
+	net::ClientPumpOptions runtimeOptions{};
+	if (options)
+		runtimeOptions.maxControlEvents = static_cast<size_t>(options->maxControlEvents);
 
-	RequestAutoAssignIfReady();
-	SpawnPlayerIfNeeded();
+	const net::ClientPumpResult result = m_runtime->Pump(runtimeOptions);
+	outResult.appliedControlEvents = result.appliedControlEvents;
+	outResult.pendingControlEvents = result.pendingControlEvents;
+	outResult.presentationUpdated  = result.presentationUpdated ? 1 : 0;
+
+	return JAM_eResult::Ok;
 }
 
-void UnityClientCore::SubmitInput(const JUInputCommand& command)
+JAM_eResult UnityClientCore::GetNetworkState(JAM_NetworkState& outState) const
+{
+	outState = {};
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+	outState.phase = ToUnity(m_runtime->GetNetworkState().phase);
+	return JAM_eResult::Ok;
+}
+
+JAM_eResult UnityClientCore::GetAccountId(uint64_t& outAccountId) const
+{
+	outAccountId = 0;
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+	outAccountId = m_runtime->GetAccountId();
+
+	return JAM_eResult::Ok;
+}
+
+JAM_eResult UnityClientCore::GetUserId(uint64_t& outUserId) const
+{
+	outUserId = 0;
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+	outUserId = m_runtime->GetUserId();
+
+	return JAM_eResult::Ok;
+}
+
+JAM_eResult UnityClientCore::GetMainWorldRef(JAM_WorldRuntimeRef& outWorldRef) const
+{
+	outWorldRef = {};
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+
+	const net::WorldRuntimeRef world = m_runtime->GetMainWorldRef();
+	outWorldRef = {
+		.worldId		   = world.worldId, 
+		.worldInstanceId   = world.instance.instanceId.value, 
+		.worldArchetypeKey = world.instance.archetypeKey.v
+	};
+	
+	return JAM_eResult::Ok;
+}
+
+JAM_eResult UnityClientCore::GetActorPresentationFramePair(uint64_t worldId, JAM_ActorState* outPreviousActors, int32_t previousCapacity, JAM_ActorFrame* outPreviousFrame, JAM_ActorState* outCurrentActors, int32_t currentCapacity, JAM_ActorFrame* outCurrentFrame, JAM_FrameCopyInfo& outInfo) const
+{
+	outInfo = { .structSize = sizeof(JAM_FrameCopyInfo) };
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+	if (!outPreviousFrame || !outCurrentFrame || previousCapacity < 0 || currentCapacity < 0 || (previousCapacity > 0 && !outPreviousActors) || (currentCapacity > 0 && !outCurrentActors))
+		return JAM_eResult::InvalidArgument;
+
+	const net::ActorPresentationFramePairView pair = m_runtime->GetActorPresentationFramePair(worldId);
+	outInfo.previousCopiedCount   = CopyFrameView(pair.previous, outPreviousActors, previousCapacity, outPreviousFrame);
+	outInfo.currentCopiedCount    = CopyFrameView(pair.current, outCurrentActors, currentCapacity, outCurrentFrame);
+	outInfo.previousRequiredCount = outPreviousFrame->actorCount;
+	outInfo.currentRequiredCount  = outCurrentFrame->actorCount;
+
+	return outInfo.previousCopiedCount < outInfo.previousRequiredCount || outInfo.currentCopiedCount < outInfo.currentRequiredCount ? JAM_eResult::BufferTooSmall : JAM_eResult::Ok;
+}
+
+JAM_eResult UnityClientCore::RequestWorldAction(const JAM_WorldActionCommand& command, JAM_ClientRequestSubmission& outSubmission)
+{
+	outSubmission = {};
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+	if (command.structSize != sizeof(JAM_WorldActionCommand))
+		return JAM_eResult::VersionMismatch;
+
+	net::WorldActionCommand runtimeCommand{};
+	if (command.kind == JAM_eWorldActionKind::Enter)
+	{
+		runtimeCommand.payload = net::EnterWorldRequest{
+			.archetypeKey			= { command.enter.worldArchetypeKey },
+			.selector				= static_cast<net::eWorldDestinationSelector>(command.enter.selector),
+			.explicitInstanceId		= { command.enter.explicitWorldInstanceId },
+			.destinationName		= command.enter.destinationName ? command.enter.destinationName : "",
+			.expectedMainRevision	= command.enter.expectedMainRevision,
+		};
+	}
+	else if (command.kind == JAM_eWorldActionKind::Leave)
+	{
+		runtimeCommand.payload = net::LeaveWorldRequest{ .expectedMainRevision = command.leave.expectedMainRevision };
+	}
+	else
+	{
+		return JAM_eResult::InvalidArgument;
+	}
+
+	const net::ClientRequestSubmission submission = m_runtime->RequestWorldAction(runtimeCommand);
+	outSubmission = ToUnity(submission);
+
+	return ToUnity(submission.admission);
+}
+
+JAM_eResult UnityClientCore::RequestActorAction(const JAM_ActorActionCommand& command, JAM_ClientRequestSubmission& outSubmission)
+{
+	outSubmission = {};
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+	if (command.structSize != sizeof(JAM_ActorActionCommand))
+		return JAM_eResult::VersionMismatch;
+
+	net::ActorActionCommand runtimeCommand{};
+	runtimeCommand.worldId = command.worldId;
+	if (command.action == JAM_eActorAction::Spawn)
+	{
+		net::FrontendSpawnActorSpec spec{};
+		spec.actorArchetypeKey = { command.spawn.actorArchetypeKey };
+		spec.pose = { .p = ToPx(command.spawn.position), .q = ToPx(command.spawn.rotation) };
+		spec.team = command.spawn.team;
+		spec.part = command.spawn.part;
+		spec.role = command.spawn.role;
+		spec.requestOwnership = command.spawn.requestOwnership != 0;
+		spec.requestControl = command.spawn.requestControl != 0;
+		spec.targetActorId = net::ActorId(command.spawn.targetActorId);
+		if (command.spawn.overrideMask & ACTOR_SPAWN_OVERRIDE_LINEAR_VELOCITY) spec.linearVelocity = ToPx(command.spawn.linearVelocity);
+		if (command.spawn.overrideMask & ACTOR_SPAWN_OVERRIDE_ANGULAR_VELOCITY) spec.angularVelocity = ToPx(command.spawn.angularVelocity);
+		if (command.spawn.overrideMask & ACTOR_SPAWN_OVERRIDE_LINEAR_DAMPING) spec.linearDamping = command.spawn.linearDamping;
+		if (command.spawn.overrideMask & ACTOR_SPAWN_OVERRIDE_ANGULAR_DAMPING) spec.angularDamping = command.spawn.angularDamping;
+		if (command.spawn.overrideMask & ACTOR_SPAWN_OVERRIDE_VIEW_YAW) spec.viewYaw = command.spawn.viewYaw;
+		if (command.spawn.overrideMask & ACTOR_SPAWN_OVERRIDE_VIEW_PITCH) spec.viewPitch = command.spawn.viewPitch;
+		runtimeCommand.payload = net::SpawnActorRequest{ .spec = std::move(spec) };
+	}
+	else if (command.action == JAM_eActorAction::Despawn)
+	{
+		runtimeCommand.payload = net::DespawnActorRequest{ .actorId = net::ActorId(command.targetActorId) };
+	}
+	else
+	{
+		return JAM_eResult::InvalidArgument;
+	}
+
+	const net::ClientRequestSubmission submission = m_runtime->RequestActorAction(runtimeCommand);
+	outSubmission = ToUnity(submission);
+	return ToUnity(submission.admission);
+}
+
+JAM_eResult UnityClientCore::RequestSocialCommand(const JAM_SocialCommand& command, JAM_ClientRequestSubmission& outSubmission)
+{
+	outSubmission = {};
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+	if (command.structSize != sizeof(JAM_SocialCommand))
+		return JAM_eResult::VersionMismatch;
+	if (command.destination.audience > JAM_eSocialAudience::Global
+		|| (command.payloadSize > 0 && !command.payload))
+		return JAM_eResult::InvalidArgument;
+
+	net::SocialCommand runtimeCommand{
+		.destination = {
+			.audience = static_cast<net::eSocialAudience>(command.destination.audience),
+			.scopeId = command.destination.scopeId,
+		},
+		.contentType = command.contentType,
+	};
+	runtimeCommand.payload.resize(command.payloadSize);
+	if (!runtimeCommand.payload.empty())
+		std::memcpy(runtimeCommand.payload.data(), command.payload, command.payloadSize);
+
+	const net::ClientRequestSubmission submission = m_runtime->RequestSocialCommand(runtimeCommand);
+	outSubmission = ToUnity(submission);
+	return ToUnity(submission.admission);
+}
+
+JAM_eResult UnityClientCore::SubmitCharacterControl(const JAM_CharacterControlIntent& intent)
 {
 	if (!m_runtime)
-		return;
+		return JAM_eResult::NotInitialized;
+	if (intent.structSize != sizeof(JAM_CharacterControlIntent))
+		return JAM_eResult::VersionMismatch;
 
-	m_runtime->PushInput(
-		ToPxInputFlags(command.inputFlags),
-		command.facingPitch,
-		command.facingYaw,
-		command.commandEpoch);
+	net::CharacterControlIntent runtimeIntent{
+		.moveReferenceYaw	= intent.moveReferenceYaw,
+		.viewYaw			= intent.viewYaw,
+		.viewPitch			= intent.viewPitch,
+		.viewPolicy		= static_cast<net::eCharacterViewPolicy>(intent.viewPolicy),
+		.continuousActions	= intent.continuousActions,
+		.edgeActions		= intent.edgeActions,
+	};
+	switch (intent.locomotion)
+	{
+	case JAM_eCharacterLocomotionKind::Stop: runtimeIntent.locomotion = net::StopMovementIntent{}; break;
+	case JAM_eCharacterLocomotionKind::Directional: runtimeIntent.locomotion = net::DirectionalMoveIntent{ .localX = intent.vector.x, .localY = intent.vector.y }; break;
+	case JAM_eCharacterLocomotionKind::WorldRay: runtimeIntent.locomotion = net::MoveByWorldRayIntent{ .rayOrigin = ToPx(intent.rayOrigin), .rayDirection = ToPx(intent.rayDirection), .maxRange = intent.maxRange }; break;
+	case JAM_eCharacterLocomotionKind::Position: runtimeIntent.locomotion = net::MoveToPositionIntent{ .target = ToPx(intent.vector) }; break;
+	case JAM_eCharacterLocomotionKind::FollowActor: runtimeIntent.locomotion = net::FollowActorIntent{ .target = net::ActorId(intent.targetActorId) }; break;
+	default: return JAM_eResult::InvalidArgument;
+	}
+	m_runtime->SubmitCharacterControl(runtimeIntent);
+	return JAM_eResult::Ok;
 }
 
-void UnityClientCore::RequestClickMove(const JUClickMoveCommand& command)
+JAM_eResult UnityClientCore::PollEvent(JAM_ClientEvent& outEvent)
 {
+	outEvent = { .structSize = sizeof(JAM_ClientEvent), .type = JAM_eClientEventType::None };
+	m_eventPayload.clear();
 	if (!m_runtime)
-		return;
+		return JAM_eResult::NotInitialized;
 
-	m_runtime->RequestClickMove(
-		ToPx(command.rayOrigin),
-		ToPx(command.rayDirection),
-		command.maxRange,
-		command.requestSeq,
-		command.commandEpoch,
-		command.facingYaw);
+	net::ClientEvent event{};
+	if (!m_runtime->PollEvent(event))
+		return JAM_eResult::NoEvent;
+
+	switch (event.type)
+	{
+	case net::eClientEventType::NetworkStateChanged:
+	{
+		const auto& value = std::get<net::NetworkStateEvent>(event.payload);
+		outEvent.type = JAM_eClientEventType::NetworkStateChanged;
+		outEvent.payload.networkStateChanged = { .accountId = value.accountId, .userId = value.userId, .state = { .phase = ToUnity(value.state.phase) } };
+		break;
+	}
+	case net::eClientEventType::WorldParticipantChanged:
+	{
+		const auto& value = std::get<net::WorldParticipantEvent>(event.payload);
+		outEvent.type = JAM_eClientEventType::WorldParticipantChanged;
+		outEvent.payload.worldParticipantChanged = { .accountId = value.accountId, .userId = value.userId, .change = static_cast<JAM_eWorldParticipantChange>(value.change), .world = { .worldId = value.participant.runtime.worldId, .worldInstanceId = value.participant.runtime.instance.instanceId.value, .worldArchetypeKey = value.participant.runtime.instance.archetypeKey.v }, .participantUserId = value.participant.participantUserId };
+		break;
+	}
+	case net::eClientEventType::ActorLifecycleChanged:
+	{
+		const auto& value = std::get<net::ActorLifecycleEvent>(event.payload);
+		outEvent.type = JAM_eClientEventType::ActorLifecycleChanged;
+		outEvent.payload.actorLifecycleChanged = { .accountId = value.accountId, .userId = value.userId, .worldId = value.worldId, .clientRequestId = value.clientRequestId, .actorId = value.actorId.Value(), .isLocal = value.isLocal ? 1 : 0, .reason = static_cast<JAM_eActorLifecycleReason>(value.reason), .actorArchetypeKey = value.actorArchetypeKey.v };
+		break;
+	}
+	case net::eClientEventType::WorldRayResolved:
+	{
+		const auto& value = std::get<net::WorldRayResolvedEvent>(event.payload);
+		outEvent.type = JAM_eClientEventType::WorldRayResolved;
+		outEvent.payload.worldRayResolved = { .accountId = value.accountId, .userId = value.userId, .worldId = value.worldId, .hit = value.hit ? 1 : 0, .position = ToUnity(value.position), .normal = ToUnity(value.normal), .hitActorId = value.hitActorId.Value() };
+		break;
+	}
+	case net::eClientEventType::ActorActionRequestCompleted:
+	{
+		const auto& value = std::get<net::ActorActionRequestCompletedEvent>(event.payload);
+		outEvent.type = JAM_eClientEventType::ActorActionRequestCompleted;
+		outEvent.payload.actorActionRequestCompleted = { .receipt = { .requestId = value.receipt.requestId, .kind = static_cast<JAM_eClientRequestKind>(value.receipt.kind) }, .action = static_cast<JAM_eActorAction>(value.result.action), .status = static_cast<JAM_eActorActionStatus>(value.result.status), .reason = static_cast<JAM_eActorActionReason>(value.result.reason), .actorId = value.result.actorId.Value() };
+		break;
+	}
+	case net::eClientEventType::SocialMessageReceived:
+	{
+		const auto& value = std::get<net::SocialMessageEvent>(event.payload);
+		m_eventPayload.resize(value.message.payload.size());
+		if (!m_eventPayload.empty())
+			std::memcpy(m_eventPayload.data(), value.message.payload.data(), m_eventPayload.size());
+
+		outEvent.type = JAM_eClientEventType::SocialMessageReceived;
+		outEvent.payload.socialMessageReceived = {
+			.accountId = value.accountId,
+			.userId = value.userId,
+			.messageId = value.message.messageId,
+			.senderUserId = value.message.sender,
+			.destination = {
+				.audience = static_cast<JAM_eSocialAudience>(value.message.destination.audience),
+				.scopeId = value.message.destination.scopeId,
+			},
+			.contentType = value.message.contentType,
+			.payload = m_eventPayload.empty() ? nullptr : m_eventPayload.data(),
+			.payloadSize = static_cast<uint32_t>(m_eventPayload.size()),
+		};
+		break;
+	}
+	case net::eClientEventType::None:
+	default:
+		return JAM_eResult::NoEvent;
+	}
+
+	return JAM_eResult::Ok;
 }
 
-bool UnityClientCore::IsConnected() const
+int32_t UnityClientCore::CopyFrameView(const net::ActorPresentationFrameView& frame, JAM_ActorState* outActors, int32_t actorCapacity, JAM_ActorFrame* outFrame)
 {
-	return m_runtime && m_runtime->GetNetworkState().phase != jam::net::eNetworkPhase::Disconnected;
-}
-
-JUNetworkPhase UnityClientCore::GetNetworkPhase() const
-{
-	return m_runtime ? ToUnity(m_runtime->GetNetworkState().phase) : JUNetworkPhase::Disconnected;
-}
-
-uint64_t UnityClientCore::GetUserId() const
-{
-	return m_runtime ? m_runtime->GetUserId() : 0;
-}
-
-int32_t UnityClientCore::CopyActorFrame(JUActorState* outActors, int32_t actorCapacity, JUActorFrame* outFrame) const
-{
-	if (!m_runtime || !outFrame)
+	if (!outFrame)
 		return 0;
-
-	const jam::net::LocalWorldId localWorldId = m_runtime->GetMainLocalWorldId();
-	const jam::net::ActorPresentationFrameView frame = m_runtime->GetActorPresentationFrame(localWorldId);
 	outFrame->sequence = frame.sequence;
 	outFrame->tick = frame.tick;
 	outFrame->timestamp = frame.timestamp;
 	outFrame->actorCount = static_cast<int32_t>(frame.actors.size());
-
 	if (!outActors || actorCapacity <= 0)
 		return outFrame->actorCount;
 
 	const int32_t copyCount = std::min<int32_t>(actorCapacity, outFrame->actorCount);
 	for (int32_t i = 0; i < copyCount; ++i)
 	{
-		const jam::net::ActorPresentationState& actor = frame.actors[static_cast<size_t>(i)];
-		JUActorState& out = outActors[i];
-		out = {};
-		out.objectId = actor.objectId;
-		out.isLevelActor = actor.netId.IsLevel() ? 1 : 0;
-		out.isLocal = actor.isLocal ? 1 : 0;
-
-		if (actor.cs.has_value())
+		const net::ActorPresentationState& actor = frame.actors[static_cast<size_t>(i)];
+		JAM_ActorState& output = outActors[i];
+		output = { .actorId = actor.actorId.Value(), .isLocal = actor.isLocal ? 1 : 0 };
+		if (actor.cs)
 		{
-			out.hasTransform = 1;
-			out.position = ToUnity(actor.cs->pos);
-			out.rotation = ToUnity(jam::px::Quat::FromYawPitch(actor.cs->facingYaw, actor.cs->facingPitch));
+			output.hasTransform = 1;
+			output.position = ToUnity(actor.cs->pos);
+			output.rotation = ToUnity(px::Quat::FromYawPitch(actor.cs->bodyYaw, 0.0f));
 		}
-		else if (actor.rs.has_value())
+		else if (actor.rs)
 		{
-			out.hasTransform = 1;
-			out.position = ToUnity(actor.rs->pose.p);
-			out.rotation = ToUnity(actor.rs->pose.q);
+			output.hasTransform = 1;
+			output.position = ToUnity(actor.rs->pose.p);
+			output.rotation = ToUnity(actor.rs->pose.q);
 		}
 	}
-
 	return copyCount;
-}
-
-void UnityClientCore::RegisterRuntimeSubscriptions()
-{
-	if (!m_runtime)
-		return;
-
-	const jam::SubscribeOptions opt{ jam::eDispatchPolicy::MainExecutor };
-	m_subNetworkState = m_runtime->SubscribeNetworkState(
-		[this](const jam::net::NetworkStateEvent& evt) { HandleNetworkState(evt); }, opt);
-	m_subWorldMembership = m_runtime->SubscribeWorldMembership(
-		[this](const jam::net::WorldMembershipEvent& evt) { HandleWorldMembership(evt); }, opt);
-	m_subActorLifecycle = m_runtime->SubscribeActorLifecycle(
-		[this](const jam::net::ActorLifecycleEvent& evt) { HandleActorLifecycle(evt); }, opt);
-	m_subClickMoveResolved = m_runtime->SubscribeClickMoveResolved(
-		[this](const jam::net::ClickMoveResolvedEvent& evt) { HandleClickMoveResolved(evt); }, opt);
-}
-
-void UnityClientCore::UnregisterRuntimeSubscriptions()
-{
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subNetworkState.type, m_subNetworkState.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subWorldMembership.type, m_subWorldMembership.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subActorLifecycle.type, m_subActorLifecycle.id);
-	GLOBAL_EVENTBUS_UNSUBSCRIBE(m_subClickMoveResolved.type, m_subClickMoveResolved.id);
-	m_subNetworkState = {};
-	m_subWorldMembership = {};
-	m_subActorLifecycle = {};
-	m_subClickMoveResolved = {};
-}
-
-void UnityClientCore::HandleNetworkState(const jam::net::NetworkStateEvent& evt)
-{
-	m_eventQueue.Push(JUNetworkStateEvent
-	{
-		.phase = ToUnity(evt.state.phase),
-		.accountId = evt.accountId,
-		.userId = evt.userId
-	});
-
-	if (evt.state.phase != jam::net::eNetworkPhase::Ready)
-	{
-		m_mainWorld = jam::net::kInvalidLocalWorldId;
-		m_mainWorldArchetypeKey = {};
-		m_autoAssignRequested = false;
-	}
-}
-
-void UnityClientCore::HandleWorldMembership(const jam::net::WorldMembershipEvent& evt)
-{
-	m_eventQueue.Push(JUWorldMembershipEvent
-	{
-		.change = ToUnity(evt.change),
-		.localWorldId = evt.membership.localWorldId,
-		.worldId = evt.membership.key.worldId,
-		.archetypeKey = evt.membership.key.archetypeKey.v
-	});
-
-	const auto mainMembership = m_runtime ? m_runtime->GetMainWorldMembership() : std::nullopt;
-	const jam::net::LocalWorldId nextMainWorld = mainMembership.has_value()
-		? mainMembership->localWorldId
-		: jam::net::kInvalidLocalWorldId;
-
-	if (nextMainWorld != m_mainWorld)
-	{
-		m_pendingPlayerSpawnReqIds.clear();
-		m_localObjectId = jam::px::INVALID_OBJ_ID;
-		m_mainWorld = nextMainWorld;
-	}
-
-	m_mainWorldArchetypeKey = mainMembership.has_value()
-		? mainMembership->key.archetypeKey
-		: jam::net::WorldArchetypeKey{};
-
-	if (nextMainWorld != jam::net::kInvalidLocalWorldId)
-		m_autoAssignRequested = false;
-}
-
-void UnityClientCore::HandleActorLifecycle(const jam::net::ActorLifecycleEvent& evt)
-{
-	if (evt.reason == jam::net::eActorLifecycleReason::Spawned
-		&& m_pendingPlayerSpawnReqIds.erase(evt.spawnReqId) > 0
-		&& evt.isLocal)
-	{
-		m_localObjectId = evt.objectId;
-	}
-
-	if ((evt.reason == jam::net::eActorLifecycleReason::Despawned
-		|| evt.reason == jam::net::eActorLifecycleReason::PredictedDespawn)
-		&& evt.objectId == m_localObjectId)
-	{
-		m_localObjectId = jam::px::INVALID_OBJ_ID;
-	}
-
-	if (evt.reason == jam::net::eActorLifecycleReason::Spawned
-		|| evt.reason == jam::net::eActorLifecycleReason::AoiEntered)
-	{
-		m_eventQueue.Push(JUActorSpawnedEvent
-		{
-			.objectId = evt.objectId,
-			.actorArchetypeKey = evt.actorArchetypeKey.v,
-			.isLevelActor = evt.netId.IsLevel() ? 1 : 0,
-			.isLocal = evt.isLocal ? 1 : 0
-		});
-		return;
-	}
-
-	if (evt.reason == jam::net::eActorLifecycleReason::Despawned
-		|| evt.reason == jam::net::eActorLifecycleReason::AoiLeft
-		|| evt.reason == jam::net::eActorLifecycleReason::PredictedDespawn)
-	{
-		m_eventQueue.Push(JUActorDespawnedEvent
-		{
-			.objectId = evt.objectId
-		});
-	}
-}
-
-void UnityClientCore::HandleClickMoveResolved(const jam::net::ClickMoveResolvedEvent& evt)
-{
-	m_eventQueue.Push(JUClickMoveResolvedEvent
-	{
-		.requestSeq = evt.requestSeq,
-		.followTarget = evt.followTarget ? 1 : 0,
-		.targetPos = ToUnity(evt.targetPos)
-	});
-}
-
-void UnityClientCore::RequestAutoAssignIfReady()
-{
-	if (!m_runtime || !m_autoAssignOnReady || m_autoAssignRequested)
-		return;
-
-	if (m_runtime->GetNetworkState().phase != jam::net::eNetworkPhase::Ready)
-		return;
-
-	if (!m_runtime->GetWorldMemberships().empty())
-		return;
-
-	const jam::net::WorldKey targetKey{ .archetypeKey = m_autoAssignArchetypeKey };
-	if (!targetKey.IsValid())
-		return;
-
-	m_autoAssignRequested = true;
-	m_runtime->RequestWorldAction(jam::net::eWorldAction::AutoAssign, {}, targetKey);
-}
-
-void UnityClientCore::SpawnPlayerIfNeeded()
-{
-	if (!m_runtime)
-		return;
-
-	if (m_mainWorld == jam::net::kInvalidLocalWorldId)
-		return;
-
-	if (m_localObjectId != jam::px::INVALID_OBJ_ID || !m_pendingPlayerSpawnReqIds.empty())
-		return;
-
-	jam::px::Vec3 pos{ 5.0f * static_cast<float>(m_instanceId), 10.0f, 0.0f };
-
-	jam::net::SpawnParams params{};
-	params.spawnId = m_nextSpawnReqId++;
-	params.owned = true;
-	params.controlled = true;
-	params.desc.archetype = jam::px::MakePhysicsArchetypeKey("Character");
-	params.actorArchetypeKey = jam::net::MakeActorArchetypeKey("Character");
-	params.desc.pose = { .p = pos };
-	params.desc.overrides = jam::px::CharacterSpawnOverrides{};
-
-	m_pendingPlayerSpawnReqIds.insert(params.spawnId);
-	m_runtime->RequestSpawnActor(params);
 }
