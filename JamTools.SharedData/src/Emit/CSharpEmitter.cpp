@@ -93,6 +93,28 @@ namespace jam::tool
 
 			return {};
 		}
+
+		const SchemaPolymorphicType* AsPolymorphicType(const SchemaType& type)
+		{
+			return type.kind == eSchemaTypeKind::Polymorphic
+				? &static_cast<const SchemaPolymorphicType&>(type)
+				: nullptr;
+		}
+
+		const SchemaPolymorphicType* FindCollectionItemPolymorphicType(const SchemaType& type)
+		{
+			switch (type.kind)
+			{
+			case eSchemaTypeKind::Array:
+				return AsPolymorphicType(*static_cast<const SchemaArrayType&>(type).elementType);
+
+			case eSchemaTypeKind::Map:
+				return AsPolymorphicType(*static_cast<const SchemaMapType&>(type).valueType);
+
+			default:
+				return nullptr;
+			}
+		}
 	}
 
 	void CSharpEmitter::Emit(const SchemaDocument& document, const EmitOptions& options, DiagnosticBag& diagnostics)
@@ -164,7 +186,6 @@ namespace jam::tool
 	std::string CSharpEmitter::EmitPolymorphicBase(const SchemaPolymorphicType& polymorphicType) const
 	{
 		std::ostringstream os;
-		os << "    [JsonConverter(typeof(" << polymorphicType.baseTypeName << "JsonConverter))]\n";
 		os << "    public abstract class " << polymorphicType.baseTypeName << "\n";
 		os << "    {\n";
 		os << "    }\n";
@@ -330,10 +351,16 @@ namespace jam::tool
 
 		for (const auto& field : object.fields)
 		{
+			if (const auto* polymorphicType = AsPolymorphicType(*field.type))
+				os << "        [JsonConverter(typeof(" << polymorphicType->baseTypeName << "JsonConverter))]\n";
+
 			os << "        [JsonProperty(\"" << field.jsonName << "\"";
 
 			if (field.required)
 				os << ", Required = Required.Always";
+
+			if (const auto* polymorphicType = FindCollectionItemPolymorphicType(*field.type))
+				os << ", ItemConverterType = typeof(" << polymorphicType->baseTypeName << "JsonConverter)";
 
 			os << ")]\n";
 
