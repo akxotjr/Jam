@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/rigid/kinematic/KinematicDrivers.h"
 
 #include <algorithm>
@@ -377,10 +377,10 @@ namespace jam::px
 		if (m_done) return m_pose;
 
 		if (m_src.centerMode == eOrbitCenterMode::FollowTarget
-			&& m_src.targetId != INVALID_OBJ_ID
+			&& m_src.targetActorId != INVALID_ACTOR_ID
 			&& m_resolver)
 		{
-			if (auto target = m_resolver(m_src.targetId); target.has_value())
+			if (auto target = m_resolver(m_src.targetActorId); target.has_value())
 				m_dynamicCenter = target->p;
 		}
 
@@ -413,7 +413,7 @@ namespace jam::px
 
 		if (m_src.centerMode == eOrbitCenterMode::FollowTarget)
 		{
-			state.targetId = m_src.targetId;
+			state.targetActorId = m_src.targetActorId;
 			state.phase    = (m_dir < 0.0f) ? 1u : 0u;
 			return state;
 		}
@@ -555,7 +555,7 @@ namespace jam::px
 	PxTransform FollowKinematicDriver::Tick(float dt)
 	{
 		std::optional<PxTransform> targetOpt;
-		if (m_resolver) targetOpt = m_resolver(m_src.targetId);
+		if (m_resolver) targetOpt = m_resolver(m_src.targetActorId);
 
 		if (!targetOpt.has_value())
 		{
@@ -621,7 +621,7 @@ namespace jam::px
 	KinematicState FollowKinematicDriver::BuildState() const
 	{
 		KinematicState state{};
-		state.targetId  = m_src.targetId;
+		state.targetActorId  = m_src.targetActorId;
 		state.phase		= m_hasValidTarget ? 1u : 0u;
 		
 		return state;

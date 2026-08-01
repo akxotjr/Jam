@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/rigid/kinematic/KinematicRigidBehavior.h"
 #include "jampx/actor/rigid/RigidBody.h"
 #include "jampx/actor/rigid/kinematic/KinematicDrivers.h"
@@ -13,7 +13,7 @@ namespace jam::px
 			{
 				return (prev.kineState.startEpoch != now.kineState.startEpoch)
 					|| (prev.kineState.phase	  != now.kineState.phase)
-					|| (prev.kineState.targetId   != now.kineState.targetId)
+					|| (prev.kineState.targetActorId   != now.kineState.targetActorId)
 					|| (prev.kineState.eventMask  != now.kineState.eventMask);
 			}
 			
@@ -130,8 +130,8 @@ namespace jam::px
 
 		if (state.kineType == eKineDrivenType::TargetDerived)
 		{
-			const ObjectId target = state.kineState.targetId;
-			if (target != INVALID_OBJ_ID && m_mainDriver)
+			const ActorId target = state.kineState.targetActorId;
+			if (target != INVALID_ACTOR_ID && m_mainDriver)
 				m_mainDriver->SetTargetId(target);
 		}
 
@@ -150,8 +150,8 @@ namespace jam::px
 
 		if (state.kineType == eKineDrivenType::TargetDerived)
 		{
-			const ObjectId target = state.kineState.targetId;
-			if (target != INVALID_OBJ_ID && m_replayDriver)
+			const ActorId target = state.kineState.targetActorId;
+			if (target != INVALID_ACTOR_ID && m_replayDriver)
 				m_replayDriver->SetTargetId(target);
 		}
 

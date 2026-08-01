@@ -1,5 +1,7 @@
-﻿#pragma once
+#pragma once
 
+#include "jampx/PhysicsTypes.h"
+#include "jampx/PhysicsFilter.h"
 
 namespace jam::px
 {
@@ -31,7 +33,7 @@ namespace jam::px
 
 	struct ProjectileHomingConfig
 	{
-		ObjectId	targetId			= INVALID_OBJ_ID;
+		ActorId		targetActorId		= INVALID_ACTOR_ID;
 
 		float		maxSpeed			= 120.f;
 		float		acceleration		= 300.f;
@@ -55,7 +57,7 @@ namespace jam::px
 	struct ProjectileHomingTarget
 	{
 		bool		valid				= false;
-		ObjectId	targetId			= INVALID_OBJ_ID;
+		ActorId		targetActorId		= INVALID_ACTOR_ID;
 		PxVec3		position			= PxVec3(physx::PxZero);
 		PxVec3		velocity			= PxVec3(physx::PxZero);
 	};
@@ -117,7 +119,7 @@ namespace jam::px
 
 		PxVec3		position			= PxVec3(physx::PxZero);
 		PxVec3		normal				= PxVec3(physx::PxZero);
-		ObjectId	hitId				= INVALID_OBJ_ID;
+		ActorId	hitActorId				= INVALID_ACTOR_ID;
 
 		bool IsTerminal() const
 		{
@@ -125,7 +127,7 @@ namespace jam::px
 		}
 	};
 
-	using ProjectileTargetResolver = std::function<bool(ObjectId, ProjectileHomingTarget&)>;
+	using ProjectileTargetResolver = std::function<bool(ActorId, ProjectileHomingTarget&)>;
 
 	/// @brief analytic / kinematic projectile simulation component
 	class ProjectileComponent

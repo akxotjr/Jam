@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "jampx/actor/ActorFactory.h"
+
+#include "jampx/PhysicsWorld.h"
 #include "jampx/actor/character/controller/AIControllerComponent.h"
 #include "jampx/actor/character/controller/PlayerControllerComponent.h"
 #include "jampx/actor/rigid/kinematic/IKinematicDriver.h"
@@ -180,7 +182,7 @@ namespace jam::px
 		PhysicsArchetypeKey			key,
 		const PhysicsArchetypeData&	data,
 		const SpawnDesc&			desc,
-		ObjectId					id,
+		ActorId						id,
 		const TargetPoseResolver&	resolver)
 	{
 		JAM_ASSERT(desc.IsRigid());
@@ -232,7 +234,7 @@ namespace jam::px
 
 			if (kineType == eKineDrivenType::TargetDerived)
 			{
-				s.kineState.targetId = desc.targetId;
+				s.kineState.targetActorId = desc.targetActorId;
 			}
 		}
 
@@ -252,7 +254,7 @@ namespace jam::px
 		PhysicsArchetypeKey			key,
 		const PhysicsArchetypeData& data,
 		const SpawnDesc&			desc,
-		ObjectId					id)
+		ActorId					id)
 	{
 		JAM_ASSERT(desc.IsCharacter());
 
@@ -303,9 +305,17 @@ namespace jam::px
 		s.pos = desc.pose.p;
 
 		if (overrides.mask.has_any(SpawnOverrideMask::VIEW_YAW))
-			s.facingYaw = overrides.yaw;
+		{
+			s.viewYaw = overrides.yaw;
+			// Preserve the historical meaning of VIEW_YAW for callers that have
+			// not opted into the separate body-yaw override yet.
+			if (!overrides.mask.has_any(SpawnOverrideMask::BODY_YAW))
+				s.bodyYaw = overrides.yaw;
+		}
+		if (overrides.mask.has_any(SpawnOverrideMask::BODY_YAW))
+			s.bodyYaw = overrides.bodyYaw;
 		if (overrides.mask.has_any(SpawnOverrideMask::VIEW_PITCH))
-			s.facingPitch = overrides.pitch;
+			s.viewPitch = overrides.pitch;
 
 		body.ApplyAuthorityToBoth(s);
 

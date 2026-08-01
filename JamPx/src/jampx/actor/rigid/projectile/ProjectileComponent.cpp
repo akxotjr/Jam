@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/rigid/projectile/ProjectileComponent.h"
 #include "jampx/PhysicsUtils.h"
 
@@ -105,7 +105,7 @@ namespace jam::px
 			result.hit		= true;
 			result.position	= buf.block.position;
 			result.normal	= buf.block.normal;
-			result.hitId	= GetObjectId(buf.block.actor);
+			result.hitActorId	= GetActorId(buf.block.actor);
 			return true;
 		}
 
@@ -119,7 +119,7 @@ namespace jam::px
 			result.hit		= true;
 			result.position	= buf.block.position;
 			result.normal	= buf.block.normal;
-			result.hitId	= GetObjectId(buf.block.actor);
+			result.hitActorId	= GetActorId(buf.block.actor);
 
 			return true;
 		}
@@ -324,10 +324,10 @@ namespace jam::px
 		if (!m_resolver)
 			return false;
 
-		if (m_config.homing.targetId == INVALID_OBJ_ID)
+		if (m_config.homing.targetActorId == INVALID_ACTOR_ID)
 			return false;
 
-		if (!m_resolver(m_config.homing.targetId, target))
+		if (!m_resolver(m_config.homing.targetActorId, target))
 			return false;
 
 		return target.valid;

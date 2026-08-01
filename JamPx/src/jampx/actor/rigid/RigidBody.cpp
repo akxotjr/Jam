@@ -1,5 +1,7 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/rigid/RigidBody.h"
+
+#include "jampx/PhysicsUtils.h"
 #include "jampx/actor/rigid/kinematic/KinematicRigidBehavior.h"
 
 

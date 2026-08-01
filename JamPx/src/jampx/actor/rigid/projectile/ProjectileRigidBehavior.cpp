@@ -1,5 +1,8 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "jampx/actor/rigid/projectile/ProjectileRigidBehavior.h"
+
+#include "jampx/PhysicsTypes.h"
+#include "jampx/PhysicsUtils.h"
 #include "jampx/actor/rigid/RigidBody.h"
 
 namespace jam::px

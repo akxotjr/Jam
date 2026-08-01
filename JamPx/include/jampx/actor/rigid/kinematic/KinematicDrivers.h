@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "jampx/geometry/Curve.h"
 #include "jampx/actor/rigid/kinematic/IKinematicDriver.h"
@@ -89,7 +89,7 @@ namespace jam::px
         bool                IsDone() const override { return m_done; }
         KinematicState      BuildState() const override;
 
-        bool                SetTargetId(ObjectId id) override { m_src.targetId = id; return true; }
+        bool                SetTargetId(ActorId id) override { m_src.targetActorId = id; return true; }
         void                SetDynamicCenter(const PxVec3& center) { m_dynamicCenter = center; }
 
     private:
@@ -136,7 +136,7 @@ namespace jam::px
         bool                IsDone() const override { return false; }
         KinematicState      BuildState() const override;
 
-        bool                SetTargetId(ObjectId id) override { m_src.targetId = id; return true; }
+        bool                SetTargetId(ActorId id) override { m_src.targetActorId = id; return true; }
 
     private:
         PxQuat              ComputeTargetRotation(const PxTransform& targetPose, const PxVec3& desiredPos) const;

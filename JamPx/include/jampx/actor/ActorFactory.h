@@ -22,7 +22,7 @@ namespace jam::px
 			PhysicsArchetypeKey			key,
 			const PhysicsArchetypeData&	data,
 			const SpawnDesc&			desc,
-			ObjectId					id,
+			ActorId						id,
 			const TargetPoseResolver&	resolver = nullptr);
 
 		/// @brief CCT / RemoteCCT CharacterBody 생성
@@ -31,7 +31,7 @@ namespace jam::px
 			PhysicsArchetypeKey			key,
 			const PhysicsArchetypeData&	data,
 			const SpawnDesc&			desc,
-			ObjectId					id);
+			ActorId						id);
 
 
 		/// @brief Actor의 모든 Shape에 PackedId 필터 적용
