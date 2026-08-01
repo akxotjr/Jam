@@ -1,4 +1,6 @@
-﻿#pragma once
+#pragma once
+
+#include <jambase/JamMacro.h>
 
 #include "Easing.h"
 #include "jampx/PhysicsTypes.h"
@@ -45,10 +47,10 @@ namespace jam::px
 		return { ToPx(tf.p), ToPx(tf.q) };
 	}
 
-	static ObjectId GetObjectId(const PxActor* actor) noexcept
+	static ActorId GetActorId(const PxActor* actor) noexcept
 	{
-		if (!actor) return INVALID_OBJ_ID;
-		return static_cast<ObjectId>(reinterpret_cast<uintptr_t>(actor->userData));
+		if (!actor) return INVALID_ACTOR_ID;
+		return static_cast<ActorId>(reinterpret_cast<uintptr_t>(actor->userData));
 	}
 
 	// a: current, b: previous

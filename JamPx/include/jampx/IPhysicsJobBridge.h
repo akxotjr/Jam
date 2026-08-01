@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include "jampx/PhysXIncludes.h"
 
 #include <functional>
 #include <cstdint>

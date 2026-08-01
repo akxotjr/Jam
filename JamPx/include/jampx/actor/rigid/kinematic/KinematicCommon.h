@@ -1,8 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include "jampx/Easing.h"
 #include "jampx/geometry/Curve.h"
 
+#include <optional>
 
 namespace jam::px
 {
@@ -71,9 +72,9 @@ namespace jam::px
 
 
 
-    /// @brief Loopup callback: ObjectId -> PxTransform.
+    /// @brief Loopup callback: ActorId -> PxTransform.
     /// If target is not found, returns std::nullopt
-    using TargetPoseResolver = std::function<std::optional<PxTransform>(ObjectId)>;
+    using TargetPoseResolver = std::function<std::optional<PxTransform>(ActorId)>;
 
 
     // ---------------------------------------------------------------
@@ -119,7 +120,7 @@ namespace jam::px
         // ---- center ----
         eOrbitCenterMode        centerMode          = eOrbitCenterMode::FixedPoint;
         PxVec3                  fixedCenter         = PxVec3(physx::PxZero);
-        ObjectId                targetId            = INVALID_OBJ_ID;
+        ActorId                targetActorId            = INVALID_ACTOR_ID;
     	PxVec3                  targetOffset        = PxVec3(physx::PxZero);   // using centerMode = FollowTarget
 
         // ---- plane ----
@@ -177,7 +178,7 @@ namespace jam::px
 
     struct FollowSource
     {
-        ObjectId            targetId                = INVALID_OBJ_ID;
+        ActorId            targetActorId                = INVALID_ACTOR_ID;
 
         PxVec3              offset                  = PxVec3(physx::PxZero);
         eFollowOffsetSpace  offsetSpace             = eFollowOffsetSpace::TargetLocal;

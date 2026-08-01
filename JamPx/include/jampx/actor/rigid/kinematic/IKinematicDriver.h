@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "jampx/PhysXTypes.h"
 
 
@@ -15,7 +15,7 @@ namespace jam::px
 		virtual KinematicState  BuildState() const { return {}; }
 
 		/// @brief runtime binding hook for eKineDrivenType == TargetDerived
-		virtual bool			SetTargetId(ObjectId oid) { return false; }
+		virtual bool			SetTargetId(ActorId oid) { return false; }
 	};
 
 } // namespace jam::px

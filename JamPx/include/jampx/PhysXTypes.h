@@ -150,12 +150,12 @@ namespace jam::px
 
 	// ---- task / dispatcher ----
 
-	using PxCpuDispatcher 			= physx::PxCpuDispatcher;
+	using PxCpuDispatcher 				= physx::PxCpuDispatcher;
 
-	using PxTaskManager				= physx::PxTaskManager;
-	using PxBaseTask 				= physx::PxBaseTask;
-	using PxTask 					= physx::PxTask;
-	using PxLightCpuTask 			= physx::PxLightCpuTask;
+	using PxTaskManager					= physx::PxTaskManager;
+	using PxBaseTask 					= physx::PxBaseTask;
+	using PxTask 						= physx::PxTask;
+	using PxLightCpuTask 				= physx::PxLightCpuTask;
 
 
 	// ---- cooking ----

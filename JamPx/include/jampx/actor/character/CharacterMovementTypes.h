@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 
 
@@ -6,7 +6,7 @@ namespace jam::px
 {
 	struct CharacterUserData
 	{
-		ObjectId id = INVALID_OBJ_ID;
+		ActorId id = INVALID_ACTOR_ID;
 		
 		bool isGhost = false;
 		bool isRemote = false;

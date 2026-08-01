@@ -58,13 +58,6 @@ namespace jam::px
 		Convex
 	};
 
-	enum class eSpawnPolicy : uint8
-	{
-		LevelOnly,
-		RuntimeOnly,
-		Both
-	};
-
 
 	struct MaterialData
 	{
@@ -149,6 +142,8 @@ namespace jam::px
 		MaterialHandle	material			= {};
 		float			density				= 10.0f;
 		eCCTPolicy		policy				= eCCTPolicy::Default;
+		SimFD			simFD				= {};
+		QueryFD			qryFD				= {};
 
 		// advance
 		float			slopeLimit			= 0.707f;
@@ -192,9 +187,6 @@ namespace jam::px
 		eBodyType			bodyType			= eBodyType::Rigid;
 		eMotionType			motionType			= eMotionType::Static;
 		MotionFlag::Flags	motionFlags			= MotionFlag::NONE;
-
-		eSpawnPolicy		spawnPolicy			= eSpawnPolicy::Both;
-		bool				allowReplication	= true;
 
 		std::variant<RigidBodyData, CharacterBodyData> body;
 

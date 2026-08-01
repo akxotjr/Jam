@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "jampx/PhysicsSimFilter.h"
 #include "jampx/PhysicsQueryFilter.h"

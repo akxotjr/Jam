@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <jambase/Fnv1a.h>
 
@@ -462,15 +462,15 @@ namespace jam::px
     {
         eSimEventType       type        = eSimEventType::None;
 
-        // ---- contact pair identity(ObjectId) ----
+        // ---- contact pair identity(ActorId) ----
 
-        ObjectId            contact0    = INVALID_OBJ_ID;
-        ObjectId            contact1    = INVALID_OBJ_ID;
+        ActorId            contact0    = INVALID_ACTOR_ID;
+        ActorId            contact1    = INVALID_ACTOR_ID;
 
-        // ---- trigger pair identity(ObjectId) ----
+        // ---- trigger pair identity(ActorId) ----
 
-        ObjectId            trigger0    = INVALID_OBJ_ID;
-        ObjectId            trigger1    = INVALID_OBJ_ID;
+        ActorId            trigger0    = INVALID_ACTOR_ID;
+        ActorId            trigger1    = INVALID_ACTOR_ID;
 
         // ---- contact extras ----
 
@@ -480,7 +480,7 @@ namespace jam::px
 
         // ---- onAdvance ----
 		//(optional)
-        //ObjectId            body        = INVALID_OBJ_ID;
+        //ActorId            body        = INVALID_ACTOR_ID;
         //PxTransform         pose        = PxTransform(PxIdentity);
     };
 
@@ -489,7 +489,7 @@ namespace jam::px
         // 비용 제어: contact points는 최대 몇 개 뽑을지
         PxU32                   maxExtractContacts = 8;
         std::vector<SimEvent>   events;
-        std::vector<ObjectId>   advanceActive;
+        std::vector<ActorId>   advanceActive;
 
         void Clear()
         {
@@ -503,9 +503,9 @@ namespace jam::px
             return out;
         }
 
-        std::vector<ObjectId> ConsumeActiveList()
+        std::vector<ActorId> ConsumeActiveList()
         {
-            std::vector<ObjectId> out;
+            std::vector<ActorId> out;
             out.swap(advanceActive);
             return out;
         }
@@ -520,8 +520,8 @@ namespace jam::px
 
         void onContact(const PxContactPairHeader& header, const PxContactPair* pairs, PxU32 nbPairs) override
         {
-            const ObjectId oid0 = GetObjectId(header.actors[0]);
-            const ObjectId oid1 = GetObjectId(header.actors[1]);
+            const ActorId oid0 = GetActorId(header.actors[0]);
+            const ActorId oid1 = GetActorId(header.actors[1]);
 
             for (PxU32 i = 0; i < nbPairs; ++i)
             {
@@ -582,8 +582,8 @@ namespace jam::px
                 const bool removedTrigger = tp.flags.isSet(PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER);
                 const bool removedOther   = tp.flags.isSet(PxTriggerPairFlag::eREMOVED_SHAPE_OTHER);
 
-                const ObjectId oid0 = removedTrigger ? INVALID_OBJ_ID : GetObjectId(tp.triggerActor);
-                const ObjectId oid1 = removedOther   ? INVALID_OBJ_ID : GetObjectId(tp.otherActor);
+                const ActorId oid0 = removedTrigger ? INVALID_ACTOR_ID : GetActorId(tp.triggerActor);
+                const ActorId oid1 = removedOther   ? INVALID_ACTOR_ID : GetActorId(tp.otherActor);
 
                 auto pushEvent = [&](eSimEventType t)
                     {
@@ -606,8 +606,8 @@ namespace jam::px
         {
             for (PxU32 i = 0; i < count; ++i)
             {
-                const ObjectId oid = GetObjectId(bodyBuffer[i]);
-                if (oid == INVALID_OBJ_ID) continue;
+                const ActorId oid = GetActorId(bodyBuffer[i]);
+                if (oid == INVALID_ACTOR_ID) continue;
 
                 advanceActive.push_back(oid);
 

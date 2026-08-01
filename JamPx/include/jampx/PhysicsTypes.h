@@ -4,9 +4,7 @@
 #include <jambase/JamTypes.h>
 #include <jambase/EnumUtils.h>
 
-#include <cstdint>
 #include <cmath>
-#include <optional>
 #include <variant>
 
 namespace jam::px
@@ -304,8 +302,10 @@ namespace jam::px
 	};
 
 
-	using ObjectId = uint32;
-	static constexpr ObjectId INVALID_OBJ_ID = 0xFFFF'FFFF;
+	using ActorId = uint32;
+	// JamPx treats this as an opaque, PhysicalWorld-local actor key.  Zero is
+	// reserved so it matches JamNet's invalid ActorId raw value.
+	static constexpr ActorId INVALID_ACTOR_ID = 0;
 
 
 
@@ -327,11 +327,11 @@ namespace jam::px
 
 	struct KinematicState
 	{
-		uint32					startEpoch	= 0;
-		uint32					phase		= 0;
-		float					t			= 0.f;
-		ObjectId				targetId	= 0;
-		uint32					eventMask   = 0;
+		uint32				startEpoch		= 0;
+		uint32				phase			= 0;
+		float				t				= 0.f;
+		ActorId				targetActorId	= 0;
+		uint32				eventMask		= 0;
 
 		bool operator==(const KinematicState&) const = default;
 	};
@@ -357,8 +357,9 @@ namespace jam::px
 	struct CharacterState
 	{
 		Vec3		pos				= Vec3::Zero();
-		float		facingYaw		= 0.f;
-		float		facingPitch		= 0.f;
+		float		bodyYaw			= 0.f;
+		float		viewYaw			= 0.f;
+		float		viewPitch		= 0.f;
 		float		verticalSpeed	= 0.f;
 		float		horizontalSpeed = 0.f;
 		Vec2		moveDir			= Vec2::Zero();
@@ -368,7 +369,7 @@ namespace jam::px
 
 		bool IsFinite() const noexcept
 		{
-			return pos.IsFinite() && std::isfinite(facingYaw) && std::isfinite(facingPitch) && std::isfinite(verticalSpeed) && std::isfinite(horizontalSpeed) && moveDir.IsFinite();
+			return pos.IsFinite() && std::isfinite(bodyYaw) && std::isfinite(viewYaw) && std::isfinite(viewPitch) && std::isfinite(verticalSpeed) && std::isfinite(horizontalSpeed) && moveDir.IsFinite();
 		}
 	};
 
@@ -379,7 +380,7 @@ namespace jam::px
 
 	struct ActorContext
 	{
-		ObjectId	 oid	= INVALID_OBJ_ID;
+		ActorId	 actorId = INVALID_ACTOR_ID;
 		PhysicsState state  = {};
 	};
 
@@ -470,6 +471,7 @@ namespace jam::px
 			CHAR_MASK		= 1 << 7, 
 			VIEW_YAW		= 1 << 8,
 			VIEW_PITCH		= 1 << 9,
+			BODY_YAW		= 1 << 10,
 		};
 
 		using Flag = FlagsT<Enum, uint32>;
@@ -490,7 +492,8 @@ namespace jam::px
 		return mask.has_any(
 			SpawnOverrideMask::CHAR_MASK 
 			| SpawnOverrideMask::VIEW_YAW 
-			| SpawnOverrideMask::VIEW_PITCH);
+			| SpawnOverrideMask::VIEW_PITCH
+			| SpawnOverrideMask::BODY_YAW);
 	}
 
 	struct RigidSpawnOverrides
@@ -507,6 +510,7 @@ namespace jam::px
 	{
 		SpawnOverrideMask::Flag mask = SpawnOverrideMask::CHAR_MASK;
 
+		float				bodyYaw = 0.0f;
 		float				yaw   = 0.0f;
 		float				pitch = 0.0f;
 	};
@@ -523,7 +527,7 @@ namespace jam::px
 
 		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
 
-		ObjectId			targetId = INVALID_OBJ_ID;
+		ActorId				targetActorId = INVALID_ACTOR_ID;
 
 		constexpr bool IsRigid() const noexcept { return std::holds_alternative<RigidSpawnOverrides>(overrides); }
 		bool IsCharacter() const noexcept { return std::holds_alternative<CharacterSpawnOverrides>(overrides); }
@@ -563,26 +567,28 @@ namespace jam::px
 		FollowTarget	= 1,
 	};
 
-	struct CharacterInput
+	struct CharacterMotorInput
 	{
 		uint32_t			inputFlags		= 0;
 		uint32_t			commandEpoch	= 0;
-		float				facingYaw		= 0.f;
-		float				facingPitch		= 0.f;
+		float				moveReferenceYaw = 0.f;
+		float				bodyYaw			= 0.f;
+		float				viewYaw			= 0.f;
+		float				viewPitch		= 0.f;
 		eMoveInputMode		moveMode		= eMoveInputMode::Keyboard;
 		eMouseMoveKind		mouseMoveKind	= eMouseMoveKind::ToPosition;
 		Vec3				targetPos		= Vec3::Zero();
-		uint32_t			targetNetId		= 0;
+		ActorId				targetActorId	= 0;
 	};
 
 
 
 	struct HitscanResult
 	{
-		bool		hit		 = false;
-		Vec3		position = Vec3::Zero();
-		Vec3		normal	 = Vec3::Zero();
-		ObjectId	hitId	 = INVALID_OBJ_ID;
+		bool		hit			= false;
+		Vec3		position	= Vec3::Zero();
+		Vec3		normal		= Vec3::Zero();
+		ActorId		hitActorId	= INVALID_ACTOR_ID;
 	};
 
 	enum class ePhysicsEventType : uint8
@@ -590,15 +596,19 @@ namespace jam::px
 		None						= 0,
 		ProjectileHit				= 1,
 		ProjectileLifetimeExpired	= 2,
+		TriggerFound				= 3,
+		TriggerLost					= 4,
 	};
 
 	struct PhysicsEvent
 	{
-		ePhysicsEventType	type		= ePhysicsEventType::None;
-		ObjectId			sourceId	= INVALID_OBJ_ID;
-		ObjectId			targetId	= INVALID_OBJ_ID;
-		Vec3				hitPosition	= Vec3::Zero();
-		Vec3				hitNormal	= Vec3::Zero();
+		ePhysicsEventType	type			= ePhysicsEventType::None;
+		ActorId				sourceActorId	= INVALID_ACTOR_ID;
+		ActorId				targetActorId	= INVALID_ACTOR_ID;
+		ActorId				triggerActorId	= INVALID_ACTOR_ID;
+		ActorId				otherActorId	= INVALID_ACTOR_ID;
+		Vec3				hitPosition		= Vec3::Zero();
+		Vec3				hitNormal		= Vec3::Zero();
 	};
 
 

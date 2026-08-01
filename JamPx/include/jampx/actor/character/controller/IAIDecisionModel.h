@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "jampx/PhysicsTypes.h"
 #include "jampx/actor/character/CharacterMovementTypes.h"
@@ -33,7 +33,7 @@ namespace jam::px
         bool                stopMovement        = false;
         bool                wantsMove           = false;
         Vec3                moveDir             = Vec3::Zero();     // world-space, normalized
-        float               facingYaw           = 0.f;              // 바라볼 방향 (rad)
+        float               viewYaw				= 0.f;              // 바라볼 방향 (rad)
         eGait               gait                = eGait::Run;
         eStance             stance              = eStance::Standing;
         bool                jump                = false;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <jambase/Fnv1a.h>
+#include <jambase/EnumUtils.h>
 
 namespace jam::px
 {

@@ -1,4 +1,5 @@
 #pragma once
+#include "jampx/PhysicsQueryFilter.h"
 
 
 namespace jam::px

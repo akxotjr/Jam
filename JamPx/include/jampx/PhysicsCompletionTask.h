@@ -1,10 +1,11 @@
-﻿#pragma once
-
+#pragma once
 #include "jampx/IPhysicsJobBridge.h"
+
+#include <physx/task/PxTask.h>
 
 namespace jam::px
 {
-	class PhysicsCompletionTask : public PxLightCpuTask
+	class PhysicsCompletionTask : public physx::PxLightCpuTask
 	{
 	public:
 		void					run() override;

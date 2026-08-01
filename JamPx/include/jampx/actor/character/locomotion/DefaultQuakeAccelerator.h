@@ -1,6 +1,6 @@
-﻿#pragma once
+#pragma once
 #include "jampx/actor/character/locomotion/IAccelerator.h"
-
+#include "jampx/actor/character/CharacterMovementTypes.h"
 
 namespace jam::px
 {
