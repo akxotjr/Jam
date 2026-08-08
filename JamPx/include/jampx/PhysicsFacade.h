@@ -66,7 +66,7 @@ namespace jam::px
 
 
 		bool								RaycastLOS(const Vec3& from, const Vec3& to) const;
-		HitscanResult						Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const;
+		HitscanResult						Hitscan(const Vec3& from, const Vec3& dir, float maxRange) const;
 
 		std::vector<PhysicsEvent>			ConsumePhysicsEvents();
 		std::vector<ActorId>				PopActiveList();

@@ -81,8 +81,8 @@ namespace jam::px
 			0,
 			QuerySublayer::Default,
 			0,
-			0, 0, 0,
-			RequestQueryFlag::IGNORE_TRIGGERS | RequestQueryFlag::IGNORE_SAME_TEAM);
+			0,
+			RequestQueryFlag::IGNORE_TRIGGERS);
 	};
 
 	struct ProjectileLifetimeConfig

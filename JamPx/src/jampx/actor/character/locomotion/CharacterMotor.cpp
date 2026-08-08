@@ -35,7 +35,7 @@ namespace jam::px
 		m_rqfd = MakeRequestQueryFD(
 			QueryCategory::WORLD, 
 			0, 0, 0, 
-			0, 0, 0, 
+			0,
 			RequestQueryFlag::MAP_DEFAULT
 			| RequestQueryFlag::IGNORE_SELF_ACTOR
 			| RequestQueryFlag::IGNORE_TRIGGERS);

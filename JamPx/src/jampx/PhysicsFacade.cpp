@@ -524,7 +524,7 @@ namespace jam::px
 		RequestQueryFD reqFD = MakeRequestQueryFD(
 			QueryCategory::WORLD,
 			0, QuerySublayer::LOS, 0,
-			0, 0, 0,
+			0,
 			RequestQueryFlag::IGNORE_TRIGGERS
 		);
 
@@ -537,7 +537,7 @@ namespace jam::px
 	}
 
 
-	HitscanResult PhysicsFacade::Hitscan(const Vec3& from, const Vec3& dir, float maxRange, uint16 teamId) const
+	HitscanResult PhysicsFacade::Hitscan(const Vec3& from, const Vec3& dir, float maxRange) const
 	{
 		HitscanResult result{};
 		if (!m_impl->m_world) return result;
@@ -551,8 +551,8 @@ namespace jam::px
 		RequestQueryFD reqFD = MakeRequestQueryFD(
 			QueryCategory::CHARACTER | QueryCategory::HITBOX | QueryCategory::WORLD,
 			0, QuerySublayer::Default, 0,
-			teamId, 0, 0,
-			RequestQueryFlag::IGNORE_TRIGGERS | RequestQueryFlag::IGNORE_SAME_TEAM
+			0,
+			RequestQueryFlag::IGNORE_TRIGGERS
 		);
 		QueryFilterCallbackT<> cb{ DefaultQueryPolicy{}, k_LOSQueryHitTypeMap };
 		const PxQueryFilterData fd = MakePxQueryFilterData(reqFD);

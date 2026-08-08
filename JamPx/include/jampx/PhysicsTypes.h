@@ -521,10 +521,6 @@ namespace jam::px
 		Transform			pose{};
 		eSpawnSource		spawnSrc = eSpawnSource::Level;
 
-		uint16				team = 0;
-		uint8				part = 0;
-		uint8				role = 0;
-
 		std::variant<RigidSpawnOverrides, CharacterSpawnOverrides> overrides;
 
 		ActorId				targetActorId = INVALID_ACTOR_ID;

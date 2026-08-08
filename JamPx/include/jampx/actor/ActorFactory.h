@@ -34,13 +34,6 @@ namespace jam::px
 			ActorId						id);
 
 
-		/// @brief Actor의 모든 Shape에 PackedId 필터 적용
-		static void ApplyPackedId(
-			const PxRigidActor&	actor,
-			uint16				teamId,
-			uint8				partId,
-			uint8				roleId);
-
 		/// @brief RigidBody를 월드에서 제거 (actor 소유권은 PhysicsWorld)
 		static void DestroyRigidBody(PhysicsWorld& world, const RigidBody& body);
 

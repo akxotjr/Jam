@@ -22,28 +22,6 @@ namespace jam::px
     };
 
 
-    struct PackedId32
-    {
-        PxU32 v{ 0 };
-
-        static constexpr PxU32 Pack(PxU16 teamId, PxU8 partId, PxU8 roleId)
-        {
-            return (static_cast<PxU32>(teamId) & 0xFFFFu)
-                | ((static_cast<PxU32>(partId) & 0xFFu) << 16)
-                | ((static_cast<PxU32>(roleId) & 0xFFu) << 24);
-        }
-
-        static constexpr PackedId32 Make(PxU16 teamId, PxU8 partId = 0, PxU8 roleId = 0)
-        {
-            return PackedId32{ Pack(teamId, partId, roleId) };
-        }
-
-        constexpr PxU16 Team() const { return static_cast<PxU16>(v & 0xFFFFu); }
-        constexpr PxU8  Part() const { return static_cast<PxU8>((v >> 16) & 0xFFu); }
-        constexpr PxU8  Role() const { return static_cast<PxU8>((v >> 24) & 0xFFu); }
-    };
-
-
     struct QueryMeta
     {
         PxU32 v{ 0 };
@@ -100,7 +78,6 @@ namespace jam::px
             NONE                = 0,
             IGNORE_TRIGGERS     = 1u << 0,
             IGNORE_SELF_ACTOR   = 1u << 1,
-            IGNORE_SAME_TEAM    = 1u << 2,
             ACCEPT_PENETRABLE   = 1u << 3,
 
 
@@ -143,7 +120,7 @@ namespace jam::px
     {
         QueryCategory::Flags        category{}; // word0 
         QueryMeta                   meta{};     // word1 
-        PackedId32                  id{};       // word2 
+        PxU32                       userData{}; // word2, interpreted only by custom policies
         ShapeQueryFlag::Flags       flags{};    // word3 
 
         static QueryFD FromPx(const PxFilterData& fd)
@@ -151,7 +128,7 @@ namespace jam::px
             QueryFD qfd{};
             qfd.category = static_cast<QueryCategory::Flags>(fd.word0);
             qfd.meta.v   = fd.word1;
-            qfd.id.v     = fd.word2;
+            qfd.userData = fd.word2;
             qfd.flags    = static_cast<ShapeQueryFlag::Flags>(fd.word3);
             return qfd;
         }
@@ -161,7 +138,7 @@ namespace jam::px
             PxFilterData fd;
             fd.word0 = category.bits();
             fd.word1 = meta.v;
-            fd.word2 = id.v;
+            fd.word2 = userData;
             fd.word3 = flags.bits();
             return fd;
         }
@@ -171,7 +148,7 @@ namespace jam::px
     {
         HashAppend(h, fd.category.bits());
         HashAppend(h, fd.meta.v);
-        HashAppend(h, fd.id.v);
+        HashAppend(h, fd.userData);
         HashAppend(h, fd.flags.bits());
     }
 
@@ -179,7 +156,7 @@ namespace jam::px
     {
         QueryCategory::Flags        mask{};           // word0
         QueryMeta                   meta{};           // word1
-        PackedId32                  id{};             // word2
+        PxU32                       userData{};       // word2, interpreted only by custom policies
         RequestQueryFlag::Flags     flags{};          // word3
 
         static RequestQueryFD FromPx(const PxFilterData& fd)
@@ -187,7 +164,7 @@ namespace jam::px
             RequestQueryFD qrfd{};
             qrfd.mask   = static_cast<QueryCategory::Flags>(fd.word0);
             qrfd.meta.v = fd.word1;
-            qrfd.id.v   = fd.word2;
+            qrfd.userData = fd.word2;
             qrfd.flags  = static_cast<RequestQueryFlag::Flags>(fd.word3);
 
             return qrfd;
@@ -198,7 +175,7 @@ namespace jam::px
             PxFilterData fd;
             fd.word0 = mask.bits();
             fd.word1 = meta.v;
-            fd.word2 = id.v;
+            fd.word2 = userData;
             fd.word3 = flags.bits();
             return fd;
         }
@@ -257,8 +234,8 @@ namespace jam::px
 
     struct QueryEvaluateContext
     {
-        const RequestQueryFD&   rqfd;        // 쿼리 요청 측 FD (category-mask, meta, id, flags)
-        const QueryFD&          qfd;         // 셰이프 측 FD (category, meta, id, flags)
+        const RequestQueryFD&   rqfd;
+        const QueryFD&          qfd;
         const PxShape*          shape = nullptr;
         const PxRigidActor*     actor = nullptr;
     };
@@ -277,9 +254,6 @@ namespace jam::px
                 return false;
 
             if (rf.has_any(RequestQueryFlag::IGNORE_SELF_ACTOR) && selfActor && ctx.actor == selfActor)
-                return false;
-
-            if (rf.has_any(RequestQueryFlag::IGNORE_SAME_TEAM) && ctx.rqfd.id.Team() != 0 && ctx.qfd.id.Team() == ctx.rqfd.id.Team())
                 return false;
 
             if (sqf.has_any(ShapeQueryFlag::PENETRABLE) && !rf.has_any(RequestQueryFlag::ACCEPT_PENETRABLE))

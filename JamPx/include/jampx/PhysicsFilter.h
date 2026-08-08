@@ -78,13 +78,13 @@ namespace jam::px
     inline QueryFD MakeShapeQueryFD(
         QueryCategory::Flags category, 
         PxU8  channel = 0, PxU8 sublayer = 0, PxU16 tag  = 0, 
-        PxU16 team    = 0, PxU8 part     = 0, PxU8  role = 0, 
+        PxU32 userData = 0,
         ShapeQueryFlag::Flags flags = ShapeQueryFlag::NONE)
     {
         QueryFD q{};
         q.category  = category;
         q.meta      = QueryMeta::Make(channel, sublayer, tag);
-        q.id        = PackedId32::Make(team, part, role);
+        q.userData  = userData;
         q.flags     = flags;
         return q;
     }
@@ -92,13 +92,13 @@ namespace jam::px
     inline RequestQueryFD MakeRequestQueryFD(
         QueryCategory::Flags mask, 
         PxU8  channel = 0, PxU8 sublayer = 0, PxU16 tag  = 0,
-        PxU16 team    = 0, PxU8 part     = 0, PxU8  role = 0,
+        PxU32 userData = 0,
         RequestQueryFlag::Flags flags = RequestQueryFlag::NONE)
     {
         RequestQueryFD r{};
         r.mask  = mask;
         r.meta  = QueryMeta::Make(channel, sublayer, tag);
-        r.id    = PackedId32::Make(team, part, role);
+        r.userData = userData;
         r.flags = flags;
         return r;
     }
@@ -106,13 +106,13 @@ namespace jam::px
     inline RequestQueryFD MakeRequestQueryFD(
         PxU32 mask = 0,
         PxU8  channel = 0, PxU8 sublayer = 0, PxU16 tag = 0,
-        PxU16 team = 0, PxU8 part = 0, PxU8  role = 0,
+        PxU32 userData = 0,
         PxU32 flags = 0)
     {
         RequestQueryFD r{};
         r.mask  = QueryCategory::Flags(mask);
         r.meta  = QueryMeta::Make(channel, sublayer, tag);
-        r.id    = PackedId32::Make(team, part, role);
+        r.userData = userData;
         r.flags = RequestQueryFlag::Flags(flags);
         return r;
     }
@@ -131,4 +131,3 @@ namespace jam::px
 
 
 }  // namespace jam::px
-

@@ -238,9 +238,6 @@ namespace jam::px
 			}
 		}
 
-		ApplyPackedId(*mainActor, desc.team, desc.part, desc.role);
-		ApplyPackedId(*replayActor, desc.team, desc.part, desc.role);
-
 		s.pose		= desc.pose;
 		s.kineType	= kineType;
 
@@ -285,7 +282,6 @@ namespace jam::px
 				return std::nullopt;
 			}
 
-			ApplyPackedId(*hitbox, desc.team, desc.part, desc.role);
 		}
 
 		CharacterBody body{ mainCCT, replayCCT, hitbox, moveCfg };
@@ -319,36 +315,7 @@ namespace jam::px
 
 		body.ApplyAuthorityToBoth(s);
 
-		if (PxRigidActor* actor = mainCCT->getActor())
-			ApplyPackedId(*actor, desc.team, desc.part, desc.role);
-		if (replayCCT)
-		{
-			if (PxRigidActor* actor = replayCCT->getActor())
-				ApplyPackedId(*actor, desc.team, desc.part, desc.role);
-		}
-
 		return body;
-	}
-
-	void ActorFactory::ApplyPackedId(const PxRigidActor& actor, uint16 teamId, uint8 partId, uint8 roleId)
-	{
-		const PxU32 n = actor.getNbShapes();
-		if (n == 0) return;
-
-		std::vector<PxShape*> shapes(n);
-		actor.getShapes(shapes.data(), n);
-
-		const auto [v] = PackedId32::Make(teamId, partId, roleId);
-
-		for (PxShape* s : shapes)
-		{
-			if (!s) continue;
-			JAM_ASSERT(s->isExclusive());
-
-			PxFilterData qfd = s->getQueryFilterData();
-			qfd.word2 = v;
-			s->setQueryFilterData(qfd);
-		}
 	}
 
 	void ActorFactory::DestroyRigidBody(PhysicsWorld& world, const RigidBody& body)
