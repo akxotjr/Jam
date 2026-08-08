@@ -487,7 +487,6 @@ struct fbActorMetaT : public ::flatbuffers::NativeTable {
   uint64_t controller_user_id = 0;
   uint64_t actor_archetype_key = 0;
   uint32_t client_request_id = 0;
-  uint32_t packed_id = 0;
   uint8_t body_type = 0;
 };
 
@@ -499,8 +498,7 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CONTROLLER_USER_ID = 6,
     VT_ACTOR_ARCHETYPE_KEY = 8,
     VT_CLIENT_REQUEST_ID = 10,
-    VT_PACKED_ID = 12,
-    VT_BODY_TYPE = 14
+    VT_BODY_TYPE = 12
   };
   uint64_t owner_user_id() const {
     return GetField<uint64_t>(VT_OWNER_USER_ID, 0);
@@ -514,9 +512,6 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t client_request_id() const {
     return GetField<uint32_t>(VT_CLIENT_REQUEST_ID, 0);
   }
-  uint32_t packed_id() const {
-    return GetField<uint32_t>(VT_PACKED_ID, 0);
-  }
   uint8_t body_type() const {
     return GetField<uint8_t>(VT_BODY_TYPE, 0);
   }
@@ -527,7 +522,6 @@ struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_ACTOR_ARCHETYPE_KEY, 8) &&
            VerifyField<uint32_t>(verifier, VT_CLIENT_REQUEST_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_PACKED_ID, 4) &&
            VerifyField<uint8_t>(verifier, VT_BODY_TYPE, 1) &&
            verifier.EndTable();
   }
@@ -552,9 +546,6 @@ struct fbActorMetaBuilder {
   void add_client_request_id(uint32_t client_request_id) {
     fbb_.AddElement<uint32_t>(fbActorMeta::VT_CLIENT_REQUEST_ID, client_request_id, 0);
   }
-  void add_packed_id(uint32_t packed_id) {
-    fbb_.AddElement<uint32_t>(fbActorMeta::VT_PACKED_ID, packed_id, 0);
-  }
   void add_body_type(uint8_t body_type) {
     fbb_.AddElement<uint8_t>(fbActorMeta::VT_BODY_TYPE, body_type, 0);
   }
@@ -575,13 +566,11 @@ inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(
     uint64_t controller_user_id = 0,
     uint64_t actor_archetype_key = 0,
     uint32_t client_request_id = 0,
-    uint32_t packed_id = 0,
     uint8_t body_type = 0) {
   fbActorMetaBuilder builder_(_fbb);
   builder_.add_actor_archetype_key(actor_archetype_key);
   builder_.add_controller_user_id(controller_user_id);
   builder_.add_owner_user_id(owner_user_id);
-  builder_.add_packed_id(packed_id);
   builder_.add_client_request_id(client_request_id);
   builder_.add_body_type(body_type);
   return builder_.Finish();
@@ -890,7 +879,6 @@ inline void fbActorMeta::UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolve
   { auto _e = controller_user_id(); _o->controller_user_id = _e; }
   { auto _e = actor_archetype_key(); _o->actor_archetype_key = _e; }
   { auto _e = client_request_id(); _o->client_request_id = _e; }
-  { auto _e = packed_id(); _o->packed_id = _e; }
   { auto _e = body_type(); _o->body_type = _e; }
 }
 
@@ -906,7 +894,6 @@ inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatB
   auto _controller_user_id = _o->controller_user_id;
   auto _actor_archetype_key = _o->actor_archetype_key;
   auto _client_request_id = _o->client_request_id;
-  auto _packed_id = _o->packed_id;
   auto _body_type = _o->body_type;
   return jam::net::fb::CreatefbActorMeta(
       _fbb,
@@ -914,7 +901,6 @@ inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatB
       _controller_user_id,
       _actor_archetype_key,
       _client_request_id,
-      _packed_id,
       _body_type);
 }
 

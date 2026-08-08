@@ -7,8 +7,24 @@ enum fbSocialAudience : ubyte
 	Global
 }
 
-struct fbSocialAddress
+enum fbSocialRecipientKind : ubyte
+{
+	None = 0,
+	AccountId,
+	CharacterId,
+	CharacterName
+}
+
+table fbSocialRecipient
+{
+	kind : fbSocialRecipientKind = None;
+	id   : ulong;
+	name : string;
+}
+
+table fbSocialAddress
 {
 	audience : fbSocialAudience;
 	scope_id : ulong;
+	recipient : fbSocialRecipient;
 }

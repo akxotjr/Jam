@@ -20,6 +20,7 @@ namespace jam::net
 	struct SessionShardState;
 	struct WorldShardState;
 	struct UserShardState;
+	struct RuntimePacketScratch;
 }
 
 namespace jam
@@ -52,6 +53,7 @@ namespace jam
 		std::shared_ptr<net::SessionShardState>				sessionState = nullptr;
 		std::shared_ptr<net::WorldShardState>				worldState	 = nullptr;
 		std::shared_ptr<net::UserShardState>				usersState	 = nullptr;
+		std::shared_ptr<net::RuntimePacketScratch>		packetScratch = nullptr;
 
 		std::vector<std::function<void(entt::registry&)>>	defers;
 

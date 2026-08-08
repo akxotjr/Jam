@@ -17,7 +17,13 @@ namespace jam {
 namespace net {
 namespace fb {
 
+struct fbSocialRecipient;
+struct fbSocialRecipientBuilder;
+struct fbSocialRecipientT;
+
 struct fbSocialAddress;
+struct fbSocialAddressBuilder;
+struct fbSocialAddressT;
 
 enum fbSocialAudience : uint8_t {
   fbSocialAudience_Direct = 0,
@@ -52,41 +58,287 @@ inline const char *EnumNamefbSocialAudience(fbSocialAudience e) {
   return EnumNamesfbSocialAudience()[index];
 }
 
-FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) fbSocialAddress FLATBUFFERS_FINAL_CLASS {
- private:
-  uint8_t audience_;
-  int8_t padding0__;  int16_t padding1__;  int32_t padding2__;
-  uint64_t scope_id_;
+enum fbSocialRecipientKind : uint8_t {
+  fbSocialRecipientKind_None = 0,
+  fbSocialRecipientKind_AccountId = 1,
+  fbSocialRecipientKind_CharacterId = 2,
+  fbSocialRecipientKind_CharacterName = 3,
+  fbSocialRecipientKind_MIN = fbSocialRecipientKind_None,
+  fbSocialRecipientKind_MAX = fbSocialRecipientKind_CharacterName
+};
 
- public:
-  fbSocialAddress()
-      : audience_(0),
-        padding0__(0),
-        padding1__(0),
-        padding2__(0),
-        scope_id_(0) {
-    (void)padding0__;
-    (void)padding1__;
-    (void)padding2__;
+inline const fbSocialRecipientKind (&EnumValuesfbSocialRecipientKind())[4] {
+  static const fbSocialRecipientKind values[] = {
+    fbSocialRecipientKind_None,
+    fbSocialRecipientKind_AccountId,
+    fbSocialRecipientKind_CharacterId,
+    fbSocialRecipientKind_CharacterName
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesfbSocialRecipientKind() {
+  static const char * const names[5] = {
+    "None",
+    "AccountId",
+    "CharacterId",
+    "CharacterName",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamefbSocialRecipientKind(fbSocialRecipientKind e) {
+  if (::flatbuffers::IsOutRange(e, fbSocialRecipientKind_None, fbSocialRecipientKind_CharacterName)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesfbSocialRecipientKind()[index];
+}
+
+struct fbSocialRecipientT : public ::flatbuffers::NativeTable {
+  typedef fbSocialRecipient TableType;
+  jam::net::fb::fbSocialRecipientKind kind = jam::net::fb::fbSocialRecipientKind_None;
+  uint64_t id = 0;
+  std::string name{};
+};
+
+struct fbSocialRecipient FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbSocialRecipientT NativeTableType;
+  typedef fbSocialRecipientBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KIND = 4,
+    VT_ID = 6,
+    VT_NAME = 8
+  };
+  jam::net::fb::fbSocialRecipientKind kind() const {
+    return static_cast<jam::net::fb::fbSocialRecipientKind>(GetField<uint8_t>(VT_KIND, 0));
   }
-  fbSocialAddress(jam::net::fb::fbSocialAudience _audience, uint64_t _scope_id)
-      : audience_(::flatbuffers::EndianScalar(static_cast<uint8_t>(_audience))),
-        padding0__(0),
-        padding1__(0),
-        padding2__(0),
-        scope_id_(::flatbuffers::EndianScalar(_scope_id)) {
-    (void)padding0__;
-    (void)padding1__;
-    (void)padding2__;
+  uint64_t id() const {
+    return GetField<uint64_t>(VT_ID, 0);
   }
-  jam::net::fb::fbSocialAudience audience() const {
-    return static_cast<jam::net::fb::fbSocialAudience>(::flatbuffers::EndianScalar(audience_));
+  const ::flatbuffers::String *name() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
   }
-  uint64_t scope_id() const {
-    return ::flatbuffers::EndianScalar(scope_id_);
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_KIND, 1) &&
+           VerifyField<uint64_t>(verifier, VT_ID, 8) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(name()) &&
+           verifier.EndTable();
+  }
+  fbSocialRecipientT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbSocialRecipientT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbSocialRecipient> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialRecipientT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct fbSocialRecipientBuilder {
+  typedef fbSocialRecipient Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_kind(jam::net::fb::fbSocialRecipientKind kind) {
+    fbb_.AddElement<uint8_t>(fbSocialRecipient::VT_KIND, static_cast<uint8_t>(kind), 0);
+  }
+  void add_id(uint64_t id) {
+    fbb_.AddElement<uint64_t>(fbSocialRecipient::VT_ID, id, 0);
+  }
+  void add_name(::flatbuffers::Offset<::flatbuffers::String> name) {
+    fbb_.AddOffset(fbSocialRecipient::VT_NAME, name);
+  }
+  explicit fbSocialRecipientBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<fbSocialRecipient> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<fbSocialRecipient>(end);
+    return o;
   }
 };
-FLATBUFFERS_STRUCT_END(fbSocialAddress, 16);
+
+inline ::flatbuffers::Offset<fbSocialRecipient> CreatefbSocialRecipient(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    jam::net::fb::fbSocialRecipientKind kind = jam::net::fb::fbSocialRecipientKind_None,
+    uint64_t id = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> name = 0) {
+  fbSocialRecipientBuilder builder_(_fbb);
+  builder_.add_id(id);
+  builder_.add_name(name);
+  builder_.add_kind(kind);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<fbSocialRecipient> CreatefbSocialRecipientDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    jam::net::fb::fbSocialRecipientKind kind = jam::net::fb::fbSocialRecipientKind_None,
+    uint64_t id = 0,
+    const char *name = nullptr) {
+  auto name__ = name ? _fbb.CreateString(name) : 0;
+  return jam::net::fb::CreatefbSocialRecipient(
+      _fbb,
+      kind,
+      id,
+      name__);
+}
+
+::flatbuffers::Offset<fbSocialRecipient> CreatefbSocialRecipient(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialRecipientT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct fbSocialAddressT : public ::flatbuffers::NativeTable {
+  typedef fbSocialAddress TableType;
+  jam::net::fb::fbSocialAudience audience = jam::net::fb::fbSocialAudience_Direct;
+  uint64_t scope_id = 0;
+  std::unique_ptr<jam::net::fb::fbSocialRecipientT> recipient{};
+  fbSocialAddressT() = default;
+  fbSocialAddressT(const fbSocialAddressT &o);
+  fbSocialAddressT(fbSocialAddressT&&) FLATBUFFERS_NOEXCEPT = default;
+  fbSocialAddressT &operator=(fbSocialAddressT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct fbSocialAddress FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbSocialAddressT NativeTableType;
+  typedef fbSocialAddressBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_AUDIENCE = 4,
+    VT_SCOPE_ID = 6,
+    VT_RECIPIENT = 8
+  };
+  jam::net::fb::fbSocialAudience audience() const {
+    return static_cast<jam::net::fb::fbSocialAudience>(GetField<uint8_t>(VT_AUDIENCE, 0));
+  }
+  uint64_t scope_id() const {
+    return GetField<uint64_t>(VT_SCOPE_ID, 0);
+  }
+  const jam::net::fb::fbSocialRecipient *recipient() const {
+    return GetPointer<const jam::net::fb::fbSocialRecipient *>(VT_RECIPIENT);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_AUDIENCE, 1) &&
+           VerifyField<uint64_t>(verifier, VT_SCOPE_ID, 8) &&
+           VerifyOffset(verifier, VT_RECIPIENT) &&
+           verifier.VerifyTable(recipient()) &&
+           verifier.EndTable();
+  }
+  fbSocialAddressT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbSocialAddressT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbSocialAddress> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialAddressT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct fbSocialAddressBuilder {
+  typedef fbSocialAddress Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_audience(jam::net::fb::fbSocialAudience audience) {
+    fbb_.AddElement<uint8_t>(fbSocialAddress::VT_AUDIENCE, static_cast<uint8_t>(audience), 0);
+  }
+  void add_scope_id(uint64_t scope_id) {
+    fbb_.AddElement<uint64_t>(fbSocialAddress::VT_SCOPE_ID, scope_id, 0);
+  }
+  void add_recipient(::flatbuffers::Offset<jam::net::fb::fbSocialRecipient> recipient) {
+    fbb_.AddOffset(fbSocialAddress::VT_RECIPIENT, recipient);
+  }
+  explicit fbSocialAddressBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<fbSocialAddress> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<fbSocialAddress>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<fbSocialAddress> CreatefbSocialAddress(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    jam::net::fb::fbSocialAudience audience = jam::net::fb::fbSocialAudience_Direct,
+    uint64_t scope_id = 0,
+    ::flatbuffers::Offset<jam::net::fb::fbSocialRecipient> recipient = 0) {
+  fbSocialAddressBuilder builder_(_fbb);
+  builder_.add_scope_id(scope_id);
+  builder_.add_recipient(recipient);
+  builder_.add_audience(audience);
+  return builder_.Finish();
+}
+
+::flatbuffers::Offset<fbSocialAddress> CreatefbSocialAddress(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialAddressT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline fbSocialRecipientT *fbSocialRecipient::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbSocialRecipientT>(new fbSocialRecipientT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void fbSocialRecipient::UnPackTo(fbSocialRecipientT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = kind(); _o->kind = _e; }
+  { auto _e = id(); _o->id = _e; }
+  { auto _e = name(); if (_e) _o->name = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<fbSocialRecipient> CreatefbSocialRecipient(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialRecipientT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbSocialRecipient::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<fbSocialRecipient> fbSocialRecipient::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialRecipientT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSocialRecipientT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _kind = _o->kind;
+  auto _id = _o->id;
+  auto _name = _o->name.empty() ? 0 : _fbb.CreateString(_o->name);
+  return jam::net::fb::CreatefbSocialRecipient(
+      _fbb,
+      _kind,
+      _id,
+      _name);
+}
+
+inline fbSocialAddressT::fbSocialAddressT(const fbSocialAddressT &o)
+      : audience(o.audience),
+        scope_id(o.scope_id),
+        recipient((o.recipient) ? new jam::net::fb::fbSocialRecipientT(*o.recipient) : nullptr) {
+}
+
+inline fbSocialAddressT &fbSocialAddressT::operator=(fbSocialAddressT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(audience, o.audience);
+  std::swap(scope_id, o.scope_id);
+  std::swap(recipient, o.recipient);
+  return *this;
+}
+
+inline fbSocialAddressT *fbSocialAddress::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbSocialAddressT>(new fbSocialAddressT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void fbSocialAddress::UnPackTo(fbSocialAddressT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = audience(); _o->audience = _e; }
+  { auto _e = scope_id(); _o->scope_id = _e; }
+  { auto _e = recipient(); if (_e) { if(_o->recipient) { _e->UnPackTo(_o->recipient.get(), _resolver); } else { _o->recipient = std::unique_ptr<jam::net::fb::fbSocialRecipientT>(_e->UnPack(_resolver)); } } else if (_o->recipient) { _o->recipient.reset(); } }
+}
+
+inline ::flatbuffers::Offset<fbSocialAddress> CreatefbSocialAddress(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialAddressT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbSocialAddress::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<fbSocialAddress> fbSocialAddress::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbSocialAddressT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSocialAddressT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _audience = _o->audience;
+  auto _scope_id = _o->scope_id;
+  auto _recipient = _o->recipient ? CreatefbSocialRecipient(_fbb, _o->recipient.get(), _rehasher) : 0;
+  return jam::net::fb::CreatefbSocialAddress(
+      _fbb,
+      _audience,
+      _scope_id,
+      _recipient);
+}
 
 }  // namespace fb
 }  // namespace net

@@ -27,7 +27,7 @@ enum fbWorldTransitionKind : ubyte
 	Leave
 }
 
-enum fbClientServerBarrierKind : ubyte
+enum fbWorldSyncKind : ubyte
 {
 	WorldPrepare = 0,
 	WorldResync,
@@ -35,73 +35,73 @@ enum fbClientServerBarrierKind : ubyte
 	WorldContent
 }
 
-table fbMainPhysicalWorld
+table fbMainWorldRef
 {
-	instance_id: ulong;
-	archetype_key: ulong;
-	runtime_id: ulong;
+	instance_id			: ulong;
+	archetype_key		: ulong;
+	world_id			: ulong;
 }
 
-table fbUserMainPhysicalWorldState
+table fbUserMainWorldState
 {
-	main: fbMainPhysicalWorld;
-	revision: ulong;
+	main				: fbMainWorldRef;
+	revision			: ulong;
 }
 
 table fbEnterWorldRequest
 {
-	request_id: uint;
-	archetype_key: ulong;
-	selector: fbWorldDestinationSelector = DefaultForArchetype;
-	explicit_instance_id: ulong;
-	destination_name: string;
-	expected_main_revision: ulong;
+	request_id				: uint;
+	archetype_key			: ulong;
+	selector				: fbWorldDestinationSelector = DefaultForArchetype;
+	explicit_instance_id	: ulong;
+	destination_name		: string;
+	expected_main_revision	: ulong;
 }
 
 table fbLeaveWorldRequest
 {
-	request_id: uint;
-	expected_main_revision: ulong;
+	request_id				: uint;
+	expected_main_revision	: ulong;
 }
 
 table fbWorldTransitionResult
 {
-	request_id: uint;
-	kind: fbWorldTransitionKind = Enter;
-	transition_token: ulong;
-	failure: fbWorldTransitionFailure = None;
-	state: fbUserMainPhysicalWorldState;
+	request_id			: uint;
+	kind				: fbWorldTransitionKind = Enter;
+	transition_token	: ulong;
+	failure				: fbWorldTransitionFailure = None;
+	state				: fbUserMainWorldState;
 }
 
-table fbUserMainPhysicalWorldChanged
+table fbUserMainWorldChanged
 {
-	state: fbUserMainPhysicalWorldState;
+	state: fbUserMainWorldState;
 }
 
 table fbClientWorldPrepare
 {
-	barrier_token: ulong;
-	kind: fbClientServerBarrierKind = WorldPrepare;
-	instance_id: ulong;
-	archetype_key: ulong;
-	runtime_id: ulong;
-	main_revision: ulong;
-	content_revision: ulong;
+	sync_token			: ulong;
+	kind				: fbWorldSyncKind = WorldPrepare;
+	instance_id			: ulong;
+	archetype_key		: ulong;
+	world_id			: ulong;
+	main_revision		: ulong;
+	content_revision	: ulong;
 }
 
-table fbClientBarrierResult
+table fbClientWorldSyncResult
 {
-	barrier_token: ulong;
-	succeeded: bool;
-	failure: fbWorldTransitionFailure = None;
+	sync_token			: ulong;
+	succeeded			: bool;
+	failure				: fbWorldTransitionFailure = None;
 }
 
 table fbClientWorldCommit
 {
-	barrier_token: ulong;
-	instance_id: ulong;
-	runtime_id: ulong;
-	main_revision: ulong;
+	sync_token			: ulong;
+	instance_id			: ulong;
+	world_id			: ulong;
+	main_revision		: ulong;
 }
 
 root_type fbEnterWorldRequest;

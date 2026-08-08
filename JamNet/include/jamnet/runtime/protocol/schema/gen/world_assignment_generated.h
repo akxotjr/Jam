@@ -17,13 +17,13 @@ namespace jam {
 namespace net {
 namespace fb {
 
-struct fbMainPhysicalWorld;
-struct fbMainPhysicalWorldBuilder;
-struct fbMainPhysicalWorldT;
+struct fbMainWorldRef;
+struct fbMainWorldRefBuilder;
+struct fbMainWorldRefT;
 
-struct fbUserMainPhysicalWorldState;
-struct fbUserMainPhysicalWorldStateBuilder;
-struct fbUserMainPhysicalWorldStateT;
+struct fbUserMainWorldState;
+struct fbUserMainWorldStateBuilder;
+struct fbUserMainWorldStateT;
 
 struct fbEnterWorldRequest;
 struct fbEnterWorldRequestBuilder;
@@ -37,17 +37,17 @@ struct fbWorldTransitionResult;
 struct fbWorldTransitionResultBuilder;
 struct fbWorldTransitionResultT;
 
-struct fbUserMainPhysicalWorldChanged;
-struct fbUserMainPhysicalWorldChangedBuilder;
-struct fbUserMainPhysicalWorldChangedT;
+struct fbUserMainWorldChanged;
+struct fbUserMainWorldChangedBuilder;
+struct fbUserMainWorldChangedT;
 
 struct fbClientWorldPrepare;
 struct fbClientWorldPrepareBuilder;
 struct fbClientWorldPrepareT;
 
-struct fbClientBarrierResult;
-struct fbClientBarrierResultBuilder;
-struct fbClientBarrierResultT;
+struct fbClientWorldSyncResult;
+struct fbClientWorldSyncResultBuilder;
+struct fbClientWorldSyncResultT;
 
 struct fbClientWorldCommit;
 struct fbClientWorldCommitBuilder;
@@ -170,26 +170,26 @@ inline const char *EnumNamefbWorldTransitionKind(fbWorldTransitionKind e) {
   return EnumNamesfbWorldTransitionKind()[index];
 }
 
-enum fbClientServerBarrierKind : uint8_t {
-  fbClientServerBarrierKind_WorldPrepare = 0,
-  fbClientServerBarrierKind_WorldResync = 1,
-  fbClientServerBarrierKind_ReplicationBaseline = 2,
-  fbClientServerBarrierKind_WorldContent = 3,
-  fbClientServerBarrierKind_MIN = fbClientServerBarrierKind_WorldPrepare,
-  fbClientServerBarrierKind_MAX = fbClientServerBarrierKind_WorldContent
+enum fbWorldSyncKind : uint8_t {
+  fbWorldSyncKind_WorldPrepare = 0,
+  fbWorldSyncKind_WorldResync = 1,
+  fbWorldSyncKind_ReplicationBaseline = 2,
+  fbWorldSyncKind_WorldContent = 3,
+  fbWorldSyncKind_MIN = fbWorldSyncKind_WorldPrepare,
+  fbWorldSyncKind_MAX = fbWorldSyncKind_WorldContent
 };
 
-inline const fbClientServerBarrierKind (&EnumValuesfbClientServerBarrierKind())[4] {
-  static const fbClientServerBarrierKind values[] = {
-    fbClientServerBarrierKind_WorldPrepare,
-    fbClientServerBarrierKind_WorldResync,
-    fbClientServerBarrierKind_ReplicationBaseline,
-    fbClientServerBarrierKind_WorldContent
+inline const fbWorldSyncKind (&EnumValuesfbWorldSyncKind())[4] {
+  static const fbWorldSyncKind values[] = {
+    fbWorldSyncKind_WorldPrepare,
+    fbWorldSyncKind_WorldResync,
+    fbWorldSyncKind_ReplicationBaseline,
+    fbWorldSyncKind_WorldContent
   };
   return values;
 }
 
-inline const char * const *EnumNamesfbClientServerBarrierKind() {
+inline const char * const *EnumNamesfbWorldSyncKind() {
   static const char * const names[5] = {
     "WorldPrepare",
     "WorldResync",
@@ -200,26 +200,26 @@ inline const char * const *EnumNamesfbClientServerBarrierKind() {
   return names;
 }
 
-inline const char *EnumNamefbClientServerBarrierKind(fbClientServerBarrierKind e) {
-  if (::flatbuffers::IsOutRange(e, fbClientServerBarrierKind_WorldPrepare, fbClientServerBarrierKind_WorldContent)) return "";
+inline const char *EnumNamefbWorldSyncKind(fbWorldSyncKind e) {
+  if (::flatbuffers::IsOutRange(e, fbWorldSyncKind_WorldPrepare, fbWorldSyncKind_WorldContent)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesfbClientServerBarrierKind()[index];
+  return EnumNamesfbWorldSyncKind()[index];
 }
 
-struct fbMainPhysicalWorldT : public ::flatbuffers::NativeTable {
-  typedef fbMainPhysicalWorld TableType;
+struct fbMainWorldRefT : public ::flatbuffers::NativeTable {
+  typedef fbMainWorldRef TableType;
   uint64_t instance_id = 0;
   uint64_t archetype_key = 0;
-  uint64_t runtime_id = 0;
+  uint64_t world_id = 0;
 };
 
-struct fbMainPhysicalWorld FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbMainPhysicalWorldT NativeTableType;
-  typedef fbMainPhysicalWorldBuilder Builder;
+struct fbMainWorldRef FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbMainWorldRefT NativeTableType;
+  typedef fbMainWorldRefBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_INSTANCE_ID = 4,
     VT_ARCHETYPE_KEY = 6,
-    VT_RUNTIME_ID = 8
+    VT_WORLD_ID = 8
   };
   uint64_t instance_id() const {
     return GetField<uint64_t>(VT_INSTANCE_ID, 0);
@@ -227,79 +227,79 @@ struct fbMainPhysicalWorld FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   uint64_t archetype_key() const {
     return GetField<uint64_t>(VT_ARCHETYPE_KEY, 0);
   }
-  uint64_t runtime_id() const {
-    return GetField<uint64_t>(VT_RUNTIME_ID, 0);
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_INSTANCE_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_ARCHETYPE_KEY, 8) &&
-           VerifyField<uint64_t>(verifier, VT_RUNTIME_ID, 8) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            verifier.EndTable();
   }
-  fbMainPhysicalWorldT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbMainPhysicalWorldT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbMainPhysicalWorld> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainPhysicalWorldT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  fbMainWorldRefT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbMainWorldRefT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbMainWorldRef> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainWorldRefT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct fbMainPhysicalWorldBuilder {
-  typedef fbMainPhysicalWorld Table;
+struct fbMainWorldRefBuilder {
+  typedef fbMainWorldRef Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
   void add_instance_id(uint64_t instance_id) {
-    fbb_.AddElement<uint64_t>(fbMainPhysicalWorld::VT_INSTANCE_ID, instance_id, 0);
+    fbb_.AddElement<uint64_t>(fbMainWorldRef::VT_INSTANCE_ID, instance_id, 0);
   }
   void add_archetype_key(uint64_t archetype_key) {
-    fbb_.AddElement<uint64_t>(fbMainPhysicalWorld::VT_ARCHETYPE_KEY, archetype_key, 0);
+    fbb_.AddElement<uint64_t>(fbMainWorldRef::VT_ARCHETYPE_KEY, archetype_key, 0);
   }
-  void add_runtime_id(uint64_t runtime_id) {
-    fbb_.AddElement<uint64_t>(fbMainPhysicalWorld::VT_RUNTIME_ID, runtime_id, 0);
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbMainWorldRef::VT_WORLD_ID, world_id, 0);
   }
-  explicit fbMainPhysicalWorldBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  explicit fbMainWorldRefBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<fbMainPhysicalWorld> Finish() {
+  ::flatbuffers::Offset<fbMainWorldRef> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbMainPhysicalWorld>(end);
+    auto o = ::flatbuffers::Offset<fbMainWorldRef>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<fbMainPhysicalWorld> CreatefbMainPhysicalWorld(
+inline ::flatbuffers::Offset<fbMainWorldRef> CreatefbMainWorldRef(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint64_t instance_id = 0,
     uint64_t archetype_key = 0,
-    uint64_t runtime_id = 0) {
-  fbMainPhysicalWorldBuilder builder_(_fbb);
-  builder_.add_runtime_id(runtime_id);
+    uint64_t world_id = 0) {
+  fbMainWorldRefBuilder builder_(_fbb);
+  builder_.add_world_id(world_id);
   builder_.add_archetype_key(archetype_key);
   builder_.add_instance_id(instance_id);
   return builder_.Finish();
 }
 
-::flatbuffers::Offset<fbMainPhysicalWorld> CreatefbMainPhysicalWorld(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainPhysicalWorldT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+::flatbuffers::Offset<fbMainWorldRef> CreatefbMainWorldRef(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainWorldRefT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct fbUserMainPhysicalWorldStateT : public ::flatbuffers::NativeTable {
-  typedef fbUserMainPhysicalWorldState TableType;
-  std::unique_ptr<jam::net::fb::fbMainPhysicalWorldT> main{};
+struct fbUserMainWorldStateT : public ::flatbuffers::NativeTable {
+  typedef fbUserMainWorldState TableType;
+  std::unique_ptr<jam::net::fb::fbMainWorldRefT> main{};
   uint64_t revision = 0;
-  fbUserMainPhysicalWorldStateT() = default;
-  fbUserMainPhysicalWorldStateT(const fbUserMainPhysicalWorldStateT &o);
-  fbUserMainPhysicalWorldStateT(fbUserMainPhysicalWorldStateT&&) FLATBUFFERS_NOEXCEPT = default;
-  fbUserMainPhysicalWorldStateT &operator=(fbUserMainPhysicalWorldStateT o) FLATBUFFERS_NOEXCEPT;
+  fbUserMainWorldStateT() = default;
+  fbUserMainWorldStateT(const fbUserMainWorldStateT &o);
+  fbUserMainWorldStateT(fbUserMainWorldStateT&&) FLATBUFFERS_NOEXCEPT = default;
+  fbUserMainWorldStateT &operator=(fbUserMainWorldStateT o) FLATBUFFERS_NOEXCEPT;
 };
 
-struct fbUserMainPhysicalWorldState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbUserMainPhysicalWorldStateT NativeTableType;
-  typedef fbUserMainPhysicalWorldStateBuilder Builder;
+struct fbUserMainWorldState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbUserMainWorldStateT NativeTableType;
+  typedef fbUserMainWorldStateBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_MAIN = 4,
     VT_REVISION = 6
   };
-  const jam::net::fb::fbMainPhysicalWorld *main() const {
-    return GetPointer<const jam::net::fb::fbMainPhysicalWorld *>(VT_MAIN);
+  const jam::net::fb::fbMainWorldRef *main() const {
+    return GetPointer<const jam::net::fb::fbMainWorldRef *>(VT_MAIN);
   }
   uint64_t revision() const {
     return GetField<uint64_t>(VT_REVISION, 0);
@@ -312,43 +312,43 @@ struct fbUserMainPhysicalWorldState FLATBUFFERS_FINAL_CLASS : private ::flatbuff
            VerifyField<uint64_t>(verifier, VT_REVISION, 8) &&
            verifier.EndTable();
   }
-  fbUserMainPhysicalWorldStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbUserMainPhysicalWorldStateT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbUserMainPhysicalWorldState> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  fbUserMainWorldStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbUserMainWorldStateT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbUserMainWorldState> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct fbUserMainPhysicalWorldStateBuilder {
-  typedef fbUserMainPhysicalWorldState Table;
+struct fbUserMainWorldStateBuilder {
+  typedef fbUserMainWorldState Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_main(::flatbuffers::Offset<jam::net::fb::fbMainPhysicalWorld> main) {
-    fbb_.AddOffset(fbUserMainPhysicalWorldState::VT_MAIN, main);
+  void add_main(::flatbuffers::Offset<jam::net::fb::fbMainWorldRef> main) {
+    fbb_.AddOffset(fbUserMainWorldState::VT_MAIN, main);
   }
   void add_revision(uint64_t revision) {
-    fbb_.AddElement<uint64_t>(fbUserMainPhysicalWorldState::VT_REVISION, revision, 0);
+    fbb_.AddElement<uint64_t>(fbUserMainWorldState::VT_REVISION, revision, 0);
   }
-  explicit fbUserMainPhysicalWorldStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  explicit fbUserMainWorldStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<fbUserMainPhysicalWorldState> Finish() {
+  ::flatbuffers::Offset<fbUserMainWorldState> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbUserMainPhysicalWorldState>(end);
+    auto o = ::flatbuffers::Offset<fbUserMainWorldState>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<fbUserMainPhysicalWorldState> CreatefbUserMainPhysicalWorldState(
+inline ::flatbuffers::Offset<fbUserMainWorldState> CreatefbUserMainWorldState(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<jam::net::fb::fbMainPhysicalWorld> main = 0,
+    ::flatbuffers::Offset<jam::net::fb::fbMainWorldRef> main = 0,
     uint64_t revision = 0) {
-  fbUserMainPhysicalWorldStateBuilder builder_(_fbb);
+  fbUserMainWorldStateBuilder builder_(_fbb);
   builder_.add_revision(revision);
   builder_.add_main(main);
   return builder_.Finish();
 }
 
-::flatbuffers::Offset<fbUserMainPhysicalWorldState> CreatefbUserMainPhysicalWorldState(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+::flatbuffers::Offset<fbUserMainWorldState> CreatefbUserMainWorldState(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct fbEnterWorldRequestT : public ::flatbuffers::NativeTable {
   typedef fbEnterWorldRequest TableType;
@@ -548,7 +548,7 @@ struct fbWorldTransitionResultT : public ::flatbuffers::NativeTable {
   jam::net::fb::fbWorldTransitionKind kind = jam::net::fb::fbWorldTransitionKind_Enter;
   uint64_t transition_token = 0;
   jam::net::fb::fbWorldTransitionFailure failure = jam::net::fb::fbWorldTransitionFailure_None;
-  std::unique_ptr<jam::net::fb::fbUserMainPhysicalWorldStateT> state{};
+  std::unique_ptr<jam::net::fb::fbUserMainWorldStateT> state{};
   fbWorldTransitionResultT() = default;
   fbWorldTransitionResultT(const fbWorldTransitionResultT &o);
   fbWorldTransitionResultT(fbWorldTransitionResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -577,8 +577,8 @@ struct fbWorldTransitionResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::
   jam::net::fb::fbWorldTransitionFailure failure() const {
     return static_cast<jam::net::fb::fbWorldTransitionFailure>(GetField<uint8_t>(VT_FAILURE, 0));
   }
-  const jam::net::fb::fbUserMainPhysicalWorldState *state() const {
-    return GetPointer<const jam::net::fb::fbUserMainPhysicalWorldState *>(VT_STATE);
+  const jam::net::fb::fbUserMainWorldState *state() const {
+    return GetPointer<const jam::net::fb::fbUserMainWorldState *>(VT_STATE);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -612,7 +612,7 @@ struct fbWorldTransitionResultBuilder {
   void add_failure(jam::net::fb::fbWorldTransitionFailure failure) {
     fbb_.AddElement<uint8_t>(fbWorldTransitionResult::VT_FAILURE, static_cast<uint8_t>(failure), 0);
   }
-  void add_state(::flatbuffers::Offset<jam::net::fb::fbUserMainPhysicalWorldState> state) {
+  void add_state(::flatbuffers::Offset<jam::net::fb::fbUserMainWorldState> state) {
     fbb_.AddOffset(fbWorldTransitionResult::VT_STATE, state);
   }
   explicit fbWorldTransitionResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
@@ -632,7 +632,7 @@ inline ::flatbuffers::Offset<fbWorldTransitionResult> CreatefbWorldTransitionRes
     jam::net::fb::fbWorldTransitionKind kind = jam::net::fb::fbWorldTransitionKind_Enter,
     uint64_t transition_token = 0,
     jam::net::fb::fbWorldTransitionFailure failure = jam::net::fb::fbWorldTransitionFailure_None,
-    ::flatbuffers::Offset<jam::net::fb::fbUserMainPhysicalWorldState> state = 0) {
+    ::flatbuffers::Offset<jam::net::fb::fbUserMainWorldState> state = 0) {
   fbWorldTransitionResultBuilder builder_(_fbb);
   builder_.add_transition_token(transition_token);
   builder_.add_state(state);
@@ -644,23 +644,23 @@ inline ::flatbuffers::Offset<fbWorldTransitionResult> CreatefbWorldTransitionRes
 
 ::flatbuffers::Offset<fbWorldTransitionResult> CreatefbWorldTransitionResult(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldTransitionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct fbUserMainPhysicalWorldChangedT : public ::flatbuffers::NativeTable {
-  typedef fbUserMainPhysicalWorldChanged TableType;
-  std::unique_ptr<jam::net::fb::fbUserMainPhysicalWorldStateT> state{};
-  fbUserMainPhysicalWorldChangedT() = default;
-  fbUserMainPhysicalWorldChangedT(const fbUserMainPhysicalWorldChangedT &o);
-  fbUserMainPhysicalWorldChangedT(fbUserMainPhysicalWorldChangedT&&) FLATBUFFERS_NOEXCEPT = default;
-  fbUserMainPhysicalWorldChangedT &operator=(fbUserMainPhysicalWorldChangedT o) FLATBUFFERS_NOEXCEPT;
+struct fbUserMainWorldChangedT : public ::flatbuffers::NativeTable {
+  typedef fbUserMainWorldChanged TableType;
+  std::unique_ptr<jam::net::fb::fbUserMainWorldStateT> state{};
+  fbUserMainWorldChangedT() = default;
+  fbUserMainWorldChangedT(const fbUserMainWorldChangedT &o);
+  fbUserMainWorldChangedT(fbUserMainWorldChangedT&&) FLATBUFFERS_NOEXCEPT = default;
+  fbUserMainWorldChangedT &operator=(fbUserMainWorldChangedT o) FLATBUFFERS_NOEXCEPT;
 };
 
-struct fbUserMainPhysicalWorldChanged FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbUserMainPhysicalWorldChangedT NativeTableType;
-  typedef fbUserMainPhysicalWorldChangedBuilder Builder;
+struct fbUserMainWorldChanged FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbUserMainWorldChangedT NativeTableType;
+  typedef fbUserMainWorldChangedBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_STATE = 4
   };
-  const jam::net::fb::fbUserMainPhysicalWorldState *state() const {
-    return GetPointer<const jam::net::fb::fbUserMainPhysicalWorldState *>(VT_STATE);
+  const jam::net::fb::fbUserMainWorldState *state() const {
+    return GetPointer<const jam::net::fb::fbUserMainWorldState *>(VT_STATE);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -669,46 +669,46 @@ struct fbUserMainPhysicalWorldChanged FLATBUFFERS_FINAL_CLASS : private ::flatbu
            verifier.VerifyTable(state()) &&
            verifier.EndTable();
   }
-  fbUserMainPhysicalWorldChangedT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbUserMainPhysicalWorldChangedT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbUserMainPhysicalWorldChanged> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldChangedT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  fbUserMainWorldChangedT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbUserMainWorldChangedT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbUserMainWorldChanged> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldChangedT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct fbUserMainPhysicalWorldChangedBuilder {
-  typedef fbUserMainPhysicalWorldChanged Table;
+struct fbUserMainWorldChangedBuilder {
+  typedef fbUserMainWorldChanged Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_state(::flatbuffers::Offset<jam::net::fb::fbUserMainPhysicalWorldState> state) {
-    fbb_.AddOffset(fbUserMainPhysicalWorldChanged::VT_STATE, state);
+  void add_state(::flatbuffers::Offset<jam::net::fb::fbUserMainWorldState> state) {
+    fbb_.AddOffset(fbUserMainWorldChanged::VT_STATE, state);
   }
-  explicit fbUserMainPhysicalWorldChangedBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  explicit fbUserMainWorldChangedBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<fbUserMainPhysicalWorldChanged> Finish() {
+  ::flatbuffers::Offset<fbUserMainWorldChanged> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbUserMainPhysicalWorldChanged>(end);
+    auto o = ::flatbuffers::Offset<fbUserMainWorldChanged>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<fbUserMainPhysicalWorldChanged> CreatefbUserMainPhysicalWorldChanged(
+inline ::flatbuffers::Offset<fbUserMainWorldChanged> CreatefbUserMainWorldChanged(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<jam::net::fb::fbUserMainPhysicalWorldState> state = 0) {
-  fbUserMainPhysicalWorldChangedBuilder builder_(_fbb);
+    ::flatbuffers::Offset<jam::net::fb::fbUserMainWorldState> state = 0) {
+  fbUserMainWorldChangedBuilder builder_(_fbb);
   builder_.add_state(state);
   return builder_.Finish();
 }
 
-::flatbuffers::Offset<fbUserMainPhysicalWorldChanged> CreatefbUserMainPhysicalWorldChanged(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldChangedT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+::flatbuffers::Offset<fbUserMainWorldChanged> CreatefbUserMainWorldChanged(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldChangedT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct fbClientWorldPrepareT : public ::flatbuffers::NativeTable {
   typedef fbClientWorldPrepare TableType;
-  uint64_t barrier_token = 0;
-  jam::net::fb::fbClientServerBarrierKind kind = jam::net::fb::fbClientServerBarrierKind_WorldPrepare;
+  uint64_t sync_token = 0;
+  jam::net::fb::fbWorldSyncKind kind = jam::net::fb::fbWorldSyncKind_WorldPrepare;
   uint64_t instance_id = 0;
   uint64_t archetype_key = 0;
-  uint64_t runtime_id = 0;
+  uint64_t world_id = 0;
   uint64_t main_revision = 0;
   uint64_t content_revision = 0;
 };
@@ -717,19 +717,19 @@ struct fbClientWorldPrepare FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   typedef fbClientWorldPrepareT NativeTableType;
   typedef fbClientWorldPrepareBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_BARRIER_TOKEN = 4,
+    VT_SYNC_TOKEN = 4,
     VT_KIND = 6,
     VT_INSTANCE_ID = 8,
     VT_ARCHETYPE_KEY = 10,
-    VT_RUNTIME_ID = 12,
+    VT_WORLD_ID = 12,
     VT_MAIN_REVISION = 14,
     VT_CONTENT_REVISION = 16
   };
-  uint64_t barrier_token() const {
-    return GetField<uint64_t>(VT_BARRIER_TOKEN, 0);
+  uint64_t sync_token() const {
+    return GetField<uint64_t>(VT_SYNC_TOKEN, 0);
   }
-  jam::net::fb::fbClientServerBarrierKind kind() const {
-    return static_cast<jam::net::fb::fbClientServerBarrierKind>(GetField<uint8_t>(VT_KIND, 0));
+  jam::net::fb::fbWorldSyncKind kind() const {
+    return static_cast<jam::net::fb::fbWorldSyncKind>(GetField<uint8_t>(VT_KIND, 0));
   }
   uint64_t instance_id() const {
     return GetField<uint64_t>(VT_INSTANCE_ID, 0);
@@ -737,8 +737,8 @@ struct fbClientWorldPrepare FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   uint64_t archetype_key() const {
     return GetField<uint64_t>(VT_ARCHETYPE_KEY, 0);
   }
-  uint64_t runtime_id() const {
-    return GetField<uint64_t>(VT_RUNTIME_ID, 0);
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
   }
   uint64_t main_revision() const {
     return GetField<uint64_t>(VT_MAIN_REVISION, 0);
@@ -749,11 +749,11 @@ struct fbClientWorldPrepare FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint64_t>(verifier, VT_BARRIER_TOKEN, 8) &&
+           VerifyField<uint64_t>(verifier, VT_SYNC_TOKEN, 8) &&
            VerifyField<uint8_t>(verifier, VT_KIND, 1) &&
            VerifyField<uint64_t>(verifier, VT_INSTANCE_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_ARCHETYPE_KEY, 8) &&
-           VerifyField<uint64_t>(verifier, VT_RUNTIME_ID, 8) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_MAIN_REVISION, 8) &&
            VerifyField<uint64_t>(verifier, VT_CONTENT_REVISION, 8) &&
            verifier.EndTable();
@@ -767,10 +767,10 @@ struct fbClientWorldPrepareBuilder {
   typedef fbClientWorldPrepare Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_barrier_token(uint64_t barrier_token) {
-    fbb_.AddElement<uint64_t>(fbClientWorldPrepare::VT_BARRIER_TOKEN, barrier_token, 0);
+  void add_sync_token(uint64_t sync_token) {
+    fbb_.AddElement<uint64_t>(fbClientWorldPrepare::VT_SYNC_TOKEN, sync_token, 0);
   }
-  void add_kind(jam::net::fb::fbClientServerBarrierKind kind) {
+  void add_kind(jam::net::fb::fbWorldSyncKind kind) {
     fbb_.AddElement<uint8_t>(fbClientWorldPrepare::VT_KIND, static_cast<uint8_t>(kind), 0);
   }
   void add_instance_id(uint64_t instance_id) {
@@ -779,8 +779,8 @@ struct fbClientWorldPrepareBuilder {
   void add_archetype_key(uint64_t archetype_key) {
     fbb_.AddElement<uint64_t>(fbClientWorldPrepare::VT_ARCHETYPE_KEY, archetype_key, 0);
   }
-  void add_runtime_id(uint64_t runtime_id) {
-    fbb_.AddElement<uint64_t>(fbClientWorldPrepare::VT_RUNTIME_ID, runtime_id, 0);
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbClientWorldPrepare::VT_WORLD_ID, world_id, 0);
   }
   void add_main_revision(uint64_t main_revision) {
     fbb_.AddElement<uint64_t>(fbClientWorldPrepare::VT_MAIN_REVISION, main_revision, 0);
@@ -801,43 +801,43 @@ struct fbClientWorldPrepareBuilder {
 
 inline ::flatbuffers::Offset<fbClientWorldPrepare> CreatefbClientWorldPrepare(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint64_t barrier_token = 0,
-    jam::net::fb::fbClientServerBarrierKind kind = jam::net::fb::fbClientServerBarrierKind_WorldPrepare,
+    uint64_t sync_token = 0,
+    jam::net::fb::fbWorldSyncKind kind = jam::net::fb::fbWorldSyncKind_WorldPrepare,
     uint64_t instance_id = 0,
     uint64_t archetype_key = 0,
-    uint64_t runtime_id = 0,
+    uint64_t world_id = 0,
     uint64_t main_revision = 0,
     uint64_t content_revision = 0) {
   fbClientWorldPrepareBuilder builder_(_fbb);
   builder_.add_content_revision(content_revision);
   builder_.add_main_revision(main_revision);
-  builder_.add_runtime_id(runtime_id);
+  builder_.add_world_id(world_id);
   builder_.add_archetype_key(archetype_key);
   builder_.add_instance_id(instance_id);
-  builder_.add_barrier_token(barrier_token);
+  builder_.add_sync_token(sync_token);
   builder_.add_kind(kind);
   return builder_.Finish();
 }
 
 ::flatbuffers::Offset<fbClientWorldPrepare> CreatefbClientWorldPrepare(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientWorldPrepareT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct fbClientBarrierResultT : public ::flatbuffers::NativeTable {
-  typedef fbClientBarrierResult TableType;
-  uint64_t barrier_token = 0;
+struct fbClientWorldSyncResultT : public ::flatbuffers::NativeTable {
+  typedef fbClientWorldSyncResult TableType;
+  uint64_t sync_token = 0;
   bool succeeded = false;
   jam::net::fb::fbWorldTransitionFailure failure = jam::net::fb::fbWorldTransitionFailure_None;
 };
 
-struct fbClientBarrierResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbClientBarrierResultT NativeTableType;
-  typedef fbClientBarrierResultBuilder Builder;
+struct fbClientWorldSyncResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbClientWorldSyncResultT NativeTableType;
+  typedef fbClientWorldSyncResultBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_BARRIER_TOKEN = 4,
+    VT_SYNC_TOKEN = 4,
     VT_SUCCEEDED = 6,
     VT_FAILURE = 8
   };
-  uint64_t barrier_token() const {
-    return GetField<uint64_t>(VT_BARRIER_TOKEN, 0);
+  uint64_t sync_token() const {
+    return GetField<uint64_t>(VT_SYNC_TOKEN, 0);
   }
   bool succeeded() const {
     return GetField<uint8_t>(VT_SUCCEEDED, 0) != 0;
@@ -848,59 +848,59 @@ struct fbClientBarrierResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint64_t>(verifier, VT_BARRIER_TOKEN, 8) &&
+           VerifyField<uint64_t>(verifier, VT_SYNC_TOKEN, 8) &&
            VerifyField<uint8_t>(verifier, VT_SUCCEEDED, 1) &&
            VerifyField<uint8_t>(verifier, VT_FAILURE, 1) &&
            verifier.EndTable();
   }
-  fbClientBarrierResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbClientBarrierResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbClientBarrierResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientBarrierResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+  fbClientWorldSyncResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbClientWorldSyncResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbClientWorldSyncResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientWorldSyncResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 };
 
-struct fbClientBarrierResultBuilder {
-  typedef fbClientBarrierResult Table;
+struct fbClientWorldSyncResultBuilder {
+  typedef fbClientWorldSyncResult Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_barrier_token(uint64_t barrier_token) {
-    fbb_.AddElement<uint64_t>(fbClientBarrierResult::VT_BARRIER_TOKEN, barrier_token, 0);
+  void add_sync_token(uint64_t sync_token) {
+    fbb_.AddElement<uint64_t>(fbClientWorldSyncResult::VT_SYNC_TOKEN, sync_token, 0);
   }
   void add_succeeded(bool succeeded) {
-    fbb_.AddElement<uint8_t>(fbClientBarrierResult::VT_SUCCEEDED, static_cast<uint8_t>(succeeded), 0);
+    fbb_.AddElement<uint8_t>(fbClientWorldSyncResult::VT_SUCCEEDED, static_cast<uint8_t>(succeeded), 0);
   }
   void add_failure(jam::net::fb::fbWorldTransitionFailure failure) {
-    fbb_.AddElement<uint8_t>(fbClientBarrierResult::VT_FAILURE, static_cast<uint8_t>(failure), 0);
+    fbb_.AddElement<uint8_t>(fbClientWorldSyncResult::VT_FAILURE, static_cast<uint8_t>(failure), 0);
   }
-  explicit fbClientBarrierResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+  explicit fbClientWorldSyncResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ::flatbuffers::Offset<fbClientBarrierResult> Finish() {
+  ::flatbuffers::Offset<fbClientWorldSyncResult> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbClientBarrierResult>(end);
+    auto o = ::flatbuffers::Offset<fbClientWorldSyncResult>(end);
     return o;
   }
 };
 
-inline ::flatbuffers::Offset<fbClientBarrierResult> CreatefbClientBarrierResult(
+inline ::flatbuffers::Offset<fbClientWorldSyncResult> CreatefbClientWorldSyncResult(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint64_t barrier_token = 0,
+    uint64_t sync_token = 0,
     bool succeeded = false,
     jam::net::fb::fbWorldTransitionFailure failure = jam::net::fb::fbWorldTransitionFailure_None) {
-  fbClientBarrierResultBuilder builder_(_fbb);
-  builder_.add_barrier_token(barrier_token);
+  fbClientWorldSyncResultBuilder builder_(_fbb);
+  builder_.add_sync_token(sync_token);
   builder_.add_failure(failure);
   builder_.add_succeeded(succeeded);
   return builder_.Finish();
 }
 
-::flatbuffers::Offset<fbClientBarrierResult> CreatefbClientBarrierResult(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientBarrierResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+::flatbuffers::Offset<fbClientWorldSyncResult> CreatefbClientWorldSyncResult(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientWorldSyncResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct fbClientWorldCommitT : public ::flatbuffers::NativeTable {
   typedef fbClientWorldCommit TableType;
-  uint64_t barrier_token = 0;
+  uint64_t sync_token = 0;
   uint64_t instance_id = 0;
-  uint64_t runtime_id = 0;
+  uint64_t world_id = 0;
   uint64_t main_revision = 0;
 };
 
@@ -908,19 +908,19 @@ struct fbClientWorldCommit FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   typedef fbClientWorldCommitT NativeTableType;
   typedef fbClientWorldCommitBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_BARRIER_TOKEN = 4,
+    VT_SYNC_TOKEN = 4,
     VT_INSTANCE_ID = 6,
-    VT_RUNTIME_ID = 8,
+    VT_WORLD_ID = 8,
     VT_MAIN_REVISION = 10
   };
-  uint64_t barrier_token() const {
-    return GetField<uint64_t>(VT_BARRIER_TOKEN, 0);
+  uint64_t sync_token() const {
+    return GetField<uint64_t>(VT_SYNC_TOKEN, 0);
   }
   uint64_t instance_id() const {
     return GetField<uint64_t>(VT_INSTANCE_ID, 0);
   }
-  uint64_t runtime_id() const {
-    return GetField<uint64_t>(VT_RUNTIME_ID, 0);
+  uint64_t world_id() const {
+    return GetField<uint64_t>(VT_WORLD_ID, 0);
   }
   uint64_t main_revision() const {
     return GetField<uint64_t>(VT_MAIN_REVISION, 0);
@@ -928,9 +928,9 @@ struct fbClientWorldCommit FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint64_t>(verifier, VT_BARRIER_TOKEN, 8) &&
+           VerifyField<uint64_t>(verifier, VT_SYNC_TOKEN, 8) &&
            VerifyField<uint64_t>(verifier, VT_INSTANCE_ID, 8) &&
-           VerifyField<uint64_t>(verifier, VT_RUNTIME_ID, 8) &&
+           VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_MAIN_REVISION, 8) &&
            verifier.EndTable();
   }
@@ -943,14 +943,14 @@ struct fbClientWorldCommitBuilder {
   typedef fbClientWorldCommit Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_barrier_token(uint64_t barrier_token) {
-    fbb_.AddElement<uint64_t>(fbClientWorldCommit::VT_BARRIER_TOKEN, barrier_token, 0);
+  void add_sync_token(uint64_t sync_token) {
+    fbb_.AddElement<uint64_t>(fbClientWorldCommit::VT_SYNC_TOKEN, sync_token, 0);
   }
   void add_instance_id(uint64_t instance_id) {
     fbb_.AddElement<uint64_t>(fbClientWorldCommit::VT_INSTANCE_ID, instance_id, 0);
   }
-  void add_runtime_id(uint64_t runtime_id) {
-    fbb_.AddElement<uint64_t>(fbClientWorldCommit::VT_RUNTIME_ID, runtime_id, 0);
+  void add_world_id(uint64_t world_id) {
+    fbb_.AddElement<uint64_t>(fbClientWorldCommit::VT_WORLD_ID, world_id, 0);
   }
   void add_main_revision(uint64_t main_revision) {
     fbb_.AddElement<uint64_t>(fbClientWorldCommit::VT_MAIN_REVISION, main_revision, 0);
@@ -968,87 +968,87 @@ struct fbClientWorldCommitBuilder {
 
 inline ::flatbuffers::Offset<fbClientWorldCommit> CreatefbClientWorldCommit(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint64_t barrier_token = 0,
+    uint64_t sync_token = 0,
     uint64_t instance_id = 0,
-    uint64_t runtime_id = 0,
+    uint64_t world_id = 0,
     uint64_t main_revision = 0) {
   fbClientWorldCommitBuilder builder_(_fbb);
   builder_.add_main_revision(main_revision);
-  builder_.add_runtime_id(runtime_id);
+  builder_.add_world_id(world_id);
   builder_.add_instance_id(instance_id);
-  builder_.add_barrier_token(barrier_token);
+  builder_.add_sync_token(sync_token);
   return builder_.Finish();
 }
 
 ::flatbuffers::Offset<fbClientWorldCommit> CreatefbClientWorldCommit(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientWorldCommitT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-inline fbMainPhysicalWorldT *fbMainPhysicalWorld::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbMainPhysicalWorldT>(new fbMainPhysicalWorldT());
+inline fbMainWorldRefT *fbMainWorldRef::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbMainWorldRefT>(new fbMainWorldRefT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void fbMainPhysicalWorld::UnPackTo(fbMainPhysicalWorldT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void fbMainWorldRef::UnPackTo(fbMainWorldRefT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
   { auto _e = instance_id(); _o->instance_id = _e; }
   { auto _e = archetype_key(); _o->archetype_key = _e; }
-  { auto _e = runtime_id(); _o->runtime_id = _e; }
+  { auto _e = world_id(); _o->world_id = _e; }
 }
 
-inline ::flatbuffers::Offset<fbMainPhysicalWorld> CreatefbMainPhysicalWorld(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainPhysicalWorldT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbMainPhysicalWorld::Pack(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbMainWorldRef> CreatefbMainWorldRef(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainWorldRefT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbMainWorldRef::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbMainPhysicalWorld> fbMainPhysicalWorld::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainPhysicalWorldT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbMainWorldRef> fbMainWorldRef::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbMainWorldRefT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbMainPhysicalWorldT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbMainWorldRefT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _instance_id = _o->instance_id;
   auto _archetype_key = _o->archetype_key;
-  auto _runtime_id = _o->runtime_id;
-  return jam::net::fb::CreatefbMainPhysicalWorld(
+  auto _world_id = _o->world_id;
+  return jam::net::fb::CreatefbMainWorldRef(
       _fbb,
       _instance_id,
       _archetype_key,
-      _runtime_id);
+      _world_id);
 }
 
-inline fbUserMainPhysicalWorldStateT::fbUserMainPhysicalWorldStateT(const fbUserMainPhysicalWorldStateT &o)
-      : main((o.main) ? new jam::net::fb::fbMainPhysicalWorldT(*o.main) : nullptr),
+inline fbUserMainWorldStateT::fbUserMainWorldStateT(const fbUserMainWorldStateT &o)
+      : main((o.main) ? new jam::net::fb::fbMainWorldRefT(*o.main) : nullptr),
         revision(o.revision) {
 }
 
-inline fbUserMainPhysicalWorldStateT &fbUserMainPhysicalWorldStateT::operator=(fbUserMainPhysicalWorldStateT o) FLATBUFFERS_NOEXCEPT {
+inline fbUserMainWorldStateT &fbUserMainWorldStateT::operator=(fbUserMainWorldStateT o) FLATBUFFERS_NOEXCEPT {
   std::swap(main, o.main);
   std::swap(revision, o.revision);
   return *this;
 }
 
-inline fbUserMainPhysicalWorldStateT *fbUserMainPhysicalWorldState::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbUserMainPhysicalWorldStateT>(new fbUserMainPhysicalWorldStateT());
+inline fbUserMainWorldStateT *fbUserMainWorldState::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbUserMainWorldStateT>(new fbUserMainWorldStateT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void fbUserMainPhysicalWorldState::UnPackTo(fbUserMainPhysicalWorldStateT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void fbUserMainWorldState::UnPackTo(fbUserMainWorldStateT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = main(); if (_e) { if(_o->main) { _e->UnPackTo(_o->main.get(), _resolver); } else { _o->main = std::unique_ptr<jam::net::fb::fbMainPhysicalWorldT>(_e->UnPack(_resolver)); } } else if (_o->main) { _o->main.reset(); } }
+  { auto _e = main(); if (_e) { if(_o->main) { _e->UnPackTo(_o->main.get(), _resolver); } else { _o->main = std::unique_ptr<jam::net::fb::fbMainWorldRefT>(_e->UnPack(_resolver)); } } else if (_o->main) { _o->main.reset(); } }
   { auto _e = revision(); _o->revision = _e; }
 }
 
-inline ::flatbuffers::Offset<fbUserMainPhysicalWorldState> CreatefbUserMainPhysicalWorldState(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbUserMainPhysicalWorldState::Pack(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbUserMainWorldState> CreatefbUserMainWorldState(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbUserMainWorldState::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbUserMainPhysicalWorldState> fbUserMainPhysicalWorldState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbUserMainWorldState> fbUserMainWorldState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUserMainPhysicalWorldStateT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _main = _o->main ? CreatefbMainPhysicalWorld(_fbb, _o->main.get(), _rehasher) : 0;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUserMainWorldStateT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _main = _o->main ? CreatefbMainWorldRef(_fbb, _o->main.get(), _rehasher) : 0;
   auto _revision = _o->revision;
-  return jam::net::fb::CreatefbUserMainPhysicalWorldState(
+  return jam::net::fb::CreatefbUserMainWorldState(
       _fbb,
       _main,
       _revision);
@@ -1129,7 +1129,7 @@ inline fbWorldTransitionResultT::fbWorldTransitionResultT(const fbWorldTransitio
         kind(o.kind),
         transition_token(o.transition_token),
         failure(o.failure),
-        state((o.state) ? new jam::net::fb::fbUserMainPhysicalWorldStateT(*o.state) : nullptr) {
+        state((o.state) ? new jam::net::fb::fbUserMainWorldStateT(*o.state) : nullptr) {
 }
 
 inline fbWorldTransitionResultT &fbWorldTransitionResultT::operator=(fbWorldTransitionResultT o) FLATBUFFERS_NOEXCEPT {
@@ -1154,7 +1154,7 @@ inline void fbWorldTransitionResult::UnPackTo(fbWorldTransitionResultT *_o, cons
   { auto _e = kind(); _o->kind = _e; }
   { auto _e = transition_token(); _o->transition_token = _e; }
   { auto _e = failure(); _o->failure = _e; }
-  { auto _e = state(); if (_e) { if(_o->state) { _e->UnPackTo(_o->state.get(), _resolver); } else { _o->state = std::unique_ptr<jam::net::fb::fbUserMainPhysicalWorldStateT>(_e->UnPack(_resolver)); } } else if (_o->state) { _o->state.reset(); } }
+  { auto _e = state(); if (_e) { if(_o->state) { _e->UnPackTo(_o->state.get(), _resolver); } else { _o->state = std::unique_ptr<jam::net::fb::fbUserMainWorldStateT>(_e->UnPack(_resolver)); } } else if (_o->state) { _o->state.reset(); } }
 }
 
 inline ::flatbuffers::Offset<fbWorldTransitionResult> CreatefbWorldTransitionResult(::flatbuffers::FlatBufferBuilder &_fbb, const fbWorldTransitionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1169,7 +1169,7 @@ inline ::flatbuffers::Offset<fbWorldTransitionResult> fbWorldTransitionResult::P
   auto _kind = _o->kind;
   auto _transition_token = _o->transition_token;
   auto _failure = _o->failure;
-  auto _state = _o->state ? CreatefbUserMainPhysicalWorldState(_fbb, _o->state.get(), _rehasher) : 0;
+  auto _state = _o->state ? CreatefbUserMainWorldState(_fbb, _o->state.get(), _rehasher) : 0;
   return jam::net::fb::CreatefbWorldTransitionResult(
       _fbb,
       _request_id,
@@ -1179,37 +1179,37 @@ inline ::flatbuffers::Offset<fbWorldTransitionResult> fbWorldTransitionResult::P
       _state);
 }
 
-inline fbUserMainPhysicalWorldChangedT::fbUserMainPhysicalWorldChangedT(const fbUserMainPhysicalWorldChangedT &o)
-      : state((o.state) ? new jam::net::fb::fbUserMainPhysicalWorldStateT(*o.state) : nullptr) {
+inline fbUserMainWorldChangedT::fbUserMainWorldChangedT(const fbUserMainWorldChangedT &o)
+      : state((o.state) ? new jam::net::fb::fbUserMainWorldStateT(*o.state) : nullptr) {
 }
 
-inline fbUserMainPhysicalWorldChangedT &fbUserMainPhysicalWorldChangedT::operator=(fbUserMainPhysicalWorldChangedT o) FLATBUFFERS_NOEXCEPT {
+inline fbUserMainWorldChangedT &fbUserMainWorldChangedT::operator=(fbUserMainWorldChangedT o) FLATBUFFERS_NOEXCEPT {
   std::swap(state, o.state);
   return *this;
 }
 
-inline fbUserMainPhysicalWorldChangedT *fbUserMainPhysicalWorldChanged::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbUserMainPhysicalWorldChangedT>(new fbUserMainPhysicalWorldChangedT());
+inline fbUserMainWorldChangedT *fbUserMainWorldChanged::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbUserMainWorldChangedT>(new fbUserMainWorldChangedT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void fbUserMainPhysicalWorldChanged::UnPackTo(fbUserMainPhysicalWorldChangedT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void fbUserMainWorldChanged::UnPackTo(fbUserMainWorldChangedT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = state(); if (_e) { if(_o->state) { _e->UnPackTo(_o->state.get(), _resolver); } else { _o->state = std::unique_ptr<jam::net::fb::fbUserMainPhysicalWorldStateT>(_e->UnPack(_resolver)); } } else if (_o->state) { _o->state.reset(); } }
+  { auto _e = state(); if (_e) { if(_o->state) { _e->UnPackTo(_o->state.get(), _resolver); } else { _o->state = std::unique_ptr<jam::net::fb::fbUserMainWorldStateT>(_e->UnPack(_resolver)); } } else if (_o->state) { _o->state.reset(); } }
 }
 
-inline ::flatbuffers::Offset<fbUserMainPhysicalWorldChanged> CreatefbUserMainPhysicalWorldChanged(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldChangedT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbUserMainPhysicalWorldChanged::Pack(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbUserMainWorldChanged> CreatefbUserMainWorldChanged(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldChangedT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbUserMainWorldChanged::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbUserMainPhysicalWorldChanged> fbUserMainPhysicalWorldChanged::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainPhysicalWorldChangedT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbUserMainWorldChanged> fbUserMainWorldChanged::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbUserMainWorldChangedT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUserMainPhysicalWorldChangedT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _state = _o->state ? CreatefbUserMainPhysicalWorldState(_fbb, _o->state.get(), _rehasher) : 0;
-  return jam::net::fb::CreatefbUserMainPhysicalWorldChanged(
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbUserMainWorldChangedT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _state = _o->state ? CreatefbUserMainWorldState(_fbb, _o->state.get(), _rehasher) : 0;
+  return jam::net::fb::CreatefbUserMainWorldChanged(
       _fbb,
       _state);
 }
@@ -1223,11 +1223,11 @@ inline fbClientWorldPrepareT *fbClientWorldPrepare::UnPack(const ::flatbuffers::
 inline void fbClientWorldPrepare::UnPackTo(fbClientWorldPrepareT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = barrier_token(); _o->barrier_token = _e; }
+  { auto _e = sync_token(); _o->sync_token = _e; }
   { auto _e = kind(); _o->kind = _e; }
   { auto _e = instance_id(); _o->instance_id = _e; }
   { auto _e = archetype_key(); _o->archetype_key = _e; }
-  { auto _e = runtime_id(); _o->runtime_id = _e; }
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = main_revision(); _o->main_revision = _e; }
   { auto _e = content_revision(); _o->content_revision = _e; }
 }
@@ -1240,52 +1240,52 @@ inline ::flatbuffers::Offset<fbClientWorldPrepare> fbClientWorldPrepare::Pack(::
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbClientWorldPrepareT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _barrier_token = _o->barrier_token;
+  auto _sync_token = _o->sync_token;
   auto _kind = _o->kind;
   auto _instance_id = _o->instance_id;
   auto _archetype_key = _o->archetype_key;
-  auto _runtime_id = _o->runtime_id;
+  auto _world_id = _o->world_id;
   auto _main_revision = _o->main_revision;
   auto _content_revision = _o->content_revision;
   return jam::net::fb::CreatefbClientWorldPrepare(
       _fbb,
-      _barrier_token,
+      _sync_token,
       _kind,
       _instance_id,
       _archetype_key,
-      _runtime_id,
+      _world_id,
       _main_revision,
       _content_revision);
 }
 
-inline fbClientBarrierResultT *fbClientBarrierResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbClientBarrierResultT>(new fbClientBarrierResultT());
+inline fbClientWorldSyncResultT *fbClientWorldSyncResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbClientWorldSyncResultT>(new fbClientWorldSyncResultT());
   UnPackTo(_o.get(), _resolver);
   return _o.release();
 }
 
-inline void fbClientBarrierResult::UnPackTo(fbClientBarrierResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+inline void fbClientWorldSyncResult::UnPackTo(fbClientWorldSyncResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = barrier_token(); _o->barrier_token = _e; }
+  { auto _e = sync_token(); _o->sync_token = _e; }
   { auto _e = succeeded(); _o->succeeded = _e; }
   { auto _e = failure(); _o->failure = _e; }
 }
 
-inline ::flatbuffers::Offset<fbClientBarrierResult> CreatefbClientBarrierResult(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientBarrierResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbClientBarrierResult::Pack(_fbb, _o, _rehasher);
+inline ::flatbuffers::Offset<fbClientWorldSyncResult> CreatefbClientWorldSyncResult(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientWorldSyncResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbClientWorldSyncResult::Pack(_fbb, _o, _rehasher);
 }
 
-inline ::flatbuffers::Offset<fbClientBarrierResult> fbClientBarrierResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientBarrierResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+inline ::flatbuffers::Offset<fbClientWorldSyncResult> fbClientWorldSyncResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbClientWorldSyncResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
   (void)_rehasher;
   (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbClientBarrierResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _barrier_token = _o->barrier_token;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbClientWorldSyncResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _sync_token = _o->sync_token;
   auto _succeeded = _o->succeeded;
   auto _failure = _o->failure;
-  return jam::net::fb::CreatefbClientBarrierResult(
+  return jam::net::fb::CreatefbClientWorldSyncResult(
       _fbb,
-      _barrier_token,
+      _sync_token,
       _succeeded,
       _failure);
 }
@@ -1299,9 +1299,9 @@ inline fbClientWorldCommitT *fbClientWorldCommit::UnPack(const ::flatbuffers::re
 inline void fbClientWorldCommit::UnPackTo(fbClientWorldCommitT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = barrier_token(); _o->barrier_token = _e; }
+  { auto _e = sync_token(); _o->sync_token = _e; }
   { auto _e = instance_id(); _o->instance_id = _e; }
-  { auto _e = runtime_id(); _o->runtime_id = _e; }
+  { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = main_revision(); _o->main_revision = _e; }
 }
 
@@ -1313,15 +1313,15 @@ inline ::flatbuffers::Offset<fbClientWorldCommit> fbClientWorldCommit::Pack(::fl
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbClientWorldCommitT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _barrier_token = _o->barrier_token;
+  auto _sync_token = _o->sync_token;
   auto _instance_id = _o->instance_id;
-  auto _runtime_id = _o->runtime_id;
+  auto _world_id = _o->world_id;
   auto _main_revision = _o->main_revision;
   return jam::net::fb::CreatefbClientWorldCommit(
       _fbb,
-      _barrier_token,
+      _sync_token,
       _instance_id,
-      _runtime_id,
+      _world_id,
       _main_revision);
 }
 

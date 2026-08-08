@@ -26,7 +26,7 @@ struct fbSocialCommandT;
 struct fbSocialCommandT : public ::flatbuffers::NativeTable {
   typedef fbSocialCommand TableType;
   uint32_t request_id = 0;
-  std::unique_ptr<jam::net::fb::fbSocialAddress> destination{};
+  std::unique_ptr<jam::net::fb::fbSocialAddressT> destination{};
   uint16_t content_type = 0;
   std::vector<uint8_t> payload{};
   fbSocialCommandT() = default;
@@ -48,7 +48,7 @@ struct fbSocialCommand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<uint32_t>(VT_REQUEST_ID, 0);
   }
   const jam::net::fb::fbSocialAddress *destination() const {
-    return GetStruct<const jam::net::fb::fbSocialAddress *>(VT_DESTINATION);
+    return GetPointer<const jam::net::fb::fbSocialAddress *>(VT_DESTINATION);
   }
   uint16_t content_type() const {
     return GetField<uint16_t>(VT_CONTENT_TYPE, 0);
@@ -60,7 +60,8 @@ struct fbSocialCommand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_REQUEST_ID, 4) &&
-           VerifyField<jam::net::fb::fbSocialAddress>(verifier, VT_DESTINATION, 8) &&
+           VerifyOffset(verifier, VT_DESTINATION) &&
+           verifier.VerifyTable(destination()) &&
            VerifyField<uint16_t>(verifier, VT_CONTENT_TYPE, 2) &&
            VerifyOffset(verifier, VT_PAYLOAD) &&
            verifier.VerifyVector(payload()) &&
@@ -78,8 +79,8 @@ struct fbSocialCommandBuilder {
   void add_request_id(uint32_t request_id) {
     fbb_.AddElement<uint32_t>(fbSocialCommand::VT_REQUEST_ID, request_id, 0);
   }
-  void add_destination(const jam::net::fb::fbSocialAddress *destination) {
-    fbb_.AddStruct(fbSocialCommand::VT_DESTINATION, destination);
+  void add_destination(::flatbuffers::Offset<jam::net::fb::fbSocialAddress> destination) {
+    fbb_.AddOffset(fbSocialCommand::VT_DESTINATION, destination);
   }
   void add_content_type(uint16_t content_type) {
     fbb_.AddElement<uint16_t>(fbSocialCommand::VT_CONTENT_TYPE, content_type, 0);
@@ -101,7 +102,7 @@ struct fbSocialCommandBuilder {
 inline ::flatbuffers::Offset<fbSocialCommand> CreatefbSocialCommand(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint32_t request_id = 0,
-    const jam::net::fb::fbSocialAddress *destination = nullptr,
+    ::flatbuffers::Offset<jam::net::fb::fbSocialAddress> destination = 0,
     uint16_t content_type = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> payload = 0) {
   fbSocialCommandBuilder builder_(_fbb);
@@ -115,7 +116,7 @@ inline ::flatbuffers::Offset<fbSocialCommand> CreatefbSocialCommand(
 inline ::flatbuffers::Offset<fbSocialCommand> CreatefbSocialCommandDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint32_t request_id = 0,
-    const jam::net::fb::fbSocialAddress *destination = nullptr,
+    ::flatbuffers::Offset<jam::net::fb::fbSocialAddress> destination = 0,
     uint16_t content_type = 0,
     const std::vector<uint8_t> *payload = nullptr) {
   auto payload__ = payload ? _fbb.CreateVector<uint8_t>(*payload) : 0;
@@ -131,7 +132,7 @@ inline ::flatbuffers::Offset<fbSocialCommand> CreatefbSocialCommandDirect(
 
 inline fbSocialCommandT::fbSocialCommandT(const fbSocialCommandT &o)
       : request_id(o.request_id),
-        destination((o.destination) ? new jam::net::fb::fbSocialAddress(*o.destination) : nullptr),
+        destination((o.destination) ? new jam::net::fb::fbSocialAddressT(*o.destination) : nullptr),
         content_type(o.content_type),
         payload(o.payload) {
 }
@@ -154,7 +155,7 @@ inline void fbSocialCommand::UnPackTo(fbSocialCommandT *_o, const ::flatbuffers:
   (void)_o;
   (void)_resolver;
   { auto _e = request_id(); _o->request_id = _e; }
-  { auto _e = destination(); if (_e) _o->destination = std::unique_ptr<jam::net::fb::fbSocialAddress>(new jam::net::fb::fbSocialAddress(*_e)); }
+  { auto _e = destination(); if (_e) { if(_o->destination) { _e->UnPackTo(_o->destination.get(), _resolver); } else { _o->destination = std::unique_ptr<jam::net::fb::fbSocialAddressT>(_e->UnPack(_resolver)); } } else if (_o->destination) { _o->destination.reset(); } }
   { auto _e = content_type(); _o->content_type = _e; }
   { auto _e = payload(); if (_e) { _o->payload.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->payload.begin()); } }
 }
@@ -168,7 +169,7 @@ inline ::flatbuffers::Offset<fbSocialCommand> fbSocialCommand::Pack(::flatbuffer
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSocialCommandT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _request_id = _o->request_id;
-  auto _destination = _o->destination ? _o->destination.get() : nullptr;
+  auto _destination = _o->destination ? CreatefbSocialAddress(_fbb, _o->destination.get(), _rehasher) : 0;
   auto _content_type = _o->content_type;
   auto _payload = _o->payload.size() ? _fbb.CreateVector(_o->payload) : 0;
   return jam::net::fb::CreatefbSocialCommand(

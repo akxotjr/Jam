@@ -1,0 +1,30 @@
+namespace jam.net.fb;
+
+enum fbContentEnvelopeKind : ubyte
+{
+	Request,
+	Response,
+}
+
+enum fbContentResponseStatus : ubyte
+{
+	None,
+	Succeeded,
+	Rejected,
+	InvalidRequest,
+	Unavailable,
+	InternalError,
+}
+
+table fbContentEnvelope
+{
+	kind          : fbContentEnvelopeKind;
+	request_id    : uint;
+	operation_key : ulong;
+	status        : fbContentResponseStatus;
+	result_code   : uint;
+	payload       : [ubyte];
+}
+
+root_type fbContentEnvelope;
+file_identifier "CNTE";
