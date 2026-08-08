@@ -22,6 +22,7 @@ namespace jam::net
 		WorldAction,
 		ActorAction,
 		SocialCommand,
+		ContentRequest,
 	};
 
 	enum class eClientRequestAdmission : uint8
@@ -66,6 +67,7 @@ namespace jam::net
 		WorldRayResolved,
 		ActorActionRequestCompleted,
 		SocialMessageReceived,
+		ContentRequestCompleted,
 	};
 
 	using ClientEventPayload = std::variant<
@@ -74,7 +76,8 @@ namespace jam::net
 		ActorLifecycleEvent,
 		WorldRayResolvedEvent,
 		ActorActionRequestCompletedEvent,
-		SocialMessageEvent>;
+		SocialMessageEvent,
+		GenericContentResponseEvent>;
 
 	struct ClientEvent
 	{
@@ -100,7 +103,7 @@ namespace jam::net
 	{
 		AccountId			accountId			  = kInvalidAccountId;
 		UserId				userId				  = kInvalidUserId;
-		WorldRuntimeRef		mainWorld			  = {};
+		WorldRef			mainWorld			  = {};
 		NetworkState		networkState		  = {};
 	};
 
@@ -123,7 +126,7 @@ namespace jam::net
 		// Frontend-thread snapshot. Values advance only when Pump() applies ingress events.
 		AccountId								GetAccountId() const;
 		UserId									GetUserId() const;
-		WorldRuntimeRef							GetMainWorldRef() const;
+		WorldRef								GetMainWorldRef() const;
 		NetworkState							GetNetworkState() const;
 		// Returned spans remain valid until the next Pump(), Disconnect(), or destruction.
 		ActorPresentationFramePairView			GetActorPresentationFramePair(WorldId worldId) const;
@@ -135,6 +138,7 @@ namespace jam::net
 		// ActorActionRequestCompleted ClientEvent with the returned receipt.
 		ClientRequestSubmission					RequestActorAction(const ActorActionCommand& command);
 		ClientRequestSubmission					RequestSocialCommand(const SocialCommand& command);
+		ClientRequestSubmission					RequestContent(const GenericContentRequest& request);
 		
 		
 		void									SubmitCharacterControl(const CharacterControlIntent& intent);
@@ -168,5 +172,6 @@ namespace jam::net
 		ClientRequestId								m_nextClientRequestId = 1;
 		
 		std::unordered_map<ClientRequestId, ActorActionCommand> m_pendingActorActions;
+		std::unordered_map<ClientRequestId, GenericContentOperationCode> m_pendingContentRequests;
 	};
 }

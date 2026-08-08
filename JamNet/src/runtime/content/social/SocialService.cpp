@@ -1,22 +1,18 @@
 #include "pch.h"
-#include "jamnet/runtime/social/SocialService.h"
+#include "jamnet/runtime/content/social/SocialService.h"
 
 #include "jamnet/core/executor/GlobalExecutor.h"
-#include "jamnet/runtime/application/ServerNetworkManager.h"
-#include "jamnet/runtime/protocol/schema/gen/social_message_generated.h"
+#include "jamnet/core/net/Session.h"
+#include "jamnet/runtime/protocol/codec/SocialCodec.h"
 #include "jamnet/runtime/protocol/transport/CustomPacketHelper.h"
-#include "jamnet/runtime/social/IServerSocialContent.h"
+#include "jamnet/runtime/session/RuntimeShardRouting.h"
+#include "jamnet/runtime/content/social/ISocialContent.h"
 
 namespace jam::net
 {
 	namespace
 	{
 		constexpr uint64 kSocialRouteSeed = 0x534F4349414Cull;
-
-		fb::fbSocialAudience ToWireAudience(eSocialAudience audience)
-		{
-			return static_cast<fb::fbSocialAudience>(audience);
-		}
 
 		class PrincipalSocialDelivery final : public ISocialDelivery
 		{
@@ -33,7 +29,7 @@ namespace jam::net
 				m_service.SendTo(userId, stamped);
 			}
 
-			void SendToWorld(const WorldRuntimeRef& world, const SocialMessage& message) override
+			void SendToWorld(const WorldRef& world, const SocialMessage& message) override
 			{
 				SocialMessage stamped = message;
 				stamped.sender = m_sender;
@@ -53,7 +49,7 @@ namespace jam::net
 		};
 	}
 
-	bool SocialService::Initialize(ServerNetworkManager* owner, std::shared_ptr<IServerSocialContent> content)
+	bool SocialService::Initialize(ServerNetworkManager* owner, std::shared_ptr<ISocialContent> content)
 	{
 		if (m_running.load(std::memory_order_acquire))
 			return true;
@@ -93,6 +89,20 @@ namespace jam::net
 		return true;
 	}
 
+	void SocialService::NotifyConnected(SocialPrincipal principal)
+	{
+		if (!m_running.load(std::memory_order_acquire) || !m_shard || !m_content
+			|| principal.accountId == kInvalidAccountId || principal.userId == kInvalidUserId)
+			return;
+
+		const auto self = shared_from_this();
+		m_shard->Submit(Job([self, principal = std::move(principal)]()
+			{
+				if (self->m_running.load(std::memory_order_acquire))
+					self->m_content->OnUserConnected(principal);
+			}, eJobPriority::Control));
+	}
+
 	void SocialService::NotifyDisconnected(UserId userId)
 	{
 		if (!m_running.load(std::memory_order_acquire) || !m_shard || !m_content || userId == kInvalidUserId)
@@ -110,32 +120,24 @@ namespace jam::net
 	{
 		if (!m_running.load(std::memory_order_acquire) || !m_owner || userId == kInvalidUserId)
 			return;
-		m_owner->Send(userId, MakeMessagePacket(message), eProtocolType::TCP);
+
+		SendToUser(userId, codec::MakeSocialMessagePacket(message), eProtocolType::TCP);
 	}
 
-	void SocialService::SendToWorld(const WorldRuntimeRef& world, const SocialMessage& message)
+	void SocialService::SendToWorld(const WorldRef& world, const SocialMessage& message)
 	{
 		if (!m_running.load(std::memory_order_acquire) || !m_owner || !world.IsValid())
 			return;
-		m_owner->Multicast(world, MakeMessagePacket(message));
+
+		MulticastToWorld(world, codec::MakeSocialMessagePacket(message));
 	}
 
 	void SocialService::Broadcast(const SocialMessage& message)
 	{
 		if (!m_running.load(std::memory_order_acquire) || !m_owner)
 			return;
-		m_owner->Broadcast(MakeMessagePacket(message));
+
+		BroadcastToUsers(codec::MakeSocialMessagePacket(message));
 	}
 
-	Packet SocialService::MakeMessagePacket(const SocialMessage& message) const
-	{
-		flatbuffers::FlatBufferBuilder fbb(128 + message.payload.size());
-		const fb::fbSocialAddress destination(ToWireAudience(message.destination.audience), message.destination.scopeId);
-
-		const auto payload = fbb.CreateVector(reinterpret_cast<const uint8*>(message.payload.data()), message.payload.size());
-		const auto root = fb::CreatefbSocialMessage(fbb, message.messageId, message.sender, &destination, message.contentType, payload);
-		fb::FinishfbSocialMessageBuffer(fbb, root);
-
-		return PacketBuilder::CreateCustomPacket(CustomPacketId::SOCIAL_EVENT, PacketFlags::NONE, eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize());
-	}
 }

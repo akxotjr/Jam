@@ -263,7 +263,7 @@ namespace jam::net
 
 	bool ClientService::Start()
 	{
-		if (m_accountId == 0 || !m_principalShard)
+		if (!m_principalShard)
 			return false;
 		if (!HasUdpFactory())
 			return false;

@@ -26,18 +26,18 @@ namespace jam::net
 		constexpr uint8 APPLICATION_MAX = 31;
 
 		// ============================================================
-		// 프레임워크 예약 ID (JamNetSync 전용)
+		// 프레임워크 예약 ID 
 		// ============================================================
 
 		constexpr uint8 NONE					= 0;   // 미사용
 		constexpr uint8 NOTIFICATION			= 1;   // 서버 푸시 알림 (애플리케이션에서 구현)
-		constexpr uint8 SNAPSHOT				= 2;   // 게임 스냅샷 (JamNetSync 내부용)
-		constexpr uint8 INPUT					= 3;   // 클라이언트 입력 (JamNetSync 내부용)
+		constexpr uint8 SNAPSHOT				= 2;   
+		constexpr uint8 INPUT					= 3;  
 		constexpr uint8 LIFECYCLE				= 4;   // 생성/삭제/메타 복제
 		constexpr uint8 USER_MAIN_WORLD_CHANGED = 5;
 		constexpr uint8 CLIENT_WORLD_PREPARE	= 6;
 		constexpr uint8 CLIENT_WORLD_COMMIT		= 7;
-		constexpr uint8 CLIENT_BARRIER_RESULT	= 8;
+		constexpr uint8 CLIENT_WORLD_SYNC_RESULT= 8;
 		constexpr uint8 BASELINE_ACK			= 9;
 		constexpr uint8 ENTER_WORLD_REQUEST		= 10;
 		constexpr uint8 LEAVE_WORLD_REQUEST		= 11;
@@ -45,10 +45,8 @@ namespace jam::net
 
 		constexpr uint8 SOCIAL_COMMAND			= 13;   // client -> server (implementation in application layer)
 		constexpr uint8 SOCIAL_EVENT			= 14;   // server -> client (implementation in application layer)
-
+		constexpr uint8 CONTENT				= 15;   // authenticated content request/response (directional envelope)
 		constexpr uint8 CONTROL         = LIFECYCLE;   // 하위 호환 별칭
-
-		// 13-15: 향후 프레임워크 확장용 예약
 	}
 
 	// ============================================================

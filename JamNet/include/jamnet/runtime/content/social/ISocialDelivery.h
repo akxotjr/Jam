@@ -1,6 +1,6 @@
 #pragma once
 
-#include "jamnet/runtime/social/SocialTypes.h"
+#include "jamnet/runtime/content/social/SocialTypes.h"
 
 namespace jam::net
 {
@@ -10,7 +10,7 @@ namespace jam::net
 		virtual ~ISocialDelivery() = default;
 
 		virtual void SendTo(UserId userId, const SocialMessage& message) = 0;
-		virtual void SendToWorld(const WorldRuntimeRef& world, const SocialMessage& message) = 0;
+		virtual void SendToWorld(const WorldRef& world, const SocialMessage& message) = 0;
 		virtual void Broadcast(const SocialMessage& message) = 0;
 	};
 }

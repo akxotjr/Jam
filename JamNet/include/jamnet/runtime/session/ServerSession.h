@@ -8,11 +8,13 @@
 
 namespace jam::net
 {
+	struct UserContext;
 	class ServerNetworkManager;
 	class ServerTcpSession;
 	class ServerUdpSession;
 
 	using ServerSessionBundle = SessionRefBundle<ServerTcpSession, ServerUdpSession>;
+	ServerSessionBundle ResolveUserSessionBundle(const UserContext& user);
 
 	class ServerTcpSession : public TcpSession
 	{
@@ -28,6 +30,8 @@ namespace jam::net
 		void					OnDisconnected() override;
 		void					HandleCustomPacket(Packet packet) override;
 		RuntimeId				ResolveServerTcpBindUserId(uint64 accountId) override;
+		void					AuthenticateServerTcpBind(const TCP_BIND_REQ_DATA& request, std::function<void(uint64)> completed) override;
+		eBootstrapKind			ResolveServerBootstrapKind(RuntimeId userId) override;
 
 	private:
 		void					FinalizeEstablishedSession();

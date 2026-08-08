@@ -37,6 +37,13 @@ namespace jam::net
 		UDP_BIND_RES		= 25,
 	};
 
+	enum class eBootstrapKind : uint8
+	{
+		Pending,
+		Fresh,
+		Resync,
+	};
+
 	enum class eAckPacketId : uint8
 	{
 		ACK					= 1,
@@ -106,9 +113,22 @@ namespace jam::net
 #pragma pack(pop)
 
 #pragma pack(push, 1)
+	enum class eLoginCredentialKind : uint8
+	{
+		Password = 0,
+		Ticket,
+	};
+
+	inline constexpr size_t kMaxLoginIdBytes = 64;
+	inline constexpr size_t kMaxLoginSecretBytes = 256;
+
 	struct TCP_BIND_REQ_DATA
 	{
-		uint64 accountId = 0;
+		eLoginCredentialKind kind = eLoginCredentialKind::Password;
+		uint16 loginIdSize = 0;
+		uint16 secretSize = 0;
+		uint8 loginId[kMaxLoginIdBytes] = {};
+		uint8 secret[kMaxLoginSecretBytes] = {};
 	};
 
 	struct TCP_BIND_RES_DATA
@@ -117,6 +137,7 @@ namespace jam::net
 		uint64 userId	 = 0;
 		uint64 sessionId = 0;
 		uint8  success	 = 0;
+		eBootstrapKind bootstrapKind = eBootstrapKind::Pending;
 	};
 
 	struct UDP_BIND_REQ_DATA

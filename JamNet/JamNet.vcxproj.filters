@@ -70,8 +70,20 @@
     <Filter Include="runtime\protocol\schema\gen">
       <UniqueIdentifier>{a791fb57-b918-4c36-baeb-56f73c3f1dab}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\social">
-      <UniqueIdentifier>{05b64c2e-2952-47f5-bfca-9de09d7fe29f}</UniqueIdentifier>
+    <Filter Include="runtime\content">
+      <UniqueIdentifier>{C227791E-0653-4FBD-B884-909318A27E86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\content\generic">
+      <UniqueIdentifier>{62106ffe-03b2-4f55-9e00-bb6272bf9a9e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\content\social">
+      <UniqueIdentifier>{d6c1cd4d-fa26-452e-9bf8-bd7a57f7c667}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\content\auth">
+      <UniqueIdentifier>{782962d9-565c-4161-b974-b11037117405}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="runtime\content\world">
+      <UniqueIdentifier>{5dcab120-4b6a-4af9-b209-d39ba4a5d6d5}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -345,9 +357,6 @@
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldBase.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldDirectory.h">
-      <Filter>runtime\world\lifecycle</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldIdentity.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
@@ -361,6 +370,9 @@
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldTransitionTypes.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldSyncTypes.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\protocol\codec\BitBuffer.h">
@@ -395,9 +407,6 @@
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\snapshot_generated.h">
       <Filter>runtime\protocol\schema\gen</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\protocol\transport\WireBarrier.h">
-      <Filter>runtime\protocol\transport</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\protocol\transport\CustomPacketHelper.h">
       <Filter>runtime\protocol\transport</Filter>
@@ -453,9 +462,6 @@
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerWorld.h">
       <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\simulation\server\IServerWorldContent.h">
-      <Filter>runtime\world\simulation\server</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerAoiSystem.h">
       <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>
@@ -468,17 +474,50 @@
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerReplicationSystem.h">
       <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\social\SocialTypes.h">
-      <Filter>runtime\social</Filter>
+    <ClInclude Include="include\jamnet\runtime\session\RuntimeShardRouting.h">
+      <Filter>runtime\session</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\social\IServerSocialContent.h">
-      <Filter>runtime\social</Filter>
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\WorldCodec.h">
+      <Filter>runtime\protocol\codec</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\social\ISocialDelivery.h">
-      <Filter>runtime\social</Filter>
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\ActorCodec.h">
+      <Filter>runtime\protocol\codec</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\social\SocialService.h">
-      <Filter>runtime\social</Filter>
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\RuntimePacketCodec.h">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\SocialCodec.h">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\ContentCodec.h">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\social\ISocialContent.h">
+      <Filter>runtime\content\social</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\social\ISocialDelivery.h">
+      <Filter>runtime\content\social</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\social\SocialService.h">
+      <Filter>runtime\content\social</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\social\SocialTypes.h">
+      <Filter>runtime\content\social</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\generic\GenericContentTypes.h">
+      <Filter>runtime\content\generic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\generic\IGenericContent.h">
+      <Filter>runtime\content\generic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\generic\GenericContentService.h">
+      <Filter>runtime\content\generic</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\authentication\IAuthenticationContent.h">
+      <Filter>runtime\content\auth</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\content\world\IWorldContent.h">
+      <Filter>runtime\content\world</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -686,12 +725,6 @@
     <ClCompile Include="src\runtime\world\lifecycle\WorldBase.cpp">
       <Filter>runtime\world\lifecycle</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\lifecycle\WorldDirectory.cpp">
-      <Filter>runtime\world\lifecycle</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\protocol\transport\WireBarrier.cpp">
-      <Filter>runtime\protocol\transport</Filter>
-    </ClCompile>
     <ClCompile Include="src\runtime\world\simulation\client\ClientWorld.cpp">
       <Filter>runtime\world\simulation\client</Filter>
     </ClCompile>
@@ -740,43 +773,67 @@
     <ClCompile Include="src\runtime\world\simulation\server\ServerReplicationSystem.cpp">
       <Filter>runtime\world\simulation\server</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\social\SocialService.cpp">
-      <Filter>runtime\social</Filter>
+    <ClCompile Include="src\runtime\session\RuntimeShardRouting.cpp">
+      <Filter>runtime\session</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\protocol\codec\WorldCodec.cpp">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\protocol\codec\ActorCodec.cpp">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\protocol\codec\RuntimePacketCodec.cpp">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\protocol\codec\SocialCodec.cpp">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\protocol\codec\ContentCodec.cpp">
+      <Filter>runtime\protocol\codec</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\content\social\SocialService.cpp">
+      <Filter>runtime\content\social</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\content\generic\GenericContentService.cpp">
+      <Filter>runtime\content\generic</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\actor_spawn.fbs">
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\actor_spawn.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\baseline_ack.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\baseline_ack.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\binding_handshake.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\binding_handshake.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\input.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\content.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\lifecycle.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\input.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\physics_type.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\lifecycle.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\snapshot.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\physics_type.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\world_assignment.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\snapshot.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_types.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\social_command.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_message.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\social_message.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_command.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\social_types.fbs">
       <Filter>runtime\protocol\schema\fbs</Filter>
-    </CustomBuild>
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\world_assignment.fbs">
+      <Filter>runtime\protocol\schema\fbs</Filter>
+    </None>
   </ItemGroup>
 </Project>

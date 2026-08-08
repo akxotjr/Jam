@@ -74,7 +74,8 @@ namespace jam::net
 
 		if (!m_mailboxRef.TryPost(std::move(j)))
 		{
-			JAMNET_LOG_WARN("[Session::Post] failed trying post job");
+			JAMNET_LOG_WARN("[Session::Post] failed trying post job. accountId={}, userId={}, sessionId={}, mailboxValid={}, closing={}",
+				m_accountId, m_userId, m_sessionId, m_mailboxRef.IsValid(), IsClosing());
 		}
 	}
 
@@ -179,7 +180,8 @@ namespace jam::net
 
 	bool Session::TryBeginServerBind()
 	{
-		if (m_sessionId != kInvalidSessionId || m_state.load(std::memory_order_relaxed) == eSessionState::Binding)
+		const eSessionState state = m_state.load(std::memory_order_relaxed);
+		if (m_sessionId != kInvalidSessionId || state == eSessionState::Authenticating || state == eSessionState::Binding)
 			return false;
 
 		SetSessionState(eSessionState::Binding);
@@ -188,7 +190,8 @@ namespace jam::net
 
 	void Session::EndServerBind()
 	{
-		if (m_sessionId == kInvalidSessionId && m_state.load(std::memory_order_relaxed) == eSessionState::Binding)
+		const eSessionState state = m_state.load(std::memory_order_relaxed);
+		if (m_sessionId == kInvalidSessionId && (state == eSessionState::Authenticating || state == eSessionState::Binding))
 			SetSessionState(eSessionState::Connected);
 	}
 

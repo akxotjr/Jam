@@ -5,6 +5,10 @@
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/TcpRecvAssembler.h"
 
+#include <functional>
+#include <string>
+#include <vector>
+
 
 namespace jam
 {
@@ -36,6 +40,8 @@ namespace jam::net
 		void					Send(Packet packet) override;
 
 		void					HandlePreBindSystemPacket(const PacketHeaderView& view) override;
+		void					SetPasswordCredential(std::string loginId, std::string password);
+		void					SetTicketCredential(std::vector<uint8> ticket);
 
 	private:
 		HANDLE					GetHandle() override;
@@ -59,11 +65,17 @@ namespace jam::net
 		void					ScheduleSessionBindingRetry();
 
 		void					SendImmediatePacket(Packet packet);
-
 		void					HandleError(int32 errorCode);
 
 	protected:
 		virtual RuntimeId		ResolveServerTcpBindUserId(uint64 accountId) { (void)accountId; return kInvalidRuntimeId; }
+		virtual void			AuthenticateServerTcpBind(const TCP_BIND_REQ_DATA& request, std::function<void(uint64)> completed)
+		{
+			(void)request;
+			if (completed) completed(0);
+		}
+		virtual eBootstrapKind  ResolveServerBootstrapKind(RuntimeId userId) { (void)userId; return eBootstrapKind::Pending; }
+		virtual void			OnTcpBindBootstrap(eBootstrapKind kind) { (void)kind; }
 		void					OnSessionPrincipalUpdated() override { TrySessionBinding(); }
 
 	private:
@@ -71,5 +83,7 @@ namespace jam::net
 		TcpDisconnectEvent				m_disconnectEvent;
 
 		TcpRecvAssembler				m_recvAssembler;
+		TCP_BIND_REQ_DATA				m_loginRequest = {};
+		uint64							m_serverAuthAttempt = 0;
 	};
 }

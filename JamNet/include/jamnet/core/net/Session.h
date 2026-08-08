@@ -32,14 +32,15 @@ namespace jam::net
 	};
 
 	// Transition summary:
-	// Disconnected -> Connected -> Binding -> Bound -> Ready
-	// Connected: transport connected, Binding: bind in flight,
+	// Disconnected -> Connected -> Authenticating -> Binding -> Bound -> Ready
+	// Connected: transport connected, Authenticating: principal verification in flight, Binding: bind in flight,
 	// Bound    : sessionId issued and shard binding completed,
 	// Ready    : entity created and link established callbacks are valid.
 	enum class eSessionState : uint8
 	{
 		Disconnected,
 		Connected,
+		Authenticating,
 		Binding,
 		Bound,
 		Ready,

@@ -186,6 +186,7 @@ namespace jam::net
 		void							ReleaseUdpSession(UdpSession* session) override;
 
 		uint64							GetAccountId() const { return m_accountId; }
+		void							SetAccountId(uint64 accountId) { m_accountId = accountId; }
 		std::shared_ptr<ShardExecutor>	GetPrincipalShard() const { return m_principalShard; }
 
 	private:

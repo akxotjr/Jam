@@ -26,7 +26,8 @@ namespace jam::net
 			return GLOBAL_EXEC.MakeAffinityRouteKey(accountId);
 		}
 
-		void SendTcpBindResponse(Session& session, bool success, uint64 accountId, RuntimeId userId)
+		void SendTcpBindResponse(Session& session, bool success, uint64 accountId, RuntimeId userId,
+			eBootstrapKind bootstrapKind = eBootstrapKind::Pending)
 		{
 			const SessionId sessionId = success ? session.GetSessionId() : kInvalidSessionId;
 			const TCP_BIND_RES_DATA res
@@ -35,6 +36,7 @@ namespace jam::net
 				.userId = userId,
 				.sessionId = sessionId,
 				.success = static_cast<uint8>(success ? 1 : 0),
+				.bootstrapKind = success ? bootstrapKind : eBootstrapKind::Pending,
 			};
 			auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_RES, PacketFlags::NONE, eChannel::TCP_DEFAULT, &res, sizeof(res));
 			session.Send(pkt);
@@ -62,6 +64,24 @@ namespace jam::net
 	TcpSession::~TcpSession()
 	{
 		SocketUtils::Close(m_socket);
+	}
+
+	void TcpSession::SetPasswordCredential(std::string loginId, std::string password)
+	{
+		m_loginRequest = {};
+		m_loginRequest.kind = eLoginCredentialKind::Password;
+		m_loginRequest.loginIdSize = static_cast<uint16>(std::min(loginId.size(), kMaxLoginIdBytes));
+		m_loginRequest.secretSize = static_cast<uint16>(std::min(password.size(), kMaxLoginSecretBytes));
+		std::memcpy(m_loginRequest.loginId, loginId.data(), m_loginRequest.loginIdSize);
+		std::memcpy(m_loginRequest.secret, password.data(), m_loginRequest.secretSize);
+	}
+
+	void TcpSession::SetTicketCredential(std::vector<uint8> ticket)
+	{
+		m_loginRequest = {};
+		m_loginRequest.kind = eLoginCredentialKind::Ticket;
+		m_loginRequest.secretSize = static_cast<uint16>(std::min(ticket.size(), kMaxLoginSecretBytes));
+		std::memcpy(m_loginRequest.secret, ticket.data(), m_loginRequest.secretSize);
 	}
 
 	bool TcpSession::Connect()
@@ -577,8 +597,7 @@ namespace jam::net
 			if (m_clientBind.bound)
 				return;
 
-			if (const auto* res = reinterpret_cast<const TCP_BIND_RES_DATA*>(view.Payload());
-				res && res->accountId == m_accountId)
+			if (const auto* res = reinterpret_cast<const TCP_BIND_RES_DATA*>(view.Payload()); res)
 			{
 				m_clientBind.active = false;
 				++m_clientBind.timerToken;
@@ -590,7 +609,14 @@ namespace jam::net
 					Disconnect();
 					return;
 				}
+				if (res->bootstrapKind != eBootstrapKind::Fresh && res->bootstrapKind != eBootstrapKind::Resync)
+				{
+					JAMNET_LOG_ERROR("[TcpSession] TCP bind response has invalid bootstrap kind. accountId={}, kind={}", m_accountId, static_cast<uint32>(res->bootstrapKind));
+					Disconnect();
+					return;
+				}
 
+				m_accountId = res->accountId;
 				m_userId = res->userId;
 				m_clientBind.bound = true;
 				if (!AdoptAuthoritativeSessionId(res->sessionId))
@@ -601,6 +627,7 @@ namespace jam::net
 					Disconnect();
 					return;
 				}
+				OnTcpBindBootstrap(res->bootstrapKind);
 			}
 			break;
 
@@ -609,62 +636,74 @@ namespace jam::net
 				return;
 			if (view.PayloadSize() < sizeof(TCP_BIND_REQ_DATA))
 				return;
-			if (const auto* req = reinterpret_cast<const TCP_BIND_REQ_DATA*>(view.Payload()); !req || req->accountId == 0)
+			if (const auto* req = reinterpret_cast<const TCP_BIND_REQ_DATA*>(view.Payload()); !req
+				|| req->loginIdSize > kMaxLoginIdBytes || req->secretSize == 0 || req->secretSize > kMaxLoginSecretBytes
+				|| (req->kind != eLoginCredentialKind::Password && req->kind != eLoginCredentialKind::Ticket))
 			{
-				SendTcpBindResponse(*this, false, req ? req->accountId : 0, kInvalidRuntimeId);
+				SendTcpBindResponse(*this, false, 0, kInvalidRuntimeId);
 				return;
 			}
 			else
 			{
 				if (GetSessionId() != kInvalidSessionId)
 				{
-					const bool sameAccount = (m_accountId == req->accountId && m_userId != kInvalidRuntimeId);
-					SendTcpBindResponse(*this, sameAccount, req->accountId, sameAccount ? m_userId : kInvalidRuntimeId);
+					const bool bound = m_accountId != 0 && m_userId != kInvalidRuntimeId;
+					const eBootstrapKind bootstrapKind = bound ? ResolveServerBootstrapKind(m_userId) : eBootstrapKind::Pending;
+					SendTcpBindResponse(*this, bound, m_accountId, bound ? m_userId : kInvalidRuntimeId, bootstrapKind);
 					return;
 				}
 				if (!TryBeginServerBind())
 					return;
+				SetSessionState(eSessionState::Authenticating);
 
-				const RouteKey boundRouteKey = MakeBoundSessionRouteKey(req->accountId);
-				const auto targetShard = GLOBAL_EXEC.GetShard(boundRouteKey);
-				if (!targetShard || targetShard->GetIndex() > std::numeric_limits<uint16>::max())
-				{
-					EndServerBind();
-					SendTcpBindResponse(*this, false, req->accountId, kInvalidRuntimeId);
-					return;
-				}
-
-				const uint64 endpointId = GetEndpointId();
-				Rehome(boundRouteKey, [this, accountId = req->accountId, endpointId, boundRouteKey](bool rehomeOk) mutable
+				const uint64 authAttempt = ++m_serverAuthAttempt;
+				const EndpointHandle endpoint = GetEndpointHandle();
+				const auto service = GetServiceRef();
+				AuthenticateServerTcpBind(*req, [service, endpoint, authAttempt](uint64 accountId)
 					{
-						if (!rehomeOk || GetEndpointId() != endpointId || GetRouteKey() != boundRouteKey)
-						{
-							EndServerBind();
-							SendTcpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+						if (!service || !endpoint.IsValid())
 							return;
-						}
-
-						const RuntimeId userId = ResolveServerTcpBindUserId(accountId);
-						if (userId == kInvalidRuntimeId)
-						{
-							EndServerBind();
-							SendTcpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+						const auto shard = GLOBAL_EXEC.GetShard(endpoint.routeKey);
+						if (!shard)
 							return;
-						}
+						shard->Submit(Job([service, endpoint, authAttempt, accountId]()
+							{
+								auto* self = static_cast<TcpSession*>(service->FindOwnedSession(kInvalidSessionId, endpoint));
+								if (!self || self->m_serverAuthAttempt != authAttempt)
+									return;
+								if (accountId == 0)
+								{
+									self->SetSessionState(eSessionState::Binding);
+									self->EndServerBind();
+									SendTcpBindResponse(*self, false, 0, kInvalidRuntimeId);
+									return;
+								}
 
-						SetAccountId(accountId);
-						SetUserId(userId);
-						IssueSessionId();
-
-						if (GetSessionId() == kInvalidSessionId || IsClosing())
-						{
-							EndServerBind();
-							SendTcpBindResponse(*this, false, accountId, kInvalidRuntimeId);
-							return;
-						}
-
-						EndServerBind();
-						SendTcpBindResponse(*this, true, accountId, m_userId);
+								const RouteKey boundRouteKey = MakeBoundSessionRouteKey(accountId);
+								self->SetSessionState(eSessionState::Binding);
+								self->Rehome(boundRouteKey, [self, accountId, boundRouteKey](bool rehomeOk)
+									{
+										if (!rehomeOk || self->GetRouteKey() != boundRouteKey || self->IsClosing())
+										{
+											self->EndServerBind();
+											SendTcpBindResponse(*self, false, accountId, kInvalidRuntimeId);
+											return;
+										}
+										const RuntimeId userId = self->ResolveServerTcpBindUserId(accountId);
+										if (userId == kInvalidRuntimeId)
+										{
+											self->EndServerBind();
+											SendTcpBindResponse(*self, false, accountId, kInvalidRuntimeId);
+											return;
+										}
+										self->SetAccountId(accountId);
+										self->SetUserId(userId);
+										self->IssueSessionId();
+										self->EndServerBind();
+										SendTcpBindResponse(*self, self->GetSessionId() != kInvalidSessionId,
+											accountId, self->m_userId, self->ResolveServerBootstrapKind(self->m_userId));
+									});
+							}));
 					});
 			}
 			break;
@@ -679,15 +718,14 @@ namespace jam::net
 			return;
 		if (m_clientBind.active || m_clientBind.bound)
 			return;
-		if (m_accountId == 0)
+		if (m_loginRequest.secretSize == 0)
 			return;
 
 		m_clientBind.active = true;
 		m_clientBind.bound = false;
 		m_clientBind.retryCount = 0;
-		SetSessionState(eSessionState::Binding);
-		const TCP_BIND_REQ_DATA req{ .accountId = m_accountId };
-		auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_REQ, PacketFlags::NONE, eChannel::TCP_DEFAULT, &req, sizeof(req));
+		SetSessionState(eSessionState::Authenticating);
+		auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_REQ, PacketFlags::NONE, eChannel::TCP_DEFAULT, &m_loginRequest, sizeof(m_loginRequest));
 		Send(pkt);
 		ScheduleSessionBindingRetry();
 	}
@@ -715,8 +753,7 @@ namespace jam::net
 				}
 
 				self->m_clientBind.retryCount++;
-				const TCP_BIND_REQ_DATA req{ .accountId = self->m_accountId };
-				auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_REQ, PacketFlags::NONE, eChannel::TCP_DEFAULT, &req, sizeof(req));
+				auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::TCP_BIND_REQ, PacketFlags::NONE, eChannel::TCP_DEFAULT, &self->m_loginRequest, sizeof(self->m_loginRequest));
 				self->Send(pkt);
 				self->ScheduleSessionBindingRetry();
 			}, eJobPriority::Control), kClientBindRetryDelayNs);

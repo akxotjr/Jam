@@ -253,8 +253,22 @@
     <ClInclude Include="include\jamnet\runtime\application\ClientNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\application\ClientRuntime.h" />
     <ClInclude Include="include\jamnet\runtime\application\ServerNetworkManager.h" />
+    <ClInclude Include="include\jamnet\runtime\content\authentication\IAuthenticationContent.h" />
+    <ClInclude Include="include\jamnet\runtime\content\generic\GenericContentService.h" />
+    <ClInclude Include="include\jamnet\runtime\content\generic\GenericContentTypes.h" />
+    <ClInclude Include="include\jamnet\runtime\content\generic\IGenericContent.h" />
+    <ClInclude Include="include\jamnet\runtime\content\social\ISocialContent.h" />
+    <ClInclude Include="include\jamnet\runtime\content\social\ISocialDelivery.h" />
+    <ClInclude Include="include\jamnet\runtime\content\social\SocialService.h" />
+    <ClInclude Include="include\jamnet\runtime\content\social\SocialTypes.h" />
+    <ClInclude Include="include\jamnet\runtime\content\world\IWorldContent.h" />
     <ClInclude Include="include\jamnet\runtime\protocol\codec\BitBuffer.h" />
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\ActorCodec.h" />
     <ClInclude Include="include\jamnet\runtime\protocol\codec\ReplicationCodec.h" />
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\RuntimePacketCodec.h" />
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\SocialCodec.h" />
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\ContentCodec.h" />
+    <ClInclude Include="include\jamnet\runtime\protocol\codec\WorldCodec.h" />
     <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\actor_spawn_generated.h" />
     <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\baseline_ack_generated.h" />
     <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\binding_handshake_generated.h" />
@@ -265,16 +279,12 @@
     <ClInclude Include="include\jamnet\runtime\protocol\schema\gen\world_assignment_generated.h" />
     <ClInclude Include="include\jamnet\runtime\protocol\schema\RPCSchemaIds.h" />
     <ClInclude Include="include\jamnet\runtime\protocol\transport\CustomPacketHelper.h" />
-    <ClInclude Include="include\jamnet\runtime\protocol\transport\WireBarrier.h" />
     <ClInclude Include="include\jamnet\runtime\session\ClientPrincipalState.h" />
     <ClInclude Include="include\jamnet\runtime\session\ClientRequestId.h" />
     <ClInclude Include="include\jamnet\runtime\session\ClientSession.h" />
+    <ClInclude Include="include\jamnet\runtime\session\RuntimeShardRouting.h" />
     <ClInclude Include="include\jamnet\runtime\session\ServerSession.h" />
     <ClInclude Include="include\jamnet\runtime\session\UserContext.h" />
-    <ClInclude Include="include\jamnet\runtime\social\IServerSocialContent.h" />
-    <ClInclude Include="include\jamnet\runtime\social\ISocialDelivery.h" />
-    <ClInclude Include="include\jamnet\runtime\social\SocialService.h" />
-    <ClInclude Include="include\jamnet\runtime\social\SocialTypes.h" />
     <ClInclude Include="include\jamnet\runtime\world\actor\ActorActionTypes.h" />
     <ClInclude Include="include\jamnet\runtime\world\actor\ActorArchetypeDatabase.h" />
     <ClInclude Include="include\jamnet\runtime\world\actor\ActorArchetypesLoader.h" />
@@ -295,12 +305,12 @@
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\ServerWorldTransitionCoordinator.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldActionTypes.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldBase.h" />
-    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldDirectory.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldIdentity.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldRuntimeLifecycle.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldShardState.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldTemplateKey.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldTransitionTypes.h" />
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldSyncTypes.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientCharacterControlCoordinator.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientInputSystem.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\client\ClientPhysicsSystem.h" />
@@ -322,7 +332,6 @@
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerPhysicsSystem.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerReplicationSystem.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerWorld.h" />
-    <ClInclude Include="include\jamnet\runtime\world\simulation\server\IServerWorldContent.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -377,11 +386,17 @@
     <ClCompile Include="src\runtime\application\ClientNetworkManager.cpp" />
     <ClCompile Include="src\runtime\application\ClientRuntime.cpp" />
     <ClCompile Include="src\runtime\application\ServerNetworkManager.cpp" />
-    <ClCompile Include="src\runtime\protocol\transport\WireBarrier.cpp" />
+    <ClCompile Include="src\runtime\content\generic\GenericContentService.cpp" />
+    <ClCompile Include="src\runtime\content\social\SocialService.cpp" />
+    <ClCompile Include="src\runtime\protocol\codec\ActorCodec.cpp" />
+    <ClCompile Include="src\runtime\protocol\codec\RuntimePacketCodec.cpp" />
+    <ClCompile Include="src\runtime\protocol\codec\SocialCodec.cpp" />
+    <ClCompile Include="src\runtime\protocol\codec\ContentCodec.cpp" />
+    <ClCompile Include="src\runtime\protocol\codec\WorldCodec.cpp" />
     <ClCompile Include="src\runtime\session\ClientSession.cpp" />
+    <ClCompile Include="src\runtime\session\RuntimeShardRouting.cpp" />
     <ClCompile Include="src\runtime\session\ServerSession.cpp" />
     <ClCompile Include="src\runtime\session\UserContext.cpp" />
-    <ClCompile Include="src\runtime\social\SocialService.cpp" />
     <ClCompile Include="src\runtime\world\actor\ActorArchetypeDatabase.cpp" />
     <ClCompile Include="src\runtime\world\actor\ActorArchetypesLoader.cpp" />
     <ClCompile Include="src\runtime\world\actor\ActorDirectory.cpp" />
@@ -399,7 +414,6 @@
     <ClCompile Include="src\runtime\world\lifecycle\ClientMainWorldState.cpp" />
     <ClCompile Include="src\runtime\world\lifecycle\ServerWorldTransitionCoordinator.cpp" />
     <ClCompile Include="src\runtime\world\lifecycle\WorldBase.cpp" />
-    <ClCompile Include="src\runtime\world\lifecycle\WorldDirectory.cpp" />
     <ClCompile Include="src\runtime\world\lifecycle\WorldRuntimeLifecycle.cpp" />
     <ClCompile Include="src\runtime\world\lifecycle\WorldShardState.cpp" />
     <ClCompile Include="src\runtime\world\simulation\client\ClientCharacterControlCoordinator.cpp" />
@@ -425,21 +439,21 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\actor_spawn.fbs">
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\actor_spawn.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
-setlocal 
+setlocal
 set "OUT=$(ProjectDir)include\jamnet\runtime\protocol\schema\gen"
 set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
 
-set "IN=%(FullPath)" 
+set "IN=%(FullPath)"
 echo FLATC=%FLATC%
 echo IN=%IN% echo OUT=%OUT%
 if not exist "%OUT%" mkdir "%OUT%"
 if not exist "%FLATC%" (
 	echo [ERROR] flatc not found at "%FLATC%"
-	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows 
-	echo [HINT] 또는 절대경로로 지정해보세요. 
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows
+	echo [HINT] 또는 절대경로로 지정해보세요.
 	exit /b 1 )
 
 "%FLATC%" --version || exit /b 1
@@ -448,8 +462,8 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\baseline_ack.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\baseline_ack.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -472,8 +486,8 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\binding_handshake.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\binding_handshake.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -496,8 +510,8 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\input.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\input.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -520,8 +534,8 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\lifecycle.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\lifecycle.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -544,8 +558,8 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\physics_type.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\physics_type.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -568,8 +582,8 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\snapshot.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\snapshot.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -592,8 +606,8 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\world_assignment.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\world_assignment.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -616,10 +630,10 @@ if not exist "%FLATC%" (
 endlocal
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_command.fbs">
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\social_command.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -661,8 +675,8 @@ if not exist "%FLATC%" (
 endlocal</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_message.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\social_message.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -704,8 +718,8 @@ if not exist "%FLATC%" (
 
 endlocal</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
-    <CustomBuild Include="include\jamnet\runtime\protocol\schema\fbs\social_types.fbs">
+    </None>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\social_types.fbs">
       <FileType>Document</FileType>
       <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
 setlocal 
@@ -747,7 +761,33 @@ if not exist "%FLATC%" (
 
 endlocal</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h;%(Outputs)</Outputs>
-    </CustomBuild>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="include\jamnet\runtime\protocol\schema\fbs\content.fbs">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">@echo on
+setlocal
+set "OUT=$(ProjectDir)include\jamnet\runtime\protocol\schema\gen"
+set "FLATC=$(VcpkgRoot)\installed\x64-windows\tools\flatbuffers\flatc.exe"
+
+set "IN=%(FullPath)"
+echo FLATC=%FLATC%
+echo IN=%IN% echo OUT=%OUT%
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%FLATC%" (
+	echo [ERROR] flatc not found at "%FLATC%"
+	echo [HINT] vcpkg로 flatbuffers를 설치했는지 확인하세요: vcpkg install flatbuffers:x64-windows
+	echo [HINT] 또는 절대경로로 지정해보세요.
+	exit /b 1 )
+
+"%FLATC%" --version || exit /b 1
+"%FLATC%" -c --gen-object-api -I . -o "%OUT%" "%IN%" || exit /b 1
+
+endlocal
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)include\jamnet\runtime\protocol\schema\gen\%(Filename)_generated.h</Outputs>
+    </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

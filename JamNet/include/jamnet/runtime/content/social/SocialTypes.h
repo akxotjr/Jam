@@ -6,6 +6,7 @@
 #include "jamnet/runtime/session/UserContext.h"
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
 
@@ -18,10 +19,26 @@ namespace jam::net
 		Global,
 	};
 
+	enum class eSocialRecipientKind : uint8
+	{
+		None,
+		AccountId,
+		CharacterId,
+		CharacterName,
+	};
+
+	struct SocialRecipient
+	{
+		eSocialRecipientKind	kind = eSocialRecipientKind::None;
+		uint64					id	 = 0;
+		std::string				name;
+	};
+
 	struct SocialAddress
 	{
 		eSocialAudience			audience = eSocialAudience::Direct;		// The audience of the message
-		uint64					scopeId  = 0;							// The scope of the message, e.g., userId for Direct, worldId for World, etc. 
+		uint64					scopeId  = 0;
+		SocialRecipient			recipient = {};
 	};
 
 	struct SocialCommand
@@ -45,7 +62,7 @@ namespace jam::net
 	{
 		AccountId				accountId	= kInvalidAccountId;
 		UserId					userId		= kInvalidUserId;
-		UserPhysicalWorldState	world		= {};
+		UserWorldState			world		= {};
 	};
 
 
