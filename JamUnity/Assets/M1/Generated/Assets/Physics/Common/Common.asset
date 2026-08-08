@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 25e7a7b4f3ea7b9408adc8cc1c0c4293, type: 3}
   m_Name: Common
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.Physics.PhysicsAssetDatabase
-  sharedDataPath: M1/Physics/Common.physics_asset.json
+  sharedDataPath: Physics/Source/Common.physics_asset.json
   version: 1
   materials:
   - {fileID: 11400000, guid: f5e80063f03aaaa42b23f3535a0df515, type: 2}

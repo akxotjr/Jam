@@ -17,6 +17,7 @@ namespace JamUnity.Runtime.Client
             public Transform PresentationRoot;
             public WorldPresentationDatabase WorldPresentationDatabase;
             public ActorPresentationCatalog ActorPresentationCatalog;
+            public float LocalActorSmoothSpeed;
         }
 
         private CoreNative.ActorState[] previousActorBuffer = new CoreNative.ActorState[512];
@@ -54,13 +55,19 @@ namespace JamUnity.Runtime.Client
             Debug.Log($"[WorldPresentation] initialized. worldDatabase={(config.WorldPresentationDatabase != null ? config.WorldPresentationDatabase.name : "null")}, actorCatalog={(config.ActorPresentationCatalog != null ? config.ActorPresentationCatalog.name : "null")}, root={(config.PresentationRoot != null ? config.PresentationRoot.name : "null")}");
         }
 
+        public void ConfigureLocalActorSmoothing(float smoothSpeed)
+        {
+            config.LocalActorSmoothSpeed = smoothSpeed;
+            activeWorldPresenter?.ConfigureLocalActorSmoothing(smoothSpeed);
+        }
+
         public void Tick(NativeManager nativeManager, float deltaTime)
         {
             if (nativeManager == null || !nativeManager.IsInitialized)
                 return;
 
             SyncMainWorld(nativeManager);
-            PullPresentationFrames(nativeManager);
+            PullPresentationFrames(nativeManager, deltaTime);
         }
 
         public void OnMainWorldChanged(in CoreNative.WorldRuntimeRef world)
@@ -151,7 +158,7 @@ namespace JamUnity.Runtime.Client
             OnMainWorldChanged(world);
         }
 
-        private void PullPresentationFrames(NativeManager nativeManager)
+        private void PullPresentationFrames(NativeManager nativeManager, float deltaTime)
         {
             CoreNative.eResult result = nativeManager.CopyActorFramePair(
                 activeMainWorldId,
@@ -180,6 +187,7 @@ namespace JamUnity.Runtime.Client
                 return;
 
             RecordPresentationFrame(currentFrame.sequence);
+            float interpolationAlpha = ResolvePresentationInterpolationAlpha(previousFrame, currentFrame);
 
             int actorCount = currentFrame.actorCount;
 
@@ -192,11 +200,13 @@ namespace JamUnity.Runtime.Client
             for (int i = 0; i < actorCount; ++i)
             {
                 CoreNative.ActorState current = currentActorBuffer[i];
-				previousActorIndices.TryGetValue(current.actorId, out int previousIndex);
-                CoreNative.ActorState previous = previousIndex < previousActorCount ? previousActorBuffer[previousIndex] : default;
+				bool hasPrevious = previousActorIndices.TryGetValue(current.actorId, out int previousIndex);
+                CoreNative.ActorState previous = hasPrevious && previousIndex < previousActorCount
+                    ? previousActorBuffer[previousIndex]
+                    : default;
 
-                WorldPresenter.ActorRenderSample sample = BuildRenderSample(previousFrame, currentFrame, previous, current);
-                activeWorldPresenter?.ApplyActorRenderSample(sample);
+                WorldPresenter.ActorRenderSample sample = BuildRenderSample(previous, current, interpolationAlpha);
+                activeWorldPresenter?.ApplyActorRenderSample(sample, deltaTime);
             }
         }
 
@@ -205,6 +215,31 @@ namespace JamUnity.Runtime.Client
         private int presentationRepeatedFrames;
         private int presentationSequenceChanges;
         private float presentationLogElapsed;
+        private ulong presentationInterpolationSequence;
+        private float presentationInterpolationElapsed;
+
+        private float ResolvePresentationInterpolationAlpha(
+            CoreNative.ActorFrame previousFrame,
+            CoreNative.ActorFrame currentFrame)
+        {
+            if (previousFrame.sequence == 0
+                || currentFrame.sequence == 0
+                || currentFrame.sequence <= previousFrame.sequence)
+                return 1.0f;
+
+            if (currentFrame.sequence != presentationInterpolationSequence)
+            {
+                presentationInterpolationSequence = currentFrame.sequence;
+                presentationInterpolationElapsed = 0.0f;
+            }
+            else
+            {
+                presentationInterpolationElapsed += Time.unscaledDeltaTime;
+            }
+
+            const float simulationTickInterval = 1.0f / 30.0f;
+            return Mathf.Clamp01(presentationInterpolationElapsed / simulationTickInterval);
+        }
 
         private void RecordPresentationFrame(ulong sequence)
         {
@@ -221,7 +256,7 @@ namespace JamUnity.Runtime.Client
             if (presentationLogElapsed < 1.0f)
                 return;
 
-            //Debug.Log($"[MovementDiag][Presentation] frames={presentationFrames}, repeated={presentationRepeatedFrames}, sequenceChanges={presentationSequenceChanges}, lastSequence={lastPresentationSequence}");
+            Debug.Log($"[MovementDiag][Presentation] frames={presentationFrames}, repeated={presentationRepeatedFrames}, sequenceChanges={presentationSequenceChanges}, lastSequence={lastPresentationSequence}");
             presentationFrames = 0;
             presentationRepeatedFrames = 0;
             presentationSequenceChanges = 0;
@@ -299,6 +334,7 @@ namespace JamUnity.Runtime.Client
             activeWorldRoot = instance;
             activeWorldPresenter = instance.WorldPresenter;
             groundClickMarker = instance.GetComponentInChildren<GroundClickMarker>(true);
+            activeWorldPresenter?.ConfigureLocalActorSmoothing(config.LocalActorSmoothSpeed);
             activeWorldPresenter?.ResetRuntimePopulation();
             if (activeWorldPresenter == null)
             {
@@ -319,13 +355,14 @@ namespace JamUnity.Runtime.Client
             activeWorldPresenter = null;
             groundClickMarker = null;
             previousActorIndices.Clear();
+            presentationInterpolationSequence = 0;
+            presentationInterpolationElapsed = 0.0f;
         }
 
         private WorldPresenter.ActorRenderSample BuildRenderSample(
-            CoreNative.ActorFrame previousFrame,
-            CoreNative.ActorFrame currentFrame,
             CoreNative.ActorState previous,
-            CoreNative.ActorState current)
+            CoreNative.ActorState current,
+            float interpolationAlpha)
         {
 			actorIdentities.TryGetValue((activeMainWorldId, current.actorId), out ActorPresentationIdentity identity);
 
@@ -333,13 +370,15 @@ namespace JamUnity.Runtime.Client
             Quaternion rotation = current.rotation.ToUnity();
             if (previous.hasTransform != 0 && current.hasTransform != 0)
             {
-                float alpha = ResolveInterpolationAlpha(previousFrame, currentFrame);
-                position = Vector3.Lerp(previous.position.ToUnity(), position, alpha);
-                rotation = Quaternion.Slerp(previous.rotation.ToUnity(), rotation, alpha);
+                position = Vector3.Lerp(previous.position.ToUnity(), position, interpolationAlpha);
+                rotation = Quaternion.Slerp(previous.rotation.ToUnity(), rotation, interpolationAlpha);
             }
 
 			bool isLocal = current.isLocal != 0 || identity.IsLocal;
             ulong actorArchetypeKey = identity.ActorArchetypeKey;
+
+            // if (isLocal)
+            //     Debug.Log($"[MovementDiag][PlayerPosition] pos={position}");
 
             return new WorldPresenter.ActorRenderSample(
 				current.actorId,
@@ -350,15 +389,5 @@ namespace JamUnity.Runtime.Client
                 rotation);
         }
 
-        private static float ResolveInterpolationAlpha(CoreNative.ActorFrame previousFrame, CoreNative.ActorFrame currentFrame)
-        {
-            if (previousFrame.sequence == 0 || currentFrame.sequence == 0)
-                return 1.0f;
-
-            if (currentFrame.sequence <= previousFrame.sequence)
-                return 1.0f;
-
-            return 1.0f;
-        }
     }
 }

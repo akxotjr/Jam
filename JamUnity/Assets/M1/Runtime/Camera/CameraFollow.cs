@@ -11,6 +11,8 @@ namespace JamUnity.Client.Runtime
 
         private CameraProfile profile;
         private Camera targetCamera;
+        private float orbitYaw;
+        private float orbitPitch;
 
         public void SetProfile(CameraProfile nextProfile)
         {
@@ -23,6 +25,18 @@ namespace JamUnity.Client.Runtime
             targetCamera.orthographic = profile.Orthographic;
             targetCamera.fieldOfView = profile.FieldOfView;
             targetCamera.orthographicSize = profile.OrthographicSize;
+
+            orbitYaw = profile.InitialOrbitYaw;
+            orbitPitch = Mathf.Clamp(
+                profile.InitialOrbitPitch,
+                profile.OrbitPitchLimits.x,
+                profile.OrbitPitchLimits.y);
+        }
+
+        public void SetOrbit(float yaw, float pitch)
+        {
+            orbitYaw = yaw;
+            orbitPitch = pitch;
         }
     
         void LateUpdate()
@@ -39,10 +53,11 @@ namespace JamUnity.Client.Runtime
             Transform target = presenter.GetLocalActorTransform();
             if (target == null)
                 return;
-    
-            Vector3 desiredPosition = target.position + profile.FollowOffset;
-            float blend = 1.0f - Mathf.Exp(-profile.SmoothSpeed * Time.deltaTime);
-            transform.position = Vector3.Lerp(transform.position, desiredPosition, blend);
+
+            Vector3 followOffset = profile.Kind == CameraProfileKind.ThirdPerson
+                ? Quaternion.Euler(orbitPitch, orbitYaw, 0.0f) * profile.FollowOffset
+                : profile.FollowOffset;
+            transform.position = target.position + followOffset;
             transform.LookAt(target.position + profile.LookAtOffset);
         }
     

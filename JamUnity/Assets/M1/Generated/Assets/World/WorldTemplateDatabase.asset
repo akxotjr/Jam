@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b729e4af1755f804da1381ec2b1f6794, type: 3}
   m_Name: WorldTemplateDatabase
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.World.WorldTemplateDatabase
-  worldTemplateAssetPath: world_templates.json
+  worldTemplateAssetPath: Bootstrap/world_templates.json
   version: 1
   entries:
   - {fileID: 11400000, guid: 2644e5719fd62524dabe56eac83a7271, type: 2}

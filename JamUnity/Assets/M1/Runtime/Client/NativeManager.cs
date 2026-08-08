@@ -1,14 +1,38 @@
 using JamUnity.Core.Native;
 using System;
 using System.Runtime.InteropServices;
-using JamUnity.Core.Util;
 using UnityEngine;
+
 
 namespace JamUnity.Runtime.Client
 {
+    public readonly struct ContentResponse
+    {
+        public readonly ulong AccountId;
+        public readonly ulong UserId;
+        public readonly ulong RequestId;
+        public readonly ulong OperationKey;
+        public readonly CoreNative.eContentResponseStatus Status;
+        public readonly uint ResultCode;
+        public readonly byte[] Payload;
+
+        public ContentResponse(ulong accountId, ulong userId, ulong requestId, ulong operationKey,
+            CoreNative.eContentResponseStatus status, uint resultCode, byte[] payload)
+        {
+            AccountId = accountId;
+            UserId = userId;
+            RequestId = requestId;
+            OperationKey = operationKey;
+            Status = status;
+            ResultCode = resultCode;
+            Payload = payload ?? Array.Empty<byte>();
+        }
+    }
+
     public sealed class NativeManager
     {
         private const int MaxEventsPerFrame = 128;
+        public const int MaxContentPayloadBytes = 1024;
 
         private INativeNetworkEventSink networkEventSink;
         private INativeWorldEventSink worldEventSink;
@@ -18,36 +42,45 @@ namespace JamUnity.Runtime.Client
 
         public bool IsInitialized => nativeInitialized;
         public event Action<CoreNative.ActorActionRequestCompletedEvent> ActorActionRequestCompleted;
+        public event Action<ContentResponse> ContentRequestCompleted;
 
         public void BindNetworkEvent(INativeNetworkEventSink sink) => networkEventSink = sink;
         public void BindWorldEvent(INativeWorldEventSink sink) => worldEventSink = sink;
         public void BindActorEvent(INativeActorEventSink sink) => actorEventSink = sink;
         public void BindSocialEvent(INativeSocialEventSink sink) => socialEventSink = sink;
 
-        public bool Init(ClientRoot.Config config)
+        public bool Login(ClientRoot.Config config, string loginId, string password)
         {
             if (nativeInitialized)
             {
                 Debug.Log("NativeManager is already initialized.");
                 return true;
-            }    
+            }
             if (!CoreNative.IsAvailable)
             {
                 Debug.Log("NativeManager failed to initialize native client: CoreNative is not available.");
                 return false;
             }
 
-            CoreNative.ClientConfig nativeConfig = CreateNativeConfig(config);
+            CoreNative.ClientConfig nativeConfig = CreateNativeConfig(config, loginId, password);
 
             if (CoreNative.Initialize(ref nativeConfig) != CoreNative.eResult.Ok)
             {
                 Debug.Log("NativeManager failed to initialize native client.");
                 return false;
             }
-            if (CoreNative.Connect() != CoreNative.eResult.Ok)
+
+            CoreNative.eResult connectResult = CoreNative.Connect();
+            if (connectResult  != CoreNative.eResult.Ok)
             {
                 CoreNative.Shutdown();
                 Debug.Log("NativeManager failed to connect native client.");
+
+                if (connectResult == CoreNative.eResult.InternalError)
+                    Debug.Log("reason: internal error");
+                else if (connectResult == CoreNative.eResult.NotInitialized)
+                    Debug.Log("reason: not initialized");
+
                 return false;
             }
 
@@ -95,6 +128,9 @@ namespace JamUnity.Runtime.Client
         public CoreNative.eResult RequestSocialCommand(
             CoreNative.eSocialAudience audience,
             ulong scopeId,
+            CoreNative.eSocialRecipientKind recipientKind,
+            ulong recipientId,
+            string recipientName,
             ushort contentType,
             byte[] payload,
             out CoreNative.ClientRequestSubmission submission)
@@ -106,6 +142,7 @@ namespace JamUnity.Runtime.Client
                 return CoreNative.eResult.InvalidArgument;
 
             GCHandle payloadHandle = default;
+            GCHandle recipientNameHandle = default;
             try
             {
                 CoreNative.SocialCommand command = new()
@@ -115,16 +152,61 @@ namespace JamUnity.Runtime.Client
                     {
                         audience = audience,
                         scopeId = scopeId,
+                        recipientKind = recipientKind,
+                        recipientId = recipientId,
+                        recipientName = IntPtr.Zero,
                     },
                     contentType = contentType,
                     payloadSize = (uint)payload.Length,
                 };
+                if (!string.IsNullOrEmpty(recipientName))
+                {
+                    byte[] recipientNameBytes = System.Text.Encoding.UTF8.GetBytes(recipientName + '\0');
+                    recipientNameHandle = GCHandle.Alloc(recipientNameBytes, GCHandleType.Pinned);
+                    command.destination.recipientName = recipientNameHandle.AddrOfPinnedObject();
+                }
                 if (payload.Length > 0)
                 {
                     payloadHandle = GCHandle.Alloc(payload, GCHandleType.Pinned);
                     command.payload = payloadHandle.AddrOfPinnedObject();
                 }
                 return CoreNative.RequestSocialCommand(ref command, out submission);
+            }
+            finally
+            {
+                if (payloadHandle.IsAllocated)
+                    payloadHandle.Free();
+                if (recipientNameHandle.IsAllocated)
+                    recipientNameHandle.Free();
+            }
+        }
+
+        public CoreNative.eResult RequestContent(
+            ulong operationKey,
+            byte[] payload,
+            out CoreNative.ClientRequestSubmission submission)
+        {
+            submission = default;
+            if (!nativeInitialized)
+                return CoreNative.eResult.NotInitialized;
+            if (operationKey == 0 || payload == null || payload.Length > MaxContentPayloadBytes)
+                return CoreNative.eResult.InvalidArgument;
+
+            GCHandle payloadHandle = default;
+            try
+            {
+                CoreNative.GenericContentRequest request = new()
+                {
+                    structSize = (uint)Marshal.SizeOf<CoreNative.GenericContentRequest>(),
+                    operationKey = operationKey,
+                    payloadSize = (uint)payload.Length,
+                };
+                if (payload.Length > 0)
+                {
+                    payloadHandle = GCHandle.Alloc(payload, GCHandleType.Pinned);
+                    request.payload = payloadHandle.AddrOfPinnedObject();
+                }
+                return CoreNative.RequestGenericContent(ref request, out submission);
             }
             finally
             {
@@ -164,13 +246,8 @@ namespace JamUnity.Runtime.Client
                 : CoreNative.GetActorPresentationFramePair(worldId, previousActors, previousCapacity, out previousFrame, currentActors, currentCapacity, out currentFrame, out info);
         }
 
-        private CoreNative.ClientConfig CreateNativeConfig(ClientRoot.Config config)
+        private CoreNative.ClientConfig CreateNativeConfig(ClientRoot.Config config, string loginId, string password)
         {
-            ulong actualAccountId = config.AccountId;
-            
-#if UNITY_EDITOR
-            actualAccountId += (ulong)(MultiPlayModeUtility.GetPlayerIndex() - 1);
-#endif
             return new CoreNative.ClientConfig
             {
                 structSize = (uint)Marshal.SizeOf<CoreNative.ClientConfig>(),
@@ -178,7 +255,11 @@ namespace JamUnity.Runtime.Client
                 serverIp = config.ServerIp,
                 tcpPort = config.TcpPort,
                 udpPort = config.UdpPort,
-                accountId = actualAccountId,
+                accountId = 0,
+                loginId = loginId?.Trim() ?? string.Empty,
+                password = password ?? string.Empty,
+                ticket = IntPtr.Zero,
+                ticketSize = 0,
                 sharedDataManifestPath = config.SharedDataManifestPath?.Trim() ?? string.Empty,
                 headlessMode = config.HeadlessMode ? 1 : 0,
             };
@@ -229,7 +310,35 @@ namespace JamUnity.Runtime.Client
                             nativeMessage.senderUserId,
                             nativeMessage.destination.audience,
                             nativeMessage.destination.scopeId,
+                            nativeMessage.destination.recipientKind,
+                            nativeMessage.destination.recipientId,
+                            nativeMessage.destination.recipientName == IntPtr.Zero
+                                ? string.Empty
+                                : Marshal.PtrToStringUTF8(nativeMessage.destination.recipientName),
                             nativeMessage.contentType,
+                            payload));
+                        break;
+                    }
+                    case CoreNative.eClientEventType.ContentRequestCompleted:
+                    {
+                        CoreNative.GenericContentRequestCompletedEvent nativeResponse = ev.contentRequestCompleted;
+                        if (nativeResponse.payloadSize > int.MaxValue)
+                            return;
+                        int payloadSize = (int)nativeResponse.payloadSize;
+                        byte[] payload = new byte[payloadSize];
+                        if (payload.Length > 0)
+                        {
+                            if (nativeResponse.payload == IntPtr.Zero)
+                                return;
+                            Marshal.Copy(nativeResponse.payload, payload, 0, payload.Length);
+                        }
+                        ContentRequestCompleted?.Invoke(new ContentResponse(
+                            nativeResponse.accountId,
+                            nativeResponse.userId,
+                            nativeResponse.requestId,
+                            nativeResponse.operationKey,
+                            nativeResponse.status,
+                            nativeResponse.resultCode,
                             payload));
                         break;
                     }

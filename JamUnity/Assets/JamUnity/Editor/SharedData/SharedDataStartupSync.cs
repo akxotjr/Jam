@@ -25,7 +25,7 @@ namespace JamUnity.Editor.SharedData
         private const string StartupSyncSessionKey  = "JamUnity.SharedDataStartupSync.Completed";
         private const string ActorCacheRoot         = Core.Util.Path.GeneratedAssetRoot + "/Actor";
         private const string PhysicsCacheRoot       = Core.Util.Path.GeneratedAssetRoot + "/Physics";
-        private const string PhysicsSourceRoot      = "M1/Physics";
+        private const string PhysicsSourceRoot      = "Physics/Source";
 
         private readonly struct DomainPaths
         {

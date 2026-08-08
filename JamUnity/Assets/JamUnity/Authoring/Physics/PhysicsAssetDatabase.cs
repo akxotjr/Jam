@@ -13,7 +13,7 @@ namespace JamUnity.Authoring.Physics
     {
         public const string DatabaseAssetPath = Core.Util.Path.GeneratedAssetRoot + "/Physics/Common/Common.asset";
         public const string PhysicsDataRoot = Core.Util.Path.GeneratedAssetRoot + "/Physics/Common";
-        public const string DefaultSharedDataPath = "M1/Physics/Common.physics_asset.json";
+        public const string DefaultSharedDataPath = Core.Util.Path.PhysicsAssetPath;
 
         [SerializeField] private string sharedDataPath = DefaultSharedDataPath;
         [SerializeField] private int    version = 1;

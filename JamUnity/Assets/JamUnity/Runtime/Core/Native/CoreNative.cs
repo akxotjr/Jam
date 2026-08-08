@@ -6,7 +6,7 @@ namespace JamUnity.Core.Native
 {
     public static class CoreNative
     {
-        public const uint AbiVersion = 12;
+        public const uint AbiVersion = 15;
 
         private const string DllName =
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
@@ -27,20 +27,28 @@ namespace JamUnity.Core.Native
             InternalError = -6,
         }
 
-        public enum eNetworkPhase : byte
+		public enum eNetworkPhase : byte
         {
             Disconnected,
             Connecting,
             Ready,
-            Degraded
-        }
+			Degraded
+		}
+
+		public enum eBootstrapKind : byte
+		{
+			Pending,
+			Fresh,
+			Resync
+		}
 
         public enum eClientRequestKind : byte
         {
             None,
             WorldAction,
             ActorAction,
-            SocialCommand
+            SocialCommand,
+            ContentRequest
         }
 
         public enum eClientRequestAdmission : byte
@@ -126,7 +134,18 @@ namespace JamUnity.Core.Native
             ActorLifecycleChanged,
             WorldRayResolved,
             ActorActionRequestCompleted,
-            SocialMessageReceived
+            SocialMessageReceived,
+            ContentRequestCompleted
+        }
+
+        public enum eContentResponseStatus : byte
+        {
+            None,
+            Succeeded,
+            Rejected,
+            InvalidRequest,
+            Unavailable,
+            InternalError
         }
 
         public enum eSocialAudience : byte
@@ -134,6 +153,14 @@ namespace JamUnity.Core.Native
             Direct,
             Group,
             Global
+        }
+
+        public enum eSocialRecipientKind : byte
+        {
+            None,
+            AccountId,
+            CharacterId,
+            CharacterName
         }
 
         [Flags]
@@ -184,7 +211,7 @@ namespace JamUnity.Core.Native
             public static Quat FromUnity(Quaternion value) => new() { x = value.x, y = value.y, z = value.z, w = value.w };
         }
 
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        [StructLayout(LayoutKind.Sequential)]
         public struct ClientConfig
         {
             public uint structSize;
@@ -193,6 +220,10 @@ namespace JamUnity.Core.Native
             public ushort tcpPort;
             public ushort udpPort;
             public ulong accountId;
+            [MarshalAs(UnmanagedType.LPUTF8Str)] public string loginId;
+            [MarshalAs(UnmanagedType.LPUTF8Str)] public string password;
+            public IntPtr ticket;
+            public uint ticketSize;
             [MarshalAs(UnmanagedType.LPUTF8Str)] public string sharedDataManifestPath;
             public int headlessMode;
         }
@@ -214,10 +245,11 @@ namespace JamUnity.Core.Native
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct NetworkState
-        {
-            public eNetworkPhase phase;
-        }
+		public struct NetworkState
+		{
+			public eNetworkPhase phase;
+			public eBootstrapKind bootstrapKind;
+		}
 
         [StructLayout(LayoutKind.Sequential)]
         public struct WorldRuntimeRef
@@ -272,9 +304,6 @@ namespace JamUnity.Core.Native
             public ulong actorArchetypeKey;
             public Vec3 position;
             public Quat rotation;
-            public ushort team;
-            public byte part;
-            public byte role;
             public int requestOwnership;
             public int requestControl;
             public uint targetActorId;
@@ -297,11 +326,14 @@ namespace JamUnity.Core.Native
             public uint targetActorId;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         public struct SocialAddress
         {
             public eSocialAudience audience;
             public ulong scopeId;
+            public eSocialRecipientKind recipientKind;
+            public ulong recipientId;
+            public IntPtr recipientName;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -310,6 +342,15 @@ namespace JamUnity.Core.Native
             public uint structSize;
             public SocialAddress destination;
             public ushort contentType;
+            public IntPtr payload;
+            public uint payloadSize;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct GenericContentRequest
+        {
+            public uint structSize;
+            public ulong operationKey;
             public IntPtr payload;
             public uint payloadSize;
         }
@@ -427,7 +468,20 @@ namespace JamUnity.Core.Native
             public uint payloadSize;
         }
 
-        [StructLayout(LayoutKind.Explicit, Size = 88)]
+        [StructLayout(LayoutKind.Sequential)]
+        public struct GenericContentRequestCompletedEvent
+        {
+            public ulong accountId;
+            public ulong userId;
+            public ulong requestId;
+            public ulong operationKey;
+            public eContentResponseStatus status;
+            public uint resultCode;
+            public IntPtr payload;
+            public uint payloadSize;
+        }
+
+        [StructLayout(LayoutKind.Explicit, Size = 104)]
         public struct ClientEvent
         {
             [FieldOffset(0)] public uint structSize;
@@ -438,6 +492,7 @@ namespace JamUnity.Core.Native
             [FieldOffset(8)] public WorldRayResolvedEvent worldRayResolved;
             [FieldOffset(8)] public ActorActionRequestCompletedEvent actorActionRequestCompleted;
             [FieldOffset(8)] public SocialMessageReceivedEvent socialMessageReceived;
+            [FieldOffset(8)] public GenericContentRequestCompletedEvent contentRequestCompleted;
         }
 
         public static bool IsAvailable
@@ -467,6 +522,7 @@ namespace JamUnity.Core.Native
         public static eResult RequestWorldAction(ref WorldActionCommand command, out ClientRequestSubmission submission) => JU_RequestWorldAction(ref command, out submission);
         public static eResult RequestActorAction(ref ActorActionCommand command, out ClientRequestSubmission submission) => JU_RequestActorAction(ref command, out submission);
         public static eResult RequestSocialCommand(ref SocialCommand command, out ClientRequestSubmission submission) => JU_RequestSocialCommand(ref command, out submission);
+        public static eResult RequestGenericContent(ref GenericContentRequest request, out ClientRequestSubmission submission) => JU_RequestGenericContent(ref request, out submission);
         public static eResult SubmitCharacterControl(ref CharacterControlIntent intent) => JU_SubmitCharacterControl(ref intent);
         public static eResult PollEvent(out ClientEvent ev) => JU_PollEvent(out ev);
 
@@ -511,6 +567,9 @@ namespace JamUnity.Core.Native
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern eResult JU_RequestSocialCommand(ref SocialCommand command, out ClientRequestSubmission submission);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern eResult JU_RequestGenericContent(ref GenericContentRequest request, out ClientRequestSubmission submission);
         
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern eResult JU_SubmitCharacterControl(ref CharacterControlIntent intent);

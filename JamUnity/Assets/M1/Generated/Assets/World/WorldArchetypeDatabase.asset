@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1bdd2140827aea64f87dc65c7ceccb0e, type: 3}
   m_Name: WorldArchetypeDatabase
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.World.WorldArchetypeDatabase
-  worldArchetypesAssetPath: world_archetypes.json
+  worldArchetypesAssetPath: Bootstrap/world_archetypes.json
   version: 1
   entries:
   - {fileID: 11400000, guid: 13d5fa8cae0463c4197a99753c513ff7, type: 2}

@@ -6,6 +6,7 @@ using JamUnity.UI.Chat;
 using UnityEngine;
 using JamUnity.Client.Runtime;
 using JamUnity.Actor.Runtime;
+using System.Collections.Generic;
 
 namespace JamUnity.Runtime.Client
 {
@@ -20,7 +21,6 @@ namespace JamUnity.Runtime.Client
             public string ServerIp;
             public ushort TcpPort;
             public ushort UdpPort;
-            public ulong AccountId;
             public string SharedDataManifestPath;
 
             public bool HeadlessMode;
@@ -29,7 +29,6 @@ namespace JamUnity.Runtime.Client
         }
 
         [SerializeField] private Config config;
-        [SerializeField] private Transform viewSource;
         [SerializeField] private CameraProfile cameraProfile;
         [SerializeField] private MovementProfile movementProfile;
         [SerializeField] private Camera pointerCamera;
@@ -43,9 +42,16 @@ namespace JamUnity.Runtime.Client
         private InputManager inputManager;
         private WorldManager worldManager;
         private SocialManager socialManager;
+        private CharacterContent characterContent;
+        private CameraFollow cameraFollow;
+        private bool characterListRequested;
         private bool initialWorldRequested;
         private bool characterControlEnabled;
         private ulong activeMainWorldId;
+
+		public event Action<NetworkManager.StateSnapshot> NetworkStateChanged;
+		public event Action<CoreNative.eContentResponseStatus, IReadOnlyList<CharacterSummary>> CharacterListCompleted;
+		public event Action<CoreNative.eContentResponseStatus, CharacterSummary> CharacterSelectCompleted;
 
         private void Awake()
         {
@@ -59,13 +65,17 @@ namespace JamUnity.Runtime.Client
             networkManager = new NetworkManager();
             inputManager = new InputManager();
             worldManager = new WorldManager();
-            socialManager = new SocialManager(nativeManager);
+            socialManager = new SocialManager(nativeManager, worldPresentationDB);
+            characterContent = new CharacterContent(nativeManager);
+			characterContent.CharacterListCompleted += OnCharacterListCompleted;
+			characterContent.CharacterSelectCompleted += OnCharacterSelectCompleted;
 
             nativeManager.BindNetworkEvent(networkManager);
             nativeManager.BindWorldEvent(worldManager);
             nativeManager.BindActorEvent(worldManager);
             nativeManager.BindSocialEvent(socialManager);
             chatUI?.Bind(socialManager);
+            SetChatVisible(false);
             networkManager.StateChanged += OnNetworkStateChanged;
             worldManager.MainWorldActivated += OnMainWorldActivated;
             worldManager.LocalPlayerAvailabilityChanged += OnLocalPlayerAvailabilityChanged;
@@ -74,7 +84,7 @@ namespace JamUnity.Runtime.Client
         private void Start()
         {
             Camera activeCamera = pointerCamera != null ? pointerCamera : Camera.main;
-            if (activeCamera != null && activeCamera.TryGetComponent(out CameraFollow cameraFollow))
+            if (activeCamera != null && activeCamera.TryGetComponent(out cameraFollow))
                 cameraFollow.SetProfile(cameraProfile);
 
             worldManager.Init(new WorldManager.Config
@@ -82,15 +92,14 @@ namespace JamUnity.Runtime.Client
                 PresentationRoot = worldPresentationRoot != null ? worldPresentationRoot : transform,
                 WorldPresentationDatabase = worldPresentationDB,
                 ActorPresentationCatalog = actorPresentationCatalog,
+                LocalActorSmoothSpeed = cameraProfile.SmoothSpeed,
             });
             inputManager.Init(new InputManager.Config
             {
-                ViewSource = viewSource != null ? viewSource : transform,
                 PointerCamera = activeCamera,
                 CameraProfile = cameraProfile,
                 MovementProfile = movementProfile,
             });
-            nativeManager.Init(config);
         }
 
         private void Update()
@@ -99,16 +108,27 @@ namespace JamUnity.Runtime.Client
 
             if (nativeManager.IsInitialized && characterControlEnabled)
             {
-                if (inputManager.TryBuildIntent(Time.deltaTime, out var intent))
+                if (inputManager != null && inputManager.TryBuildIntent(Time.deltaTime, out var intent))
                     nativeManager.SubmitCharacterControl(ref intent);
             }
+
+            if (cameraFollow != null && inputManager != null && cameraProfile.Kind == CameraProfileKind.ThirdPerson)
+                cameraFollow.SetOrbit(inputManager.OrbitYaw, inputManager.OrbitPitch);
 
             nativeManager.Process(Time.deltaTime);
             worldManager.Tick(nativeManager, Time.deltaTime);
         }
 
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus)
+                inputManager?.ReleasePointerLock();
+        }
+
         private void OnDestroy()
         {
+            inputManager?.ReleasePointerLock();
+
             if (networkManager != null)
                 networkManager.StateChanged -= OnNetworkStateChanged;
 
@@ -120,22 +140,67 @@ namespace JamUnity.Runtime.Client
 
             chatUI?.Unbind();
 
+			if (characterContent != null)
+			{
+				characterContent.CharacterListCompleted -= OnCharacterListCompleted;
+				characterContent.CharacterSelectCompleted -= OnCharacterSelectCompleted;
+				characterContent.Dispose();
+			}
+
             nativeManager?.Shutdown();
         }
 
         private void OnNetworkStateChanged(NetworkManager.StateSnapshot state)
         {
+			NetworkStateChanged?.Invoke(state);
             if (state.Phase == CoreNative.eNetworkPhase.Disconnected)
             {
+				characterListRequested = false;
                 initialWorldRequested = false;
                 characterControlEnabled = false;
                 activeMainWorldId = 0;
+                SetChatVisible(false);
+                inputManager?.ReleasePointerLock();
                 inputManager?.Reset();
+				nativeManager?.Shutdown();
                 return;
             }
 
-            if (state.Phase != CoreNative.eNetworkPhase.Ready || initialWorldRequested)
-                return;
+			if (state.Phase != CoreNative.eNetworkPhase.Ready || characterListRequested
+				|| state.BootstrapKind != CoreNative.eBootstrapKind.Fresh)
+				return;
+
+			CoreNative.eResult result = characterContent.RequestCharacterList(out CoreNative.ClientRequestSubmission submission);
+			if (result != CoreNative.eResult.Ok || submission.admission != CoreNative.eClientRequestAdmission.Accepted)
+			{
+				Debug.LogError($"ClientRoot: character list request rejected. result={result}, admission={submission.admission}");
+				return;
+			}
+
+			characterListRequested = true;
+			Debug.Log($"ClientRoot: character list requested. request={submission.receipt.requestId}");
+		}
+
+		private void OnCharacterListCompleted(
+			CoreNative.eContentResponseStatus status,
+			IReadOnlyList<CharacterSummary> characters)
+		{
+			CharacterListCompleted?.Invoke(status, characters);
+		}
+
+		private void OnCharacterSelectCompleted(
+			CoreNative.eContentResponseStatus status,
+			CharacterSummary character)
+		{
+			if (status == CoreNative.eContentResponseStatus.Succeeded && !RequestInitialWorld())
+				status = CoreNative.eContentResponseStatus.Unavailable;
+			CharacterSelectCompleted?.Invoke(status, character);
+		}
+
+		private bool RequestInitialWorld()
+		{
+			if (initialWorldRequested)
+				return true;
 
             CoreNative.WorldActionCommand command = new()
             {
@@ -149,20 +214,23 @@ namespace JamUnity.Runtime.Client
                 },
             };
 
-            CoreNative.eResult result = nativeManager.RequestWorldAction(ref command, out CoreNative.ClientRequestSubmission submission);
+			CoreNative.eResult result = nativeManager.RequestWorldAction(ref command, out CoreNative.ClientRequestSubmission submission);
             if (result != CoreNative.eResult.Ok || submission.admission != CoreNative.eClientRequestAdmission.Accepted)
             {
                 Debug.LogError($"ClientRoot: initial world entry rejected. result={result}, admission={submission.admission}");
-                return;
+				return false;
             }
 
             initialWorldRequested = true;
             Debug.Log($"ClientRoot: initial world entry requested. archetype={InitialWorldArchetypeName}, destination={InitialWorldDestinationName}, request={submission.receipt.requestId}");
+			return true;
         }
 
         private void OnMainWorldActivated(CoreNative.WorldRuntimeRef world)
         {
             activeMainWorldId = world.worldId;
+            SetChatVisible(world.worldId != 0);
+			chatUI?.RefreshWorldChannel();
             inputManager?.Reset();
             SetCharacterControlEnabled(world.worldId != 0 && worldManager.HasLocalPlayer(world.worldId));
         }
@@ -183,10 +251,36 @@ namespace JamUnity.Runtime.Client
                 inputManager.Reset();
         }
 
+        private void SetChatVisible(bool visible)
+        {
+            if (chatUI != null && chatUI.gameObject.activeSelf != visible)
+                chatUI.gameObject.SetActive(visible);
+        }
+
         public bool SetCameraProfile(CameraProfile profile)
         {
             return TrySetInputProfiles(profile, movementProfile);
         }
+
+		public bool Login(string loginId, string password)
+		{
+			if (nativeManager == null || nativeManager.IsInitialized || string.IsNullOrWhiteSpace(loginId) || string.IsNullOrEmpty(password))
+				return false;
+
+			return nativeManager.Login(config, loginId, password);
+		}
+
+		public CoreNative.eResult SelectCharacter(
+			ulong characterId,
+			out CoreNative.ClientRequestSubmission submission)
+		{
+			if (characterContent == null || initialWorldRequested)
+			{
+				submission = default;
+				return CoreNative.eResult.InvalidArgument;
+			}
+			return characterContent.SelectCharacter(characterId, out submission);
+		}
 
         public bool SetMovementProfile(MovementProfile profile)
         {
@@ -203,9 +297,10 @@ namespace JamUnity.Runtime.Client
 
             cameraProfile = nextCameraProfile;
             movementProfile = nextMovementProfile;
+            worldManager?.ConfigureLocalActorSmoothing(cameraProfile.SmoothSpeed);
 
             Camera activeCamera = pointerCamera != null ? pointerCamera : Camera.main;
-            if (activeCamera != null && activeCamera.TryGetComponent(out CameraFollow cameraFollow))
+            if (activeCamera != null && activeCamera.TryGetComponent(out cameraFollow))
                 cameraFollow.SetProfile(cameraProfile);
             return true;
         }
@@ -239,12 +334,6 @@ namespace JamUnity.Runtime.Client
             if (!ValidatePortNumber(config.TcpPort, config.UdpPort))
                 return false;
 
-            if (config.AccountId == 0)
-            {
-                Debug.LogError("ClientRoot: AccountId is 0. Please set a valid account ID.");
-                return false;
-            }
-
             if (string.IsNullOrWhiteSpace(config.SharedDataManifestPath))
             {
                 Debug.LogError("ClientRoot: SharedDataManifestPath is not set.");
@@ -261,9 +350,7 @@ namespace JamUnity.Runtime.Client
 
         private void OnValidate()
         {
-            if (cameraProfile != null
-                && movementProfile != null
-                && !InputManager.IsValidProfileCombination(cameraProfile, movementProfile))
+            if (cameraProfile != null && movementProfile != null && !InputManager.IsValidProfileCombination(cameraProfile, movementProfile))
                 Debug.LogWarning($"ClientRoot: Unsupported input profile combination. camera={cameraProfile.name}, movement={movementProfile.name}", this);
         }
 

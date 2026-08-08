@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30067816d6cc2f44eab5a835a8f41161, type: 3}
   m_Name: ActorArchetypeDatabase
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Authoring.Actor.ActorArchetypeDatabase
-  sharedDataPath: actor_archetypes.json
+  sharedDataPath: Bootstrap/actor_archetypes.json
   sharedDataVersion: 1
   archetypes:
   - {fileID: 11400000, guid: aabc416af629af44887300ebcbd77654, type: 2}

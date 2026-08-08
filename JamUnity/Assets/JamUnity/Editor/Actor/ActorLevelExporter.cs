@@ -63,7 +63,7 @@ namespace JamUnity.Editor.Actor
             string worldName = worldRoot != null ? worldRoot.name?.Trim() ?? string.Empty : string.Empty;
             return string.IsNullOrWhiteSpace(worldName)
                 ? string.Empty
-                : JamUnity.Core.Util.Path.ResolveSharedDataPath($"{worldName}.actor_level.json");
+                : JamUnity.Core.Util.Path.ResolveSharedDataPath($"Levels/{worldName}.actor_level.json");
         }
 
         public static bool TryExportSelectedWorldLevel(out string outputPath, out string errorMessage)

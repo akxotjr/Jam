@@ -44,6 +44,7 @@ namespace JamUnity.World.Runtime
             public ulong actorArchetypeKey;
             public bool isLevelActor;
             public bool isLocal;
+            public bool hasPresentedTransform;
         }
         
         [SerializeField] private ActorManager   actorManager;
@@ -51,6 +52,12 @@ namespace JamUnity.World.Runtime
         [SerializeField] private bool           createCubeFallback = true;
     
         private readonly Dictionary<ActorId, ActorView> actors = new();
+        private float localActorSmoothSpeed;
+
+        public void ConfigureLocalActorSmoothing(float smoothSpeed)
+        {
+            localActorSmoothSpeed = Mathf.Max(0.0f, smoothSpeed);
+        }
     
         private void Awake()
         {
@@ -124,7 +131,7 @@ namespace JamUnity.World.Runtime
 			actors.Remove(actorId);
         }
     
-        public void ApplyActorRenderSample(in ActorRenderSample sample)
+        public void ApplyActorRenderSample(in ActorRenderSample sample, float deltaTime)
         {
             if (sample.ActorId == 0 || !sample.HasTransform)
                 return;
@@ -144,8 +151,17 @@ namespace JamUnity.World.Runtime
 
             actor.actorArchetypeKey     = sample.ActorArchetypeKey != 0 ? sample.ActorArchetypeKey : actor.actorArchetypeKey;
             actor.isLocal               = sample.IsLocal;
-            actor.go.transform.position = sample.Position;
+
+            Vector3 presentedPosition = sample.Position;
+            if (actor.isLocal && actor.hasPresentedTransform)
+            {
+                float blend = 1.0f - Mathf.Exp(-localActorSmoothSpeed * deltaTime);
+                presentedPosition = Vector3.Lerp(actor.go.transform.position, sample.Position, blend);
+            }
+
+            actor.go.transform.position = presentedPosition;
             actor.go.transform.rotation = sample.Rotation;
+            actor.hasPresentedTransform = true;
         }
 
         public void ResetRuntimePopulation()

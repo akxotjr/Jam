@@ -19,8 +19,7 @@ namespace JamUnity.Core.Util
                 string playerName = args[i + 1];
                 const string prefix = "Player";
 
-                if (playerName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-                    int.TryParse(playerName.AsSpan(prefix.Length), out int playerIndex))
+                if (playerName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && int.TryParse(playerName.AsSpan(prefix.Length), out int playerIndex))
                 {
                     return playerIndex;
                 }

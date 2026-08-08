@@ -7,7 +7,6 @@ namespace JamUnity.Runtime.Client
     {
         public struct Config
         {
-            public Transform ViewSource;
             public Camera PointerCamera;
             public CameraProfile CameraProfile;
             public MovementProfile MovementProfile;
@@ -28,6 +27,8 @@ namespace JamUnity.Runtime.Client
 
         public CameraProfile CameraProfile => cameraProfile;
         public MovementProfile MovementProfile => movementProfile;
+        public float OrbitYaw => viewInput != null ? viewInput.ViewYaw : 0.0f;
+        public float OrbitPitch => viewInput != null ? viewInput.ViewPitch : 0.0f;
 
         public void Init(Config config)
         {
@@ -40,7 +41,7 @@ namespace JamUnity.Runtime.Client
                 pointerCamera,
                 config.MovementProfile.PointAndClickMaxRange);
             actionInput = new CharacterActionInput();
-            viewInput = new CharacterViewInput(config.ViewSource);
+            viewInput = new CharacterViewInput(config.CameraProfile);
 
             cameraProfile = config.CameraProfile;
             movementProfile = config.MovementProfile;
@@ -75,7 +76,7 @@ namespace JamUnity.Runtime.Client
                 pointerCamera,
                 movementProfile.PointAndClickMaxRange);
             activeLocomotion = ResolveLocomotion(nextMovementProfile.Kind);
-            viewInput?.Reset();
+            viewInput?.SetProfile(nextCameraProfile);
             locomotionSample = CharacterLocomotionSample.Stop();
             locomotionDirty = true;
             return true;
@@ -104,11 +105,17 @@ namespace JamUnity.Runtime.Client
                 return;
 
             inputSuppressed = suppressed;
+            if (suppressed)
+                viewInput?.ReleaseCursor();
             activeLocomotion?.Reset();
             actionInput?.Reset();
-            viewInput?.Reset();
             locomotionSample = CharacterLocomotionSample.Stop();
             locomotionDirty = true;
+        }
+
+        public void ReleasePointerLock()
+        {
+            viewInput?.ReleaseCursor();
         }
 
         public bool TryBuildIntent(float deltaTime, out CoreNative.CharacterControlIntent intent)
@@ -149,7 +156,7 @@ namespace JamUnity.Runtime.Client
             CoreNative.eCharacterViewPolicy viewPolicy = CoreNative.eCharacterViewPolicy.FollowMovement;
             if (cameraProfile.Kind == CameraProfileKind.ThirdPerson)
             {
-                viewChanged = viewInput.TrySample(out viewYaw, out viewPitch);
+                viewChanged = viewInput.TrySample(deltaTime, out viewYaw, out viewPitch);
                 moveReferenceYaw = viewYaw;
                 viewPolicy = CoreNative.eCharacterViewPolicy.Explicit;
             }

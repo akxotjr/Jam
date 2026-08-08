@@ -6,13 +6,13 @@ namespace JamUnity.Core.Util
     public static class Path
     {
         // All shared-data file paths are relative to this manifest's parent directory.
-        public const string SharedDataManifestPath  = "C:/Users/akxotjr/GameWorkSpace/Jam-dev/SharedData/shared_data_manifest.json";
-        public const string SharedRoot              = "../SharedData";
-        public const string SharedSchemaRoot        = "Schema";
-        public const string PhysicsAssetPath        = "physics_asset.json";
-        public const string WorldArchetypesPath     = "world_archetypes.json";
-        public const string WorldTemplatesPath      = "world_templates.json";
-        public const string ActorArchetypesPath     = "actor_archetypes.json";
+        public const string SharedDataManifestPath  = "C:/Users/akxotjr/GameWorkSpace/Jam-dev/SampleApp/M1_Shared/Data/shared_data_manifest.json";
+        public const string SharedRoot              = "../SampleApp/M1_Shared/Data";
+        public const string SharedSchemaRoot        = "../SharedData/Schema";
+        public const string PhysicsAssetPath        = "Physics/Source/Common.physics_asset.json";
+        public const string WorldArchetypesPath     = "Bootstrap/world_archetypes.json";
+        public const string WorldTemplatesPath      = "Bootstrap/world_templates.json";
+        public const string ActorArchetypesPath     = "Bootstrap/actor_archetypes.json";
         public const string M1AssetRoot             = "Assets/M1";
         public const string GeneratedAssetRoot      = M1AssetRoot + "/Generated/Assets";
         public const string ContentAssetRoot        = M1AssetRoot + "/Contents";

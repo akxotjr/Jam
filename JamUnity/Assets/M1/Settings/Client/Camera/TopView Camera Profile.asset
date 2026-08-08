@@ -18,4 +18,9 @@ MonoBehaviour:
   orthographicSize: 5
   followOffset: {x: 8, y: 15, z: -8}
   lookAtOffset: {x: 0, y: 1, z: 0}
-  smoothSpeed: 4
+  smoothSpeed: 10
+  mouseOrbitSensitivity: 0.15
+  initialOrbitYaw: 0
+  initialOrbitPitch: 0
+  orbitPitchLimits: {x: -60, y: 75}
+  orbitInputRate: 30
