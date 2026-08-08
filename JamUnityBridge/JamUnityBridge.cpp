@@ -77,7 +77,7 @@ JAM_eResult JU_GetUserId(uint64_t* outUserId)
 	return !outUserId ? JAM_eResult::InvalidArgument : !g_core ? JAM_eResult::NotInitialized : g_core->GetUserId(*outUserId);
 }
 
-JAM_eResult JU_GetMainWorldRef(JAM_WorldRuntimeRef* outWorldRef)
+JAM_eResult JU_GetMainWorldRef(JAM_WorldRef* outWorldRef)
 {
 	return !outWorldRef ? JAM_eResult::InvalidArgument : !g_core ? JAM_eResult::NotInitialized : g_core->GetMainWorldRef(*outWorldRef);
 }
@@ -120,6 +120,16 @@ JAM_eResult JU_RequestSocialCommand(const JAM_SocialCommand* command, JAM_Client
 		return JAM_eResult::NotInitialized;
 
 	return g_core->RequestSocialCommand(*command, *outSubmission);
+}
+
+JAM_eResult JU_RequestGenericContent(const JAM_GenericContentRequest* request, JAM_ClientRequestSubmission* outSubmission)
+{
+	if (!request || !outSubmission)
+		return JAM_eResult::InvalidArgument;
+	if (!g_core)
+		return JAM_eResult::NotInitialized;
+
+	return g_core->RequestGenericContent(*request, *outSubmission);
 }
 
 JAM_eResult JU_SubmitCharacterControl(const JAM_CharacterControlIntent* intent)

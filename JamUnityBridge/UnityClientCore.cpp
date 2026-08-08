@@ -17,6 +17,11 @@ namespace
 		return static_cast<JAM_eNetworkPhase>(phase);
 	}
 
+	JAM_eBootstrapKind ToUnity(net::eBootstrapKind kind)
+	{
+		return static_cast<JAM_eBootstrapKind>(kind);
+	}
+
 	JAM_Vec3 ToUnity(const px::Vec3& value)
 	{
 		return { .x = value.x, .y = value.y, .z = value.z };
@@ -75,6 +80,10 @@ bool UnityClientCore::Initialize(const JAM_ClientConfig& config)
 
 	net::ClientConfig clientConfig{};
 	clientConfig.accountId		  = config.accountId;
+	clientConfig.loginId		  = config.loginId ? config.loginId : "";
+	clientConfig.password		  = config.password ? config.password : "";
+	if (config.ticket && config.ticketSize > 0)
+		clientConfig.ticket.assign(config.ticket, config.ticket + config.ticketSize);
 	clientConfig.serverTcpAddress = net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.tcpPort);
 	clientConfig.serverUdpAddress = net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.udpPort);
 
@@ -133,6 +142,7 @@ JAM_eResult UnityClientCore::GetNetworkState(JAM_NetworkState& outState) const
 	if (!m_runtime)
 		return JAM_eResult::NotInitialized;
 	outState.phase = ToUnity(m_runtime->GetNetworkState().phase);
+	outState.bootstrapKind = ToUnity(m_runtime->GetNetworkState().bootstrapKind);
 	return JAM_eResult::Ok;
 }
 
@@ -156,13 +166,13 @@ JAM_eResult UnityClientCore::GetUserId(uint64_t& outUserId) const
 	return JAM_eResult::Ok;
 }
 
-JAM_eResult UnityClientCore::GetMainWorldRef(JAM_WorldRuntimeRef& outWorldRef) const
+JAM_eResult UnityClientCore::GetMainWorldRef(JAM_WorldRef& outWorldRef) const
 {
 	outWorldRef = {};
 	if (!m_runtime)
 		return JAM_eResult::NotInitialized;
 
-	const net::WorldRuntimeRef world = m_runtime->GetMainWorldRef();
+	const net::WorldRef world = m_runtime->GetMainWorldRef();
 	outWorldRef = {
 		.worldId		   = world.worldId, 
 		.worldInstanceId   = world.instance.instanceId.value, 
@@ -238,9 +248,6 @@ JAM_eResult UnityClientCore::RequestActorAction(const JAM_ActorActionCommand& co
 		net::FrontendSpawnActorSpec spec{};
 		spec.actorArchetypeKey = { command.spawn.actorArchetypeKey };
 		spec.pose = { .p = ToPx(command.spawn.position), .q = ToPx(command.spawn.rotation) };
-		spec.team = command.spawn.team;
-		spec.part = command.spawn.part;
-		spec.role = command.spawn.role;
 		spec.requestOwnership = command.spawn.requestOwnership != 0;
 		spec.requestControl = command.spawn.requestControl != 0;
 		spec.targetActorId = net::ActorId(command.spawn.targetActorId);
@@ -274,6 +281,7 @@ JAM_eResult UnityClientCore::RequestSocialCommand(const JAM_SocialCommand& comma
 	if (command.structSize != sizeof(JAM_SocialCommand))
 		return JAM_eResult::VersionMismatch;
 	if (command.destination.audience > JAM_eSocialAudience::Global
+		|| command.destination.recipientKind > JAM_eSocialRecipientKind::CharacterName
 		|| (command.payloadSize > 0 && !command.payload))
 		return JAM_eResult::InvalidArgument;
 
@@ -281,6 +289,11 @@ JAM_eResult UnityClientCore::RequestSocialCommand(const JAM_SocialCommand& comma
 		.destination = {
 			.audience = static_cast<net::eSocialAudience>(command.destination.audience),
 			.scopeId = command.destination.scopeId,
+			.recipient = {
+				.kind = static_cast<net::eSocialRecipientKind>(command.destination.recipientKind),
+				.id = command.destination.recipientId,
+				.name = command.destination.recipientName ? command.destination.recipientName : "",
+			},
 		},
 		.contentType = command.contentType,
 	};
@@ -290,6 +303,32 @@ JAM_eResult UnityClientCore::RequestSocialCommand(const JAM_SocialCommand& comma
 
 	const net::ClientRequestSubmission submission = m_runtime->RequestSocialCommand(runtimeCommand);
 	outSubmission = ToUnity(submission);
+	return ToUnity(submission.admission);
+}
+
+JAM_eResult UnityClientCore::RequestGenericContent(const JAM_GenericContentRequest& request, JAM_ClientRequestSubmission& outSubmission)
+{
+	outSubmission = {};
+	if (!m_runtime)
+		return JAM_eResult::NotInitialized;
+
+	if (request.structSize != sizeof(JAM_GenericContentRequest))
+		return JAM_eResult::VersionMismatch;
+
+	if (request.operationKey == jam::net::kInvalidGenericContentOpCode || request.payloadSize > jam::net::kMaxGenericContentPayloadBytes || (request.payloadSize > 0 && !request.payload))
+		return JAM_eResult::InvalidArgument;
+
+	jam::net::GenericContentRequest runtimeRequest{
+		.opCode = request.operationKey,
+	};
+
+	runtimeRequest.payload.resize(request.payloadSize);
+	if (!runtimeRequest.payload.empty())
+		std::memcpy(runtimeRequest.payload.data(), request.payload, request.payloadSize);
+
+	const jam::net::ClientRequestSubmission submission = m_runtime->RequestContent(runtimeRequest);
+	outSubmission = ToUnity(submission);
+
 	return ToUnity(submission.admission);
 }
 
@@ -325,6 +364,7 @@ JAM_eResult UnityClientCore::PollEvent(JAM_ClientEvent& outEvent)
 {
 	outEvent = { .structSize = sizeof(JAM_ClientEvent), .type = JAM_eClientEventType::None };
 	m_eventPayload.clear();
+	m_eventRecipientName.clear();
 	if (!m_runtime)
 		return JAM_eResult::NotInitialized;
 
@@ -338,14 +378,15 @@ JAM_eResult UnityClientCore::PollEvent(JAM_ClientEvent& outEvent)
 	{
 		const auto& value = std::get<net::NetworkStateEvent>(event.payload);
 		outEvent.type = JAM_eClientEventType::NetworkStateChanged;
-		outEvent.payload.networkStateChanged = { .accountId = value.accountId, .userId = value.userId, .state = { .phase = ToUnity(value.state.phase) } };
+		outEvent.payload.networkStateChanged = { .accountId = value.accountId, .userId = value.userId,
+			.state = { .phase = ToUnity(value.state.phase), .bootstrapKind = ToUnity(value.state.bootstrapKind) } };
 		break;
 	}
 	case net::eClientEventType::WorldParticipantChanged:
 	{
 		const auto& value = std::get<net::WorldParticipantEvent>(event.payload);
 		outEvent.type = JAM_eClientEventType::WorldParticipantChanged;
-		outEvent.payload.worldParticipantChanged = { .accountId = value.accountId, .userId = value.userId, .change = static_cast<JAM_eWorldParticipantChange>(value.change), .world = { .worldId = value.participant.runtime.worldId, .worldInstanceId = value.participant.runtime.instance.instanceId.value, .worldArchetypeKey = value.participant.runtime.instance.archetypeKey.v }, .participantUserId = value.participant.participantUserId };
+		outEvent.payload.worldParticipantChanged = { .accountId = value.accountId, .userId = value.userId, .change = static_cast<JAM_eWorldParticipantChange>(value.change), .world = { .worldId = value.participant.world.worldId, .worldInstanceId = value.participant.world.instance.instanceId.value, .worldArchetypeKey = value.participant.world.instance.archetypeKey.v }, .participantUserId = value.participant.participantUserId };
 		break;
 	}
 	case net::eClientEventType::ActorLifecycleChanged:
@@ -373,6 +414,7 @@ JAM_eResult UnityClientCore::PollEvent(JAM_ClientEvent& outEvent)
 	{
 		const auto& value = std::get<net::SocialMessageEvent>(event.payload);
 		m_eventPayload.resize(value.message.payload.size());
+		m_eventRecipientName = value.message.destination.recipient.name;
 		if (!m_eventPayload.empty())
 			std::memcpy(m_eventPayload.data(), value.message.payload.data(), m_eventPayload.size());
 
@@ -385,8 +427,31 @@ JAM_eResult UnityClientCore::PollEvent(JAM_ClientEvent& outEvent)
 			.destination = {
 				.audience = static_cast<JAM_eSocialAudience>(value.message.destination.audience),
 				.scopeId = value.message.destination.scopeId,
+				.recipientKind = static_cast<JAM_eSocialRecipientKind>(value.message.destination.recipient.kind),
+				.recipientId = value.message.destination.recipient.id,
+				.recipientName = m_eventRecipientName.empty() ? nullptr : m_eventRecipientName.c_str(),
 			},
 			.contentType = value.message.contentType,
+			.payload = m_eventPayload.empty() ? nullptr : m_eventPayload.data(),
+			.payloadSize = static_cast<uint32_t>(m_eventPayload.size()),
+		};
+		break;
+	}
+	case net::eClientEventType::ContentRequestCompleted:
+	{
+		const auto& value = std::get<net::GenericContentResponseEvent>(event.payload);
+		m_eventPayload.resize(value.response.payload.size());
+		if (!m_eventPayload.empty())
+			std::memcpy(m_eventPayload.data(), value.response.payload.data(), m_eventPayload.size());
+
+		outEvent.type = JAM_eClientEventType::ContentRequestCompleted;
+		outEvent.payload.contentRequestCompleted = {
+			.accountId = value.accountId,
+			.userId = value.userId,
+			.requestId = value.response.requestId,
+			.operationKey = value.response.opCode,
+			.status = static_cast<JAM_eContentResponseStatus>(value.response.status),
+			.resultCode = value.response.resultCode,
 			.payload = m_eventPayload.empty() ? nullptr : m_eventPayload.data(),
 			.payloadSize = static_cast<uint32_t>(m_eventPayload.size()),
 		};

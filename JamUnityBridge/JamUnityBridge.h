@@ -8,7 +8,7 @@
 #define JAM_API extern "C"
 #endif
 
-inline constexpr uint32_t JAM_ABI_VERSION = 12;
+inline constexpr uint32_t JAM_ABI_VERSION = 15;
 
 enum class JAM_eResult : int32_t
 {
@@ -30,12 +30,20 @@ enum class JAM_eNetworkPhase : uint8_t
 	Degraded,
 };
 
+enum class JAM_eBootstrapKind : uint8_t
+{
+	Pending,
+	Fresh,
+	Resync,
+};
+
 enum class JAM_eClientRequestKind : uint8_t
 {
 	None,
 	WorldAction,
 	ActorAction,
 	SocialCommand,
+	ContentRequest,
 };
 
 enum class JAM_eClientRequestAdmission : uint8_t
@@ -122,6 +130,17 @@ enum class JAM_eClientEventType : uint8_t
 	WorldRayResolved,
 	ActorActionRequestCompleted,
 	SocialMessageReceived,
+	ContentRequestCompleted,
+};
+
+enum class JAM_eContentResponseStatus : uint8_t
+{
+	None,
+	Succeeded,
+	Rejected,
+	InvalidRequest,
+	Unavailable,
+	InternalError,
 };
 
 enum class JAM_eSocialAudience : uint8_t
@@ -129,6 +148,14 @@ enum class JAM_eSocialAudience : uint8_t
 	Direct,
 	Group,
 	Global,
+};
+
+enum class JAM_eSocialRecipientKind : uint8_t
+{
+	None,
+	AccountId,
+	CharacterId,
+	CharacterName,
 };
 
 enum JAM_CharacterActionFlag : uint32_t
@@ -176,6 +203,10 @@ struct JAM_ClientConfig
 	uint16_t	tcpPort;
 	uint16_t	udpPort;
 	uint64_t	accountId;
+	const char*	loginId;
+	const char*	password;
+	const uint8_t* ticket;
+	uint32_t	ticketSize;
 	const char*	sharedDataManifestPath;
 	int32_t		headlessMode;
 };
@@ -196,10 +227,11 @@ struct JAM_ClientPumpResult
 
 struct JAM_NetworkState
 {
-	JAM_eNetworkPhase phase;
+	JAM_eNetworkPhase		phase;
+	JAM_eBootstrapKind bootstrapKind;
 };
 
-struct JAM_WorldRuntimeRef
+struct JAM_WorldRef
 {
 	uint64_t	worldId; 
 	uint64_t	worldInstanceId; 
@@ -245,9 +277,6 @@ struct JAM_ActorSpawnSpec
 	uint64_t	actorArchetypeKey;
 	JAM_Vec3	position;
 	JAM_Quat	rotation;
-	uint16_t	team;
-	uint8_t		part;
-	uint8_t		role;
 	int32_t		requestOwnership;
 	int32_t		requestControl;
 	uint32_t	targetActorId;
@@ -273,6 +302,9 @@ struct JAM_SocialAddress
 {
 	JAM_eSocialAudience	audience;
 	uint64_t			scopeId;
+	JAM_eSocialRecipientKind recipientKind;
+	uint64_t			recipientId;
+	const char*			recipientName;
 };
 
 struct JAM_SocialCommand
@@ -282,6 +314,14 @@ struct JAM_SocialCommand
 	uint16_t			contentType;
 	const uint8_t*		payload;
 	uint32_t			payloadSize;
+};
+
+struct JAM_GenericContentRequest
+{
+	uint32_t		structSize;
+	uint64_t		operationKey;
+	const uint8_t*	payload;
+	uint32_t		payloadSize;
 };
 
 struct JAM_CharacterControlIntent
@@ -339,7 +379,7 @@ struct JAM_WorldParticipantChangedEvent
 	uint64_t					accountId; 
 	uint64_t					userId; 
 	JAM_eWorldParticipantChange	change; 
-	JAM_WorldRuntimeRef			world; 
+	JAM_WorldRef				world;
 	uint64_t					participantUserId;
 };
 
@@ -387,14 +427,27 @@ struct JAM_SocialMessageReceivedEvent
 	uint32_t			payloadSize;
 };
 
+struct JAM_GenericContentRequestCompletedEvent
+{
+	uint64_t					accountId;
+	uint64_t					userId;
+	uint64_t					requestId;
+	uint64_t					operationKey;
+	JAM_eContentResponseStatus	status;
+	uint32_t					resultCode;
+	const uint8_t*				payload;
+	uint32_t					payloadSize;
+};
+
 union JAM_ClientEventPayload
 {
-	JAM_NetworkStateChangedEvent			networkStateChanged;
-	JAM_WorldParticipantChangedEvent		worldParticipantChanged;
-	JAM_ActorLifecycleChangedEvent			actorLifecycleChanged;
-	JAM_WorldRayResolvedEvent				worldRayResolved;
-	JAM_ActorActionRequestCompletedEvent	actorActionRequestCompleted;
-	JAM_SocialMessageReceivedEvent			socialMessageReceived;
+	JAM_NetworkStateChangedEvent				networkStateChanged;
+	JAM_WorldParticipantChangedEvent			worldParticipantChanged;
+	JAM_ActorLifecycleChangedEvent				actorLifecycleChanged;
+	JAM_WorldRayResolvedEvent					worldRayResolved;
+	JAM_ActorActionRequestCompletedEvent		actorActionRequestCompleted;
+	JAM_SocialMessageReceivedEvent				socialMessageReceived;
+	JAM_GenericContentRequestCompletedEvent		contentRequestCompleted;
 };
 
 struct JAM_ClientEvent
@@ -413,11 +466,11 @@ JAM_API uint32_t		JU_GetAbiVersion();
 JAM_API JAM_eResult		JU_GetNetworkState(JAM_NetworkState* outState);
 JAM_API JAM_eResult		JU_GetAccountId(uint64_t* outAccountId);
 JAM_API JAM_eResult		JU_GetUserId(uint64_t* outUserId);
-JAM_API JAM_eResult		JU_GetMainWorldRef(JAM_WorldRuntimeRef* outWorldRef);
+JAM_API JAM_eResult		JU_GetMainWorldRef(JAM_WorldRef* outWorldRef);
 JAM_API JAM_eResult		JU_GetActorPresentationFramePair(uint64_t worldId, JAM_ActorState* outPreviousActors, int32_t previousCapacity, JAM_ActorFrame* outPreviousFrame, JAM_ActorState* outCurrentActors, int32_t currentCapacity, JAM_ActorFrame* outCurrentFrame, JAM_FrameCopyInfo* outInfo);
 JAM_API JAM_eResult		JU_RequestWorldAction(const JAM_WorldActionCommand* command, JAM_ClientRequestSubmission* outSubmission);
 JAM_API JAM_eResult		JU_RequestActorAction(const JAM_ActorActionCommand* command, JAM_ClientRequestSubmission* outSubmission);
 JAM_API JAM_eResult		JU_RequestSocialCommand(const JAM_SocialCommand* command, JAM_ClientRequestSubmission* outSubmission);
+JAM_API JAM_eResult		JU_RequestGenericContent(const JAM_GenericContentRequest* request, JAM_ClientRequestSubmission* outSubmission);
 JAM_API JAM_eResult		JU_SubmitCharacterControl(const JAM_CharacterControlIntent* intent);
-// Social event payload remains valid until the next JU_PollEvent call or JU_Shutdown.
-JAM_API JAM_eResult		JU_PollEvent(JAM_ClientEvent* outEvent);
+JAM_API JAM_eResult		JU_PollEvent(JAM_ClientEvent* outEvent); // Event payload pointers remain valid until the next JU_PollEvent call or JU_Shutdown.
