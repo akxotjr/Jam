@@ -37,14 +37,13 @@ namespace jam::net
 		const px::HitscanResult hit = m_world.m_physics->Hitscan(
 			ray.rayOrigin,
 			ray.rayDirection.GetNormalized(),
-			ray.maxRange,
-			0);
+			ray.maxRange);
 
 		WorldRayResolvedEvent event
 		{
 			.accountId = m_world.GetAccountId(),
 			.userId = m_world.GetUserId(),
-			.worldId = m_world.GetWorldRuntime().worldId,
+			.worldId = m_world.GetWorldRef().worldId,
 			.hit = hit.hit,
 			.position = hit.position,
 			.normal = hit.normal,

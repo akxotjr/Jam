@@ -10,9 +10,11 @@
 #include <mutex>
 #include <optional>
 #include <type_traits>
+#include <memory>
 
 namespace jam::net
 {
+
 	struct ClientRuntime::Ingress
 	{
 		struct PresentationPair
@@ -21,8 +23,8 @@ namespace jam::net
 			std::optional<PresentationFramePushedEvent> current;
 		};
 
-		explicit Ingress(AccountId ownerAccountId)
-			: accountId(ownerAccountId)
+		explicit Ingress(AccountId ownerAccountId, uint64 ownerClientInstanceId)
+			: accountId(ownerAccountId), clientInstanceId(ownerClientInstanceId)
 		{
 		}
 
@@ -64,6 +66,7 @@ namespace jam::net
 			worldRayResolvedSubscription.reset();
 			actorActionResultSubscription.reset();
 			socialMessageSubscription.reset();
+			contentResponseSubscription.reset();
 			presentationFrameSubscription.reset();
 		}
 
@@ -75,6 +78,26 @@ namespace jam::net
 				return;
 
 			controlEvents.push_back(ClientEvent{ .type = type, .payload = event });
+		}
+
+		void EnqueueNetworkState(const NetworkStateEvent& event)
+		{
+			std::scoped_lock lock(mutex);
+			if (closed || !active)
+				return;
+			if (event.clientInstanceId != clientInstanceId)
+				return;
+			if (accountId != kInvalidAccountId
+				&& event.accountId != kInvalidAccountId
+				&& accountId != event.accountId)
+				return;
+			if (accountId == kInvalidAccountId && event.accountId != kInvalidAccountId)
+				accountId = event.accountId;
+
+			controlEvents.push_back(ClientEvent{
+				.type = eClientEventType::NetworkStateChanged,
+				.payload = event,
+			});
 		}
 
 		void EnqueueActorActionResult(const ActorActionResultEvent& event)
@@ -153,7 +176,8 @@ namespace jam::net
 		}
 
 	public:
-		const AccountId accountId = kInvalidAccountId;
+		AccountId			accountId = kInvalidAccountId;
+		const uint64		clientInstanceId = 0;
 		std::mutex				mutex;
 		bool					active = false;
 		bool					closed = false;
@@ -166,12 +190,13 @@ namespace jam::net
 		GlobalEventBus::Subscription worldRayResolvedSubscription;
 		GlobalEventBus::Subscription actorActionResultSubscription;
 		GlobalEventBus::Subscription socialMessageSubscription;
+		GlobalEventBus::Subscription contentResponseSubscription;
 		GlobalEventBus::Subscription presentationFrameSubscription;
 	};
 
 	ClientRuntime::ClientRuntime(const ClientConfig& config)
-		: m_networkManager(std::make_shared<ClientNetworkManager>(config, config.accountId))
-		, m_ingress(std::make_shared<Ingress>(config.accountId))
+		: m_networkManager(std::make_shared<ClientNetworkManager>(config))
+		, m_ingress(std::make_shared<Ingress>(config.accountId, m_networkManager->GetClientInstanceId()))
 		, m_frontendThreadId(std::this_thread::get_id())
 	{
 		m_frontendState.accountId = config.accountId;
@@ -183,7 +208,7 @@ namespace jam::net
 			[ingress](const NetworkStateEvent& evt)
 			{
 				if (const auto state = ingress.lock())
-					state->EnqueueControl(eClientEventType::NetworkStateChanged, evt);
+					state->EnqueueNetworkState(evt);
 			}, {});
 		m_ingress->worldParticipantSubscription = GLOBAL_EVENTBUS_SUBSCRIBE(
 			WorldParticipantEvent,
@@ -220,6 +245,13 @@ namespace jam::net
 				if (const auto state = ingress.lock())
 					state->EnqueueControl(eClientEventType::SocialMessageReceived, evt);
 			}, {});
+		m_ingress->contentResponseSubscription = GLOBAL_EVENTBUS_SUBSCRIBE(
+			GenericContentResponseEvent,
+			[ingress](const GenericContentResponseEvent& evt)
+			{
+				if (const auto state = ingress.lock())
+					state->EnqueueControl(eClientEventType::ContentRequestCompleted, evt);
+			}, {});
 		m_ingress->presentationFrameSubscription = GLOBAL_EVENTBUS_SUBSCRIBE(
 			PresentationFramePushedEvent,
 			[ingress](const PresentationFramePushedEvent& evt)
@@ -239,24 +271,19 @@ namespace jam::net
 		AssertFrontendThread();
 		if (!m_networkManager)
 			return false;
-		if (m_frontendState.accountId == kInvalidAccountId)
-			return false;
 		if (m_frontendState.networkState.phase != eNetworkPhase::Disconnected)
 			return true;
 		if (!m_ingress || !m_ingress->Begin())
 			return false;
 
-		const bool connected = m_networkManager->Connect();
-		if (!connected)
+		const bool admitted = m_networkManager->Connect();
+		if (!admitted)
 		{
 			m_ingress->Stop();
 			return false;
 		}
 
-		if (connected && m_frontendState.networkState.phase == eNetworkPhase::Disconnected)
-			m_frontendState.networkState.phase = eNetworkPhase::Connecting;
-
-		return connected;
+		return true;
 	}
 
 	void ClientRuntime::Disconnect()
@@ -335,6 +362,18 @@ namespace jam::net
 				m_frontendEvents.push_back(event);
 				break;
 
+			case eClientEventType::ContentRequestCompleted:
+			{
+				const auto& response = std::get<GenericContentResponseEvent>(event.payload).response;
+				const auto pending = m_pendingContentRequests.find(response.requestId);
+				if (pending != m_pendingContentRequests.end() && pending->second == response.opCode)
+				{
+					m_pendingContentRequests.erase(pending);
+					m_frontendEvents.push_back(event);
+				}
+				break;
+			}
+
 			case eClientEventType::None:
 			default:
 				break;
@@ -363,7 +402,7 @@ namespace jam::net
 		return m_frontendState.userId;
 	}
 
-	WorldRuntimeRef ClientRuntime::GetMainWorldRef() const
+	WorldRef ClientRuntime::GetMainWorldRef() const
 	{
 		AssertFrontendThread();
 		return m_frontendState.mainWorld;
@@ -503,6 +542,8 @@ namespace jam::net
 			return ClientRequestSubmission{ .admission = eClientRequestAdmission::QueueFull };
 		if (resolved.destination.audience > eSocialAudience::Global)
 			return ClientRequestSubmission{ .admission = eClientRequestAdmission::InvalidArgument };
+		if (resolved.destination.recipient.kind > eSocialRecipientKind::CharacterName)
+			return ClientRequestSubmission{ .admission = eClientRequestAdmission::InvalidArgument };
 		if (!m_networkManager->RequestSocialCommand(resolved))
 			return ClientRequestSubmission{ .admission = eClientRequestAdmission::QueueFull };
 
@@ -511,6 +552,37 @@ namespace jam::net
 			.receipt = {
 				.requestId = resolved.requestId,
 				.kind = eClientRequestKind::SocialCommand,
+			},
+		};
+	}
+
+	ClientRequestSubmission ClientRuntime::RequestContent(const GenericContentRequest& request)
+	{
+		constexpr size_t kMaxPendingContentRequests = 64;
+		AssertFrontendThread();
+		if (!m_networkManager)
+			return {};
+		if (m_frontendState.networkState.phase != eNetworkPhase::Ready)
+			return ClientRequestSubmission{ .admission = eClientRequestAdmission::NotConnected };
+		if (m_pendingContentRequests.size() >= kMaxPendingContentRequests)
+			return ClientRequestSubmission{ .admission = eClientRequestAdmission::QueueFull };
+
+		GenericContentRequest resolved = request;
+		if (resolved.requestId == kInvalidClientRequestId)
+			resolved.requestId = m_nextClientRequestId++;
+		if (!resolved.IsValid())
+			return ClientRequestSubmission{ .admission = eClientRequestAdmission::InvalidArgument };
+		if (m_pendingContentRequests.contains(resolved.requestId))
+			return ClientRequestSubmission{ .admission = eClientRequestAdmission::InvalidArgument };
+		if (!m_networkManager->RequestGenericContent(resolved))
+			return ClientRequestSubmission{ .admission = eClientRequestAdmission::QueueFull };
+
+		m_pendingContentRequests.emplace(resolved.requestId, resolved.opCode);
+		return ClientRequestSubmission{
+			.admission = eClientRequestAdmission::Accepted,
+			.receipt = {
+				.requestId = resolved.requestId,
+				.kind = eClientRequestKind::ContentRequest,
 			},
 		};
 	}
@@ -559,7 +631,9 @@ namespace jam::net
 
 	void ClientRuntime::HandleNetworkStateEvent(const NetworkStateEvent& evt)
 	{
-		if (!OwnsEvent(evt.accountId))
+		if (evt.accountId == kInvalidAccountId
+			? m_frontendState.accountId != kInvalidAccountId
+			: !OwnsEvent(evt.accountId))
 			return;
 
 		m_frontendState.accountId	 = evt.accountId;
@@ -586,9 +660,9 @@ namespace jam::net
 		{
 			if (evt.change == eWorldParticipantChange::Joined)
 			{
-				m_frontendState.mainWorld = evt.participant.runtime;
+				m_frontendState.mainWorld = evt.participant.world;
 			}
-			else if (m_frontendState.mainWorld.worldId == evt.participant.runtime.worldId)
+			else if (m_frontendState.mainWorld.worldId == evt.participant.world.worldId)
 			{
 				m_frontendState.mainWorld = {};
 			}
@@ -657,6 +731,7 @@ namespace jam::net
 		m_snapshotSequence = 0;
 		m_snapshotWorldId = kInvalidWorldId;
 		m_frontendEvents.clear();
+		m_pendingContentRequests.clear();
 	}
 
 	void ClientRuntime::AssertFrontendThread() const

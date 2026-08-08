@@ -96,7 +96,8 @@ namespace jam::net
 
 		for (auto& [user, userState] : m_userStates)
 		{
-			if (userState.phase == eReplicationPhase::AwaitingPlayer)
+			if (userState.phase == eReplicationPhase::AwaitingPlayer
+				|| userState.phase == eReplicationPhase::Suspended)
 				continue;
 			if (userState.phase == eReplicationPhase::NeedsResync)
 			{
@@ -594,6 +595,33 @@ namespace jam::net
 		return true;
 	}
 
+	bool ServerReplicationSystem::SuspendUser(uint64 userId)
+	{
+		auto* userState = FindUserState(userId);
+		if (!userState)
+			return false;
+
+		userState->phase = eReplicationPhase::Suspended;
+		m_forceLifecycleSyncPerUsers.erase(userId);
+		return true;
+	}
+
+	bool ServerReplicationSystem::ResumeUserWithFullSync(uint64 userId)
+	{
+		auto* userState = FindUserState(userId);
+		if (!userState || userState->phase != eReplicationPhase::Suspended)
+			return false;
+
+		for (const ActorId actorId : userState->knownActors)
+			RemoveKnownUserFromActor(actorId, userId);
+		userState->knownActors.clear();
+		userState->baselineDelivery.clear();
+		userState->pendingLifecycle.clear();
+		userState->phase = eReplicationPhase::InitialSync;
+		ForceLifecycleSyncForUser(userId, 30);
+		return true;
+	}
+
 	bool ServerReplicationSystem::IsAwaitingPlayer(uint64 userId) const
 	{
 		const auto* userState = FindUserState(userId);
@@ -603,7 +631,8 @@ namespace jam::net
 	void ServerReplicationSystem::HandleBaselineFeedback(uint64 userId, const fb::fbBaselineAckBatch& batch)
 	{
 		auto* userState = FindUserState(userId);
-		if (!userState || userState->phase == eReplicationPhase::AwaitingPlayer || !batch.entries())
+		if (!userState || userState->phase == eReplicationPhase::AwaitingPlayer
+			|| userState->phase == eReplicationPhase::Suspended || !batch.entries())
 			return;
 
 		for (const auto* entry : *batch.entries())
@@ -699,7 +728,6 @@ namespace jam::net
 		uint64 controller			= 0;
 		uint64 actorArchetypeKey	= 0;
 		uint32 clientRequestId		= 0;
-		uint32 packedId				= 0;
 		const auto* body = m_world.try_get<ActorBodyType>(e);
 		if (!body || body->body == px::eBodyType::None)
 			return 0;
@@ -709,7 +737,6 @@ namespace jam::net
 		if (auto* o   = m_world.try_get<OwnershipTag>(e))			owner			 = o->userId;
 		if (auto* c   = m_world.try_get<ControlTag>(e))				controller		 = c->userId;
 		if (auto* a   = m_world.try_get<ActorArchetypeRef>(e))	actorArchetypeKey = a->key.v;
-		if (auto* tpr = m_world.try_get<ActorTeamPartRole>(e))		packedId		 = tpr->Packed();
 
 		if (userId != 0 && userId == owner)
 		{
@@ -717,7 +744,7 @@ namespace jam::net
 				clientRequestId = s->requestId;
 		}
 
-		return fb::CreatefbActorMeta(*m_fbb, owner, controller, actorArchetypeKey, clientRequestId, packedId, bodyType);
+		return fb::CreatefbActorMeta(*m_fbb, owner, controller, actorArchetypeKey, clientRequestId, bodyType);
 	}
 
 	flatbuffers::Offset<fb::fbLifecycleActor> ServerReplicationSystem::BuildLifecycleActor(const PendingLifecycleEvent& event, entt::entity e, ActorId actorId, uint64 userId)

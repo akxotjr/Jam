@@ -23,6 +23,7 @@
 #include "jamnet/runtime/application/AppRuntimeEvents.h"
 
 #include "jamnet/runtime/protocol/transport/CustomPacketHelper.h"
+#include "jamnet/runtime/protocol/codec/ActorCodec.h"
 #include "jamnet/runtime/protocol/schema/gen/lifecycle_generated.h"
 #include "jamnet/runtime/protocol/schema/gen/snapshot_generated.h"
 
@@ -175,15 +176,13 @@ namespace jam::net
 						PublishActorActionResult(request.requestId, ActorActionResult{ .reason = eActorActionReason::InvalidArgument, .action = action });
 						return;
 					}
-					if (!correlation.world.IsValid() || correlation.world != GetWorldRuntime() || correlation.mainRevision == 0)
+					if (!correlation.world.IsValid() || correlation.world != GetWorldRef() || correlation.mainRevision == 0)
 					{
 						PublishActorActionResult(request.requestId, ActorActionResult{ .reason = eActorActionReason::WorldUnavailable, .action = action });
 						return;
 					}
-					params.correlation = correlation;
-
-					if (params.controlled)
-						RequestSpawnPlayer(params);
+					if (request.spec.requestControl)
+						RequestSpawnPlayer(correlation, params);
 					else
 						RequestSpawnActor(params);
 				}
@@ -230,16 +229,11 @@ namespace jam::net
 		outParams = {};
 		outParams.actorArchetypeKey = spec.actorArchetypeKey;
 		outParams.clientRequestId = requestId;
-		outParams.owned = spec.requestOwnership;
-		outParams.controlled = spec.requestControl;
+		outParams.owner = spec.requestOwnership ? GetUserId() : 0;
 		outParams.targetActorId = spec.targetActorId;
 		outParams.desc.archetype = physicsArchetype;
 		outParams.desc.pose = spec.pose;
 		outParams.desc.spawnSrc = px::eSpawnSource::Runtime;
-		outParams.desc.team = spec.team;
-		outParams.desc.part = spec.part;
-		outParams.desc.role = spec.role;
-
 		if (bodyType == px::eBodyType::Rigid)
 		{
 			px::RigidSpawnOverrides overrides{};
@@ -273,7 +267,7 @@ namespace jam::net
 
 		px::HitscanResult result{};
 		if (m_physics)
-			result = m_physics->Hitscan(from, dir, maxRange, 0);
+			result = m_physics->Hitscan(from, dir, maxRange);
 
 		if (onDone)
 		{
@@ -285,85 +279,20 @@ namespace jam::net
 	}
 
 
-	void ClientWorld::RequestSpawnPlayer(const SpawnParams& params)
+	void ClientWorld::RequestSpawnPlayer(const WorldEventCorrelation& correlation, const SpawnParams& params)
 	{
 		if (!IsValidAssetKey(params.desc.archetype))
 			return;
 
-		flatbuffers::FlatBufferBuilder fbb(256);
-		const fb::fbVec3 pos(params.desc.pose.p.x, params.desc.pose.p.y, params.desc.pose.p.z);
-		const fb::fbQuat rot(params.desc.pose.q.x, params.desc.pose.q.y, params.desc.pose.q.z, params.desc.pose.q.w);
-		fb::fbVec3 linearVel{};
-		fb::fbVec3 angularVel{};
-		const fb::fbVec3* linearVelPtr = nullptr;
-		const fb::fbVec3* angularVelPtr = nullptr;
-		uint32 overrideMask = 0;
-		float linearDamping = 0.0f;
-		float angularDamping = 0.0f;
-		float yaw = 0.0f;
-		float pitch = 0.0f;
-
-		if (params.desc.IsRigid())
-		{
-			const auto& overrides = std::get<px::RigidSpawnOverrides>(params.desc.overrides);
-			overrideMask = overrides.mask.bits();
-
-			if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_VEL))
-			{
-				linearVel = fb::fbVec3(overrides.linearVelocity.x, overrides.linearVelocity.y, overrides.linearVelocity.z);
-				linearVelPtr = &linearVel;
-			}
-			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_VEL))
-			{
-				angularVel = fb::fbVec3(overrides.angularVelocity.x, overrides.angularVelocity.y, overrides.angularVelocity.z);
-				angularVelPtr = &angularVel;
-			}
-			if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_DAMP))
-				linearDamping = overrides.linearDamping;
-			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_DAMP))
-				angularDamping = overrides.angularDamping;
-		}
-		else
-		{
-			const auto& overrides = std::get<px::CharacterSpawnOverrides>(params.desc.overrides);
-			overrideMask = overrides.mask.bits();
-
-			if (overrides.mask.has_any(px::SpawnOverrideMask::VIEW_YAW))
-				yaw = overrides.yaw;
-			if (overrides.mask.has_any(px::SpawnOverrideMask::VIEW_PITCH))
-				pitch = overrides.pitch;
-		}
-
-		const auto root = fb::CreatefbSpawnPlayerReq(
-			fbb,
-			params.correlation.world.worldId,
-			params.correlation.world.instance.instanceId.value,
-			params.correlation.mainRevision,
-			params.clientRequestId,
-			params.actorArchetypeKey.v,
-			&pos,
-			&rot,
-			static_cast<uint32>(params.desc.spawnSrc),
-			params.desc.team,
-			params.desc.part,
-			params.desc.role,
-			overrideMask,
-			linearVelPtr,
-			angularVelPtr,
-			linearDamping,
-			angularDamping,
-			yaw,
-			pitch,
-			params.targetActorId.Value());
-		fbb.Finish(root);
+		const auto payload = codec::EncodeSpawnPlayerRequest(correlation, params);
 
 		JAMNET_LOG_DEBUG("[ClientPhysicalWorld::RequestSpawnPlayer] account id= {}, user id= {}", GetAccountId(), GetUserId());
 
 		RPCCallOptions opt{ .channel = eChannel::TCP_DEFAULT, .timeout_ns = 15_s };
 		RPCCallAsync<fb::fbSpawnPlayerReq, fb::fbSpawnPlayerRes>(
 			m_principal->tcp,
-			fbb.GetBufferPointer(),
-			static_cast<uint32>(fbb.GetSize()),
+			payload.data,
+			payload.size,
 			opt,
 			[this, requestId = params.clientRequestId](std::optional<RPCTableRef<fb::fbSpawnPlayerRes>> res)
 			{
@@ -376,55 +305,12 @@ namespace jam::net
 		if (!IsValidAssetKey(params.desc.archetype))
 			return;
 
-		flatbuffers::FlatBufferBuilder fbb(256);
-		const fb::fbVec3 pos(params.desc.pose.p.x, params.desc.pose.p.y, params.desc.pose.p.z);
-		const fb::fbQuat rot(params.desc.pose.q.x, params.desc.pose.q.y, params.desc.pose.q.z, params.desc.pose.q.w);
-		fb::fbVec3 linearVel{};
-		fb::fbVec3 angularVel{};
-		const fb::fbVec3* linearVelPtr  = nullptr;
-		const fb::fbVec3* angularVelPtr = nullptr;
-		uint32 overrideMask = 0;
-		float linearDamping = 0.0f;
-		float angularDamping = 0.0f;
-		float yaw = 0.0f;
-		float pitch = 0.0f;
-
-		if (params.desc.IsRigid())
-		{
-			const auto& overrides = std::get<px::RigidSpawnOverrides>(params.desc.overrides);
-			overrideMask = overrides.mask.bits();
-			if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_VEL))
-			{
-				linearVel = fb::fbVec3(overrides.linearVelocity.x, overrides.linearVelocity.y, overrides.linearVelocity.z);
-				linearVelPtr = &linearVel;
-			}
-			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_VEL))
-			{
-				angularVel = fb::fbVec3(overrides.angularVelocity.x, overrides.angularVelocity.y, overrides.angularVelocity.z);
-				angularVelPtr = &angularVel;
-			}
-			if (overrides.mask.has_any(px::SpawnOverrideMask::LINEAR_DAMP)) linearDamping = overrides.linearDamping;
-			if (overrides.mask.has_any(px::SpawnOverrideMask::ANGULAR_DAMP)) angularDamping = overrides.angularDamping;
-		}
-		else
-		{
-			const auto& overrides = std::get<px::CharacterSpawnOverrides>(params.desc.overrides);
-			overrideMask = overrides.mask.bits();
-			if (overrides.mask.has_any(px::SpawnOverrideMask::VIEW_YAW)) yaw = overrides.yaw;
-			if (overrides.mask.has_any(px::SpawnOverrideMask::VIEW_PITCH)) pitch = overrides.pitch;
-		}
-
-		const auto root = fb::CreatefbSpawnActorReq(
-			fbb, GetWorldId(), GetWorldInstance().instanceId.value, params.clientRequestId,
-			params.owned ? GetUserId() : 0, 0, params.actorArchetypeKey.v, &pos, &rot,
-			static_cast<uint32>(params.desc.spawnSrc), params.desc.team, params.desc.part, params.desc.role,
-			overrideMask, linearVelPtr, angularVelPtr, linearDamping, angularDamping, yaw, pitch, params.targetActorId.Value());
-		fbb.Finish(root);
+		const auto payload = codec::EncodeSpawnActorRequest(GetWorldRef(), params);
 
 		RPCCallAsync<fb::fbSpawnActorReq, fb::fbSpawnActorRes>(
 			m_principal->udp, 
-			fbb.GetBufferPointer(), 
-			static_cast<uint32>(fbb.GetSize()),
+			payload.data,
+			payload.size,
 			{ .channel = eChannel::RELIABLE_ORDERED, .timeout_ns = 1_s },
 			[this, requestId = params.clientRequestId](std::optional<RPCTableRef<fb::fbSpawnActorRes>> res)
 			{
@@ -434,15 +320,13 @@ namespace jam::net
 
 	void ClientWorld::RequestDespawnActor(const DespawnActorRequest& request)
 	{
-		flatbuffers::FlatBufferBuilder fbb(64);
-		const auto root = fb::CreatefbDespawnActorReq(fbb, GetWorldId(), GetWorldInstance().instanceId.value, request.actorId.Value());
-		fbb.Finish(root);
+		const auto payload = codec::EncodeDespawnActorRequest(GetWorldRef(), request.actorId);
 
 		RPCCallOptions opt{ .channel = eChannel::RELIABLE_ORDERED, .timeout_ns = 1_s };
 		RPCCallAsync<fb::fbDespawnActorReq, fb::fbDespawnActorRes>(
 			m_principal->udp,
-			fbb.GetBufferPointer(),
-			static_cast<uint32>(fbb.GetSize()),
+			payload.data,
+			payload.size,
 			opt,
 			[this, requestId = request.requestId, actorId = request.actorId](std::optional<RPCTableRef<fb::fbDespawnActorRes>> res)
 			{
@@ -456,14 +340,13 @@ namespace jam::net
 		if (user == m_userContexts.end() || user->second.mainRevision == 0)
 			return;
 
-		flatbuffers::FlatBufferBuilder fbb(64);
-		const auto root = fb::CreatefbDespawnPlayerReq(fbb, GetWorldId(), GetWorldInstance().instanceId.value, user->second.mainRevision, request.actorId.Value());
-		fbb.Finish(root);
+		const WorldEventCorrelation correlation{ .world = GetWorldRef(), .mainRevision = user->second.mainRevision };
+		const auto payload = codec::EncodeDespawnPlayerRequest(correlation, request.actorId);
 
 		RPCCallAsync<fb::fbDespawnPlayerReq, fb::fbDespawnPlayerRes>(
 			m_principal->tcp, 
-			fbb.GetBufferPointer(), 
-			static_cast<uint32>(fbb.GetSize()),
+			payload.data,
+			payload.size,
 			{ .channel = eChannel::TCP_DEFAULT, .timeout_ns = 10_s },
 			[this, requestId = request.requestId, actorId = request.actorId](std::optional<RPCTableRef<fb::fbDespawnPlayerRes>> res)
 			{
@@ -562,7 +445,6 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 	m_registry.emplace<ActorId>(e, actorId);
 	m_registry.emplace<ActorArchetypeRef>(e, ActorArchetypeRef{ actorArchetypeKey });
 	m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ physicsArchetypeKey });
-	m_registry.emplace<ActorTeamPartRole>(e);
 	m_registry.emplace<OwnershipTag>(e, OwnershipTag{ owner });
 	m_registry.emplace<ControlTag>(e, ControlTag{ controller });
 	m_registry.emplace<ActorBodyType>(e, ActorBodyType{ bodyType });
@@ -648,24 +530,13 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 			return;
 		}
 
-		ActorId actorId((*res)->actor_id());
-		if (const entt::entity entity = ResolveActor(actorId); entity != entt::null && m_registry.valid(entity))
+		ActorActionResult result = codec::DecodeSpawnActorResponse(**res);
+		if (const entt::entity entity = ResolveActor(result.actorId); entity != entt::null && m_registry.valid(entity))
 		{
-			actorId = GetActorId(entity);
+			result.actorId = GetActorId(entity);
 		}
 
-		PublishActorActionResult(requestId, ActorActionResult
-			{
-				.status = (*res)->success() ? eActorActionStatus::Succeeded : eActorActionStatus::Failed,
-				.reason = (*res)->success()
-					? eActorActionReason::None
-					: (((*res)->failure() == fb::fbSpawnActorFailure_InvalidCorrelation
-						|| (*res)->failure() == fb::fbSpawnActorFailure_StaleRevision)
-						? eActorActionReason::WorldUnavailable
-						: eActorActionReason::Rejected),
-				.action  = eActorAction::Spawn,
-				.actorId = actorId,
-			});
+		PublishActorActionResult(requestId, result);
 
 	}
 
@@ -683,13 +554,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 			JAMNET_LOG_WARN_LOC("Despawn RPC failed on server\n");
 		}
 
-		PublishActorActionResult(requestId, ActorActionResult
-			{
-				.status = (*res)->success() ? eActorActionStatus::Succeeded : eActorActionStatus::Failed,
-				.reason = (*res)->success() ? eActorActionReason::None : eActorActionReason::Rejected,
-				.action = eActorAction::Despawn,
-				.actorId = actorId,
-			});
+		PublishActorActionResult(requestId, codec::DecodeDespawnActorResponse(**res, actorId));
 	}
 
 	void ClientWorld::OnSpawnPlayerResponse(ClientRequestId requestId, std::optional<RPCTableRef<fb::fbSpawnPlayerRes>> res)
@@ -700,20 +565,11 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 			return;
 		}
 
-		ActorId actorId((*res)->actor_id());
-		if (const entt::entity entity = ResolveActor(actorId); entity != entt::null && m_registry.valid(entity))
-			actorId = GetActorId(entity);
+		ActorActionResult result = codec::DecodeSpawnPlayerResponse(**res);
+		if (const entt::entity entity = ResolveActor(result.actorId); entity != entt::null && m_registry.valid(entity))
+			result.actorId = GetActorId(entity);
 
-		const auto failure = (*res)->failure();
-		PublishActorActionResult(requestId, ActorActionResult
-			{
-				.status = (*res)->success() ? eActorActionStatus::Succeeded : eActorActionStatus::Failed,
-				.reason = (*res)->success() ? eActorActionReason::None
-					: ((failure == fb::fbSpawnPlayerFailure_InvalidCorrelation || failure == fb::fbSpawnPlayerFailure_StaleRevision)
-						? eActorActionReason::WorldUnavailable : eActorActionReason::Rejected),
-				.action = eActorAction::Spawn,
-				.actorId = actorId,
-			});
+		PublishActorActionResult(requestId, result);
 	}
 
 	void ClientWorld::OnDespawnPlayerResponse(ClientRequestId requestId, ActorId actorId, std::optional<RPCTableRef<fb::fbDespawnPlayerRes>> res)
@@ -724,13 +580,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 			return;
 		}
 
-		PublishActorActionResult(requestId, ActorActionResult
-			{
-				.status = (*res)->success() ? eActorActionStatus::Succeeded : eActorActionStatus::Failed,
-				.reason = (*res)->success() ? eActorActionReason::None : eActorActionReason::Rejected,
-				.action = eActorAction::Despawn,
-				.actorId = actorId,
-			});
+		PublishActorActionResult(requestId, codec::DecodeDespawnPlayerResponse(**res, actorId));
 	}
 
 	void ClientWorld::PublishActorActionResult(ClientRequestId requestId, ActorActionResult result) const
@@ -757,7 +607,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		ActorLifecycleEvent event{};
 		event.accountId		= GetAccountId();
 		event.userId		= GetUserId();
-		event.worldId		= m_config.RuntimeRef().worldId;
+		event.worldId		= m_config.GetWorldRef().worldId;
 		event.clientRequestId = requestId;
 		event.actorId		= GetActorId(e);
 		event.isLocal		= isLocal;
@@ -776,7 +626,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		ActorLifecycleEvent event{};
 		event.accountId	   = GetAccountId();
 		event.userId       = GetUserId();
-		event.worldId      = m_config.RuntimeRef().worldId;
+		event.worldId      = m_config.GetWorldRef().worldId;
 		event.actorId	   = GetActorId(e);
 		event.reason	   = reason;
 		GLOBAL_EVENTBUS_PUBLISH(event);
@@ -784,7 +634,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 
 	void ClientWorld::PublishWorldParticipantEvent(uint64 participantUserId, eWorldParticipantChange change)
 	{
-		if (participantUserId == 0 || !GetWorldRuntime().IsValid())
+		if (participantUserId == 0 || !GetWorldRef().IsValid())
 			return;
 
 		WorldParticipantEvent event{};
@@ -793,7 +643,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		event.change	= change;
 		event.participant = WorldParticipantView
 		{
-			.runtime = GetWorldRuntime(),
+			.world = GetWorldRef(),
 			.participantUserId = participantUserId,
 		};
 		GLOBAL_EVENTBUS_PUBLISH(event);
@@ -838,7 +688,6 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 			m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ physicsArchetypeKey });
 			m_registry.emplace<OwnershipTag>(e);
 			m_registry.emplace<ControlTag>(e);
-			m_registry.emplace<ActorTeamPartRole>(e);
 			m_registry.emplace<ActorBodyType>(e, ActorBodyType{ bodyType });
 			if (m_physics->FindMotionType(physicsArchetypeKey) == px::eMotionType::Static)
 				m_registry.emplace<ReplicationStaticTag>(e);

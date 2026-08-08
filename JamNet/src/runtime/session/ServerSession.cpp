@@ -10,103 +10,91 @@
 
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
 #include "jamnet/runtime/protocol/codec/ReplicationCodec.h"
+#include "jamnet/runtime/protocol/codec/WorldCodec.h"
+#include "jamnet/runtime/protocol/codec/SocialCodec.h"
+#include "jamnet/runtime/protocol/codec/ActorCodec.h"
 #include "jamnet/runtime/protocol/transport/CustomPacketHelper.h"
 #include "jamnet/runtime/protocol/schema/gen/social_command_generated.h"
+#include "jamnet/runtime/protocol/codec/ContentCodec.h"
 #include "jamnet/runtime/application/ServerNetworkManager.h"
+#include "jamnet/runtime/session/RuntimeShardRouting.h"
 #include "jamnet/runtime/world/lifecycle/ServerWorldTransitionCoordinator.h"
 
 namespace jam::net
 {
 	namespace
 	{
-
-		uint16 ResolveAccountShardIndex(AccountId accountId)
-		{
-			if (accountId == kInvalidAccountId)
-				return static_cast<uint16>(kInvalidRouteShard);
-
-			if (auto shard = GLOBAL_EXEC.GetAffinityShard(accountId))
-				return static_cast<uint16>(shard->GetIndex());
-
-			return static_cast<uint16>(kInvalidRouteShard);
-		}
-
-
 		void SendSpawnActorResponse(entt::entity e, fb::fbSpawnActorFailure failure, ClientRequestId clientRequestId, ActorId actorId, uint32 requestId)
 		{
-			flatbuffers::FlatBufferBuilder fbb(64);
 			const bool success = failure == fb::fbSpawnActorFailure_None && actorId.IsValid();
-			const auto root = fb::CreatefbSpawnActorRes(fbb, success, failure, clientRequestId, actorId.Value());
-			fbb.Finish(root);
-			RPCSendResponse<fb::fbSpawnActorRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::RELIABLE_ORDERED);
+			const auto payload = codec::EncodeSpawnActorResponse(success, failure, clientRequestId, actorId);
+			RPCSendResponse<fb::fbSpawnActorRes>(e, payload.data, payload.size, requestId, eChannel::RELIABLE_ORDERED);
 		}
 
 		void SendSpawnPlayerResponse(entt::entity e, fb::fbSpawnPlayerFailure failure, ClientRequestId clientRequestId, ActorId actorId, uint32 requestId)
 		{
-			flatbuffers::FlatBufferBuilder fbb(64);
 			const bool success = failure == fb::fbSpawnPlayerFailure_None && actorId.IsValid();
-			const auto root = fb::CreatefbSpawnPlayerRes(fbb, success, failure, clientRequestId, actorId.Value());
-			fbb.Finish(root);
-			RPCSendResponse<fb::fbSpawnPlayerRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::TCP_DEFAULT);
+			const auto payload = codec::EncodeSpawnPlayerResponse(success, failure, clientRequestId, actorId);
+			RPCSendResponse<fb::fbSpawnPlayerRes>(e, payload.data, payload.size, requestId, eChannel::TCP_DEFAULT);
 		}
 
 		void SendDespawnActorResponse(entt::entity e, bool success, uint32 requestId)
 		{
-			flatbuffers::FlatBufferBuilder fbb(64);
-			const auto root = fb::CreatefbDespawnActorRes(fbb, success);
-			fbb.Finish(root);
-			RPCSendResponse<fb::fbDespawnActorRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::RELIABLE_ORDERED);
+			const auto payload = codec::EncodeDespawnActorResponse(success);
+			RPCSendResponse<fb::fbDespawnActorRes>(e, payload.data, payload.size, requestId, eChannel::RELIABLE_ORDERED);
 		}
 
 		void SendDespawnPlayerResponse(entt::entity e, bool success, uint32 requestId)
 		{
-			flatbuffers::FlatBufferBuilder fbb(64);
-			const auto root = fb::CreatefbDespawnPlayerRes(fbb, success);
-			fbb.Finish(root);
-			RPCSendResponse<fb::fbDespawnPlayerRes>(e, fbb.GetBufferPointer(), fbb.GetSize(), requestId, eChannel::TCP_DEFAULT);
+			const auto payload = codec::EncodeDespawnPlayerResponse(success);
+			RPCSendResponse<fb::fbDespawnPlayerRes>(e, payload.data, payload.size, requestId, eChannel::TCP_DEFAULT);
 		}
 
-		std::optional<WorldRuntimeRef> ResolveMainRuntime(const UserContext& ctx, WorldId worldId)
+		std::optional<WorldRef> ResolveMainWorld(const UserContext& ctx, WorldId worldId)
 		{
-			return ctx.physicalWorld.main && ctx.physicalWorld.main->worldId == worldId
-				? ctx.physicalWorld.main : std::nullopt;
+			return ctx.worldState.main && ctx.worldState.main->worldId == worldId
+				? ctx.worldState.main : std::nullopt;
 		}
 
-		std::optional<WorldRuntimeRef> ResolveRequestedMainRuntime(UserId userId, WorldId worldId)
+		std::optional<WorldRef> ResolveRequestedMainWorld(UserId userId, WorldId worldId)
 		{
 			if (userId == kInvalidUserId || worldId == kInvalidWorldId)
 				return {};
 
 			auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
 			if (const auto* ctx = state.FindUserContext(userId))
-				return ResolveMainRuntime(*ctx, worldId);
+				return ResolveMainWorld(*ctx, worldId);
 			return std::nullopt;
 		}
 
-		fb::fbSpawnActorFailure ToWireSpawnFailure(ePlayerSpawnFailure failure)
+	}
+
+
+
+	ServerSessionBundle ResolveUserSessionBundle(const UserContext& user)
+	{
+		JAM_ASSERT(CurrentShardLocal() && CurrentShardLocal()->shardIndex == GetUserShardIndex(user.userId));
+
+		auto& sessionState = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+
+		ServerSessionBundle bundle;
+
+		if (user.tcp != kInvalidSessionId)
 		{
-			switch (failure)
-			{
-			case ePlayerSpawnFailure::None: return fb::fbSpawnActorFailure_None;
-			case ePlayerSpawnFailure::InvalidCorrelation: return fb::fbSpawnActorFailure_InvalidCorrelation;
-			case ePlayerSpawnFailure::AlreadySpawned: return fb::fbSpawnActorFailure_AlreadySpawned;
-			case ePlayerSpawnFailure::SpawnFailed: return fb::fbSpawnActorFailure_SpawnFailed;
-			}
-			return fb::fbSpawnActorFailure_SpawnFailed;
+			if (auto* session = sessionState.FindSession(user.tcp))
+				bundle.tcp.Set(static_cast<ServerTcpSession*>(session));
 		}
 
-		fb::fbSpawnPlayerFailure ToWireSpawnPlayerFailure(ePlayerSpawnFailure failure)
+		if (user.udp != kInvalidSessionId)
 		{
-			switch (failure)
-			{
-			case ePlayerSpawnFailure::None: return fb::fbSpawnPlayerFailure_None;
-			case ePlayerSpawnFailure::InvalidCorrelation: return fb::fbSpawnPlayerFailure_InvalidCorrelation;
-			case ePlayerSpawnFailure::AlreadySpawned: return fb::fbSpawnPlayerFailure_AlreadySpawned;
-			case ePlayerSpawnFailure::SpawnFailed: return fb::fbSpawnPlayerFailure_SpawnFailed;
-			}
-			return fb::fbSpawnPlayerFailure_SpawnFailed;
+			if (auto* session = sessionState.FindSession(user.udp))
+				bundle.udp.Set(static_cast<ServerUdpSession*>(session));
 		}
+
+		return bundle;
 	}
+
+
 
 
 	void ServerTcpSession::OnLinkEstablished()
@@ -139,76 +127,63 @@ namespace jam::net
 		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
 		if (!view.IsValid())
 			return;
+
 		if (view.Id() == CustomPacketId::ENTER_WORLD_REQUEST && m_userId != kInvalidUserId)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			const auto* wire = flatbuffers::GetRoot<fb::fbEnterWorldRequest>(view.Payload());
-			if (!wire || !wire->Verify(verifier))
+			EnterWorldRequest request;
+			if (!codec::DecodeEnterWorldRequest(view.Payload(), view.PayloadSize(), request))
 				return;
-			EnterWorldRequest request
-			{
-				.requestId = wire->request_id(),
-				.archetypeKey = WorldArchetypeKey{ wire->archetype_key() },
-				.selector = static_cast<eWorldDestinationSelector>(wire->selector()),
-				.explicitInstanceId = WorldInstanceId{ wire->explicit_instance_id() },
-				.destinationName = wire->destination_name() ? wire->destination_name()->str() : std::string{},
-				.expectedMainRevision = wire->expected_main_revision(),
-			};
+
 			m_manager->EnterWorld(m_userId, request);
 			return;
 		}
+
 		if (view.Id() == CustomPacketId::LEAVE_WORLD_REQUEST && m_userId != kInvalidUserId)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			const auto* wire = flatbuffers::GetRoot<fb::fbLeaveWorldRequest>(view.Payload());
-			if (!wire || !wire->Verify(verifier))
+			LeaveWorldRequest request;
+			if (!codec::DecodeLeaveWorldRequest(view.Payload(), view.PayloadSize(), request))
 				return;
-			const LeaveWorldRequest request
-			{
-				.requestId = wire->request_id(),
-				.expectedMainRevision = wire->expected_main_revision(),
-			};
+
 			m_manager->LeaveWorld(m_userId, request);
 			return;
 		}
-		if (view.Id() == CustomPacketId::CLIENT_BARRIER_RESULT && m_userId != kInvalidUserId)
+
+		if (view.Id() == CustomPacketId::CLIENT_WORLD_SYNC_RESULT && m_userId != kInvalidUserId)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			const auto* result = flatbuffers::GetRoot<fb::fbClientBarrierResult>(view.Payload());
-			if (!result || !result->Verify(verifier))
+			ClientWorldSyncResult result;
+			if (!codec::DecodeClientWorldSyncResult(view.Payload(), view.PayloadSize(), result))
 				return;
+
 			if (auto* coordinator = m_manager->GetWorldTransitionSystem())
-				coordinator->OnClientBarrierResult(m_userId,
-					{ .token = { result->barrier_token() }, .succeeded = result->succeeded(),
-					  .failure = static_cast<eWorldTransitionFailure>(result->failure()) }, NOW_NS());
+				coordinator->OnClientWorldSyncResult(m_userId, result, NOW_NS());
+
 			return;
 		}
+
 		if (view.Id() == CustomPacketId::SOCIAL_COMMAND && m_userId != kInvalidUserId)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			if (!fb::VerifyfbSocialCommandBuffer(verifier))
+			SocialCommand command;
+			if (!codec::DecodeSocialCommand(view.Payload(), view.PayloadSize(), command))
 				return;
-
-			const auto* wire = fb::GetfbSocialCommand(view.Payload());
-			const auto* destination = wire ? wire->destination() : nullptr;
-			const auto* payload = wire ? wire->payload() : nullptr;
-			if (!wire || !destination || !payload
-				|| destination->audience() < fb::fbSocialAudience_MIN
-				|| destination->audience() > fb::fbSocialAudience_MAX)
-				return;
-
-			SocialCommand command{
-				.requestId = wire->request_id(),
-				.destination = {
-					.audience = static_cast<eSocialAudience>(destination->audience()),
-					.scopeId = destination->scope_id(),
-				},
-				.contentType = wire->content_type(),
-			};
-			command.payload.resize(payload->size());
-			if (!command.payload.empty())
-				std::memcpy(command.payload.data(), payload->data(), payload->size());
 			m_manager->DispatchSocialCommand(m_userId, std::move(command));
+			return;
+		}
+
+		if (view.Id() == CustomPacketId::CONTENT && m_userId != kInvalidUserId)
+		{
+			GenericContentRequest request;
+			if (!codec::DecodeContentRequest(view.Payload(), view.PayloadSize(), request))
+				return;
+			const ClientRequestId requestId = request.requestId;
+			const GenericContentOperationCode opCode = request.opCode;
+			if (!m_manager->DispatchContentRequest(m_userId, std::move(request)))
+			{
+				Send(codec::MakeContentResponsePacket({
+					.requestId = requestId,
+					.opCode = opCode,
+					.status = eGenericContentResponseStatus::Unavailable,
+				}));
+			}
 			return;
 		}
 
@@ -221,10 +196,11 @@ namespace jam::net
 		if (!ctx)
 			return;
 
-		const auto targetRuntime = ResolveMainRuntime(*ctx, worldId);
-		if (!targetRuntime)
+		const auto targetWorld = ResolveMainWorld(*ctx, worldId);
+		if (!targetWorld)
 			return;
-		m_manager->SubmitWorldJob(*targetRuntime, [userId = m_userId, packet = std::move(packet)](WorldBase& world) mutable
+
+		SubmitWorldJob(*targetWorld, [userId = m_userId, packet = std::move(packet)](WorldBase& world) mutable
 			{
 				if (auto* host = dynamic_cast<WorldMembershipHost*>(&world))
 				{
@@ -246,6 +222,28 @@ namespace jam::net
 		return ctx ? ctx->userId : kInvalidRuntimeId;
 	}
 
+	void ServerTcpSession::AuthenticateServerTcpBind(const TCP_BIND_REQ_DATA& request, std::function<void(uint64)> completed)
+	{
+		if (!m_manager || !completed)
+		{
+			if (completed) completed(kInvalidAccountId);
+			return;
+		}
+
+		if (request.kind == eLoginCredentialKind::Password)
+		{
+			m_manager->Authenticate(PasswordCredential{
+				.loginId = std::string(reinterpret_cast<const char*>(request.loginId), request.loginIdSize),
+				.password = std::string(reinterpret_cast<const char*>(request.secret), request.secretSize),
+			}, std::move(completed));
+			return;
+		}
+
+		m_manager->Authenticate(TicketCredential{
+			.ticket = std::vector<uint8>(request.secret, request.secret + request.secretSize),
+		}, std::move(completed));
+	}
+
 	void ServerTcpSession::FinalizeEstablishedSession()
 	{
 		if (!m_manager || m_accountId == kInvalidAccountId || m_userId == kInvalidUserId || GetSessionId() == kInvalidSessionId)
@@ -257,19 +255,34 @@ namespace jam::net
 		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
 		UserContext* ctx = state.FindUserContext(m_userId);
 
-		if (!ctx || ctx->accountId != m_accountId)
+		if (!ctx || ctx->accountId != m_accountId || ctx->connectionState == eUserConnectionState::Released)
 		{
 			Disconnect();
 			return;
 		}
 
-		const SessionId prevTcp = ctx->tcp;
-		ctx->tcp = GetSessionId();
-		if (!m_manager->CacheTcpSession(m_userId, this))
+		auto& sessionState = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+		if (ctx->tcp != kInvalidSessionId && ctx->tcp != GetSessionId() && sessionState.FindSessionRef(ctx->tcp).TryGet())
 		{
-			ctx->tcp = prevTcp;
+			JAMNET_LOG_WARN("TCP session is already registered.");
 			Disconnect();
+			return;
 		}
+
+		ctx->tcp = GetSessionId();
+		m_manager->NotifyUserConnected(*ctx);
+		if (auto* transitions = m_manager->GetWorldTransitionSystem())
+			transitions->OnReconnected(m_userId);
+	}
+
+	eBootstrapKind ServerTcpSession::ResolveServerBootstrapKind(RuntimeId userId)
+	{
+		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
+		const UserContext* ctx = state.FindUserContext(userId);
+		if (!ctx)
+			return eBootstrapKind::Pending;
+
+		return ctx->worldState.main ? eBootstrapKind::Resync : eBootstrapKind::Fresh;
 	}
 
 	void ServerTcpSession::BootstrapRPC()
@@ -303,18 +316,20 @@ namespace jam::net
 	{
 		JAMNET_LOG_INFO("[AccountId= {}, UserId = {}] ServerUdpSession disconnected", GetAccountId(), GetUserId());
 
-		if (m_manager && m_userId != kInvalidUserId)
+		if (m_userId != kInvalidUserId)
 		{
 			auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
 			if (auto* ctx = state.FindUserContext(m_userId))
 			{
 				if (ctx->udp == GetSessionId())
 					ctx->udp = kInvalidSessionId;
-				if (ctx->tcp == kInvalidSessionId && ctx->udp == kInvalidSessionId && !ctx->physicalWorld.main)
+				if (ctx->connectionState == eUserConnectionState::Released && ctx->tcp == kInvalidSessionId && ctx->udp == kInvalidSessionId && !ctx->worldState.main)
 					state.FreeUserContext(m_userId);
 			}
 
-			m_manager->ReleaseUdpSession(m_userId, this);
+			if (m_manager)
+				if (auto* transitions = m_manager->GetWorldTransitionSystem())
+					transitions->OnSessionChanged(m_userId);
 		}
 	}
 
@@ -336,10 +351,11 @@ namespace jam::net
 		if (!ctx)
 			return;
 
-		const auto targetRuntime = ResolveMainRuntime(*ctx, worldId);
-		if (!targetRuntime)
+		const auto targetWorld = ResolveMainWorld(*ctx, worldId);
+		if (!targetWorld)
 			return;
-		m_manager->SubmitWorldJob(*targetRuntime, [userId = m_userId, packet = std::move(packet)](WorldBase& world) mutable
+
+		SubmitWorldJob(*targetWorld, [userId = m_userId, packet = std::move(packet)](WorldBase& world) mutable
 			{
 				if (auto* host = dynamic_cast<WorldMembershipHost*>(&world))
 				{
@@ -354,11 +370,8 @@ namespace jam::net
 			return false;
 
 		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
-		const uint16 accountShardIndex = ResolveAccountShardIndex(accountId);
 		UserContext* ctx = state.FindUserContext(userId);
-		if (!ctx || ctx->accountId != accountId || ctx->tcp == kInvalidSessionId)
-			return false;
-		return GetUserShardIndex(ctx->userId) == accountShardIndex;
+		return ctx && ctx->accountId == accountId && ctx->tcp != kInvalidSessionId;
 	}
 
 	void ServerUdpSession::FinalizeEstablishedSession()
@@ -371,20 +384,25 @@ namespace jam::net
 
 		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
 		UserContext* ctx = state.FindUserContext(m_userId);
-		if (!ctx || ctx->accountId != m_accountId || ctx->tcp == kInvalidSessionId)
+		if (!ctx || ctx->accountId != m_accountId || ctx->connectionState == eUserConnectionState::Released
+			|| ctx->tcp == kInvalidSessionId)
 		{
 			Disconnect();
 			return;
 		}
 
-		const SessionId prevUdp = ctx->udp;
-		ctx->udp = GetSessionId();
-		if (!m_manager->CacheUdpSession(m_userId, this))
+		auto& sessionState = GetOrCreateSessionShardState(CurrentShardLocalChecked());
+		if (ctx->udp != kInvalidSessionId && ctx->udp != GetSessionId()
+			&& sessionState.FindSessionRef(ctx->udp).TryGet())
 		{
-			ctx->udp = prevUdp;
+			JAMNET_LOG_WARN("UDP session is already registered.");
 			Disconnect();
 			return;
 		}
+
+		ctx->udp = GetSessionId();
+		if (auto* transitions = m_manager->GetWorldTransitionSystem())
+			transitions->OnSessionChanged(m_userId);
 	}
 
 	void ServerUdpSession::BootstrapRPC()
@@ -411,28 +429,30 @@ namespace jam::net
 
 		auto& userShardState = GetOrCreateUserShardState(CurrentShardLocalChecked());
 		const auto* userContext = userShardState.FindUserContext(m_userId);
-		if (!userContext || userContext->physicalWorld.revision != req.expected_main_revision())
+		if (!userContext || userContext->worldState.revision != req.expected_main_revision())
 		{
 			SendSpawnPlayerResponse(e, fb::fbSpawnPlayerFailure_StaleRevision, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
 
-		const auto& main = userContext->physicalWorld.main;
+		const auto& main = userContext->worldState.main;
 		if (!main || main->worldId != req.world_id()
 			|| main->instance.instanceId != WorldInstanceId{ req.world_instance_id() })
 		{
 			SendSpawnPlayerResponse(e, fb::fbSpawnPlayerFailure_InvalidCorrelation, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
-		const WorldRuntimeRef targetRuntime = *main;
-		const WorldEventCorrelation correlation{ .world = targetRuntime, .mainRevision = req.expected_main_revision() };
+		const WorldRef targetWorld = *main;
+		const WorldEventCorrelation correlation{ .world = targetWorld, .mainRevision = req.expected_main_revision() };
 
-		const ActorArchetypeKey actorArchetypeKey = ActorArchetypeKey::FromU64(req.actor_archetype_key());
-		if (!IsValidAssetKey(actorArchetypeKey) || !req.pos() || !req.rot())
+		SpawnParams params{};
+		if (!codec::DecodeSpawnPlayerRequest(req, m_userId, params)
+			|| !IsValidAssetKey(params.actorArchetypeKey))
 		{
 			SendSpawnPlayerResponse(e, fb::fbSpawnPlayerFailure_SpawnFailed, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
+		params.desc.spawnSrc = px::eSpawnSource::Runtime;
 
 		const UserId userId = m_userId;
 		if (userId == kInvalidUserId)
@@ -441,55 +461,11 @@ namespace jam::net
 			return;
 		}
 
-		SpawnParams params{};
-
-		params.clientRequestId		= req.client_request_id();
-		params.actorArchetypeKey	= actorArchetypeKey;
-		params.owner				= userId;
-		params.controller			= userId;
-		params.targetActorId			= ActorId(req.target_actor_id());
-		params.desc.spawnSrc		= px::eSpawnSource::Runtime;
-		params.desc.pose			= { .p = { req.pos()->x(), req.pos()->y(), req.pos()->z() }, .q = { req.rot()->x(), req.rot()->y(), req.rot()->z(), req.rot()->w() } };
-		params.desc.team			= static_cast<uint16>(req.team_id());
-		params.desc.part			= static_cast<uint8>(req.part_id());
-		params.desc.role			= static_cast<uint8>(req.role_id());
-
-		px::SpawnOverrideMask::Flag overrideMask{ req.override_mask() };
-
-		if (px::IsRigidOverrideMask(overrideMask))
-		{
-			px::RigidSpawnOverrides overrides{};
-			overrides.mask = overrideMask;
-
-			if (overrideMask.has_any(px::SpawnOverrideMask::LINEAR_VEL) && req.linear_vel())
-				overrides.linearVelocity = px::Vec3{ req.linear_vel()->x(), req.linear_vel()->y(), req.linear_vel()->z() };
-			if (overrideMask.has_any(px::SpawnOverrideMask::ANGULAR_VEL) && req.angular_vel())
-				overrides.angularVelocity = px::Vec3{ req.angular_vel()->x(), req.angular_vel()->y(), req.angular_vel()->z() };
-			if (overrideMask.has_any(px::SpawnOverrideMask::LINEAR_DAMP))
-				overrides.linearDamping = req.linear_damping();
-			if (overrideMask.has_any(px::SpawnOverrideMask::ANGULAR_DAMP))
-				overrides.angularDamping = req.angular_damping();
-
-			params.desc.overrides = overrides;
-		}
-		else
-		{
-			px::CharacterSpawnOverrides overrides{};
-			overrides.mask = overrideMask;
-
-			if (overrideMask.has_any(px::SpawnOverrideMask::VIEW_YAW))
-				overrides.yaw = req.yaw();
-			if (overrideMask.has_any(px::SpawnOverrideMask::VIEW_PITCH))
-				overrides.pitch = req.pitch();
-
-			params.desc.overrides = overrides;
-		}
-
 		const SessionId sessionId = GetSessionId();
 		const uint32 reqId		= requestId;
 		const ClientRequestId clientRequestId = req.client_request_id();
 
-		if (!m_manager->SubmitWorldJob(targetRuntime, [params, correlation, sessionId, e, reqId, clientRequestId, userId](WorldBase& world) mutable
+		if (SubmitWorldJob(targetWorld, [params, correlation, sessionId, reqId, clientRequestId, userId](WorldBase& world) mutable
 			{
 				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
 				if (!physicalWorld) return;
@@ -506,7 +482,7 @@ namespace jam::net
 								if (!self)
 									return;
 
-								SendSpawnPlayerResponse(self->GetEntity(), ToWireSpawnPlayerFailure(failure), clientRequestId, actorId, reqId);
+								SendSpawnPlayerResponse(self->GetEntity(), codec::EncodeSpawnPlayerFailure(failure), clientRequestId, actorId, reqId);
 							}));
 					});
 			}))
@@ -525,15 +501,15 @@ namespace jam::net
 
 		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
 		const auto* userContext = state.FindUserContext(m_userId);
-		if (!userContext || userContext->physicalWorld.revision != req.expected_main_revision()
-			|| !userContext->physicalWorld.main)
+		if (!userContext || userContext->worldState.revision != req.expected_main_revision()
+			|| !userContext->worldState.main)
 		{
 			SendDespawnPlayerResponse(e, false, requestId);
 			return;
 		}
 
-		const WorldRuntimeRef runtime = *userContext->physicalWorld.main;
-		if (runtime.worldId != req.world_id() || runtime.instance.instanceId != WorldInstanceId{ req.world_instance_id() })
+		const WorldRef world = *userContext->worldState.main;
+		if (world.worldId != req.world_id() || world.instance.instanceId != WorldInstanceId{ req.world_instance_id() })
 		{
 			SendDespawnPlayerResponse(e, false, requestId);
 			return;
@@ -541,10 +517,10 @@ namespace jam::net
 
 		const SessionId sessionId = GetSessionId();
 		const ActorId actorId = ActorId(req.actor_id());
-		const WorldEventCorrelation correlation{ .world = runtime, .mainRevision = req.expected_main_revision() };
-		if (!m_manager->SubmitWorldJob(runtime, [sessionId, e, requestId, actorId, userId = m_userId, correlation](WorldBase& world)
+		const WorldEventCorrelation correlation{ .world = world, .mainRevision = req.expected_main_revision() };
+		if (!SubmitWorldJob(world, [sessionId, e, requestId, actorId, userId = m_userId, correlation](WorldBase& target)
 			{
-				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
+				auto* physicalWorld = dynamic_cast<ServerWorld*>(&target);
 				if (!physicalWorld) return;
 				const bool ok = physicalWorld->DespawnPlayer(userId, correlation, actorId);
 				if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
@@ -568,56 +544,28 @@ namespace jam::net
 			return;
 		}
 
-		const auto targetRuntime = ResolveRequestedMainRuntime(m_userId, req.world_id());
-		if (!targetRuntime || targetRuntime->instance.instanceId != WorldInstanceId{ req.world_instance_id() })
+		const auto targetWorld = ResolveRequestedMainWorld(m_userId, req.world_id());
+		if (!targetWorld || targetWorld->instance.instanceId != WorldInstanceId{ req.world_instance_id() })
 		{
 			SendSpawnActorResponse(e, fb::fbSpawnActorFailure_InvalidCorrelation, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
 
-		const ActorArchetypeKey archetype = ActorArchetypeKey::FromU64(req.actor_archetype_key());
-		if (!IsValidAssetKey(archetype) || !req.pos() || !req.rot()
-			|| (req.owner_user_id() != 0 && req.owner_user_id() != m_userId)
-			|| req.controller_user_id() != 0)
+		SpawnParams params{};
+		if (!codec::DecodeSpawnActorRequest(req, params)
+			|| !IsValidAssetKey(params.actorArchetypeKey)
+			|| (params.owner != 0 && params.owner != m_userId)
+			|| params.controller != 0)
 		{
 			SendSpawnActorResponse(e, fb::fbSpawnActorFailure_SpawnFailed, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
-
-		SpawnParams params{};
-		params.clientRequestId = req.client_request_id();
-		params.actorArchetypeKey = archetype;
-		params.owner = req.owner_user_id() != 0 ? m_userId : 0;
-		params.targetActorId = ActorId(req.target_actor_id());
+		params.owner = params.owner != 0 ? m_userId : 0;
 		params.desc.spawnSrc = px::eSpawnSource::Runtime;
-		params.desc.pose = { .p = { req.pos()->x(), req.pos()->y(), req.pos()->z() }, .q = { req.rot()->x(), req.rot()->y(), req.rot()->z(), req.rot()->w() } };
-		params.desc.team = static_cast<uint16>(req.team_id());
-		params.desc.part = static_cast<uint8>(req.part_id());
-		params.desc.role = static_cast<uint8>(req.role_id());
-
-		px::SpawnOverrideMask::Flag overrideMask{ req.override_mask() };
-		if (px::IsRigidOverrideMask(overrideMask))
-		{
-			px::RigidSpawnOverrides overrides{};
-			overrides.mask = overrideMask;
-			if (overrideMask.has_any(px::SpawnOverrideMask::LINEAR_VEL) && req.linear_vel()) overrides.linearVelocity = { req.linear_vel()->x(), req.linear_vel()->y(), req.linear_vel()->z() };
-			if (overrideMask.has_any(px::SpawnOverrideMask::ANGULAR_VEL) && req.angular_vel()) overrides.angularVelocity = { req.angular_vel()->x(), req.angular_vel()->y(), req.angular_vel()->z() };
-			if (overrideMask.has_any(px::SpawnOverrideMask::LINEAR_DAMP)) overrides.linearDamping = req.linear_damping();
-			if (overrideMask.has_any(px::SpawnOverrideMask::ANGULAR_DAMP)) overrides.angularDamping = req.angular_damping();
-			params.desc.overrides = overrides;
-		}
-		else
-		{
-			px::CharacterSpawnOverrides overrides{};
-			overrides.mask = overrideMask;
-			if (overrideMask.has_any(px::SpawnOverrideMask::VIEW_YAW)) overrides.yaw = req.yaw();
-			if (overrideMask.has_any(px::SpawnOverrideMask::VIEW_PITCH)) overrides.pitch = req.pitch();
-			params.desc.overrides = overrides;
-		}
 
 		const SessionId sessionId = GetSessionId();
 		const ClientRequestId clientRequestId = req.client_request_id();
-		if (!m_manager->SubmitWorldJob(*targetRuntime, [params, sessionId, e, requestId, clientRequestId](WorldBase& world) mutable
+		if (SubmitWorldJob(*targetWorld, [params, sessionId, e, requestId, clientRequestId](WorldBase& world) mutable
 			{
 				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
 				if (!physicalWorld) return;
@@ -637,8 +585,8 @@ namespace jam::net
 
 	void ServerUdpSession::OnDespawnActorRequest(entt::entity e, const fb::fbDespawnActorReq& req, uint32 requestId)
 	{
-		const auto targetRuntime = ResolveRequestedMainRuntime(m_userId, req.world_id());
-		if (!m_manager || !targetRuntime || targetRuntime->instance.instanceId != WorldInstanceId{ req.world_instance_id() })
+		const auto targetWorld = ResolveRequestedMainWorld(m_userId, req.world_id());
+		if (!m_manager || !targetWorld || targetWorld->instance.instanceId != WorldInstanceId{ req.world_instance_id() })
 		{
 			SendDespawnActorResponse(e, false, requestId);
 			return;
@@ -654,7 +602,7 @@ namespace jam::net
 		const ActorId actorId = ActorId(req.actor_id());
 		const SessionId sessionId = GetSessionId();
 
-		if (!m_manager->SubmitWorldJob(*targetRuntime, [actorId, userId, sessionId, e, requestId](WorldBase& world)
+		if (!SubmitWorldJob(*targetWorld, [actorId, userId, sessionId, e, requestId](WorldBase& world)
 			{
 				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
 				if (!physicalWorld) return;

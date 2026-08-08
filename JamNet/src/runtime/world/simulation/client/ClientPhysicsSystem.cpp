@@ -140,11 +140,6 @@ namespace jam::net
         desc.archetype  = pk.key;
         desc.spawnSrc   = isLocal ? px::eSpawnSource::Runtime : px::eSpawnSource::Network;
 
-        const auto& tpr = m_world.get<ActorTeamPartRole>(e);
-        desc.team = tpr.team;
-        desc.part = tpr.part;
-        desc.role = tpr.role;
-
         const px::eBodyType bodyType = m_world.get<ActorBodyType>(e).body;
         const bool isRigid = (bodyType == px::eBodyType::Rigid);
 
@@ -266,6 +261,8 @@ namespace jam::net
         const auto& live = m_world.ctx().get<LivePredictedState>();
         const uint32 currentSeq = inputHistory.current.sequence;
 		const px::CharacterState* predictedAtAck = predictedHistory.Find(inputAck);
+		const bool predictedFound = predictedAtAck != nullptr;
+		const px::Vec3 predictedPos = predictedFound ? predictedAtAck->pos : px::Vec3::Zero();
 
 		const float posErr = predictedAtAck
 			? (auth.pos - predictedAtAck->pos).Magnitude()
@@ -277,11 +274,27 @@ namespace jam::net
         {
             auto& correction = m_world.ctx().get<CorrectionState>();
             correction = live;
+			const auto& delta = m_world.ctx().get<RenderCorrectionDelta>();
+
+			JAMNET_LOG_DEBUG(
+				"[MovementDiag][Reconcile] corrected=false, serverTick={}, inputAck={}, currentSeq={}, predictedFound={}, auth=({}, {}, {}), predictedAtAck=({}, {}, {}), posErr={}, replaySteps=0, preLive=({}, {}, {}), correction=({}, {}, {}), renderDelta=({}, {}, {})",
+				signal.serverTick,
+				inputAck,
+				currentSeq,
+				predictedFound,
+				auth.pos.x, auth.pos.y, auth.pos.z,
+				predictedPos.x, predictedPos.y, predictedPos.z,
+				posErr,
+				live.pos.x, live.pos.y, live.pos.z,
+				correction.pos.x, correction.pos.y, correction.pos.z,
+				delta.pos.x, delta.pos.y, delta.pos.z);
 
             inputHistory.PruneAck(inputAck);
             predictedHistory.PruneAck(inputAck);
             return;
         }
+
+		const px::CharacterState preLive = live;
 
         const ReplayContext rc{ 
         	.tick     = static_cast<uint32>(signal.serverTick), 
@@ -292,6 +305,24 @@ namespace jam::net
         Replay(rc);
 
         m_replayRunner->Commit(m_world, rc);
+
+		const auto& replayStats = m_world.ctx().get<ReplayStats>();
+		const auto& correction = m_world.ctx().get<CorrectionState>();
+		const auto& delta = m_world.ctx().get<RenderCorrectionDelta>();
+
+		JAMNET_LOG_DEBUG(
+			"[MovementDiag][Reconcile] corrected=true, serverTick={}, inputAck={}, currentSeq={}, predictedFound={}, auth=({}, {}, {}), predictedAtAck=({}, {}, {}), posErr={}, replaySteps={}, preLive=({}, {}, {}), correction=({}, {}, {}), renderDelta=({}, {}, {})",
+			signal.serverTick,
+			inputAck,
+			currentSeq,
+			predictedFound,
+			auth.pos.x, auth.pos.y, auth.pos.z,
+			predictedPos.x, predictedPos.y, predictedPos.z,
+			posErr,
+			replayStats.stepCount,
+			preLive.pos.x, preLive.pos.y, preLive.pos.z,
+			correction.pos.x, correction.pos.y, correction.pos.z,
+			delta.pos.x, delta.pos.y, delta.pos.z);
 
         inputHistory.PruneAck(inputAck);
         predictedHistory.PruneAck(inputAck);

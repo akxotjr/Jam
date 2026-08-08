@@ -141,9 +141,6 @@ struct fbSpawnActorReqT : public ::flatbuffers::NativeTable {
   std::unique_ptr<jam::net::fb::fbVec3> pos{};
   std::unique_ptr<jam::net::fb::fbQuat> rot{};
   uint32_t spawn_src = 0;
-  uint32_t team_id = 0;
-  uint32_t part_id = 0;
-  uint32_t role_id = 0;
   uint32_t override_mask = 0;
   std::unique_ptr<jam::net::fb::fbVec3> linear_vel{};
   std::unique_ptr<jam::net::fb::fbVec3> angular_vel{};
@@ -171,17 +168,14 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_POS = 16,
     VT_ROT = 18,
     VT_SPAWN_SRC = 20,
-    VT_TEAM_ID = 22,
-    VT_PART_ID = 24,
-    VT_ROLE_ID = 26,
-    VT_OVERRIDE_MASK = 28,
-    VT_LINEAR_VEL = 30,
-    VT_ANGULAR_VEL = 32,
-    VT_LINEAR_DAMPING = 34,
-    VT_ANGULAR_DAMPING = 36,
-    VT_YAW = 38,
-    VT_PITCH = 40,
-    VT_TARGET_ACTOR_ID = 42
+    VT_OVERRIDE_MASK = 22,
+    VT_LINEAR_VEL = 24,
+    VT_ANGULAR_VEL = 26,
+    VT_LINEAR_DAMPING = 28,
+    VT_ANGULAR_DAMPING = 30,
+    VT_YAW = 32,
+    VT_PITCH = 34,
+    VT_TARGET_ACTOR_ID = 36
   };
   uint64_t world_id() const {
     return GetField<uint64_t>(VT_WORLD_ID, 0);
@@ -209,15 +203,6 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   uint32_t spawn_src() const {
     return GetField<uint32_t>(VT_SPAWN_SRC, 0);
-  }
-  uint32_t team_id() const {
-    return GetField<uint32_t>(VT_TEAM_ID, 0);
-  }
-  uint32_t part_id() const {
-    return GetField<uint32_t>(VT_PART_ID, 0);
-  }
-  uint32_t role_id() const {
-    return GetField<uint32_t>(VT_ROLE_ID, 0);
   }
   uint32_t override_mask() const {
     return GetField<uint32_t>(VT_OVERRIDE_MASK, 0);
@@ -255,9 +240,6 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_POS, 4) &&
            VerifyField<jam::net::fb::fbQuat>(verifier, VT_ROT, 4) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_SRC, 4) &&
-           VerifyField<uint32_t>(verifier, VT_TEAM_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_PART_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_ROLE_ID, 4) &&
            VerifyField<uint32_t>(verifier, VT_OVERRIDE_MASK, 4) &&
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_LINEAR_VEL, 4) &&
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_ANGULAR_VEL, 4) &&
@@ -303,15 +285,6 @@ struct fbSpawnActorReqBuilder {
   }
   void add_spawn_src(uint32_t spawn_src) {
     fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_SPAWN_SRC, spawn_src, 0);
-  }
-  void add_team_id(uint32_t team_id) {
-    fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_TEAM_ID, team_id, 0);
-  }
-  void add_part_id(uint32_t part_id) {
-    fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_PART_ID, part_id, 0);
-  }
-  void add_role_id(uint32_t role_id) {
-    fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_ROLE_ID, role_id, 0);
   }
   void add_override_mask(uint32_t override_mask) {
     fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_OVERRIDE_MASK, override_mask, 0);
@@ -359,9 +332,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     const jam::net::fb::fbVec3 *pos = nullptr,
     const jam::net::fb::fbQuat *rot = nullptr,
     uint32_t spawn_src = 0,
-    uint32_t team_id = 0,
-    uint32_t part_id = 0,
-    uint32_t role_id = 0,
     uint32_t override_mask = 0,
     const jam::net::fb::fbVec3 *linear_vel = nullptr,
     const jam::net::fb::fbVec3 *angular_vel = nullptr,
@@ -384,9 +354,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
   builder_.add_angular_vel(angular_vel);
   builder_.add_linear_vel(linear_vel);
   builder_.add_override_mask(override_mask);
-  builder_.add_role_id(role_id);
-  builder_.add_part_id(part_id);
-  builder_.add_team_id(team_id);
   builder_.add_spawn_src(spawn_src);
   builder_.add_rot(rot);
   builder_.add_pos(pos);
@@ -492,9 +459,6 @@ struct fbSpawnPlayerReqT : public ::flatbuffers::NativeTable {
   std::unique_ptr<jam::net::fb::fbVec3> pos{};
   std::unique_ptr<jam::net::fb::fbQuat> rot{};
   uint32_t spawn_src = 0;
-  uint32_t team_id = 0;
-  uint32_t part_id = 0;
-  uint32_t role_id = 0;
   uint32_t override_mask = 0;
   std::unique_ptr<jam::net::fb::fbVec3> linear_vel{};
   std::unique_ptr<jam::net::fb::fbVec3> angular_vel{};
@@ -521,17 +485,14 @@ struct fbSpawnPlayerReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_POS = 14,
     VT_ROT = 16,
     VT_SPAWN_SRC = 18,
-    VT_TEAM_ID = 20,
-    VT_PART_ID = 22,
-    VT_ROLE_ID = 24,
-    VT_OVERRIDE_MASK = 26,
-    VT_LINEAR_VEL = 28,
-    VT_ANGULAR_VEL = 30,
-    VT_LINEAR_DAMPING = 32,
-    VT_ANGULAR_DAMPING = 34,
-    VT_YAW = 36,
-    VT_PITCH = 38,
-    VT_TARGET_ACTOR_ID = 40
+    VT_OVERRIDE_MASK = 20,
+    VT_LINEAR_VEL = 22,
+    VT_ANGULAR_VEL = 24,
+    VT_LINEAR_DAMPING = 26,
+    VT_ANGULAR_DAMPING = 28,
+    VT_YAW = 30,
+    VT_PITCH = 32,
+    VT_TARGET_ACTOR_ID = 34
   };
   uint64_t world_id() const {
     return GetField<uint64_t>(VT_WORLD_ID, 0);
@@ -556,15 +517,6 @@ struct fbSpawnPlayerReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   uint32_t spawn_src() const {
     return GetField<uint32_t>(VT_SPAWN_SRC, 0);
-  }
-  uint32_t team_id() const {
-    return GetField<uint32_t>(VT_TEAM_ID, 0);
-  }
-  uint32_t part_id() const {
-    return GetField<uint32_t>(VT_PART_ID, 0);
-  }
-  uint32_t role_id() const {
-    return GetField<uint32_t>(VT_ROLE_ID, 0);
   }
   uint32_t override_mask() const {
     return GetField<uint32_t>(VT_OVERRIDE_MASK, 0);
@@ -601,9 +553,6 @@ struct fbSpawnPlayerReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_POS, 4) &&
            VerifyField<jam::net::fb::fbQuat>(verifier, VT_ROT, 4) &&
            VerifyField<uint32_t>(verifier, VT_SPAWN_SRC, 4) &&
-           VerifyField<uint32_t>(verifier, VT_TEAM_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_PART_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_ROLE_ID, 4) &&
            VerifyField<uint32_t>(verifier, VT_OVERRIDE_MASK, 4) &&
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_LINEAR_VEL, 4) &&
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_ANGULAR_VEL, 4) &&
@@ -646,15 +595,6 @@ struct fbSpawnPlayerReqBuilder {
   }
   void add_spawn_src(uint32_t spawn_src) {
     fbb_.AddElement<uint32_t>(fbSpawnPlayerReq::VT_SPAWN_SRC, spawn_src, 0);
-  }
-  void add_team_id(uint32_t team_id) {
-    fbb_.AddElement<uint32_t>(fbSpawnPlayerReq::VT_TEAM_ID, team_id, 0);
-  }
-  void add_part_id(uint32_t part_id) {
-    fbb_.AddElement<uint32_t>(fbSpawnPlayerReq::VT_PART_ID, part_id, 0);
-  }
-  void add_role_id(uint32_t role_id) {
-    fbb_.AddElement<uint32_t>(fbSpawnPlayerReq::VT_ROLE_ID, role_id, 0);
   }
   void add_override_mask(uint32_t override_mask) {
     fbb_.AddElement<uint32_t>(fbSpawnPlayerReq::VT_OVERRIDE_MASK, override_mask, 0);
@@ -701,9 +641,6 @@ inline ::flatbuffers::Offset<fbSpawnPlayerReq> CreatefbSpawnPlayerReq(
     const jam::net::fb::fbVec3 *pos = nullptr,
     const jam::net::fb::fbQuat *rot = nullptr,
     uint32_t spawn_src = 0,
-    uint32_t team_id = 0,
-    uint32_t part_id = 0,
-    uint32_t role_id = 0,
     uint32_t override_mask = 0,
     const jam::net::fb::fbVec3 *linear_vel = nullptr,
     const jam::net::fb::fbVec3 *angular_vel = nullptr,
@@ -725,9 +662,6 @@ inline ::flatbuffers::Offset<fbSpawnPlayerReq> CreatefbSpawnPlayerReq(
   builder_.add_angular_vel(angular_vel);
   builder_.add_linear_vel(linear_vel);
   builder_.add_override_mask(override_mask);
-  builder_.add_role_id(role_id);
-  builder_.add_part_id(part_id);
-  builder_.add_team_id(team_id);
   builder_.add_spawn_src(spawn_src);
   builder_.add_rot(rot);
   builder_.add_pos(pos);
@@ -1100,9 +1034,6 @@ inline fbSpawnActorReqT::fbSpawnActorReqT(const fbSpawnActorReqT &o)
         pos((o.pos) ? new jam::net::fb::fbVec3(*o.pos) : nullptr),
         rot((o.rot) ? new jam::net::fb::fbQuat(*o.rot) : nullptr),
         spawn_src(o.spawn_src),
-        team_id(o.team_id),
-        part_id(o.part_id),
-        role_id(o.role_id),
         override_mask(o.override_mask),
         linear_vel((o.linear_vel) ? new jam::net::fb::fbVec3(*o.linear_vel) : nullptr),
         angular_vel((o.angular_vel) ? new jam::net::fb::fbVec3(*o.angular_vel) : nullptr),
@@ -1123,9 +1054,6 @@ inline fbSpawnActorReqT &fbSpawnActorReqT::operator=(fbSpawnActorReqT o) FLATBUF
   std::swap(pos, o.pos);
   std::swap(rot, o.rot);
   std::swap(spawn_src, o.spawn_src);
-  std::swap(team_id, o.team_id);
-  std::swap(part_id, o.part_id);
-  std::swap(role_id, o.role_id);
   std::swap(override_mask, o.override_mask);
   std::swap(linear_vel, o.linear_vel);
   std::swap(angular_vel, o.angular_vel);
@@ -1155,9 +1083,6 @@ inline void fbSpawnActorReq::UnPackTo(fbSpawnActorReqT *_o, const ::flatbuffers:
   { auto _e = pos(); if (_e) _o->pos = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
   { auto _e = rot(); if (_e) _o->rot = std::unique_ptr<jam::net::fb::fbQuat>(new jam::net::fb::fbQuat(*_e)); }
   { auto _e = spawn_src(); _o->spawn_src = _e; }
-  { auto _e = team_id(); _o->team_id = _e; }
-  { auto _e = part_id(); _o->part_id = _e; }
-  { auto _e = role_id(); _o->role_id = _e; }
   { auto _e = override_mask(); _o->override_mask = _e; }
   { auto _e = linear_vel(); if (_e) _o->linear_vel = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
   { auto _e = angular_vel(); if (_e) _o->angular_vel = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
@@ -1185,9 +1110,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
   auto _pos = _o->pos ? _o->pos.get() : nullptr;
   auto _rot = _o->rot ? _o->rot.get() : nullptr;
   auto _spawn_src = _o->spawn_src;
-  auto _team_id = _o->team_id;
-  auto _part_id = _o->part_id;
-  auto _role_id = _o->role_id;
   auto _override_mask = _o->override_mask;
   auto _linear_vel = _o->linear_vel ? _o->linear_vel.get() : nullptr;
   auto _angular_vel = _o->angular_vel ? _o->angular_vel.get() : nullptr;
@@ -1207,9 +1129,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
       _pos,
       _rot,
       _spawn_src,
-      _team_id,
-      _part_id,
-      _role_id,
       _override_mask,
       _linear_vel,
       _angular_vel,
@@ -1264,9 +1183,6 @@ inline fbSpawnPlayerReqT::fbSpawnPlayerReqT(const fbSpawnPlayerReqT &o)
         pos((o.pos) ? new jam::net::fb::fbVec3(*o.pos) : nullptr),
         rot((o.rot) ? new jam::net::fb::fbQuat(*o.rot) : nullptr),
         spawn_src(o.spawn_src),
-        team_id(o.team_id),
-        part_id(o.part_id),
-        role_id(o.role_id),
         override_mask(o.override_mask),
         linear_vel((o.linear_vel) ? new jam::net::fb::fbVec3(*o.linear_vel) : nullptr),
         angular_vel((o.angular_vel) ? new jam::net::fb::fbVec3(*o.angular_vel) : nullptr),
@@ -1286,9 +1202,6 @@ inline fbSpawnPlayerReqT &fbSpawnPlayerReqT::operator=(fbSpawnPlayerReqT o) FLAT
   std::swap(pos, o.pos);
   std::swap(rot, o.rot);
   std::swap(spawn_src, o.spawn_src);
-  std::swap(team_id, o.team_id);
-  std::swap(part_id, o.part_id);
-  std::swap(role_id, o.role_id);
   std::swap(override_mask, o.override_mask);
   std::swap(linear_vel, o.linear_vel);
   std::swap(angular_vel, o.angular_vel);
@@ -1317,9 +1230,6 @@ inline void fbSpawnPlayerReq::UnPackTo(fbSpawnPlayerReqT *_o, const ::flatbuffer
   { auto _e = pos(); if (_e) _o->pos = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
   { auto _e = rot(); if (_e) _o->rot = std::unique_ptr<jam::net::fb::fbQuat>(new jam::net::fb::fbQuat(*_e)); }
   { auto _e = spawn_src(); _o->spawn_src = _e; }
-  { auto _e = team_id(); _o->team_id = _e; }
-  { auto _e = part_id(); _o->part_id = _e; }
-  { auto _e = role_id(); _o->role_id = _e; }
   { auto _e = override_mask(); _o->override_mask = _e; }
   { auto _e = linear_vel(); if (_e) _o->linear_vel = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
   { auto _e = angular_vel(); if (_e) _o->angular_vel = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
@@ -1346,9 +1256,6 @@ inline ::flatbuffers::Offset<fbSpawnPlayerReq> fbSpawnPlayerReq::Pack(::flatbuff
   auto _pos = _o->pos ? _o->pos.get() : nullptr;
   auto _rot = _o->rot ? _o->rot.get() : nullptr;
   auto _spawn_src = _o->spawn_src;
-  auto _team_id = _o->team_id;
-  auto _part_id = _o->part_id;
-  auto _role_id = _o->role_id;
   auto _override_mask = _o->override_mask;
   auto _linear_vel = _o->linear_vel ? _o->linear_vel.get() : nullptr;
   auto _angular_vel = _o->angular_vel ? _o->angular_vel.get() : nullptr;
@@ -1367,9 +1274,6 @@ inline ::flatbuffers::Offset<fbSpawnPlayerReq> fbSpawnPlayerReq::Pack(::flatbuff
       _pos,
       _rot,
       _spawn_src,
-      _team_id,
-      _part_id,
-      _role_id,
       _override_mask,
       _linear_vel,
       _angular_vel,

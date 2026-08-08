@@ -47,34 +47,6 @@ namespace jam::net
 	};
 
 
-	struct ActorTeamPartRole
-	{
-		uint16				team = 0;
-		uint8				part = 0;
-		uint8				role = 0;
-
-		static constexpr uint32 Pack(uint16 team, uint8 part, uint8 role) noexcept
-		{
-			return (static_cast<uint32>(team) & 0xFFFFu)
-				| ((static_cast<uint32>(part) & 0xFFu) << 16)
-				| ((static_cast<uint32>(role) & 0xFFu) << 24);
-		}
-
-		constexpr uint32 Packed() const noexcept
-		{
-			return Pack(team, part, role);
-		}
-
-		static constexpr ActorTeamPartRole FromPacked(uint32 packed) noexcept
-		{
-			ActorTeamPartRole out{};
-			out.team = static_cast<uint16>(packed & 0xFFFFu);
-			out.part = static_cast<uint8>((packed >> 16) & 0xFFu);
-			out.role = static_cast<uint8>((packed >> 24) & 0xFFu);
-			return out;
-		}
-	};
-
 	/// @brief	Tag of successful spawned in PhysicsFacade
 	struct PhysicsSpawnedTag{};
 

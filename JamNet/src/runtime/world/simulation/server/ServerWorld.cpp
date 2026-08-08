@@ -13,7 +13,6 @@
 #include "jamnet/runtime/world/simulation/server/ServerPhysicsSystem.h"
 #include "jamnet/runtime/world/simulation/server/ServerAoiSystem.h"
 #include "jamnet/runtime/world/simulation/server/ServerReplicationSystem.h"
-#include "jamnet/runtime/world/simulation/server/IServerWorldContent.h"
 
 #include "jamnet/runtime/session/ServerSession.h"
 
@@ -105,7 +104,7 @@ namespace jam::net
 
 	ServerWorld::ServerWorld(
 		const WorldConfig& config,
-		std::unique_ptr<IServerWorldContent> content,
+		std::unique_ptr<IWorldContent> content,
 		EnterWorldHandler enterWorld)
 		: PhysicalWorld(config)
 		, m_content(std::move(content))
@@ -204,6 +203,28 @@ namespace jam::net
 		return true;
 	}
 
+	void ServerWorld::SuspendMemberReplication(UserId userId)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		if (!m_userContexts.contains(userId))
+			return;
+		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
+			replication->SuspendUser(userId);
+	}
+
+	bool ServerWorld::ResumeMemberReplication(UserId userId)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		if (!m_userContexts.contains(userId))
+			return false;
+
+		if (auto* input = m_registry.ctx().find<ServerInputSystem>())
+			input->RemoveUser(userId);
+		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
+			return replication->ResumeUserWithFullSync(userId);
+		return false;
+	}
+
 
 	void ServerWorld::SendTo(Packet packet, UserId userId)
 	{
@@ -298,7 +319,7 @@ namespace jam::net
 			};
 
 		const auto* replication = m_registry.ctx().find<ServerReplicationSystem>();
-		if (userId == 0 || !correlation.world.IsValid() || correlation.world != GetWorldRuntime()
+		if (userId == 0 || !correlation.world.IsValid() || correlation.world != GetWorldRef()
 			|| !m_userContexts.contains(userId) || !replication
 			|| params.controller != userId || params.desc.IsRigid())
 		{
@@ -367,7 +388,7 @@ namespace jam::net
 		JAM_ASSERT(IsCurrentShardContext());
 		const entt::entity player = ResolveActor(actorId);
 		const bool valid = userId != 0
-			&& correlation.world == GetWorldRuntime()
+			&& correlation.world == GetWorldRef()
 			&& m_userContexts.contains(userId)
 			&& player != entt::null
 			&& GetControlledEntity(userId) == player;
@@ -396,7 +417,7 @@ namespace jam::net
 
 	void ServerWorld::PrepareMemberContent(
 		const ServerWorldMemberContentContext& context,
-		IServerWorldContent::PrepareMemberCompletion completion)
+		IWorldContent::PrepareMemberCompletion completion)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
 		if (!m_content || !m_userContexts.contains(context.userId))
@@ -488,7 +509,7 @@ namespace jam::net
 		for (const auto& [userId, pending] : m_pendingPlayerSpawns)
 		{
 			if (!m_userContexts.contains(userId)
-				|| pending.correlation.world != GetWorldRuntime()
+				|| pending.correlation.world != GetWorldRef()
 				|| !replication->IsAwaitingPlayer(userId)
 				|| pending.entity == entt::null
 				|| !m_registry.valid(pending.entity)
@@ -651,7 +672,6 @@ namespace jam::net
 				: std::variant<px::RigidSpawnOverrides, px::CharacterSpawnOverrides>(px::RigidSpawnOverrides{});
 
 			m_registry.emplace<ActorBodyType>(e, ActorBodyType{ bodyType });
-			m_registry.emplace<ActorTeamPartRole>(e);
 			m_registry.emplace<ActorArchetypeRef>(e, ActorArchetypeRef{ actorArchetype->key });
 			m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ physicsArchetypeKey });
 			m_registry.emplace<OwnershipTag>(e);
@@ -728,7 +748,6 @@ namespace jam::net
 		const px::eBodyType body = params.desc.IsRigid() ? px::eBodyType::Rigid : px::eBodyType::Character;
 
 		m_registry.emplace<ActorBodyType>(e, ActorBodyType{ body });
-		m_registry.emplace<ActorTeamPartRole>(e, ActorTeamPartRole{ .team = params.desc.team, .part = params.desc.part, .role = params.desc.role });
 		m_registry.emplace<ActorArchetypeRef>(e, ActorArchetypeRef{ params.actorArchetypeKey });
 		m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ params.desc.archetype });
 		m_registry.emplace<OwnershipTag>(e, OwnershipTag{ params.owner });
