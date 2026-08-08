@@ -1,7 +1,7 @@
 #pragma once
 #include "jamnet/runtime/world/simulation/common/PhysicalWorld.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
-#include "jamnet/runtime/world/simulation/server/IServerWorldContent.h"
+#include "jamnet/runtime/content/world/IWorldContent.h"
 
 #include <unordered_map>
 #include <span>
@@ -25,7 +25,7 @@ namespace jam::net
 	public:
 		using EnterWorldHandler = std::function<void(UserId, const EnterWorldRequest&)>;
 
-		ServerWorld(const WorldConfig& config, std::unique_ptr<IServerWorldContent> content = {}, EnterWorldHandler enterWorld = {});
+		ServerWorld(const WorldConfig& config, std::unique_ptr<IWorldContent> content = {}, EnterWorldHandler enterWorld = {});
 		~ServerWorld() override;
 
 		void								Start(uint64 dt_ns) override;
@@ -44,10 +44,12 @@ namespace jam::net
 		void								SpawnPlayerAsync(UserId userId, const WorldEventCorrelation& correlation, SpawnParams params, std::function<void(ActorId, ePlayerSpawnFailure)> onDone);
 		bool								DespawnPlayer(UserId userId, const WorldEventCorrelation& correlation, ActorId actorId);
 		bool								RestorePlayerControl(UserId userId, ActorId actorId);
-		void								PrepareMemberContent(const ServerWorldMemberContentContext& context, IServerWorldContent::PrepareMemberCompletion completion);
+		void								PrepareMemberContent(const ServerWorldMemberContentContext& context, IWorldContent::PrepareMemberCompletion completion);
 		void								RollbackMemberContent(UserId userId, WorldTransitionToken transitionToken);
 		bool								CommitMemberLeave(UserId userId, WorldTransitionToken transitionToken);
 		bool								RestoreMemberContent(const WorldUserContext& user, WorldTransitionToken transitionToken);
+		void								SuspendMemberReplication(UserId userId);
+		bool								ResumeMemberReplication(UserId userId);
 
 		entt::entity						GetControlledEntity(UserId userId) const;
 		bool								RequestEnterWorld(UserId userId, EnterWorldRequest request);
@@ -90,7 +92,7 @@ namespace jam::net
 			std::vector<std::function<void(ActorId, ePlayerSpawnFailure)>> completions;
 		};
 		std::unordered_map<uint64, PendingPlayerSpawn> m_pendingPlayerSpawns;
-		std::unique_ptr<IServerWorldContent>	m_content;
+		std::unique_ptr<IWorldContent>	m_content;
 		EnterWorldHandler						m_enterWorld;
 		bool									m_contentInitialized = false;
 	};

@@ -168,23 +168,19 @@ namespace jam::net
 		if (cmd.intent.controlRevision < LastAppliedControlRevision(userId))
 			return;
 
-		auto [it, inserted] = m_pendingInputs.try_emplace(userId, cmd);
-		if (inserted)
-			return;
-
-		auto& pending = it->second;
-		if (cmd.sequence > pending.sequence)
+		auto& pending = m_pendingInputs[userId];
+		if (auto it = pending.find(cmd.sequence); it != pending.end())
 		{
-			const CharacterActionFlags accumulatedEdges = pending.intent.edgeActions;
-			pending = cmd;
-			pending.intent.edgeActions |= accumulatedEdges;
+			const CharacterActionFlags accumulatedEdges = it->second.intent.edgeActions;
+			it->second = cmd;
+			it->second.intent.edgeActions |= accumulatedEdges;
 			return;
 		}
 
-		// An older command cannot replace the latest continuous state, but its
-		// unconsumed edge still belongs to this simulation-tick window.
-		if (cmd.sequence < pending.sequence)
-			pending.intent.edgeActions |= cmd.intent.edgeActions;
+		if (pending.size() >= kMaxPendingInputsPerUser)
+			return;
+
+		pending.emplace(cmd.sequence, cmd);
 	}
 
 	CharacterControlCommand ServerInputSystem::SelectInputForTick(uint64 userId)
@@ -193,12 +189,33 @@ namespace jam::net
 			return {};
 
 		const uint32 appliedSeq = LastAppliedSeq(userId);
+		const uint32 nextSeq = appliedSeq + 1;
 		if (auto pendingIt = m_pendingInputs.find(userId); pendingIt != m_pendingInputs.end())
 		{
-			CharacterControlCommand cmd = pendingIt->second;
-			m_pendingInputs.erase(pendingIt);
-			if (cmd.sequence > appliedSeq)
+			auto& pending = pendingIt->second;
+			pending.erase(pending.begin(), pending.upper_bound(appliedSeq));
+
+			if (auto commandIt = pending.find(nextSeq); commandIt != pending.end())
+			{
+				CharacterControlCommand cmd = commandIt->second;
+				pending.erase(commandIt);
+				if (pending.empty())
+					m_pendingInputs.erase(pendingIt);
 				return cmd;
+			}
+
+			// A newer command proves that the client advanced through nextSeq. Fill
+			// the missing unreliable packet with the last continuous state so ACK and
+			// client prediction history retain one-step-per-sequence semantics.
+			if (!pending.empty() && pending.begin()->first > nextSeq)
+			{
+				CharacterControlCommand cmd{};
+				if (auto currentIt = m_currentInputs.find(userId); currentIt != m_currentInputs.end())
+					cmd = currentIt->second;
+				cmd.sequence = nextSeq;
+				cmd.intent.edgeActions = 0;
+				return cmd;
+			}
 		}
 
 		if (auto it = m_currentInputs.find(userId); it != m_currentInputs.end())

@@ -101,6 +101,7 @@ namespace jam::net
     {
         fb::fbActorEntityT entity = {};
         uint64             serverTick = 0;
+        uint32             inputAck = 0;
         uint32             inputEpoch = 0;
     };
 
@@ -128,10 +129,10 @@ namespace jam::net
     private:
         void                                ProcessLifecycleActor(const fb::fbLifecycleActorT& actor);
         void                                ApplyActorMeta(ActorId actorId, entt::entity entity, const fb::fbActorMetaT& meta, Replica& replica);
-        void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
+        void                                ProcessEntity(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputAck, uint32 inputEpoch);
         entt::entity                        ResolveEntityForSnapshot(ActorId actorId);
         void                                PreserveDeferredBaselineSnapshots(const PendingSnapshotBatch& batch);
-        void                                StoreDeferredBaselineSnapshot(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputEpoch);
+        void                                StoreDeferredBaselineSnapshot(const fb::fbActorEntityT& ent, uint64 serverTick, uint32 inputAck, uint32 inputEpoch);
         void                                ApplyDeferredBaselineSnapshot(ActorId actorId);
         bool                                HasBaselinePayload(const fb::fbActorEntityT& ent) const;
         bool                                NeedsBaseline(ActorId actorId) const;
@@ -140,8 +141,8 @@ namespace jam::net
         void                                ApplyRigidDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbTransformDelta* tf, uint32 baselineRev);
         void                                ApplyKinematicStateSnapshot(Replica& replica, uint64 serverTick, const fb::fbKinematicState* ks, uint32 baselineRev);
 
-        void                                ApplyCharacterFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterFull160* ch, uint32 baselineRev, uint32 inputEpoch);
-        void                                ApplyCharacterDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterDelta128* ch, uint32 baselineRev, uint32 inputEpoch);
+        void                                ApplyCharacterFullSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterFull160* ch, uint32 baselineRev, uint32 inputAck, uint32 inputEpoch);
+        void                                ApplyCharacterDeltaSnapshot(Replica& replica, uint64 serverTick, const fb::fbCharacterDelta128* ch, uint32 baselineRev, uint32 inputAck, uint32 inputEpoch);
 
 		Replica&                            GetOrCreateReplica(ActorId actorId, bool* created = nullptr);
         void                                PruneOldReplicas(uint64 serverTick, uint64 forgetAfterTicks = 300);

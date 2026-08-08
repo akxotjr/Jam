@@ -1,80 +1,26 @@
 #include "pch.h"
 #include "jamnet/runtime/application/ServerNetworkManager.h"
 
+#include "jamnet/core/utils/Clock.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/net/Service.h"
 
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
-#include "jamnet/runtime/world/simulation/server/IServerWorldContent.h"
 
+#include "jamnet/runtime/session/RuntimeShardRouting.h"
 #include "jamnet/runtime/session/ServerSession.h"
 #include "jamnet/runtime/session/UserContext.h"
-#include "jamnet/runtime/social/SocialService.h"
+#include "jamnet/runtime/content/social/SocialService.h"
+#include "jamnet/runtime/content/generic/GenericContentService.h"
 #include "jamnet/runtime/world/lifecycle/ServerWorldTransitionCoordinator.h"
 #include "jamnet/runtime/world/data/SharedDataManifestLoader.h"
-#include "jamnet/core/utils/Clock.h"
-#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/runtime/protocol/transport/CustomPacketHelper.h"
+#include "jamnet/runtime/protocol/codec/WorldCodec.h"
 
 
 
 namespace jam::net
 {
-	namespace
-	{
-		Packet MakeClientWorldPreparePacket(const ClientWorldPrepare& prepare)
-		{
-			flatbuffers::FlatBufferBuilder fbb(128);
-			const auto& world = prepare.correlation.world;
-			const auto root = fb::CreatefbClientWorldPrepare(fbb, prepare.token.value,
-				static_cast<fb::fbClientServerBarrierKind>(prepare.kind), world.instance.instanceId.value,
-				world.instance.archetypeKey.v, world.worldId, prepare.correlation.mainRevision, prepare.contentRevision);
-			fbb.Finish(root);
-			return PacketBuilder::CreateCustomPacket(CustomPacketId::CLIENT_WORLD_PREPARE, PacketFlags::NONE,
-				eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize());
-		}
-
-		Packet MakeClientWorldCommitPacket(const ClientWorldCommit& commit)
-		{
-			flatbuffers::FlatBufferBuilder fbb(96);
-			const auto& world = commit.correlation.world;
-			const auto root = fb::CreatefbClientWorldCommit(fbb, commit.token.value, world.instance.instanceId.value,
-				world.worldId, commit.correlation.mainRevision);
-			fbb.Finish(root);
-			return PacketBuilder::CreateCustomPacket(CustomPacketId::CLIENT_WORLD_COMMIT, PacketFlags::NONE,
-				eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize());
-		}
-
-		Packet MakeMainWorldChangedPacket(const UserPhysicalWorldState& state)
-		{
-			flatbuffers::FlatBufferBuilder fbb(128);
-			flatbuffers::Offset<fb::fbMainPhysicalWorld> main;
-			if (state.main)
-				main = fb::CreatefbMainPhysicalWorld(fbb, state.main->instance.instanceId.value,
-					state.main->instance.archetypeKey.v, state.main->worldId);
-			const auto wireState = fb::CreatefbUserMainPhysicalWorldState(fbb, main, state.revision);
-			const auto root = fb::CreatefbUserMainPhysicalWorldChanged(fbb, wireState);
-			fbb.Finish(root);
-			return PacketBuilder::CreateCustomPacket(CustomPacketId::USER_MAIN_WORLD_CHANGED, PacketFlags::NONE,
-				eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize());
-		}
-
-		Packet MakeWorldTransitionResultPacket(const WorldTransitionResult& result)
-		{
-			flatbuffers::FlatBufferBuilder fbb(160);
-			flatbuffers::Offset<fb::fbMainPhysicalWorld> main;
-			if (result.state.main)
-				main = fb::CreatefbMainPhysicalWorld(fbb, result.state.main->instance.instanceId.value,
-					result.state.main->instance.archetypeKey.v, result.state.main->worldId);
-			const auto state = fb::CreatefbUserMainPhysicalWorldState(fbb, main, result.state.revision);
-			const auto kind = result.kind == eWorldTransitionKind::Enter
-				? fb::fbWorldTransitionKind_Enter : fb::fbWorldTransitionKind_Leave;
-			const auto root = fb::CreatefbWorldTransitionResult(fbb, result.requestId, kind,
-				result.transitionToken.value, static_cast<fb::fbWorldTransitionFailure>(result.failure), state);
-			fbb.Finish(root);
-			return PacketBuilder::CreateCustomPacket(CustomPacketId::WORLD_TRANSITION_RESULT, PacketFlags::NONE,
-				eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize());
-		}
-	}
 
 	ServerNetworkManager::ServerNetworkManager(const ServerConfig& config)
 		: m_config(config)
@@ -88,7 +34,7 @@ namespace jam::net
 		Stop();
 	}
 
-	std::unique_ptr<IServerWorldContent> ServerNetworkManager::CreateWorldContent(const WorldConfig& config) const
+	std::unique_ptr<IWorldContent> ServerNetworkManager::CreateWorldContent(const WorldConfig& config) const
 	{
 		return m_config.worldContentFactory ? m_config.worldContentFactory(config) : nullptr;
 	}
@@ -113,18 +59,26 @@ namespace jam::net
 				return false;
 			}
 		}
-		m_worldTransitions->SetTransport(
-			[this](uint64 userId, const ClientWorldPrepare& prepare)
-				{ Send(userId, MakeClientWorldPreparePacket(prepare), eProtocolType::TCP); },
-			[this](uint64 userId, const ClientWorldCommit& commit)
-				{ Send(userId, MakeClientWorldCommitPacket(commit), eProtocolType::TCP); },
-			[this](uint64 userId, const WorldTransitionResult& result)
-				{ Send(userId, MakeWorldTransitionResultPacket(result), eProtocolType::TCP); },
-			[this](uint64 userId, const UserPhysicalWorldState& state)
-				{ Send(userId, MakeMainWorldChangedPacket(state), eProtocolType::TCP); });
+
+		if (m_config.content)
+		{
+			m_contentService = std::make_shared<GenericContentService>();
+			if (!m_contentService->Initialize(this, m_config.content))
+			{
+				m_contentService.reset();
+				if (m_socialService)
+					m_socialService->Shutdown();
+				m_socialService.reset();
+				m_worldTransitions->Shutdown();
+				return false;
+			}
+		}
 
 		if (!StartServerService())
 		{
+			if (m_contentService)
+				m_contentService->Shutdown();
+			m_contentService.reset();
 			if (m_socialService)
 				m_socialService->Shutdown();
 			m_socialService.reset();
@@ -153,14 +107,12 @@ namespace jam::net
 
 		if (m_socialService)
 			m_socialService->Shutdown();
-
-		{
-			WRITE_LOCK_IDX(kSessionLockIdx)
-			m_sessions.clear();
-		}
+		if (m_contentService)
+			m_contentService->Shutdown();
 
 		m_worldTransitions.reset();
 		m_socialService.reset();
+		m_contentService.reset();
 
 		JAMNET_LOG_INFO("ServerNetworkManager stopped");
 	}
@@ -168,15 +120,17 @@ namespace jam::net
 
 	void ServerNetworkManager::EnterWorld(UserId userId, const EnterWorldRequest& request)
 	{
-		JAMNET_LOG_INFO("[EnterWorld] requested. userId={}, requestId={}, archetype={}, destination={}",
-			userId, request.requestId, request.archetypeKey.v, request.destinationName);
-
 		if (!m_worldTransitions)
 		{
-			Send(userId, MakeWorldTransitionResultPacket({ .kind = eWorldTransitionKind::Enter,
-				.requestId = request.requestId, .failure = eWorldTransitionFailure::InvalidRequest }), eProtocolType::TCP);
+			SendToUser(userId, codec::MakeWorldTransitionResultPacket({
+				.kind		= eWorldTransitionKind::Enter,
+				.requestId	= request.requestId,
+				.failure	= eWorldTransitionFailure::InvalidRequest
+			}), eProtocolType::TCP);
+
 			return;
 		}
+
 		m_worldTransitions->Enter(userId, request, NOW_NS());
 	}
 
@@ -184,17 +138,15 @@ namespace jam::net
 	{
 		if (!m_worldTransitions)
 		{
-			Send(userId, MakeWorldTransitionResultPacket({ .kind = eWorldTransitionKind::Leave,
-				.requestId = request.requestId, .failure = eWorldTransitionFailure::InvalidRequest }), eProtocolType::TCP);
+			SendToUser(userId, codec::MakeWorldTransitionResultPacket({
+				.kind		= eWorldTransitionKind::Leave,
+				.requestId	= request.requestId,
+				.failure	= eWorldTransitionFailure::InvalidRequest
+			}), eProtocolType::TCP);
+
 			return;
 		}
-		auto* local = CurrentShardLocal();
-		if (!local || local->shardIndex != GetUserShardIndex(userId))
-		{
-			Send(userId, MakeWorldTransitionResultPacket({ .kind = eWorldTransitionKind::Leave,
-				.requestId = request.requestId, .failure = eWorldTransitionFailure::InvalidRequest }), eProtocolType::TCP);
-			return;
-		}
+
 		m_worldTransitions->Leave(userId, request);
 	}
 
@@ -214,10 +166,42 @@ namespace jam::net
 
 		const SocialPrincipal principal{
 			.accountId = user->accountId,
-			.userId = user->userId,
-			.world = user->physicalWorld,
+			.userId    = user->userId,
+			.world     = user->worldState,
 		};
 		return m_socialService->Submit(principal, std::move(command));
+	}
+
+	bool ServerNetworkManager::DispatchContentRequest(UserId userId, GenericContentRequest request)
+	{
+		if (!m_contentService || userId == kInvalidUserId || !request.IsValid())
+			return false;
+
+		auto* local = CurrentShardLocal();
+		if (!local || local->shardIndex != GetUserShardIndex(userId))
+			return false;
+
+		const auto& state = GetOrCreateUserShardState(*local);
+		const UserContext* user = state.FindUserContext(userId);
+		if (!user || user->tcp == kInvalidSessionId || user->connectionState != eUserConnectionState::Connected)
+			return false;
+
+		return m_contentService->Submit(GenericContentPrincipal{
+			.accountId = user->accountId,
+			.userId = user->userId,
+		}, std::move(request));
+	}
+
+	void ServerNetworkManager::Authenticate(LoginCredential credential, AuthenticationCompleted completed) const
+	{
+		if (!completed)
+			return;
+		if (!m_config.authenticationContent)
+		{
+			completed(kInvalidAccountId);
+			return;
+		}
+		m_config.authenticationContent->Authenticate(std::move(credential), std::move(completed));
 	}
 
 	void ServerNetworkManager::BootstrapWorldInstances(std::function<void(bool)> completed)
@@ -230,88 +214,10 @@ namespace jam::net
 		m_worldTransitions->BootstrapConfiguredWorlds(std::move(completed));
 	}
 
-	void ServerNetworkManager::DestroyWorld(const WorldRuntimeRef& runtime)
+	void ServerNetworkManager::DestroyWorld(const WorldRef& world)
 	{
 		if (m_worldTransitions)
-			m_worldTransitions->DestroyRuntime(runtime);
-	}
-
-	bool ServerNetworkManager::SubmitWorldJob(const WorldRuntimeRef& runtime, std::function<void(WorldBase&)> job)
-	{
-		return m_worldTransitions ? m_worldTransitions->SubmitWorldJob(runtime, std::move(job)) : false;
-	}
-
-	bool ServerNetworkManager::CacheTcpSession(UserId userId, ServerTcpSession* tcp)
-	{
-		if (userId == kInvalidUserId || !tcp)
-			return false;
-
-		{
-			WRITE_LOCK_IDX(kSessionLockIdx);
-
-			auto& bundle = m_sessions[userId];
-			if (bundle.HasTcp() && bundle.TryGetTcp() != tcp)
-			{
-				JAMNET_LOG_WARN("TCP session is already registered.");
-				return false;
-			}
-
-			bundle.tcp.Set(tcp);
-		}
-
-		return true;
-	}
-
-	bool ServerNetworkManager::CacheUdpSession(UserId userId, ServerUdpSession* udp)
-	{
-		if (userId == kInvalidUserId || !udp)
-			return false;
-
-		{
-			WRITE_LOCK_IDX(kSessionLockIdx);
-
-			if (const auto it = m_sessions.find(userId); it != m_sessions.end())
-			{
-				if (it->second.HasTcp())
-				{
-					if (it->second.HasUdp() && it->second.TryGetUdp() != udp)
-					{
-						JAMNET_LOG_WARN("UDP session is already registered.");
-						return false;
-					}
-
-					it->second.udp.Set(udp);
-				}
-				else
-				{
-					JAMNET_LOG_WARN("registered TCP session is null");
-					return false;
-				}
-			}
-			else
-			{
-				JAMNET_LOG_WARN("TCP session must be registered in the SessionBundle before UDP session is registered.");
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	void ServerNetworkManager::ReleaseUdpSession(UserId userId, const ServerUdpSession* udp)
-	{
-		if (userId == kInvalidUserId || !udp)
-			return;
-
-		{
-			WRITE_LOCK_IDX(kSessionLockIdx);
-			if (auto it = m_sessions.find(userId); it != m_sessions.end())
-			{
-				if (it->second.udp.TryGetRaw() == udp)
-					it->second.udp.Set(nullptr);
-			}
-		}
-
+			m_worldTransitions->DestroyWorld(world);
 	}
 
 	void ServerNetworkManager::ReleaseSession(UserId userId, const ServerTcpSession* tcp)
@@ -324,7 +230,7 @@ namespace jam::net
 		if (!user || user->tcp != tcp->GetSessionId())
 			return;
 
-		const ServerSessionBundle sessions = GetSessionBundle(userId);
+		const ServerSessionBundle sessions = ResolveUserSessionBundle(*user);
 		const SessionRef<ServerUdpSession> udpRef = sessions.udp;
 		udpRef.TryPost(Job([udpRef]()
 			{
@@ -332,96 +238,29 @@ namespace jam::net
 					udp->Disconnect();
 			}, eJobPriority::Control));
 
+		user->tcp = kInvalidSessionId;
+		user->udp = kInvalidSessionId;
+
 		if (m_worldTransitions)
 			m_worldTransitions->OnDisconnected(userId);
+	}
+
+	void ServerNetworkManager::NotifyUserConnected(const UserContext& user)
+	{
+		if (!m_socialService || user.accountId == kInvalidAccountId || user.userId == kInvalidUserId)
+			return;
+
+		m_socialService->NotifyConnected(SocialPrincipal{
+			.accountId = user.accountId,
+			.userId    = user.userId,
+			.world     = user.worldState,
+		});
+	}
+
+	void ServerNetworkManager::NotifyUserReleased(UserId userId)
+	{
 		if (m_socialService)
 			m_socialService->NotifyDisconnected(userId);
-
-		user = userState.FindUserContext(userId);
-		if (user)
-		{
-			if (user->tcp == tcp->GetSessionId())
-				user->tcp = kInvalidSessionId;
-			user->udp = kInvalidSessionId;
-
-			if (!user->physicalWorld.main && !user->worldTransition.active)
-				userState.FreeUserContext(userId);
-		}
-
-		{
-			WRITE_LOCK_IDX(kSessionLockIdx);
-			auto it = m_sessions.find(userId);
-			if (it != m_sessions.end() && it->second.tcp.TryGetRaw() == tcp)
-				m_sessions.erase(it);
-		}
-	}
-
-	ServerTcpSession* ServerNetworkManager::FindTcpSession(UserId userId)
-	{
-		READ_LOCK_IDX(kSessionLockIdx);
-
-		const auto it = m_sessions.find(userId);
-		return (it != m_sessions.end()) ? it->second.tcp.TryGet() : nullptr;
-	}
-
-	ServerUdpSession* ServerNetworkManager::FindUdpSession(UserId userId)
-	{
-		READ_LOCK_IDX(kSessionLockIdx);
-
-		const auto it = m_sessions.find(userId);
-		return (it != m_sessions.end()) ? it->second.udp.TryGet() : nullptr;
-	}
-
-	ServerSessionBundle ServerNetworkManager::GetSessionBundle(UserId userId)
-	{
-		READ_LOCK_IDX(kSessionLockIdx);
-
-		const auto it = m_sessions.find(userId);
-		return (it != m_sessions.end()) ? it->second : ServerSessionBundle{};
-	}
-
-	void ServerNetworkManager::Send(UserId userId, Packet packet, eProtocolType protocol)
-	{
-		if (!packet.IsValid()) return;
-
-		Session* session = nullptr;
-
-		if (protocol == eProtocolType::TCP)
-		{
-			session = FindTcpSession(userId);
-			if (session && session->IsConnected())
-				session->Send(packet);
-			else
-				JAMNET_LOG_WARN("[ServerNetworkManager::Send] session is nullptr or not conntected");
-			return;
-		}
-
-		if (protocol == eProtocolType::UDP)
-		{
-			session = FindUdpSession(userId);
-			if (session && session->IsConnected())
-				session->Send(packet);
-			return;
-		}
-
-		JAMNET_LOG_WARN("Protocol is none");
-	}
-
-	void ServerNetworkManager::Multicast(const WorldRuntimeRef& runtime, Packet packet)
-	{
-		SubmitWorldJob(runtime, [packet = std::move(packet)](WorldBase& world) mutable
-			{
-				if (auto* host = dynamic_cast<WorldMembershipHost*>(&world))
-					host->Multicast(std::move(packet));
-			});
-	}
-
-	void ServerNetworkManager::Broadcast(Packet packet)
-	{
-		READ_LOCK_IDX(kSessionLockIdx);
-		for (const auto& [_, sessions] : m_sessions)
-			if (auto* tcp = sessions.tcp.TryGet(); tcp && tcp->IsConnected())
-				tcp->Send(packet);
 	}
 
 

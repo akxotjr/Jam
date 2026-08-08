@@ -1,8 +1,8 @@
 #pragma once
 
+#include "jamnet/core/net/PacketStructure.h"
 #include "jamnet/core/net/Session.h"
 #include "jamnet/core/net/NetAddress.h"
-#include "jamnet/core/executor/MailboxRef.h"
 #include "jamnet/runtime/session/ClientPrincipalState.h"
 #include "jamnet/runtime/world/data/WorldTemplateDatabase.h"
 #include "jamnet/runtime/world/data/WorldArchetypeDatabase.h"
@@ -12,11 +12,14 @@
 #include "jamnet/runtime/world/simulation/client/ClientWorld.h"
 #include "jamnet/runtime/world/simulation/common/CharacterControlTypes.h"
 #include "jamnet/runtime/world/data/SharedDataManifest.h"
-#include "jamnet/runtime/social/SocialTypes.h"
+#include "jamnet/runtime/content/social/SocialTypes.h"
+#include "jamnet/runtime/content/generic/GenericContentTypes.h"
 
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <vector>
 
 
 
@@ -29,12 +32,15 @@ namespace jam::net
 
 	struct ClientConfig
 	{
-		AccountId		accountId			= kInvalidAccountId;
-		NetAddress      serverTcpAddress    = { "127.0.0.1", 7777 };
-		NetAddress      serverUdpAddress    = { "127.0.0.1", 8888 };
+		AccountId			accountId			= kInvalidAccountId;
+		std::string			loginId;
+		std::string			password;
+		std::vector<uint8>	ticket;
+		NetAddress			serverTcpAddress    = { "127.0.0.1", 7777 };
+		NetAddress			serverUdpAddress    = { "127.0.0.1", 8888 };
 
-		std::string		sharedDataManifestPath;
-		bool            headlessMode		= false;
+		std::string			sharedDataManifestPath;
+		bool				headlessMode		= false;
 	};
 
 	class ClientNetworkManager : public std::enable_shared_from_this<ClientNetworkManager>
@@ -42,8 +48,9 @@ namespace jam::net
 		friend class ClientTcpSession;
 		friend class ClientUdpSession;
 
+
 	public:
-		explicit ClientNetworkManager(const ClientConfig& config, AccountId accountId);
+		explicit ClientNetworkManager(const ClientConfig& config);
 		~ClientNetworkManager();
 
 		// Frontend admission only. Work is serialized on the principal shard.
@@ -55,9 +62,12 @@ namespace jam::net
 		bool									RequestWorldAction(const WorldActionCommand& command);
 		bool									RequestActorAction(const ActorActionCommand& command);
 		bool									RequestSocialCommand(const SocialCommand& command);
+		bool									RequestGenericContent(const GenericContentRequest& request);
 
 		void									SubmitCharacterControl(const CharacterControlIntent& intent);
 
+		// temp
+		uint64									GetClientInstanceId() const { return m_clientInstanceId; }
 
 	protected:
 		bool                                    StartClientService();
@@ -66,21 +76,25 @@ namespace jam::net
 		bool                                    ConnectTcp();
 		bool                                    ConnectUdp();
 
-		void                                    NotifyTcpBound(UserId userId);
+		void                                    NotifyTcpBound(AccountId accountId, UserId userId);
 		void                                    NotifyUdpBound(UserId userId);
+		void                                    NotifyBootstrap(UserId userId, eBootstrapKind kind);
 		void                                    NotifyTcpDisconnected(const ClientTcpSession* session);
 		void                                    NotifyUdpDisconnected(const ClientUdpSession* session);
 
 		void									PrepareMainWorld(const ClientWorldPrepare& prepare, std::function<void(bool)> completed);
 		bool									CommitMainWorld(const ClientWorldCommit& commit);
-		bool									ApplyMainWorldChanged(const UserPhysicalWorldState& state);
+		bool									ApplyMainWorldChanged(const UserWorldState& state);
 
 	private:
 		bool									ConnectOnPrincipalShard();
 		void									DisconnectOnPrincipalShard(std::function<void()> completed = {});
+
 		bool									RequestWorldActionOnPrincipalShard(const WorldActionCommand& command);
 		bool									RequestActorActionOnPrincipalShard(const ActorActionCommand& command);
 		bool									RequestSocialCommandOnPrincipalShard(const SocialCommand& command);
+		bool									RequestGenericContentOnPrincipalShard(const GenericContentRequest& request);
+		
 		void									DrainCharacterControlOnPrincipalShard();
 		void									ClearPendingCharacterControl();
 
@@ -90,6 +104,7 @@ namespace jam::net
 
 		bool									DispatchWorldPacket(UserId userId, WorldId worldId, Packet packet);
 		void									PublishSocialMessage(SocialMessage message) const;
+		void									PublishGenericContentResponse(GenericContentResponse response) const;
 
 		bool                                    IsConnected()	 const;
 		bool                                    IsTcpConnected() const;
@@ -108,6 +123,7 @@ namespace jam::net
 
 	private:
 		ClientConfig                            m_config					= {};
+		uint64									m_clientInstanceId			= 0;
 		SharedDataManifest						m_manifest					= {};
 
 		ClientPrincipalState					m_principal					= {};
@@ -125,6 +141,7 @@ namespace jam::net
 		std::atomic_bool                        m_tcpBound					= false;
 		std::atomic_bool                        m_udpBound					= false;
 		std::atomic_bool                        m_sessionReady				= false;
+		std::atomic<eBootstrapKind>             m_bootstrapKind				= eBootstrapKind::Pending;
 
 		std::mutex								m_characterControlMutex;
 		std::optional<CharacterControlIntent>	m_pendingCharacterControl;

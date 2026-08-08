@@ -37,8 +37,8 @@ namespace jam::net
 
 
 
-	// Transient server routing handle. Its generation makes a destroyed runtime
-	// distinguishable from a later runtime that reuses the same local slot.
+	// Transient server routing handle. Its generation makes a destroyed world
+	// distinguishable from a later world that reuses the same local slot.
 	using WorldId = RuntimeId;
 
 	inline constexpr WorldId kInvalidWorldId = kInvalidRuntimeId;
@@ -86,10 +86,10 @@ namespace jam::net
 		}
 	};
 
-	// A runtime is an incarnation of exactly one logical instance. The
+	// A live world is an incarnation of exactly one logical instance. The
 	// archetype stays on WorldInstanceRef so routing does not become a content
 	// lookup key again.
-	struct WorldRuntimeRef
+	struct WorldRef
 	{
 		WorldInstanceRef instance = {};
 		WorldId			 worldId  = kInvalidWorldId;
@@ -99,12 +99,12 @@ namespace jam::net
 			return instance.IsValid() && worldId != kInvalidWorldId;
 		}
 
-		bool operator==(const WorldRuntimeRef&) const = default;
+		bool operator==(const WorldRef&) const = default;
 	};
 
-	struct WorldRuntimeRefHash
+	struct WorldRefHash
 	{
-		size_t operator()(const WorldRuntimeRef& ref) const noexcept
+		size_t operator()(const WorldRef& ref) const noexcept
 		{
 			return SmallHashOf(ref.instance.instanceId.value, ref.worldId);
 		}

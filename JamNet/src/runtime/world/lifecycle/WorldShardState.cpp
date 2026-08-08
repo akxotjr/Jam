@@ -11,22 +11,22 @@ namespace jam::net
 		return static_cast<WorldId>(worldsById.AllocId(shardIndex));
 	}
 
-	void WorldShardState::FreeWorldId(WorldId runtimeId)
+	void WorldShardState::FreeWorldId(WorldId worldId)
 	{
-		if (const auto* object = worldsById.FindAny(runtimeId))
+		if (const auto* object = worldsById.FindAny(worldId))
 		{
 			UnregisterWorld(object->GetWorldId());
 		}
 		else
 		{
-			auto it = std::ranges::find_if(authoritativeWorldsByRuntimeId, [runtimeId](const auto& pair)
+			auto it = std::ranges::find_if(worldRecordsById, [worldId](const auto& pair)
 				{
-					return pair.first == runtimeId;
+					return pair.first == worldId;
 				});
-			if (it != authoritativeWorldsByRuntimeId.end())
+			if (it != worldRecordsById.end())
 				UnregisterWorld(it->first);
 		}
-		worldsById.FreeId(runtimeId);
+		worldsById.FreeId(worldId);
 	}
 
 	bool WorldShardState::AdoptWorld(std::unique_ptr<WorldBase> world)
@@ -34,20 +34,21 @@ namespace jam::net
 		return worldsById.Adopt(std::move(world));
 	}
 
-	bool WorldShardState::BeginDestroyWorld(WorldId runtimeId, eMailboxCloseMode mode, std::function<void()> onDestroyed)
+	bool WorldShardState::BeginDestroyWorld(WorldId worldId, eMailboxCloseMode mode, std::function<void()> onDestroyed)
 	{
-		if (!FindWorld(runtimeId))
+		if (!FindWorld(worldId))
 			return false;
 
-		WorldRecord* record = FindAuthoritativeWorldEntry(runtimeId);
+		WorldRecord* record = FindAuthoritativeWorldEntry(worldId);
 		if (!record || record->state == eWorldRuntimeState::Destroying)
 			return false;
 
 		const eWorldRuntimeState previous = record->state;
 		if (record->state != eWorldRuntimeState::Draining)
 			record->state = eWorldRuntimeState::Draining;
+
 		record->state = eWorldRuntimeState::Destroying;
-		const bool accepted = worldsById.BeginDestroy(runtimeId, mode, [this, onDestroyed = std::move(onDestroyed)](RuntimeId id)
+		const bool accepted = worldsById.BeginDestroy(worldId, mode, [this, onDestroyed = std::move(onDestroyed)](RuntimeId id)
 			{
 				FreeWorldId(static_cast<WorldId>(id));
 				if (onDestroyed)
@@ -58,139 +59,64 @@ namespace jam::net
 		return accepted;
 	}
 
-	WorldBase* WorldShardState::FindWorld(WorldId runtimeId)
+	WorldBase* WorldShardState::FindWorld(WorldId worldId)
 	{
-		return worldsById.Find(runtimeId);
+		return worldsById.Find(worldId);
 	}
 
-	const WorldBase* WorldShardState::FindWorld(WorldId runtimeId) const
+	const WorldBase* WorldShardState::FindWorld(WorldId worldId) const
 	{
-		return worldsById.Find(runtimeId);
+		return worldsById.Find(worldId);
 	}
 
-	ShardOwnedObjectRefSlot<WorldBase> WorldShardState::FindWorldRef(WorldId runtimeId)
+	ShardOwnedObjectRefSlot<WorldBase> WorldShardState::FindWorldRef(WorldId worldId)
 	{
-		return worldsById.FindRef(runtimeId);
+		return worldsById.FindRef(worldId);
 	}
 
-	ShardOwnedObjectRefSlot<const WorldBase> WorldShardState::FindWorldRef(WorldId runtimeId) const
+	ShardOwnedObjectRefSlot<const WorldBase> WorldShardState::FindWorldRef(WorldId worldId) const
 	{
-		return worldsById.FindRef(runtimeId);
+		return worldsById.FindRef(worldId);
 	}
 
 	void WorldShardState::RegisterWorld(const WorldConfig& config)
 	{
-		if (!config.HasRuntime())
+		if (!config.HasWorld())
 			return;
 
 		UnregisterWorld(config.world.worldId);
 
 		WorldRecord entry{};
 		entry.instance	= config.world.instance;
-		entry.runtime	= config.RuntimeRef();
+		entry.world	= config.GetWorldRef();
 		entry.group		= config.templateData.group;
 		entry.capacity	= config.templateData.capacity;
 		entry.state		= eWorldRuntimeState::Standby;
 
-		authoritativeWorldsByRuntimeId[config.world.worldId] = entry;
-		worldsByArchetypeKey.emplace(config.world.instance.archetypeKey, config.world.worldId);
-		if (config.templateData.group != kInvalidWorldGroup)
-			worldsByGroup.emplace(config.templateData.group, config.world.worldId);
+		worldRecordsById[config.world.worldId] = entry;
 	}
 
-	void WorldShardState::UnregisterWorld(WorldId runtimeId)
+	void WorldShardState::UnregisterWorld(WorldId worldId)
 	{
-		if (runtimeId == kInvalidWorldId)
+		if (worldId == kInvalidWorldId)
 			return;
 
-		authoritativeWorldsByRuntimeId.erase(runtimeId);
-		std::erase_if(worldsByArchetypeKey, [runtimeId](const auto& pair)
-			{
-				return pair.second == runtimeId;
-			});
-		std::erase_if(worldsByGroup, [runtimeId](const auto& pair)
-			{
-				return pair.second == runtimeId;
-			});
+		worldRecordsById.erase(worldId);
 	}
 
-	WorldRecord* WorldShardState::FindAuthoritativeWorldEntry(WorldId runtimeId)
+	WorldRecord* WorldShardState::FindAuthoritativeWorldEntry(WorldId worldId)
 	{
-		auto it = authoritativeWorldsByRuntimeId.find(runtimeId);
-		return (it != authoritativeWorldsByRuntimeId.end()) ? &it->second : nullptr;
+		auto it = worldRecordsById.find(worldId);
+		return (it != worldRecordsById.end()) ? &it->second : nullptr;
 	}
 
-	const WorldRecord* WorldShardState::FindAuthoritativeWorldEntry(WorldId runtimeId) const
+	const WorldRecord* WorldShardState::FindAuthoritativeWorldEntry(WorldId worldId) const
 	{
-		auto it = authoritativeWorldsByRuntimeId.find(runtimeId);
-		return (it != authoritativeWorldsByRuntimeId.end()) ? &it->second : nullptr;
+		auto it = worldRecordsById.find(worldId);
+		return (it != worldRecordsById.end()) ? &it->second : nullptr;
 	}
 
-	bool WorldShardState::TryReserveMemberSlot(WorldId runtimeId)
-	{
-		WorldRecord* entry = FindAuthoritativeWorldEntry(runtimeId);
-		if (!entry || !entry->HasCapacity())
-			return false;
-
-		++entry->memberCount;
-		RefreshRuntimeState(runtimeId);
-		return true;
-	}
-
-	void WorldShardState::ReleaseMemberSlot(WorldId runtimeId)
-	{
-		WorldRecord* entry = FindAuthoritativeWorldEntry(runtimeId);
-		if (!entry || entry->memberCount == 0)
-			return;
-
-		--entry->memberCount;
-		entry->activePresenceCount = std::min(entry->activePresenceCount, entry->memberCount);
-		RefreshRuntimeState(runtimeId);
-	}
-
-	void WorldShardState::PromoteMemberPresence(WorldId runtimeId)
-	{
-		WorldRecord* entry = FindAuthoritativeWorldEntry(runtimeId);
-		if (!entry || entry->state == eWorldRuntimeState::Draining || entry->state == eWorldRuntimeState::Destroying)
-			return;
-
-		if (entry->activePresenceCount < entry->memberCount)
-			++entry->activePresenceCount;
-		RefreshRuntimeState(runtimeId);
-	}
-
-	void WorldShardState::DemoteMemberPresence(WorldId runtimeId)
-	{
-		WorldRecord* entry = FindAuthoritativeWorldEntry(runtimeId);
-		if (!entry || entry->activePresenceCount == 0)
-			return;
-
-		--entry->activePresenceCount;
-		RefreshRuntimeState(runtimeId);
-	}
-
-	void WorldShardState::RefreshRuntimeState(WorldId runtimeId)
-	{
-		WorldRecord* entry = FindAuthoritativeWorldEntry(runtimeId);
-		if (!entry || entry->state == eWorldRuntimeState::Draining || entry->state == eWorldRuntimeState::Destroying)
-			return;
-
-		if (entry->activePresenceCount > 0)
-		{
-			entry->state = eWorldRuntimeState::Active;
-			return;
-		}
-
-		if (entry->state == eWorldRuntimeState::Active || entry->state == eWorldRuntimeState::Paused)
-		{
-			entry->state = eWorldRuntimeState::Paused;
-			return;
-		}
-
-		entry->state = eWorldRuntimeState::Standby;
-	}
-
-	bool WorldShardState::ReserveEnter(WorldTransitionToken token, uint64 userId, const WorldRuntimeRef& target)
+	bool WorldShardState::ReserveEnter(WorldTransitionToken token, uint64 userId, const WorldRef& target)
 	{
 		if (!token.IsValid() || userId == 0 || !target.IsValid() || transitionMembers.contains(token))
 			return false;
@@ -207,7 +133,6 @@ namespace jam::net
 				.userId = userId,
 				.worldId = target.worldId,
 			});
-		RefreshRuntimeState(target.worldId);
 		return true;
 	}
 
@@ -225,9 +150,11 @@ namespace jam::net
 		auto it = transitionMembers.find(token);
 		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::Prepared)
 			return false;
+
 		auto* host = dynamic_cast<WorldMembershipHost*>(FindWorld(it->second.worldId));
 		if (!host || !host->AddMember(user))
 			return false;
+		
 		it->second.hostMemberAttached = true;
 		it->second.state = eWorldTransitionMemberState::AttachedPendingCommit;
 		return true;
@@ -242,10 +169,8 @@ namespace jam::net
 		if (!entry)
 			return false;
 		entry->pendingAttachCount = entry->pendingAttachCount > 0 ? entry->pendingAttachCount - 1 : 0;
-		++entry->activePresenceCount;
 		entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
 		it->second.state = eWorldTransitionMemberState::Active;
-		RefreshRuntimeState(it->second.worldId);
 		transitionMembers.erase(it);
 		return true;
 	}
@@ -268,26 +193,25 @@ namespace jam::net
 			entry->memberCount = entry->memberCount > 0 ? entry->memberCount - 1 : 0;
 			entry->pendingAttachCount = entry->pendingAttachCount > 0 ? entry->pendingAttachCount - 1 : 0;
 			entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
-			RefreshRuntimeState(it->second.worldId);
 		}
 		transitionMembers.erase(it);
 		return true;
 	}
 
-	bool WorldShardState::PrepareLeave(WorldTransitionToken token, uint64 userId, const WorldRuntimeRef& source)
+	bool WorldShardState::PrepareLeave(WorldTransitionToken token, uint64 userId, const WorldRef& source)
 	{
 		if (!token.IsValid() || userId == 0 || !source.IsValid() || transitionMembers.contains(token))
 			return false;
 		WorldRecord* entry = FindAuthoritativeWorldEntry(source.worldId);
-		if (!entry || entry->activePresenceCount == 0)
+		if (!entry || entry->state == eWorldRuntimeState::Draining || entry->state == eWorldRuntimeState::Destroying)
 			return false;
 		++entry->lifecyclePinCount;
 		transitionMembers.emplace(token, WorldTransitionMember
 			{
-				.token = token,
-				.userId = userId,
-				.worldId = source.worldId,
-				.state = eWorldTransitionMemberState::Active,
+				.token		= token,
+				.userId		= userId,
+				.worldId	= source.worldId,
+				.state		= eWorldTransitionMemberState::Active,
 				.hostMemberAttached = true,
 			});
 		return true;
@@ -298,16 +222,16 @@ namespace jam::net
 		auto it = transitionMembers.find(token);
 		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::Active)
 			return false;
+		
 		auto* host = dynamic_cast<WorldMembershipHost*>(FindWorld(it->second.worldId));
 		if (!host || !host->RemoveMember(it->second.userId))
 			return false;
-		WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId);
-		if (entry)
+
+		if (WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId))
 		{
-			entry->activePresenceCount = entry->activePresenceCount > 0 ? entry->activePresenceCount - 1 : 0;
 			entry->memberCount = entry->memberCount > 0 ? entry->memberCount - 1 : 0;
-			RefreshRuntimeState(it->second.worldId);
 		}
+		
 		it->second.hostMemberAttached = false;
 		it->second.state = eWorldTransitionMemberState::DetachedPendingCommit;
 		return true;
@@ -357,20 +281,18 @@ namespace jam::net
 		if (WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId))
 		{
 			++entry->memberCount;
-			++entry->activePresenceCount;
 			entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
-			RefreshRuntimeState(it->second.worldId);
 		}
 		transitionMembers.erase(it);
 		return true;
 	}
 
-	bool WorldShardState::DisconnectMember(uint64 userId, const WorldRuntimeRef& runtime)
+	bool WorldShardState::DisconnectMember(uint64 userId, const WorldRef& world)
 	{
-		if (userId == kInvalidUserId || !runtime.IsValid())
+		if (userId == kInvalidUserId || !world.IsValid())
 			return false;
 
-		auto* host = dynamic_cast<WorldMembershipHost*>(FindWorld(runtime.worldId));
+		auto* host = dynamic_cast<WorldMembershipHost*>(FindWorld(world.worldId));
 		if (!host)
 			return false;
 		if (auto* serverWorld = dynamic_cast<ServerWorld*>(host))
@@ -378,30 +300,28 @@ namespace jam::net
 		if (!host->RemoveMember(userId))
 			return false;
 
-		if (WorldRecord* entry = FindAuthoritativeWorldEntry(runtime.worldId))
+		if (WorldRecord* entry = FindAuthoritativeWorldEntry(world.worldId))
 		{
-			entry->activePresenceCount = entry->activePresenceCount > 0 ? entry->activePresenceCount - 1 : 0;
 			entry->memberCount = entry->memberCount > 0 ? entry->memberCount - 1 : 0;
-			RefreshRuntimeState(runtime.worldId);
 		}
 
 		return true;
 	}
 
-	bool WorldShardState::TryBeginRuntimeDrain(WorldId runtimeId, uint64 expectedDestroyRevision)
+	bool WorldShardState::TryBeginWorldDrain(WorldId worldId, uint64 expectedDestroyRevision)
 	{
-		WorldRecord* entry = FindAuthoritativeWorldEntry(runtimeId);
-		if (!entry || entry->destroyRevision != expectedDestroyRevision || entry->lifecyclePinCount != 0
-			|| entry->memberCount != 0 || entry->pendingAttachCount != 0)
+		WorldRecord* entry = FindAuthoritativeWorldEntry(worldId);
+		if (!entry || entry->destroyRevision != expectedDestroyRevision || entry->lifecyclePinCount != 0 || entry->memberCount != 0 || entry->pendingAttachCount != 0)
 			return false;
+
 		entry->state = eWorldRuntimeState::Draining;
 		++entry->destroyRevision;
 		return true;
 	}
 
-	bool WorldShardState::CanDestroyRuntime(WorldId runtimeId, uint64 expectedDestroyRevision) const
+	bool WorldShardState::CanDestroyWorld(WorldId worldId, uint64 expectedDestroyRevision) const
 	{
-		const WorldRecord* entry = FindAuthoritativeWorldEntry(runtimeId);
+		const WorldRecord* entry = FindAuthoritativeWorldEntry(worldId);
 		return entry && entry->state == eWorldRuntimeState::Draining
 			&& entry->destroyRevision == expectedDestroyRevision
 			&& entry->lifecyclePinCount == 0 && entry->memberCount == 0 && entry->pendingAttachCount == 0;

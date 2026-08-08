@@ -52,7 +52,7 @@ namespace jam::net
 		bool							IsCurrentShardContext() const;
 		const WorldInstanceRef&			GetWorldInstance() const { return m_config.world.instance; }
 		WorldId							GetWorldId()	   const { return m_config.world.worldId; }
-		WorldRuntimeRef					GetWorldRuntime()  const { return m_config.RuntimeRef(); }
+		WorldRef					GetWorldRef()  const { return m_config.GetWorldRef(); }
 
 	protected:
 		virtual bool					OnInitialize() { return true; }

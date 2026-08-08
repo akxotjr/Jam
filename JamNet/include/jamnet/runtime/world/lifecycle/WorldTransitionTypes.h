@@ -2,7 +2,7 @@
 
 #include "jamnet/runtime/world/lifecycle/WorldIdentity.h"
 #include "jamnet/runtime/session/ClientRequestId.h"
-#include "jamnet/runtime/protocol/transport/WireBarrier.h"
+#include "jamnet/runtime/world/lifecycle/WorldSyncTypes.h"
 
 #include <functional>
 #include <optional>
@@ -80,20 +80,20 @@ namespace jam::net
 		ClientPrepareFailed		= 5,
 		Timeout					= 6,
 		Disconnected			= 7,
-		RuntimeDestroyed		= 8,
+		WorldDestroyed			= 8,
 		InternalError			= 9,
 	};
 
 	// Single authoritative Main PhysicalWorld state. The same value type is
 	// stored in UserContext and copied into responses/notifications.
-	struct UserPhysicalWorldState
+	struct UserWorldState
 	{
-		std::optional<WorldRuntimeRef>	main	 = std::nullopt;
+		std::optional<WorldRef>	main	 = std::nullopt;
 		WorldStateRevision				revision = 0;
 
 		bool IsValid() const noexcept { return !main || main->IsValid(); }
 
-		bool SetMain(const WorldRuntimeRef& value)
+		bool SetMain(const WorldRef& value)
 		{
 			if (!value.IsValid() || (main && *main == value))
 				return false;
@@ -102,9 +102,9 @@ namespace jam::net
 			return true;
 		}
 
-		bool ClearIfRuntime(WorldId runtimeId)
+		bool ClearIfWorld(WorldId worldId)
 		{
-			if (!main || main->worldId != runtimeId)
+			if (!main || main->worldId != worldId)
 				return false;
 			main.reset();
 			++revision;
@@ -124,42 +124,34 @@ namespace jam::net
 		ClientRequestId				requestId		= kInvalidClientRequestId;
 		WorldTransitionToken		transitionToken	= {};
 		eWorldTransitionFailure		failure			= eWorldTransitionFailure::None;
-		UserPhysicalWorldState		state			= {};
+		UserWorldState		state			= {};
 	};
 
 	struct WorldEventCorrelation
 	{
-		WorldRuntimeRef		world		 = {};
+		WorldRef		world		 = {};
 		WorldStateRevision	mainRevision = 0;
-	};
-
-	enum class eWireBarrierKind : uint8
-	{
-		WorldPrepare		= 0,
-		WorldResync			= 1,
-		ReplicationBaseline	= 2,
-		WorldContent		= 3,
 	};
 
 	struct ClientWorldPrepare
 	{
-		WireBarrierToken		token		    = {};
-		eWireBarrierKind		kind			= eWireBarrierKind::WorldPrepare;
+		WorldSyncToken			token		    = {};
+		eWorldSyncKind			kind			= eWorldSyncKind::WorldPrepare;
 		WorldEventCorrelation	correlation		= {};
 		WorldArchetypeKey		archetypeKey	= {};
 		uint64					contentRevision = 0;
 	};
 
-	struct ClientBarrierResult
+	struct ClientWorldSyncResult
 	{
-		WireBarrierToken		token	  = {};
+		WorldSyncToken			token	  = {};
 		bool					succeeded = false;
 		eWorldTransitionFailure failure	  = eWorldTransitionFailure::None;
 	};
 
 	struct ClientWorldCommit
 	{
-		WireBarrierToken		token = {};
+		WorldSyncToken			token = {};
 		WorldEventCorrelation	correlation = {};
 	};
 
@@ -186,11 +178,11 @@ namespace jam::net
 		uint64								userId			 = 0;
 		ClientRequestId						requestId		 = kInvalidClientRequestId;
 		eWorldTransitionPhase				phase			 = eWorldTransitionPhase::ResolvingTarget;
-		std::optional<WorldRuntimeRef>		source			 = std::nullopt;
-		std::optional<WorldRuntimeRef>		target			 = std::nullopt;
+		std::optional<WorldRef>		source			 = std::nullopt;
+		std::optional<WorldRef>		target			 = std::nullopt;
 		WorldInstanceRef					targetInstance	 = {};
 		WorldStateRevision					expectedRevision = 0;
-		WireBarrierToken					barrierToken	 = {};
+		WorldSyncToken						syncToken		 = {};
 		uint64								deadlineNs		 = 0;
 		eWorldTransitionFailure				terminalFailure  = eWorldTransitionFailure::None;
 		bool								sourceDetached	 = false;

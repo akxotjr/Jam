@@ -80,7 +80,7 @@ namespace jam::net
 		void								PublishWorldParticipantEvent(uint64 participantUserId, eWorldParticipantChange change);
 
 		void								RequestSpawnActor(const SpawnParams& params);
-		void								RequestSpawnPlayer(const SpawnParams& params);
+		void								RequestSpawnPlayer(const WorldEventCorrelation& correlation, const SpawnParams& params);
 		void								RequestDespawnActor(const DespawnActorRequest& request);
 		void								RequestDespawnPlayer(const DespawnActorRequest& request);
 		void								PublishActorActionResult(ClientRequestId requestId, ActorActionResult result) const;

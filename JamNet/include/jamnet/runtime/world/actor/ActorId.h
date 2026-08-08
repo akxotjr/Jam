@@ -6,7 +6,7 @@
 
 namespace jam::net
 {
-	// Canonical actor identity within one WorldRuntimeRef. The raw layout is
+	// Canonical actor identity within one WorldRef. The raw layout is
 	// interpreted only by ActorDirectory; other systems treat it as opaque.
 	struct ActorId
 	{

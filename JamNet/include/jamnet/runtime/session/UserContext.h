@@ -45,13 +45,41 @@ namespace jam::net
 		std::optional<WorldTransitionState> active;
 	};
 
+	enum class eUserConnectionState : uint8
+	{
+		Connected,
+		Reconnecting,
+		Released,
+	};
+
+	enum class eUserWorldResyncPhase : uint8
+	{
+		None,
+		WaitingTransition,
+		WaitingClientPrepared,
+		WaitingClientApplied,
+		WaitingTransport,
+	};
+
+	struct UserWorldResyncContext
+	{
+		eUserWorldResyncPhase	phase			= eUserWorldResyncPhase::None;
+		WorldSyncToken			token			= {};
+		WorldRef			world			= {};
+		WorldStateRevision		mainRevision	= 0;
+		uint64					deadlineNs		= 0;
+	};
+
 	struct UserContext
 	{
-		AccountId						accountId	= kInvalidAccountId;
-		UserId							userId		= kInvalidUserId;
-		SessionId						tcp			= kInvalidSessionId;
-		SessionId						udp			= kInvalidSessionId;
-		UserPhysicalWorldState			physicalWorld;
+		AccountId						accountId			= kInvalidAccountId;
+		UserId							userId				= kInvalidUserId;
+		SessionId						tcp					= kInvalidSessionId;
+		SessionId						udp					= kInvalidSessionId;
+		eUserConnectionState			connectionState		= eUserConnectionState::Connected;
+		uint64							reconnectDeadlineNs = 0;
+		UserWorldResyncContext			worldResync;
+		UserWorldState					worldState;
 		UserWorldTransitionContext		worldTransition;
 	};
 
@@ -63,6 +91,7 @@ namespace jam::net
 
 		UserContext*		AllocUserContext(AccountId accountId);
 		void				FreeUserContext(UserId userId);
+		void				ReleaseAccountBinding(UserId userId);
 		
 		UserContext*		FindUserContext(UserId userId);
 		const UserContext*	FindUserContext(UserId userId) const;

@@ -23,12 +23,12 @@ namespace jam::net
 		std::string				entryPoint;
 	};
 
-	class IServerWorldContent
+	class IWorldContent
 	{
 	public:
 		using PrepareMemberCompletion = std::function<void(bool)>;
 
-		virtual ~IServerWorldContent() = default;
+		virtual ~IWorldContent() = default;
 
 		virtual bool Initialize(ServerWorld& world)
 		{
@@ -47,8 +47,7 @@ namespace jam::net
 			(void)events;
 		}
 
-		virtual void PrepareMemberContent(ServerWorld& world,
-			const ServerWorldMemberContentContext& context, PrepareMemberCompletion completion)
+		virtual void PrepareMemberContent(ServerWorld& world, const ServerWorldMemberContentContext& context, PrepareMemberCompletion completion)
 		{
 			(void)world;
 			(void)context;

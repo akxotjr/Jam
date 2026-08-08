@@ -18,9 +18,6 @@ namespace jam::net
 	{
 		ActorArchetypeKey	actorArchetypeKey{};
 		px::Transform		pose = {};
-		uint16				team = 0;
-		uint8				part = 0;
-		uint8				role = 0;
 		bool				requestOwnership = true;
 		bool				requestControl = false;
 		ActorId				targetActorId = ActorId::Invalid();

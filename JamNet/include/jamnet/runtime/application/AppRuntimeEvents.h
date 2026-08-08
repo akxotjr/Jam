@@ -1,9 +1,10 @@
 #pragma once
 
-#include "jamnet/runtime/world/lifecycle/WorldActionTypes.h"
+#include "jamnet/core/net/PacketStructure.h"
+#include "jamnet/runtime/world/lifecycle/WorldTransitionTypes.h"
 #include "jamnet/runtime/world/actor/ActorActionTypes.h"
-#include "jamnet/runtime/world/simulation/common/ActorComponents.h"
-#include "jamnet/runtime/social/SocialTypes.h"
+#include "jamnet/runtime/content/social/SocialTypes.h"
+#include "jamnet/runtime/content/generic/GenericContentTypes.h"
 
 #include <jampx/PhysicsTypes.h>
 
@@ -24,11 +25,13 @@ namespace jam::net
 
 	struct NetworkState
 	{
-		eNetworkPhase	phase	= eNetworkPhase::Disconnected;
+		eNetworkPhase	phase = eNetworkPhase::Disconnected;
+		eBootstrapKind	bootstrapKind = eBootstrapKind::Pending;
 	};
 
 	struct NetworkStateEvent
 	{
+		uint64			clientInstanceId = 0;
 		uint64			accountId = 0;
 		uint64			userId	 = 0;
 		NetworkState	state	 = {};
@@ -42,10 +45,10 @@ namespace jam::net
 
 	struct WorldParticipantView
 	{
-		WorldRuntimeRef	runtime				= {};
-		uint64			participantUserId	= 0;
+		WorldRef	world				= {};
+		uint64		participantUserId	= 0;
 
-		bool IsValid() const { return runtime.IsValid() && participantUserId != 0; }
+		bool IsValid() const { return world.IsValid() && participantUserId != 0; }
 	};
 
 	struct WorldParticipantEvent
@@ -105,6 +108,13 @@ namespace jam::net
 		AccountId		accountId	= kInvalidAccountId;
 		UserId			userId		= kInvalidUserId;
 		SocialMessage	message		= {};
+	};
+
+	struct GenericContentResponseEvent
+	{
+		AccountId				accountId = kInvalidAccountId;
+		UserId					userId	  = kInvalidUserId;
+		GenericContentResponse	response  = {};
 	};
 
 	// Render-ready presentation sample produced after client replay/correction is applied.

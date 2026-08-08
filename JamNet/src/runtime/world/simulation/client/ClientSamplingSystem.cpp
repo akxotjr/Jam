@@ -49,7 +49,7 @@ namespace jam::net
 				px::CharacterState sampled = live;
 
 				// correction commit 직후 visual jump 완화를 위해 렌더 보정 오프셋을 반영한다.
-				sampled.pos			= sampled.pos - delta.pos;
+				sampled.pos	= sampled.pos - delta.pos;
 
 				ActorPresentationState actorSnapshot{
 					.actorId = GetActorIdComponent(m_world, local),

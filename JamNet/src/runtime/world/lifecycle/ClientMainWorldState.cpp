@@ -3,18 +3,24 @@
 
 namespace jam::net
 {
-	bool ClientMainWorldState::Prepare(const ClientWorldPrepare& prepare, const MailboxRef& mailbox, std::shared_ptr<ClientWorld> runtime)
+	bool ClientMainWorldState::Prepare(const ClientWorldPrepare& prepare, const MailboxRef& mailbox, std::shared_ptr<ClientWorld> worldObject)
 	{
-		if (!prepare.token.IsValid() || !prepare.correlation.world.IsValid() || !mailbox.IsValid()
-			|| prepare.correlation.mainRevision != m_revision)
+		if (!prepare.token.IsValid() || !prepare.correlation.world.IsValid() || !mailbox.IsValid())
+			return false;
+
+		const bool validRevision = prepare.kind == eWorldSyncKind::WorldResync
+			? prepare.correlation.mainRevision >= m_revision
+			: prepare.correlation.mainRevision == m_revision;
+		if (!validRevision)
 			return false;
 
 		m_prepared = ClientWorldBinding
 		{
 			.world = prepare.correlation.world,
-			.barrierToken = prepare.token,
+			.syncToken = prepare.token,
+			.kind = prepare.kind,
 			.mailbox = mailbox,
-			.runtime = std::move(runtime),
+			.worldObject = std::move(worldObject),
 			.prepared = true,
 			.packetReady = true,
 			.active = false,
@@ -25,9 +31,14 @@ namespace jam::net
 
 	bool ClientMainWorldState::Commit(const ClientWorldCommit& commit)
 	{
-		if (!m_prepared || m_prepared->barrierToken != commit.token
-			|| m_prepared->world != commit.correlation.world
-			|| commit.correlation.mainRevision <= m_revision)
+		if (!m_prepared || m_prepared->syncToken != commit.token
+			|| m_prepared->world != commit.correlation.world)
+			return false;
+
+		const bool validRevision = m_prepared->kind == eWorldSyncKind::WorldResync
+			? commit.correlation.mainRevision >= m_revision
+			: commit.correlation.mainRevision > m_revision;
+		if (!validRevision)
 			return false;
 
 		m_prepared->active = true;
@@ -37,7 +48,7 @@ namespace jam::net
 		return true;
 	}
 
-	bool ClientMainWorldState::MarkPresentationReady(const WorldRuntimeRef& world)
+	bool ClientMainWorldState::MarkPresentationReady(const WorldRef& world)
 	{
 		if (!m_current || m_current->world != world
 			|| !m_current->prepared || !m_current->packetReady || !m_current->active)
@@ -47,7 +58,7 @@ namespace jam::net
 		return true;
 	}
 
-	bool ClientMainWorldState::ApplyAuthoritative(const UserPhysicalWorldState& state)
+	bool ClientMainWorldState::ApplyAuthoritative(const UserWorldState& state)
 	{
 		if (!state.IsValid() || state.revision < m_revision)
 			return false;
@@ -62,9 +73,9 @@ namespace jam::net
 		return true;
 	}
 
-	void ClientMainWorldState::Cancel(WireBarrierToken token)
+	void ClientMainWorldState::Cancel(WorldSyncToken token)
 	{
-		if (m_prepared && m_prepared->barrierToken == token)
+		if (m_prepared && m_prepared->syncToken == token)
 			m_prepared.reset();
 	}
 

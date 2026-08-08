@@ -45,6 +45,7 @@ namespace jam::net
 		InitialSync,
 		Streaming,
 		NeedsResync,
+		Suspended,
 	};
 
 	struct ReplicationUserState
@@ -102,6 +103,8 @@ namespace jam::net
 
 		bool                                        AttachUser(uint64 userId);
 		bool                                        BeginInitialSync(uint64 userId);
+		bool                                        SuspendUser(uint64 userId);
+		bool                                        ResumeUserWithFullSync(uint64 userId);
 		bool                                        IsAwaitingPlayer(uint64 userId) const;
 		void                                        HandleBaselineFeedback(uint64 userId, const fb::fbBaselineAckBatch& batch);
 		void                                        OnUserLeave(uint64 userId);

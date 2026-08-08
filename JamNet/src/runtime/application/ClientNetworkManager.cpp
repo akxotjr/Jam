@@ -13,6 +13,8 @@
 #include "jamnet/runtime/world/data/WorldTemplatesLoader.h"
 #include "jamnet/runtime/world/data/WorldArchetypesLoader.h"
 #include "jamnet/runtime/world/data/ActorLevelsLoader.h"
+#include "jamnet/runtime/world/lifecycle/WorldTransitionTypes.h"
+#include "jamnet/runtime/world/simulation/common/ReplicationTypes.h"
 
 #include <atomic>
 #include <future>
@@ -20,11 +22,25 @@
 
 namespace jam::net
 {
-	ClientNetworkManager::ClientNetworkManager(const ClientConfig& config, AccountId accountId)
+	namespace
+	{
+		std::atomic<uint64> g_nextClientInstanceId = 1;
+	}
+
+	ClientNetworkManager::ClientNetworkManager(const ClientConfig& config)
 		: m_config(config)
 	{
-		m_principal.accountId = accountId;
-		m_principalShard	  = GLOBAL_EXEC.GetAffinityShard(accountId);
+		m_clientInstanceId = g_nextClientInstanceId.fetch_add(1, std::memory_order_relaxed);
+
+		if (m_config.loginId.empty() && m_config.accountId != kInvalidAccountId)
+			m_config.loginId = std::to_string(m_config.accountId);
+		if (m_config.password.empty() && m_config.accountId != kInvalidAccountId)
+			m_config.password = std::to_string(m_config.accountId);
+
+		m_principal.accountId = config.accountId;
+		const uint64 principalSeed = config.accountId != kInvalidAccountId
+			? config.accountId : static_cast<uint64>(std::hash<std::string>{}(config.loginId));
+		m_principalShard = GLOBAL_EXEC.GetAffinityShard(principalSeed);
 
 		m_manifest			  = SharedDataManifestLoader::Load(config.sharedDataManifestPath);
 		m_worldTemplates	  = WorldTemplatesLoader::Load(m_manifest.worldTemplateDatabasePath);
@@ -40,9 +56,17 @@ namespace jam::net
 
 	bool ClientNetworkManager::Connect()
 	{
-		if (GetAccountId() == kInvalidAccountId)
+
+		if (m_config.ticket.empty() && (m_config.loginId.empty() || m_config.password.empty()))
 		{
-			JAMNET_LOG_ERROR_LOC("AccountId is not set");
+			JAMNET_LOG_ERROR_LOC("Login credential is not set");
+			return false;
+		}
+		if (m_config.loginId.size() > kMaxLoginIdBytes
+			|| m_config.password.size() > kMaxLoginSecretBytes
+			|| m_config.ticket.size() > kMaxLoginSecretBytes)
+		{
+			JAMNET_LOG_ERROR_LOC("Login credential exceeds the binding packet limit");
 			return false;
 		}
 		if (!m_principalShard)
@@ -107,8 +131,8 @@ namespace jam::net
 		const auto prepared = mainWorld.Prepared();
 		const UserId userId = m_principal.userId;
 
-		if (current && current->runtime && userId != kInvalidUserId)
-			current->runtime->RemoveMember(userId);
+		if (current && current->worldObject && userId != kInvalidUserId)
+			current->worldObject->RemoveMember(userId);
 		mainWorld.Clear();
 
 		m_principal.udp = nullptr;
@@ -118,14 +142,15 @@ namespace jam::net
 		m_tcpBound.store(false, std::memory_order_release);
 		m_udpBound.store(false, std::memory_order_release);
 		m_sessionReady.store(false, std::memory_order_relaxed);
+		m_bootstrapKind.store(eBootstrapKind::Pending, std::memory_order_release);
 
 		PublishNetworkStateEvent();
 
 		std::vector<std::shared_ptr<ClientWorld>> worlds;
-		if (current && current->runtime)
-			worlds.push_back(current->runtime);
-		if (prepared && prepared->runtime && (!current || current->runtime != prepared->runtime))
-			worlds.push_back(prepared->runtime);
+		if (current && current->worldObject)
+			worlds.push_back(current->worldObject);
+		if (prepared && prepared->worldObject && (!current || current->worldObject != prepared->worldObject))
+			worlds.push_back(prepared->worldObject);
 
 		if (worlds.empty())
 		{
@@ -241,7 +266,7 @@ namespace jam::net
 			return false;
 
 		const auto current = m_principal.mainWorld.Current();
-		if (!current || !current->runtime)
+		if (!current || !current->worldObject)
 		{
 			PublishActorActionFailure(requestId, action, eActorActionReason::WorldUnavailable);
 			return false;
@@ -252,7 +277,7 @@ namespace jam::net
 			.world = current->world,
 			.mainRevision = m_principal.mainWorld.Revision(),
 		};
-		current->runtime->SubmitActorAction(command, correlation);
+		current->worldObject->SubmitActorAction(command, correlation);
 		return true;
 	}
 
@@ -261,9 +286,7 @@ namespace jam::net
 		if (!m_principalShard)
 			return false;
 
-		m_principalShard->Submit(Job(shared_from_this(),
-			&ClientNetworkManager::RequestSocialCommandOnPrincipalShard,
-			eJobPriority::Control, command));
+		m_principalShard->Submit(Job(shared_from_this(), &ClientNetworkManager::RequestSocialCommandOnPrincipalShard, eJobPriority::Control, command));
 		return true;
 	}
 
@@ -276,6 +299,24 @@ namespace jam::net
 		return tcp->SendSocialCommand(command);
 	}
 
+	bool ClientNetworkManager::RequestGenericContent(const GenericContentRequest& request)
+	{
+		if (!m_principalShard)
+			return false;
+
+		m_principalShard->Submit(Job(shared_from_this(), &ClientNetworkManager::RequestGenericContentOnPrincipalShard, eJobPriority::Control, request));
+		return true;
+	}
+
+	bool ClientNetworkManager::RequestGenericContentOnPrincipalShard(const GenericContentRequest& request)
+	{
+		AssertPrincipalAffinity();
+		auto* tcp = m_principal.tcp;
+		if (!tcp || !IsTcpConnected() || !request.IsValid())
+			return false;
+		return tcp->SendGenericContentRequest(request);
+	}
+
 	void ClientNetworkManager::PublishSocialMessage(SocialMessage message) const
 	{
 		AssertPrincipalAffinity();
@@ -283,6 +324,17 @@ namespace jam::net
 			.accountId = GetAccountId(),
 			.userId = GetUserId(),
 			.message = std::move(message),
+		};
+		GLOBAL_EVENTBUS_PUBLISH(event);
+	}
+
+	void ClientNetworkManager::PublishGenericContentResponse(GenericContentResponse response) const
+	{
+		AssertPrincipalAffinity();
+		GenericContentResponseEvent event{
+			.accountId = GetAccountId(),
+			.userId = GetUserId(),
+			.response = std::move(response),
 		};
 		GLOBAL_EVENTBUS_PUBLISH(event);
 	}
@@ -340,10 +392,10 @@ namespace jam::net
 			return;
 
 		const auto current = m_principal.mainWorld.Current();
-		if (!current || !current->runtime)
+		if (!current || !current->worldObject)
 			return;
 
-		current->runtime->SubmitCharacterControl(*intent);
+		current->worldObject->SubmitCharacterControl(*intent);
 	}
 
 	void ClientNetworkManager::ClearPendingCharacterControl()
@@ -373,7 +425,13 @@ namespace jam::net
 					return;
 
 				if (auto* tcp = dynamic_cast<ClientTcpSession*>(session))
+				{
 					tcp->SetNetworkManager(this);
+					if (!m_config.ticket.empty())
+						tcp->SetTicketCredential(m_config.ticket);
+					else
+						tcp->SetPasswordCredential(m_config.loginId, m_config.password);
+				}
 				else if (auto* udp = dynamic_cast<ClientUdpSession*>(session))
 					udp->SetNetworkManager(this);
 
@@ -458,10 +516,13 @@ namespace jam::net
 		return true;
 	}
 
-	void ClientNetworkManager::NotifyTcpBound(UserId userId)
+	void ClientNetworkManager::NotifyTcpBound(AccountId accountId, UserId userId)
 	{
 		AssertPrincipalAffinity();
 
+		m_principal.accountId = accountId;
+		if (m_service)
+			m_service->SetAccountId(accountId);
 		m_tcpBound.store(true, std::memory_order_release);
 		m_principal.userId = userId;
 
@@ -482,6 +543,24 @@ namespace jam::net
 		UpdateSessionReadyState();
 	}
 
+	void ClientNetworkManager::NotifyBootstrap(UserId userId, eBootstrapKind kind)
+	{
+		AssertPrincipalAffinity();
+		if (userId != m_principal.userId
+			|| (kind != eBootstrapKind::Fresh && kind != eBootstrapKind::Resync))
+		{
+			JAMNET_LOG_WARN("[UserBootstrap] rejected. receivedUserId={}, principalUserId={}, kind={}",
+				userId, m_principal.userId, static_cast<uint32>(kind));
+			return;
+		}
+
+		m_bootstrapKind.store(kind, std::memory_order_release);
+		JAMNET_LOG_INFO("[UserBootstrap] accepted. userId={}, kind={}, tcpBound={}, udpBound={}",
+			userId, static_cast<uint32>(kind),
+			m_tcpBound.load(std::memory_order_acquire), m_udpBound.load(std::memory_order_acquire));
+		UpdateSessionReadyState();
+	}
+
 	void ClientNetworkManager::NotifyTcpDisconnected(const ClientTcpSession* session)
 	{
 		AssertPrincipalAffinity();
@@ -490,6 +569,7 @@ namespace jam::net
 
 		m_principal.tcp = nullptr;
 		m_tcpBound.store(false, std::memory_order_release);
+		m_bootstrapKind.store(eBootstrapKind::Pending, std::memory_order_release);
 		UpdateSessionReadyState();
 	}
 
@@ -513,23 +593,24 @@ namespace jam::net
 			if (completed) completed(false);
 			return;
 		}
-		if (const auto& pending = mainWorld.Prepared(); pending && pending->barrierToken == prepare.token)
+		if (const auto& pending = mainWorld.Prepared(); pending && pending->syncToken == prepare.token)
 		{
 			if (completed) completed(pending->world == prepare.correlation.world);
 			return;
 		}
-		if (const auto& current = mainWorld.Current(); current && current->world == prepare.correlation.world)
+		if (const auto& current = mainWorld.Current(); current && current->world == prepare.correlation.world
+			&& prepare.kind != eWorldSyncKind::WorldResync)
 		{
-			if (completed) completed(mainWorld.Prepare(prepare, current->mailbox, current->runtime));
+			if (completed) completed(mainWorld.Prepare(prepare, current->mailbox, current->worldObject));
 			return;
 		}
 		if (const auto pending = mainWorld.Prepared(); pending && pending->mailbox.IsValid())
 		{
 			const auto& current = mainWorld.Current();
-			if ((!current || current->mailbox.ownerId != pending->mailbox.ownerId) && pending->runtime)
-				pending->runtime->Shutdown(eMailboxCloseMode::Abort);
+			if ((!current || current->mailbox.ownerId != pending->mailbox.ownerId) && pending->worldObject)
+				pending->worldObject->Shutdown(eMailboxCloseMode::Abort);
 
-			mainWorld.Cancel(pending->barrierToken);
+			mainWorld.Cancel(pending->syncToken);
 		}
 
 		WorldConfig config = m_worldConfigResolver->ResolveWorldConfig(prepare.correlation.world.instance);
@@ -552,7 +633,7 @@ namespace jam::net
 			world->SetActorLevelDatabase(ActorLevelsLoader::Load(config.actorLevelPath));
 
 		if (world && world->Init())
-			binding = { .world = config.RuntimeRef(), .mailbox = world->GetMailboxRef(), .runtime = std::move(world) };
+			binding = { .world = config.GetWorldRef(), .mailbox = world->GetMailboxRef(), .worldObject = std::move(world) };
 
 		CompletePreparedMainWorld(prepare, std::move(binding), std::move(completed));
 	}
@@ -560,10 +641,10 @@ namespace jam::net
 	void ClientNetworkManager::CompletePreparedMainWorld(ClientWorldPrepare prepare, ClientWorldBinding binding, std::function<void(bool)> completed)
 	{
 		AssertPrincipalAffinity();
-		const bool succeeded = binding.mailbox.IsValid() && binding.runtime && m_principal.mainWorld.Prepare(prepare, binding.mailbox, binding.runtime);
+		const bool succeeded = binding.mailbox.IsValid() && binding.worldObject && m_principal.mainWorld.Prepare(prepare, binding.mailbox, binding.worldObject);
 
-		if (!succeeded && binding.runtime && binding.mailbox.IsValid())
-			binding.runtime->Shutdown(eMailboxCloseMode::Abort);
+		if (!succeeded && binding.worldObject && binding.mailbox.IsValid())
+			binding.worldObject->Shutdown(eMailboxCloseMode::Abort);
 
 		if (completed)
 			completed(succeeded);
@@ -579,16 +660,16 @@ namespace jam::net
 			return false;
 
 		const auto& current = mainWorld.Current();
-		if (current && current->runtime)
+		if (current && current->worldObject)
 		{
 			const WorldUserContext worldUser
 			{
 				.userId = GetUserId(),
 				.mainRevision = commit.correlation.mainRevision,
 			};
-			if (!current->runtime->AddMember(worldUser))
-				current->runtime->UpdateMemberContext(worldUser);
-			current->runtime->Start(30'000'000);
+			if (!current->worldObject->AddMember(worldUser))
+				current->worldObject->UpdateMemberContext(worldUser);
+			current->worldObject->Start(SIMULATION_TICK_NS);
 			const bool presentationReady = mainWorld.MarkPresentationReady(current->world);
 			JAM_ASSERT(presentationReady);
 		}
@@ -597,16 +678,16 @@ namespace jam::net
 			return false;
 		}
 
-		if (previous && current && previous->mailbox.ownerId != current->mailbox.ownerId && previous->runtime)
+		if (previous && current && previous->mailbox.ownerId != current->mailbox.ownerId && previous->worldObject)
 		{
-			previous->runtime->RemoveMember(GetUserId());
-			previous->runtime->Shutdown(eMailboxCloseMode::Abort);
+			previous->worldObject->RemoveMember(GetUserId());
+			previous->worldObject->Shutdown(eMailboxCloseMode::Abort);
 		}
 
 		return true;
 	}
 
-	bool ClientNetworkManager::ApplyMainWorldChanged(const UserPhysicalWorldState& state)
+	bool ClientNetworkManager::ApplyMainWorldChanged(const UserWorldState& state)
 	{
 		AssertPrincipalAffinity();
 
@@ -622,9 +703,9 @@ namespace jam::net
 		const UserId userId = GetUserId();
 		auto destroy = [userId](const std::optional<ClientWorldBinding>& binding)
 			{
-				if (!binding || !binding->runtime) return;
-				binding->runtime->RemoveMember(userId);
-				binding->runtime->Shutdown(eMailboxCloseMode::Abort);
+				if (!binding || !binding->worldObject) return;
+				binding->worldObject->RemoveMember(userId);
+				binding->worldObject->Shutdown(eMailboxCloseMode::Abort);
 			};
 
 		destroy(current);
@@ -641,16 +722,16 @@ namespace jam::net
 			return false;
 
 		const auto& current = m_principal.mainWorld.Current();
-		if (current && current->packetReady && current->runtime && current->world.worldId == worldId)
+		if (current && current->packetReady && current->worldObject && current->world.worldId == worldId)
 		{
-			current->runtime->HandleWorldPacket(userId, std::move(packet));
+			current->worldObject->HandleWorldPacket(userId, std::move(packet));
 			return true;
 		}
 
 		const auto& prepared = m_principal.mainWorld.Prepared();
-		if (prepared && prepared->packetReady && prepared->runtime && prepared->world.worldId == worldId)
+		if (prepared && prepared->packetReady && prepared->worldObject && prepared->world.worldId == worldId)
 		{
-			prepared->runtime->HandleWorldPacket(userId, std::move(packet));
+			prepared->worldObject->HandleWorldPacket(userId, std::move(packet));
 			return true;
 		}
 
@@ -664,18 +745,25 @@ namespace jam::net
 	void ClientNetworkManager::PublishNetworkStateEvent() const
 	{
 		NetworkStateEvent evt{};
+		evt.clientInstanceId = m_clientInstanceId;
 		evt.accountId = GetAccountId();
 		evt.userId	  = GetUserId();
 		evt.state.phase = m_running.load(std::memory_order_acquire)
 			? (m_sessionReady.load(std::memory_order_acquire) ? eNetworkPhase::Ready : eNetworkPhase::Connecting)
 			: eNetworkPhase::Disconnected;
+		evt.state.bootstrapKind = m_bootstrapKind.load(std::memory_order_acquire);
 		GLOBAL_EVENTBUS_PUBLISH(evt);
 	}
 
 	void ClientNetworkManager::UpdateSessionReadyState()
 	{
-		const bool ready	= m_tcpBound.load(std::memory_order_acquire) && m_udpBound.load(std::memory_order_acquire);
+		const bool tcpBound = m_tcpBound.load(std::memory_order_acquire);
+		const bool udpBound = m_udpBound.load(std::memory_order_acquire);
+		const eBootstrapKind bootstrapKind = m_bootstrapKind.load(std::memory_order_acquire);
+		const bool ready = tcpBound && udpBound && bootstrapKind != eBootstrapKind::Pending;
 		const bool previous = m_sessionReady.exchange(ready, std::memory_order_acq_rel);
+		JAMNET_LOG_INFO("[NetworkReady] evaluated. userId={}, tcpBound={}, udpBound={}, bootstrapKind={}, ready={}, previous={}",
+			m_principal.userId, tcpBound, udpBound, static_cast<uint32>(bootstrapKind), ready, previous);
 
 		if (m_principal.tcp) m_principal.tcp->SetReady(ready);
 		if (m_principal.udp) m_principal.udp->SetReady(ready);

@@ -41,14 +41,10 @@ namespace jam::net
 
 		ClientRequestId			clientRequestId = kInvalidClientRequestId;
 
-		bool					owned = true;
-		bool					controlled = false;
-
 		uint64					owner = 0;
 		uint64					controller = 0;
 
 		ActorId					targetActorId = ActorId::Invalid();
-		WorldEventCorrelation	correlation{};
 	};
 
 	class PhysicalWorld : public WorldMembershipHost

@@ -61,18 +61,18 @@ namespace jam::net
 		WorldRouteConfig	route						 = {};
 	};
 
-	// Concrete instance config resolved from authored instance + runtime address.
+	// Concrete instance config resolved from authored instance + live world address.
 	struct WorldConfig
 	{
-		WorldRuntimeRef		world		 = {};
+		WorldRef		world		 = {};
 		WorldTemplateData	templateData = {};
 
 		std::string			actorLevelPath;
 		std::string			physicsAssetPath;
 
 		bool IsValid() const { return world.instance.IsValid() && !physicsAssetPath.empty(); }
-		bool HasRuntime() const { return world.worldId != kInvalidWorldId; }
-		WorldRuntimeRef RuntimeRef() const { return world; }
+		bool HasWorld() const { return world.worldId != kInvalidWorldId; }
+		WorldRef GetWorldRef() const { return world; }
 		bool operator==(const WorldConfig& rhs) const
 		{
 			return world == rhs.world;

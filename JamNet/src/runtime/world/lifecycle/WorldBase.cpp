@@ -27,7 +27,7 @@ namespace jam::net
 
 	bool WorldBase::Init()
 	{
-		if (!m_config.HasRuntime())
+		if (!m_config.HasWorld())
 			return false;
 		if (m_alive.load(std::memory_order_acquire) || m_mailboxRef.IsValid() || !m_shard.expired())
 			return false;
@@ -193,8 +193,8 @@ namespace jam::net
 		if (user.userId == kInvalidUserId)
 			return;
 
-		auto& current = m_userContexts[user.userId];
-		current = user;
+		if (auto it = m_userContexts.find(user.userId); it != m_userContexts.end())
+			it->second = std::move(user);
 	}
 
 	Session* WorldMembershipHost::GetMemberSession(uint64 userId, eProtocolType protocol)

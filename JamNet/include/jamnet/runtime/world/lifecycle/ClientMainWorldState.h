@@ -6,20 +6,19 @@
 #include <optional>
 #include <memory>
 
-#include "jamnet/runtime/protocol/transport/WireBarrier.h"
-
 namespace jam::net
 {
 	class ClientWorld;
 
 	struct ClientWorldBinding
 	{
-		WorldRuntimeRef		world			 = {};
-		WireBarrierToken	barrierToken	 = {};
+		WorldRef		world			 = {};
+		WorldSyncToken		syncToken		 = {};
+		eWorldSyncKind		kind			 = eWorldSyncKind::WorldPrepare;
 		MailboxRef			mailbox			 = {};
 		// Client-only lifetime ownership. The mailbox owner is the opaque wire
 		// runtime ID; no client-local World ID is exposed or persisted.
-		std::shared_ptr<ClientWorld> runtime = {};
+		std::shared_ptr<ClientWorld> worldObject = {};
 		bool				prepared		  = false;
 		bool				packetReady		  = false;
 		bool				active			  = false;
@@ -29,11 +28,11 @@ namespace jam::net
 	class ClientMainWorldState
 	{
 	public:
-		bool										Prepare(const ClientWorldPrepare& prepare, const MailboxRef& mailbox, std::shared_ptr<ClientWorld> runtime = {});
+		bool										Prepare(const ClientWorldPrepare& prepare, const MailboxRef& mailbox, std::shared_ptr<ClientWorld> worldObject = {});
 		bool										Commit(const ClientWorldCommit& commit);
-		bool										MarkPresentationReady(const WorldRuntimeRef& world);
-		bool										ApplyAuthoritative(const UserPhysicalWorldState& state);
-		void										Cancel(WireBarrierToken token);
+		bool										MarkPresentationReady(const WorldRef& world);
+		bool										ApplyAuthoritative(const UserWorldState& state);
+		void										Cancel(WorldSyncToken token);
 		void										Clear();
 
 		const std::optional<ClientWorldBinding>&	Current() const { return m_current; }

@@ -8,37 +8,17 @@
 #include "jamnet/runtime/world/simulation/client/ClientWorld.h"
 
 #include "jamnet/runtime/protocol/transport/CustomPacketHelper.h"
-#include "jamnet/runtime/protocol/schema/gen/world_assignment_generated.h"
-#include "jamnet/runtime/protocol/schema/gen/social_command_generated.h"
-#include "jamnet/runtime/protocol/schema/gen/social_message_generated.h"
+#include "jamnet/runtime/protocol/codec/WorldCodec.h"
+#include "jamnet/runtime/protocol/codec/SocialCodec.h"
+#include "jamnet/runtime/protocol/codec/ContentCodec.h"
 
 namespace jam::net
 {
-	namespace
-	{
-		Packet MakeBarrierResultPacket(WireBarrierToken token, bool succeeded, eWorldTransitionFailure failure)
-		{
-			flatbuffers::FlatBufferBuilder fbb(64);
-			const auto root = fb::CreatefbClientBarrierResult(fbb, token.value, succeeded, static_cast<fb::fbWorldTransitionFailure>(failure));
-			fbb.Finish(root);
-
-			return PacketBuilder::CreateCustomPacket(CustomPacketId::CLIENT_BARRIER_RESULT, PacketFlags::NONE, eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize());
-		}
-
-
-	} // anonymous namespace
-
 	bool ClientTcpSession::RequestEnterWorld(const EnterWorldRequest& request)
 	{
 		if (!m_manager || !request.IsValid())
 			return false;
-		flatbuffers::FlatBufferBuilder fbb(160);
-		flatbuffers::Offset<flatbuffers::String> destination;
-		if (!request.destinationName.empty())
-			destination = fbb.CreateString(request.destinationName);
-		const auto root = fb::CreatefbEnterWorldRequest(fbb, request.requestId, request.archetypeKey.v, static_cast<fb::fbWorldDestinationSelector>(request.selector), request.explicitInstanceId.value, destination, request.expectedMainRevision);
-		fbb.Finish(root);
-		Send(PacketBuilder::CreateCustomPacket(CustomPacketId::ENTER_WORLD_REQUEST, PacketFlags::NONE, eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize()));
+		Send(codec::MakeEnterWorldRequestPacket(request));
 		return true;
 	}
 
@@ -46,10 +26,7 @@ namespace jam::net
 	{
 		if (!m_manager)
 			return false;
-		flatbuffers::FlatBufferBuilder fbb(64);
-		const auto root = fb::CreatefbLeaveWorldRequest(fbb, request.requestId, request.expectedMainRevision);
-		fbb.Finish(root);
-		Send(PacketBuilder::CreateCustomPacket(CustomPacketId::LEAVE_WORLD_REQUEST, PacketFlags::NONE, eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize()));
+		Send(codec::MakeLeaveWorldRequestPacket(request));
 		return true;
 	}
 
@@ -58,17 +35,15 @@ namespace jam::net
 		if (!m_manager || command.requestId == kInvalidClientRequestId)
 			return false;
 
-		flatbuffers::FlatBufferBuilder fbb(128 + command.payload.size());
-		const fb::fbSocialAddress destination(
-			static_cast<fb::fbSocialAudience>(command.destination.audience),
-			command.destination.scopeId);
-		const auto payload = fbb.CreateVector(
-			reinterpret_cast<const uint8*>(command.payload.data()), command.payload.size());
-		const auto root = fb::CreatefbSocialCommand(
-			fbb, command.requestId, &destination, command.contentType, payload);
-		fb::FinishfbSocialCommandBuffer(fbb, root);
-		Send(PacketBuilder::CreateCustomPacket(CustomPacketId::SOCIAL_COMMAND, PacketFlags::NONE,
-			eChannel::TCP_DEFAULT, fbb.GetBufferPointer(), fbb.GetSize()));
+		Send(codec::MakeSocialCommandPacket(command));
+		return true;
+	}
+
+	bool ClientTcpSession::SendGenericContentRequest(const GenericContentRequest& request)
+	{
+		if (!m_manager || !request.IsValid())
+			return false;
+		Send(codec::MakeContentRequestPacket(request));
 		return true;
 	}
 
@@ -83,7 +58,7 @@ namespace jam::net
 			GetRemoteNetAddress().GetPort());
 
 		if (m_manager)
-			m_manager->NotifyTcpBound(GetUserId());
+			m_manager->NotifyTcpBound(GetAccountId(), GetUserId());
 	}
 
 	void ClientTcpSession::OnDisconnected()
@@ -103,46 +78,23 @@ namespace jam::net
 
 		if (view.Id() == CustomPacketId::WORLD_TRANSITION_RESULT)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			const auto* result = flatbuffers::GetRoot<fb::fbWorldTransitionResult>(view.Payload());
-			if (!result || !result->Verify(verifier))
+			WorldTransitionResult result;
+			if (!codec::DecodeWorldTransitionResult(view.Payload(), view.PayloadSize(), result))
 				return;
-			if (result->failure() != fb::fbWorldTransitionFailure_None)
+			if (result.failure != eWorldTransitionFailure::None)
 				JAMNET_LOG_WARN("World transition failed. kind={}, requestId={}, reason={}",
-					static_cast<uint32>(result->kind()), result->request_id(), static_cast<uint32>(result->failure()));
+					static_cast<uint32>(result.kind), result.requestId, static_cast<uint32>(result.failure));
 			return;
 		}
 
 		if (view.Id() == CustomPacketId::CLIENT_WORLD_PREPARE)
 		{
-			JAMNET_LOG_INFO("[ClientWorldPrepare] received. payloadSize={}", view.PayloadSize());
-
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			const auto* wire = flatbuffers::GetRoot<fb::fbClientWorldPrepare>(view.Payload());
-			if (!wire || !wire->Verify(verifier))
+			ClientWorldPrepare prepare;
+			if (!codec::DecodeClientWorldPrepare(view.Payload(), view.PayloadSize(), prepare))
 			{
 				JAMNET_LOG_WARN("[ClientWorldPrepare] verification failed. payloadSize={}", view.PayloadSize());
 				return;
 			}
-			JAMNET_LOG_INFO("[ClientWorldPrepare] verified. token={}, instance={}, runtime={}",
-				wire->barrier_token(), wire->instance_id(), wire->runtime_id());
-
-			ClientWorldPrepare prepare
-			{
-				.token = { wire->barrier_token() },
-				.kind = static_cast<eWireBarrierKind>(wire->kind()),
-				.correlation =
-				{
-					.world =
-					{
-						.instance = { .instanceId = WorldInstanceId{ wire->instance_id() }, .archetypeKey = WorldArchetypeKey{ wire->archetype_key() } },
-						.worldId = wire->runtime_id(),
-					},
-					.mainRevision = wire->main_revision(),
-				},
-				.archetypeKey = WorldArchetypeKey{ wire->archetype_key() },
-				.contentRevision = wire->content_revision(),
-			};
 
 			const SessionId		 sessionId  = GetSessionId();
 			const EndpointHandle endpoint   = GetEndpointHandle();
@@ -151,87 +103,60 @@ namespace jam::net
 
 			m_manager->PrepareMainWorld(prepare, [service, sessionId, endpoint, generation, token = prepare.token](bool succeeded)
 				{
-					JAMNET_LOG_INFO("[ClientWorldPrepare] completed. token={}, succeeded={}", token.value, succeeded);
-
 					auto* self = service ? static_cast<ClientTcpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
 					if (!self)
 					{
-						JAMNET_LOG_WARN("[ClientWorldPrepare] barrier response dropped; TCP session lookup failed. token={}, sessionId={}, generation={}",
-							token.value, sessionId, generation);
+						JAMNET_LOG_WARN("[ClientWorldPrepare] sync response dropped; TCP session lookup failed. token={}, sessionId={}, generation={}", token.value, sessionId, generation);
 						return;
 					}
-					self->Send(MakeBarrierResultPacket(token, succeeded,
-						succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::ClientPrepareFailed));
+					self->Send(codec::MakeClientWorldSyncResultPacket({ .token = token, .succeeded = succeeded, .failure = succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::ClientPrepareFailed }));
 				});
 			return;
 		}
 
 		if (view.Id() == CustomPacketId::CLIENT_WORLD_COMMIT)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			const auto* wire = flatbuffers::GetRoot<fb::fbClientWorldCommit>(view.Payload());
-			if (!wire || !wire->Verify(verifier))
+			ClientWorldCommit commit;
+			if (!codec::DecodeClientWorldCommit(view.Payload(), view.PayloadSize(), commit))
 				return;
-			WorldRuntimeRef world{};
+			WorldRef world{};
 			if (const auto& prepared = m_manager->GetMainWorldState().Prepared(); prepared)
 				world = prepared->world;
-			ClientWorldCommit commit
-			{
-				.token		 = { wire->barrier_token() },
-				.correlation = { .world = world, .mainRevision = wire->main_revision() },
-			};
-			const bool wireMatches = world.instance.instanceId == WorldInstanceId{ wire->instance_id() }
-				&& world.worldId == wire->runtime_id();
+			const bool wireMatches = world.instance.instanceId == commit.correlation.world.instance.instanceId
+				&& world.worldId == commit.correlation.world.worldId;
+			commit.correlation.world = world;
 			const bool succeeded = wireMatches && m_manager->CommitMainWorld(commit);
 
-			Send(MakeBarrierResultPacket(commit.token, succeeded, succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::ClientPrepareFailed));
+			Send(codec::MakeClientWorldSyncResultPacket({ .token = commit.token, .succeeded = succeeded,
+				.failure = succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::ClientPrepareFailed }));
 			return;
 		}
 
 		if (view.Id() == CustomPacketId::USER_MAIN_WORLD_CHANGED)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			const auto* changed = flatbuffers::GetRoot<fb::fbUserMainPhysicalWorldChanged>(view.Payload());
-			if (!changed || !changed->Verify(verifier) || !changed->state())
+			UserWorldState state;
+			if (!codec::DecodeUserMainWorldChanged(view.Payload(), view.PayloadSize(), state))
 				return;
-			UserPhysicalWorldState state{ .revision = changed->state()->revision() };
-			if (const auto* main = changed->state()->main())
-				state.main = WorldRuntimeRef
-				{
-					.instance = { .instanceId = WorldInstanceId{ main->instance_id() }, .archetypeKey = WorldArchetypeKey{ main->archetype_key() } },
-					.worldId = main->runtime_id(),
-				};
 			m_manager->ApplyMainWorldChanged(state);
 			return;
 		}
 
 		if (view.Id() == CustomPacketId::SOCIAL_EVENT)
 		{
-			flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
-			if (!fb::VerifyfbSocialMessageBuffer(verifier))
+			SocialMessage message;
+			if (!codec::DecodeSocialMessage(view.Payload(), view.PayloadSize(), message))
 				return;
 
-			const auto* wire = fb::GetfbSocialMessage(view.Payload());
-			const auto* destination = wire ? wire->destination() : nullptr;
-			const auto* payload = wire ? wire->payload() : nullptr;
-			if (!wire || !destination || !payload
-				|| destination->audience() < fb::fbSocialAudience_MIN
-				|| destination->audience() > fb::fbSocialAudience_MAX)
-				return;
-
-			SocialMessage message{
-				.messageId = wire->message_id(),
-				.sender = wire->sender(),
-				.destination = {
-					.audience = static_cast<eSocialAudience>(destination->audience()),
-					.scopeId = destination->scope_id(),
-				},
-				.contentType = wire->content_type(),
-			};
-			message.payload.resize(payload->size());
-			if (!message.payload.empty())
-				std::memcpy(message.payload.data(), payload->data(), payload->size());
 			m_manager->PublishSocialMessage(std::move(message));
+			return;
+		}
+
+		if (view.Id() == CustomPacketId::CONTENT)
+		{
+			GenericContentResponse response;
+			if (!codec::DecodeContentResponse(view.Payload(), view.PayloadSize(), response))
+				return;
+			m_manager->PublishGenericContentResponse(std::move(response));
 			return;
 		}
 
@@ -240,6 +165,13 @@ namespace jam::net
 			return;
 
 		m_manager->DispatchWorldPacket(GetUserId(), worldId, std::move(packet));
+	}
+
+	void ClientTcpSession::OnTcpBindBootstrap(eBootstrapKind kind)
+	{
+		JAMNET_LOG_INFO("[TcpBind] bootstrap received. userId={}, kind={}", GetUserId(), static_cast<uint32>(kind));
+		if (m_manager)
+			m_manager->NotifyBootstrap(GetUserId(), kind);
 	}
 
 

@@ -14,7 +14,7 @@ namespace jam::net
 
 	struct WorldRuntimeLifecycleInput
 	{
-		const WorldRecord*		runtime			= nullptr;
+		const WorldRecord*		world			= nullptr;
 		eWorldInstanceLifecycle policy			= eWorldInstanceLifecycle::Persistent;
 		uint64					nowNs			= 0;
 		uint64					emptySinceNs	= 0;
