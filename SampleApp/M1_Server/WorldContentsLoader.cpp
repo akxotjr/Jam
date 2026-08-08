@@ -27,10 +27,7 @@ namespace m1
 			throw std::runtime_error("unsupported M1 portal destination selector");
 		}
 
-		jam::px::Transform BuildPose(
-			const std::string& worldName,
-			const std::string& spawnName,
-			const jam::shared::gen::SpawnPoseDto& dto)
+		jam::px::Transform BuildPose(const std::string& worldName, const std::string& spawnName, const jam::shared::gen::SpawnPoseDto& dto)
 		{
 			if (dto.p.size() != 3 || dto.q.size() != 4)
 				throw std::runtime_error("invalid player spawn pose dimensions: " + worldName + "/" + spawnName);
@@ -46,32 +43,32 @@ namespace m1
 			return pose;
 		}
 
-		PortalDefinition BuildPortal(
-			const std::string& sourceWorldName,
-			jam::net::WorldArchetypeKey sourceWorldKey,
-			const jam::shared::gen::PortalDto& dto)
+		PortalDefinition BuildPortal(const std::string& sourceWorldName, jam::net::WorldArchetypeKey sourceWorldKey, const jam::shared::gen::PortalDto& dto)
 		{
 			PortalDefinition definition{};
-			definition.sourceWorldArchetypeKey = sourceWorldKey;
-			definition.actorId = jam::net::ActorId(dto.actorId);
-			definition.portal.destinationArchetypeKey =
-				jam::net::MakeWorldArchetypeKey(dto.destinationWorldArchetype);
-			definition.portal.selector = ToRuntimeSelector(dto.destinationSelector);
-			definition.portal.explicitInstanceId = { dto.explicitInstanceId };
-			definition.portal.destinationName = dto.destinationName;
-			definition.portal.arrivalSpawn = dto.arrivalSpawn;
+			definition.sourceWorldArchetypeKey		  = sourceWorldKey;
+			definition.actorId						  = jam::net::ActorId(dto.actorId);
+			definition.portal.destinationArchetypeKey = jam::net::MakeWorldArchetypeKey(dto.destinationWorldArchetype);
+			definition.portal.selector				  = ToRuntimeSelector(dto.destinationSelector);
+			definition.portal.explicitInstanceId	  = { dto.explicitInstanceId };
+			definition.portal.destinationName		  = dto.destinationName;
+			definition.portal.arrivalSpawn			  = dto.arrivalSpawn;
 
 			if (!definition.actorId.IsValid())
 				throw std::runtime_error("invalid portal actor id in world: " + sourceWorldName);
+			
 			if (!jam::IsValidAssetKey(definition.portal.destinationArchetypeKey))
 				throw std::runtime_error("invalid portal destination world in world: " + sourceWorldName);
+			
 			if (definition.portal.arrivalSpawn.empty())
 				throw std::runtime_error("portal arrival spawn must not be empty in world: " + sourceWorldName);
+			
 			if (definition.portal.selector == jam::net::eWorldDestinationSelector::ExplicitInstance
 				&& !definition.portal.explicitInstanceId.IsValid())
 			{
 				throw std::runtime_error("explicit portal destination requires an instance id in world: " + sourceWorldName);
 			}
+			
 			if (definition.portal.selector == jam::net::eWorldDestinationSelector::AuthoredDestination
 				&& definition.portal.destinationName.empty())
 			{
@@ -81,16 +78,14 @@ namespace m1
 			return definition;
 		}
 
-		WorldContentsData BuildWorld(
-			const std::string& worldName,
-			const jam::shared::gen::WorldContentsDto& dto)
+		WorldContentsData BuildWorld(const std::string& worldName, const jam::shared::gen::WorldContentsDto& dto)
 		{
 			WorldContentsData data{};
-			data.worldArchetypeName = worldName;
-			data.worldArchetypeKey = jam::net::MakeWorldArchetypeKey(worldName);
+			data.worldArchetypeName		  = worldName;
+			data.worldArchetypeKey		  = jam::net::MakeWorldArchetypeKey(worldName);
 			data.playerActorArchetypeName = dto.playerActorArchetype;
-			data.playerActorArchetypeKey = jam::net::MakeActorArchetypeKey(dto.playerActorArchetype);
-			data.defaultPlayerSpawn = dto.defaultPlayerSpawn;
+			data.playerActorArchetypeKey  = jam::net::MakeActorArchetypeKey(dto.playerActorArchetype);
+			data.defaultPlayerSpawn		  = dto.defaultPlayerSpawn;
 
 			if (data.worldArchetypeName.empty() || !jam::IsValidAssetKey(data.worldArchetypeKey))
 				throw std::runtime_error("invalid M1 world archetype name: " + worldName);
@@ -131,12 +126,12 @@ namespace m1
 				{
 					const WorldContentsData* target = database.Find(portal.portal.destinationArchetypeKey);
 					if (!target)
+					{
 						throw std::runtime_error("portal target world contents were not defined: " + sourceName);
+					}
 					if (!target->FindPlayerSpawn(portal.portal.arrivalSpawn))
 					{
-						throw std::runtime_error(
-							"portal arrival spawn was not defined in target world: "
-							+ sourceName + "/" + portal.portal.arrivalSpawn);
+						throw std::runtime_error("portal arrival spawn was not defined in target world: " + sourceName + "/" + portal.portal.arrivalSpawn);
 					}
 				}
 			}
@@ -153,8 +148,7 @@ namespace m1
 		return WorldContentsDatabaseBuilder::Build(LoadDto(path));
 	}
 
-	WorldContentsDatabase WorldContentsDatabaseBuilder::Build(
-		const jam::shared::gen::M1WorldContentsRootDto& dto)
+	WorldContentsDatabase WorldContentsDatabaseBuilder::Build(const jam::shared::gen::M1WorldContentsRootDto& dto)
 	{
 		if (dto.version != 1)
 			throw std::runtime_error("unsupported M1 world contents version");

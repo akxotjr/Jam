@@ -1,11 +1,14 @@
 #include "pch.h"
 
 
-#include <jamnet/runtime/world/data/WorldArchetypeDatabase.h>
 
 #include "WorldContent.h"
 #include "WorldContentsLoader.h"
 #include "SocialContent.h"
+#include "AuthenticationContent.h"
+#include "AccountStore.h"
+#include "CharacterContent.h"
+#include "CharacterStore.h"
 
 
 int main()
@@ -25,13 +28,31 @@ int main()
 
 	try
 	{
-		const std::filesystem::path sharedDataRoot = "C://Users//akxotjr//GameWorkSpace//Jam-dev//SharedData";
-		auto worldContents = std::make_shared<m1::WorldContentsDatabase>(m1::WorldContentsLoader::Load((sharedDataRoot / "M1" / "m1_world_contents.json").string()));
+		const std::filesystem::path sharedDataRoot = "C://Users//akxotjr//GameWorkSpace//Jam-dev//SampleApp//M1_Shared//Data";
+		auto worldContents = std::make_shared<m1::WorldContentsDatabase>(m1::WorldContentsLoader::Load((sharedDataRoot / "World" / "world_contents.json").string()));
 		auto characterSessions = std::make_shared<m1::CharacterSessionStore>();
+		auto characters = std::make_shared<m1::CharacterStore>();
+		auto accounts = std::make_shared<m1::AccountStore>();
+		const m1::WorldContentsData* initialWorldContents = worldContents->Find("Town01");
+		if (!initialWorldContents)
+			throw std::runtime_error("missing initial M1 world contents");
+		for (jam::net::AccountId accountId = 1001; accountId <= 1016; ++accountId)
+		{
+			const std::string credential = std::to_string(accountId);
+			accounts->Register({ .accountId = accountId, .loginId = credential, .password = credential });
+			characters->Register({
+				.characterId = accountId * 100 + 1,
+				.accountId = accountId,
+				.name = "Player" + credential,
+				.actorArchetypeKey = initialWorldContents->playerActorArchetypeKey,
+			});
+		}
 
 		jam::net::ServerConfig config = {};
 		config.sharedDataManifestPath = (sharedDataRoot / "shared_data_manifest.json").string();
-		config.socialContent = std::make_shared<m1::SocialContent>();
+		config.socialContent = std::make_shared<m1::SocialContent>(characters, characterSessions);
+		config.authenticationContent = std::make_shared<m1::AuthenticationContent>(accounts);
+		config.content = std::make_shared<m1::CharacterContent>(characters, characterSessions);
 		config.worldContentFactory =
 			[worldContents = std::move(worldContents), characterSessions = std::move(characterSessions)](const jam::net::WorldConfig& worldConfig)
 			{

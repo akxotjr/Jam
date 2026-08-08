@@ -4,13 +4,13 @@
 #include "CharacterSessionStore.h"
 #include "WorldContentsDatabase.h"
 
-#include <jamnet/runtime/world/simulation/server/IServerWorldContent.h>
+#include <jamnet/runtime/content/world/IWorldContent.h>
 
 #include <memory>
 
 namespace m1
 {
-	class WorldContent final : public jam::net::IServerWorldContent
+	class WorldContent final : public jam::net::IWorldContent
 	{
 	public:
 		WorldContent(const WorldContentsData& contents, std::shared_ptr<CharacterSessionStore> characterSessions);

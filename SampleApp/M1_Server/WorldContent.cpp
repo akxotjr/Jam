@@ -33,9 +33,10 @@ namespace m1
 			? std::string_view(m_contents.defaultPlayerSpawn)
 			: std::string_view(context.entryPoint);
 		const PlayerSpawnData* spawn = m_contents.FindPlayerSpawn(spawnName);
+		PersistentCharacterState character;
 		if (!m_characterSessions || !spawn
 			|| !m_characterSessions->BeginMaterialization(
-				context.accountId, context.userId, context.transitionToken, context.correlation.world))
+				context.accountId, context.userId, context.transitionToken, context.correlation.world, character))
 		{
 			if (completion) completion(false);
 			return;
@@ -45,10 +46,9 @@ namespace m1
 		params.clientRequestId = static_cast<jam::net::ClientRequestId>(context.transitionToken.value);
 		if (params.clientRequestId == jam::net::kInvalidClientRequestId)
 			params.clientRequestId = 1;
-		params.actorArchetypeKey = m_contents.playerActorArchetypeKey;
+		params.actorArchetypeKey = character.actorArchetypeKey;
 		params.owner = context.userId;
 		params.controller = context.userId;
-		params.controlled = true;
 		params.desc.spawnSrc = jam::px::eSpawnSource::Runtime;
 		params.desc.pose = spawn->pose;
 		params.desc.overrides = jam::px::CharacterSpawnOverrides{};
@@ -85,8 +85,8 @@ namespace m1
 		if (!m_characterSessions)
 			return;
 		const auto target = m_characterSessions->RollbackMaterialization(
-			userId, transitionToken, world.GetWorldRuntime());
-		if (target && target->world == world.GetWorldRuntime())
+			userId, transitionToken, world.GetWorldRef());
+		if (target && target->world == world.GetWorldRef())
 			world.DespawnActor(target->actorId, userId);
 	}
 
@@ -98,7 +98,7 @@ namespace m1
 		if (!m_characterSessions)
 			return false;
 		const auto source = m_characterSessions->CommitLeave(
-			userId, transitionToken, world.GetWorldRuntime());
+			userId, transitionToken, world.GetWorldRef());
 		return !source || world.DespawnActor(source->actorId, userId);
 	}
 
@@ -109,7 +109,7 @@ namespace m1
 	{
 		if (!m_characterSessions)
 			return false;
-		const auto player = m_characterSessions->FindActivePlayer(user.userId, world.GetWorldRuntime());
+		const auto player = m_characterSessions->FindActivePlayer(user.userId, world.GetWorldRef());
 		return player && world.RestorePlayerControl(user.userId, player->actorId);
 	}
 }

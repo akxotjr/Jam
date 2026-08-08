@@ -132,7 +132,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamBase\include\;$(SolutionDir)SharedData\Generated\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamBase\include\;$(SolutionDir)SharedData\Generated\;$(SolutionDir)SampleApp\M1_Shared\Generated\</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -155,7 +155,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamBase\include\;$(SolutionDir)SharedData\Generated\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)JamPx\include\;$(SolutionDir)JamNet\include\;$(SolutionDir)JamBase\include\;$(SolutionDir)SharedData\Generated\;$(SolutionDir)SampleApp\M1_Shared\Generated\</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
@@ -176,7 +176,11 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CharacterContent.cpp" />
     <ClCompile Include="CharacterSessionStore.cpp" />
+    <ClCompile Include="CharacterStore.cpp" />
+    <ClCompile Include="AuthenticationContent.cpp" />
+    <ClCompile Include="AccountStore.cpp" />
     <ClCompile Include="SocialContent.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -191,7 +195,11 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CharacterContent.h" />
     <ClInclude Include="CharacterSessionStore.h" />
+    <ClInclude Include="CharacterStore.h" />
+    <ClInclude Include="AuthenticationContent.h" />
+    <ClInclude Include="AccountStore.h" />
     <ClInclude Include="SocialContent.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PortalSystem.h" />

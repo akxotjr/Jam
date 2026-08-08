@@ -3,11 +3,38 @@
 
 namespace m1
 {
+	bool CharacterSessionStore::SelectCharacter(
+		jam::net::AccountId accountId,
+		jam::net::UserId userId,
+		const CharacterRecord& character)
+	{
+		if (accountId == jam::net::kInvalidAccountId || userId == jam::net::kInvalidUserId
+			|| !character.IsValid() || character.accountId != accountId)
+			return false;
+
+		std::scoped_lock lock(m_mutex);
+		auto [it, inserted] = m_sessions.try_emplace(userId);
+		CharacterSessionContext& session = it->second;
+		if (!inserted && (session.persistentCharacter.accountId != accountId
+			|| session.transitionToken.IsValid() || session.activePlayer))
+			return false;
+
+		session.userId = userId;
+		session.persistentCharacter = {
+			.accountId = accountId,
+			.characterId = character.characterId,
+			.name = character.name,
+			.actorArchetypeKey = character.actorArchetypeKey,
+		};
+		return true;
+	}
+
 	bool CharacterSessionStore::BeginMaterialization(
 		jam::net::AccountId accountId,
 		jam::net::UserId userId,
 		jam::net::WorldTransitionToken token,
-		const jam::net::WorldRuntimeRef& target)
+		const jam::net::WorldRef& target,
+		PersistentCharacterState& outCharacter)
 	{
 		if (accountId == jam::net::kInvalidAccountId || userId == jam::net::kInvalidUserId
 			|| !token.IsValid() || !target.IsValid())
@@ -16,16 +43,12 @@ namespace m1
 		}
 
 		std::scoped_lock lock(m_mutex);
-		auto [it, inserted] = m_sessions.try_emplace(userId);
+		auto it = m_sessions.find(userId);
+		if (it == m_sessions.end())
+			return false;
 		CharacterSessionContext& session = it->second;
-		if (inserted)
-		{
-			session.userId = userId;
-			session.persistentCharacter.accountId = accountId;
-			// Character selection is not implemented yet; the account id is the temporary stable character identity.
-			session.persistentCharacter.characterId = accountId;
-		}
-		else if (session.persistentCharacter.accountId != accountId)
+		if (!session.persistentCharacter.IsValid()
+			|| session.persistentCharacter.accountId != accountId)
 		{
 			return false;
 		}
@@ -38,6 +61,7 @@ namespace m1
 		session.transitionToken = token;
 		session.rollbackSourcePlayer = session.activePlayer;
 		session.pendingTargetWorld = target;
+		outCharacter = session.persistentCharacter;
 		return true;
 	}
 
@@ -83,7 +107,7 @@ namespace m1
 	std::optional<PlayerActorBinding> CharacterSessionStore::RollbackMaterialization(
 		jam::net::UserId userId,
 		jam::net::WorldTransitionToken token,
-		const jam::net::WorldRuntimeRef& targetWorld)
+		const jam::net::WorldRef& targetWorld)
 	{
 		std::scoped_lock lock(m_mutex);
 		const auto it = m_sessions.find(userId);
@@ -120,7 +144,7 @@ namespace m1
 	std::optional<PlayerActorBinding> CharacterSessionStore::CommitLeave(
 		jam::net::UserId userId,
 		jam::net::WorldTransitionToken token,
-		const jam::net::WorldRuntimeRef& source)
+		const jam::net::WorldRef& source)
 	{
 		std::scoped_lock lock(m_mutex);
 		const auto it = m_sessions.find(userId);
@@ -148,12 +172,21 @@ namespace m1
 
 	std::optional<PlayerActorBinding> CharacterSessionStore::FindActivePlayer(
 		jam::net::UserId userId,
-		const jam::net::WorldRuntimeRef& world) const
+		const jam::net::WorldRef& world) const
 	{
 		std::scoped_lock lock(m_mutex);
 		const auto it = m_sessions.find(userId);
 		if (it == m_sessions.end() || !it->second.activePlayer || it->second.activePlayer->world != world)
 			return std::nullopt;
 		return it->second.activePlayer;
+	}
+
+	std::optional<PersistentCharacterState> CharacterSessionStore::FindSelectedCharacter(jam::net::UserId userId) const
+	{
+		std::scoped_lock lock(m_mutex);
+		const auto it = m_sessions.find(userId);
+		if (it == m_sessions.end() || !it->second.persistentCharacter.IsValid())
+			return std::nullopt;
+		return it->second.persistentCharacter;
 	}
 }
