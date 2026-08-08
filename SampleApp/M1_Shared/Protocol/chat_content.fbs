@@ -1,0 +1,7 @@
+namespace m1.fb;
+
+table fbChatText
+{
+	text                 : string;
+	sender_character_name: string;
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "jam://schema/M1/m1_world_contents.schema.json",
+  "$id": "jam://schema/M1/world_contents.schema.json",
   "title": "M1 World Contents",
   "description": "M1-specific authored content used to materialize players and configure portals for each world archetype.",
   "type": "object",

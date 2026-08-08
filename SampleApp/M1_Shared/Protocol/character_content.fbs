@@ -1,0 +1,23 @@
+namespace m1.fb;
+
+table fbCharacterSummary
+{
+	character_id       : ulong;
+	name               : string;
+	actor_archetype_key: ulong;
+}
+
+table fbCharacterListResponse
+{
+	characters: [fbCharacterSummary];
+}
+
+table fbCharacterSelectRequest
+{
+	character_id: ulong;
+}
+
+table fbCharacterSelectResponse
+{
+	character: fbCharacterSummary;
+}
