@@ -24,7 +24,9 @@ namespace JamUnity.SharedData.Generated
     public enum eCctBodyDtoPolicy
     {
         [EnumMember(Value = "default")]
-        Default
+        Default,
+        [EnumMember(Value = "ignore_controllers")]
+        IgnoreControllers
     }
 
     [JsonConverter(typeof(StringEnumConverter))]

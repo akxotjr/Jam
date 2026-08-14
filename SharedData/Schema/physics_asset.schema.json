@@ -139,7 +139,7 @@
         "angular_damping": { "type": "number", "default": 0.05 }
       }
     },
-    "cct_policy": { "type": "string", "enum": ["default"] },
+    "cct_policy": { "type": "string", "enum": ["default", "ignore_controllers"] },
     "cct_body": {
       "type": "object",
       "additionalProperties": false,

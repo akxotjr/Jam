@@ -173,7 +173,8 @@ namespace jam::shared::gen
 
     enum class eCctBodyDtoPolicy
     {
-        Default
+        Default,
+        IgnoreControllers
     };
 
     enum class eWaypointSourceDtoEaseType
@@ -1145,6 +1146,7 @@ namespace jam::shared::gen
         const std::string s = j.get<std::string>();
 
         if (s == "default") { v = eCctBodyDtoPolicy::Default; return; }
+        if (s == "ignore_controllers") { v = eCctBodyDtoPolicy::IgnoreControllers; return; }
 
         throw std::runtime_error("Unknown enum value for eCctBodyDtoPolicy: " + s);
     }
@@ -1154,6 +1156,7 @@ namespace jam::shared::gen
         switch (v)
         {
         case eCctBodyDtoPolicy::Default: j = "default"; return;
+        case eCctBodyDtoPolicy::IgnoreControllers: j = "ignore_controllers"; return;
         }
 
         throw std::runtime_error("Unknown eCctBodyDtoPolicy enum state.");
