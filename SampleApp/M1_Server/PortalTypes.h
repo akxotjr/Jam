@@ -2,6 +2,7 @@
 
 #include <jamnet/runtime/world/actor/ActorId.h>
 #include <jamnet/runtime/world/lifecycle/WorldTransitionTypes.h>
+#include <jampx/PhysicsTypes.h>
 
 namespace m1
 {
@@ -16,8 +17,10 @@ namespace m1
 
 	struct PortalDefinition
 	{
+		std::string							name;
 		jam::net::WorldArchetypeKey			sourceWorldArchetypeKey{};
 		jam::net::ActorId					actorId = jam::net::ActorId::Invalid();
+		jam::px::Vec3						approachPosition = jam::px::Vec3::Zero();
 		PortalComponent						portal;
 	};
 }

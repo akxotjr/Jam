@@ -2,6 +2,9 @@
 
 #include <jamnet/runtime/session/UserContext.h>
 #include <jamnet/runtime/world/actor/ActorArchetypeDatabase.h>
+#include <jamnet/runtime/world/data/WorldArchetypeDatabase.h>
+
+#include <jampx/PhysicsTypes.h>
 
 #include <optional>
 #include <shared_mutex>
@@ -21,13 +24,17 @@ namespace m1
 		jam::net::AccountId			accountId = jam::net::kInvalidAccountId;
 		std::string					name;
 		jam::net::ActorArchetypeKey	actorArchetypeKey{};
+		jam::net::WorldArchetypeKey	worldArchetypeKey{};
+		jam::px::Vec3				position{};
 
 		bool IsValid() const noexcept
 		{
 			return characterId != kInvalidCharacterId
 				&& accountId != jam::net::kInvalidAccountId
 				&& !name.empty()
-				&& static_cast<bool>(actorArchetypeKey);
+				&& static_cast<bool>(actorArchetypeKey)
+				&& static_cast<bool>(worldArchetypeKey)
+				&& position.IsFinite();
 		}
 	};
 
@@ -39,6 +46,7 @@ namespace m1
 		std::optional<CharacterRecord>	FindOwnedCharacter(jam::net::AccountId accountId, CharacterId characterId) const;
 		std::optional<CharacterRecord>	FindById(CharacterId characterId) const;
 		std::optional<CharacterRecord>	FindByName(std::string_view name) const;
+		bool							UpdateLocation(CharacterId characterId, jam::net::WorldArchetypeKey worldArchetypeKey, const jam::px::Vec3& position);
 
 	private:
 		mutable std::shared_mutex m_mutex;

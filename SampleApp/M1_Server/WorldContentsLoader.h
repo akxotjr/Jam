@@ -6,19 +6,19 @@
 
 namespace jam::shared::gen
 {
-	struct M1WorldContentsRootDto;
+	struct WorldContentsRootDto;
 }
 
 namespace m1
 {
 	struct WorldContentsDatabaseBuilder
 	{
-		static WorldContentsDatabase Build(const jam::shared::gen::M1WorldContentsRootDto& dto);
+		static WorldContentsDatabase Build(const jam::shared::gen::WorldContentsRootDto& dto);
 	};
 
 	struct WorldContentsLoader
 	{
-		static jam::shared::gen::M1WorldContentsRootDto LoadDto(const std::string& path);
+		static jam::shared::gen::WorldContentsRootDto LoadDto(const std::string& path);
 		static WorldContentsDatabase Load(const std::string& path);
 	};
 }

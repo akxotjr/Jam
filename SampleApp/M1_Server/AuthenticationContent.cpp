@@ -21,7 +21,6 @@ namespace m1
 			return;
 		}
 
-		completed(m_accounts->Authenticate(password->loginId, password->password)
-			.value_or(jam::net::kInvalidAccountId));
+		completed(m_accounts->Authenticate(password->loginId, password->password).value_or(jam::net::kInvalidAccountId));
 	}
 }

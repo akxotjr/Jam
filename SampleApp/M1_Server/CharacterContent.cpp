@@ -10,9 +10,9 @@ namespace m1
 		jam::net::GenericContentResponse MakeResponse(const jam::net::GenericContentRequest& request, jam::net::eGenericContentResponseStatus status)
 		{
 			return {
-				.requestId = request.requestId,
-				.opCode = request.opCode,
-				.status = status,
+				.requestId	= request.requestId,
+				.opCode		= request.opCode,
+				.status		= status,
 			};
 		}
 
@@ -32,9 +32,7 @@ namespace m1
 		}
 	}
 
-	CharacterContent::CharacterContent(
-		std::shared_ptr<CharacterStore> characters,
-		std::shared_ptr<CharacterSessionStore> sessions)
+	CharacterContent::CharacterContent(std::shared_ptr<CharacterStore> characters, std::shared_ptr<CharacterSessionStore> sessions)
 		: m_characters(std::move(characters))
 		, m_sessions(std::move(sessions))
 	{

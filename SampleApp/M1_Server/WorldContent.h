@@ -13,7 +13,7 @@ namespace m1
 	class WorldContent final : public jam::net::IWorldContent
 	{
 	public:
-		WorldContent(const WorldContentsData& contents, std::shared_ptr<CharacterSessionStore> characterSessions);
+		WorldContent(const WorldContentsData& contents, const WorldInstanceContentsData& instance, std::shared_ptr<CharacterSessionStore> characterSessions);
 
 		bool Initialize(jam::net::ServerWorld& world) override;
 		void OnPhysicsEvents(jam::net::ServerWorld& world, std::span<const jam::px::PhysicsEvent> events) override;
@@ -28,4 +28,3 @@ namespace m1
 		PortalSystem							m_portals;
 	};
 }
-

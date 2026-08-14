@@ -17,8 +17,7 @@ namespace m1
 	class SocialContent final : public jam::net::ISocialContent
 	{
 	public:
-		SocialContent(std::shared_ptr<CharacterStore> characters,
-			std::shared_ptr<CharacterSessionStore> sessions);
+		SocialContent(std::shared_ptr<CharacterStore> characters, std::shared_ptr<CharacterSessionStore> sessions);
 
 		void HandleCommand(const jam::net::SocialPrincipal& sender, const jam::net::SocialCommand& command, jam::net::ISocialDelivery& delivery) override;
 		void OnUserConnected(const jam::net::SocialPrincipal& principal) override;

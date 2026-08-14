@@ -40,8 +40,7 @@ namespace m1
 		return result;
 	}
 
-	std::optional<CharacterRecord> CharacterStore::FindOwnedCharacter(
-		jam::net::AccountId accountId, CharacterId characterId) const
+	std::optional<CharacterRecord> CharacterStore::FindOwnedCharacter(jam::net::AccountId accountId, CharacterId characterId) const
 	{
 		std::shared_lock lock(m_mutex);
 		const auto character = m_charactersById.find(characterId);
@@ -69,5 +68,20 @@ namespace m1
 		if (character == m_charactersById.end())
 			return std::nullopt;
 		return character->second;
+	}
+
+	bool CharacterStore::UpdateLocation(CharacterId characterId, jam::net::WorldArchetypeKey worldArchetypeKey, const jam::px::Vec3& position)
+	{
+		if (characterId == kInvalidCharacterId || !jam::IsValidAssetKey(worldArchetypeKey) || !position.IsFinite())
+			return false;
+
+		std::unique_lock lock(m_mutex);
+		const auto character = m_charactersById.find(characterId);
+		if (character == m_charactersById.end())
+			return false;
+
+		character->second.worldArchetypeKey = worldArchetypeKey;
+		character->second.position = position;
+		return true;
 	}
 }

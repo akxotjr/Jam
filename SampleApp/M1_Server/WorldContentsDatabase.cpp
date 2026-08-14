@@ -25,4 +25,10 @@ namespace m1
 		const auto it = worldsByKey.find(key);
 		return it != worldsByKey.end() ? it->second : nullptr;
 	}
+
+	const WorldInstanceContentsData* WorldContentsDatabase::Find(jam::net::WorldInstanceId instanceId) const
+	{
+		const auto it = instancesById.find(instanceId);
+		return it != instancesById.end() ? it->second : nullptr;
+	}
 }
