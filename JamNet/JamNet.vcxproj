@@ -194,6 +194,7 @@
     <ClInclude Include="include\jamnet\core\executor\CoreTopology.h" />
     <ClInclude Include="include\jamnet\core\executor\DeadLockProfiler.h" />
     <ClInclude Include="include\jamnet\core\executor\ExecutorMetrics.h" />
+    <ClInclude Include="include\jamnet\core\executor\ProcessMetrics.h" />
     <ClInclude Include="include\jamnet\core\executor\ExecutorPeriodic.h" />
     <ClInclude Include="include\jamnet\core\executor\MailboxRef.h" />
     <ClInclude Include="include\jamnet\core\executor\RuntimeId.h" />
@@ -227,7 +228,7 @@
     <ClInclude Include="include\jamnet\core\net\IocpEvent.h" />
     <ClInclude Include="include\jamnet\core\net\NetRuntime.h" />
     <ClInclude Include="include\jamnet\core\net\NetAddress.h" />
-    <ClInclude Include="include\jamnet\core\net\NetworkProfile.h" />
+    <ClInclude Include="include\jamnet\core\net\NetworkMetrics.h" />
     <ClInclude Include="include\jamnet\core\net\PacketBuilder.h" />
     <ClInclude Include="include\jamnet\core\net\PacketStructure.h" />
     <ClInclude Include="include\jamnet\core\net\PacketWireTime.h" />
@@ -247,6 +248,8 @@
     <ClInclude Include="include\jamnet\core\net\WinErrorHandling.h" />
     <ClInclude Include="include\jamnet\core\utils\Clock.h" />
     <ClInclude Include="include\jamnet\core\utils\ScopedTimer.h" />
+    <ClInclude Include="include\jamnet\core\utils\MetricsAggregator.h" />
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\WorldMetrics.h" />
     <ClInclude Include="include\jamnet\core\utils\TimeUnits.h" />
     <ClInclude Include="include\jamnet\JamNet.h" />
     <ClInclude Include="include\jamnet\runtime\application\AppRuntimeEvents.h" />
@@ -358,7 +361,10 @@
     <ClCompile Include="src\core\executor\ShardExecutor.cpp" />
     <ClCompile Include="src\core\executor\ShardSlot.cpp" />
     <ClCompile Include="src\core\executor\WinFiberBackend.cpp" />
+    <ClCompile Include="src\core\executor\ProcessMetrics.cpp" />
     <ClCompile Include="src\core\memory\DefaultAllocator.cpp" />
+    <ClCompile Include="src\core\utils\MetricsAggregator.cpp" />
+    <ClCompile Include="src\runtime\world\simulation\server\WorldMetrics.cpp" />
     <ClCompile Include="src\core\net\Buffer.cpp" />
     <ClCompile Include="src\core\net\BufferReader.cpp" />
     <ClCompile Include="src\core\net\BufferWriter.cpp" />
@@ -366,7 +372,7 @@
     <ClCompile Include="src\core\net\IocpEvent.cpp" />
     <ClCompile Include="src\core\net\NetRuntime.cpp" />
     <ClCompile Include="src\core\net\NetAddress.cpp" />
-    <ClCompile Include="src\core\net\NetworkProfile.cpp" />
+    <ClCompile Include="src\core\net\NetworkMetrics.cpp" />
     <ClCompile Include="src\core\net\PacketBuilder.cpp" />
     <ClCompile Include="src\core\net\PacketWireTime.cpp" />
     <ClCompile Include="src\core\net\RPC.cpp" />

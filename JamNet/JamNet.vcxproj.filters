@@ -234,13 +234,16 @@
     <ClInclude Include="include\jamnet\core\executor\ExecutorMetrics.h">
       <Filter>core\executor</Filter>
     </ClInclude>
+    <ClInclude Include="include\jamnet\core\executor\ProcessMetrics.h">
+      <Filter>core\executor</Filter>
+    </ClInclude>
     <ClInclude Include="include\jamnet\core\executor\ExecutorPeriodic.h">
       <Filter>core\executor</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\core\net\NetworkProfile.h">
+    <ClInclude Include="include\jamnet\core\net\Buffer.h">
       <Filter>core\net</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\core\net\Buffer.h">
+    <ClInclude Include="include\jamnet\core\net\NetworkMetrics.h">
       <Filter>core\net</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\net\TcpRecvAssembler.h">
@@ -302,6 +305,12 @@
     </ClInclude>
     <ClInclude Include="include\jamnet\core\utils\ScopedTimer.h">
       <Filter>core\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\utils\MetricsAggregator.h">
+      <Filter>core\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\WorldMetrics.h">
+      <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\application\ServerNetworkManager.h">
       <Filter>runtime\application</Filter>
@@ -575,6 +584,15 @@
     <ClCompile Include="src\core\memory\DefaultAllocator.cpp">
       <Filter>core\memory</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\utils\MetricsAggregator.cpp">
+      <Filter>core\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\server\WorldMetrics.cpp">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\executor\ProcessMetrics.cpp">
+      <Filter>core\executor</Filter>
+    </ClCompile>
     <ClCompile Include="src\core\net\BufferReader.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
@@ -632,10 +650,10 @@
     <ClCompile Include="src\core\utils\Clock.cpp">
       <Filter>core\utils</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\net\NetworkProfile.cpp">
+    <ClCompile Include="src\core\net\Buffer.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\net\Buffer.cpp">
+    <ClCompile Include="src\core\net\NetworkMetrics.cpp">
       <Filter>core\net</Filter>
     </ClCompile>
     <ClCompile Include="src\core\net\TcpRecvAssembler.cpp">
