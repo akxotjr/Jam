@@ -463,6 +463,7 @@ namespace jam::net
 
 				if (reliability->ackTrack.test(dist))
 				{
+					reliability->MarkAckPending(ctx.now_ns);
 					ctx.shouldDrop = true;
 					ctx.L.networkMetrics.RecordDuplicate();
 					return false;

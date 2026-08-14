@@ -185,6 +185,7 @@ namespace jam::net
 		void							ErasePendingPacket(uint16 seq);
 
 		void							MarkReceived(uint16 seq, uint64 now_ns);
+		void							MarkAckPending(uint64 now_ns);
 		void							BuildPendingAck();
 		void							ProcessAck(uint16 ackSeq, uint32 ackBitfield);
 		bool							ShouldSendAck(uint64 now_ns) const;

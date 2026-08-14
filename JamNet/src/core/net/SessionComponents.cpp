@@ -236,6 +236,11 @@ namespace jam::net
 				ackTrack.set(dist);
 		}
 
+		MarkAckPending(now_ns);
+	}
+
+	void ReliabilityState::MarkAckPending(uint64 now_ns)
+	{
 		if (!ackDirty)
 		{
 			ackDirty = true;
