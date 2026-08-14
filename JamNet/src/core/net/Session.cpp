@@ -91,6 +91,13 @@ namespace jam::net
 			shard->SubmitAfter(std::move(j), delay_ns);
 	}
 
+	bool Session::IsCurrentShardContext() const
+	{
+		const auto* local = CurrentShardLocal();
+		auto shard = m_shard.lock();
+		return local && shard && local->shardIndex == static_cast<uint32>(shard->GetIndex());
+	}
+
 	void Session::Rehome(RouteKey newRouteKey, std::function<void(bool)> onDone)
 	{
 		auto* service = GetService();

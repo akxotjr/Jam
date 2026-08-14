@@ -167,10 +167,7 @@ namespace jam::net
 		std::vector<uint16> out;
 		for (const auto& [seq, pkt] : reliablePendings)
 		{
-			if (!pkt.hasInitialSend)
-				continue;
-
-			if (pkt.retryCount >= MaxRetry)
+			if (!pkt.hasInitialSend || pkt.retransmitQueued)
 				continue;
 
 			if (now_ns - pkt.lastRetransmitTime_ns >= RetransmitTimout_ns)
@@ -244,6 +241,7 @@ namespace jam::net
 			ackDirty = true;
 			firstPendingAckTime_ns = now_ns;
 		}
+		++pendingAckPacketCount;
 
 		BuildPendingAck();
 	}
@@ -289,7 +287,8 @@ namespace jam::net
 	bool ReliabilityState::ShouldSendAck(uint64 now_ns) const
 	{
 		if (!ackDirty) return false;
-		return (now_ns - firstPendingAckTime_ns) >= DelayPiggybackAckTimeout_ns;
+		return pendingAckPacketCount >= AckElicitingPacketThreshold
+			|| (now_ns - firstPendingAckTime_ns) >= DelayPiggybackAckTimeout_ns;
 	}
 
 	void ReliabilityState::ClearPendingAck()
@@ -297,6 +296,7 @@ namespace jam::net
 		ackDirty				= false;
 		pendingAckSeq			= 0;
 		pendingAckBitfield		= 0;
+		pendingAckPacketCount	= 0;
 		firstPendingAckTime_ns	= 0;
 	}
 
@@ -316,38 +316,6 @@ namespace jam::net
 			if (ackTrack.test(dist))
 				bitfield |= (1u << (i - 1));
 		}
-		return bitfield;
-	}
-
-	uint32 ReliabilityState::BuildNackWindow(uint16 expectedSeq) const
-	{
-		uint32 bitfield = 0;
-
-		// NACK 윈도우는 expectedSeq 이후(미수신 추정) 구간을 훑는 로직인데,
-		// ackTrack의 기준(base=pendingAckSeq)에 대해 "해당 seq가 관측된 적 있는가"로 판정하려면
-		// seq가 base 기준 과거에 있어야만 의미가 있음.
-		const uint16 base = pendingAckSeq;
-
-		for (uint16 i = 1; i <= AckWindowSize; ++i)
-		{
-			const uint16 seq = static_cast<uint16>(expectedSeq + i);
-
-			// 최신 ACK보다 미래면 중단
-			if (SeqGreater(seq, latestRecvSeq))
-				break;
-
-			// base 기준으로 seq가 과거로 ACK_TRACK_SIZE 안에 들어오는지 확인
-			const uint16 dist = SeqDistance(base, seq);
-			if (dist == 0 || dist > AckTrackSize)
-			{
-				// ackTrack으로 판정 불가능한 영역(너무 옛날/동일) -> 여기서는 NACK 대상으로 취급하지 않음
-				continue;
-			}
-
-			if (!ackTrack.test(dist))
-				bitfield |= (1u << (i - 1));
-		}
-
 		return bitfield;
 	}
 

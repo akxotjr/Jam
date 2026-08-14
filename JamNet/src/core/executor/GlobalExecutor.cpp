@@ -63,6 +63,16 @@ namespace jam
 
 		m_fiberMetricSlot.value = {};
 		m_metricBaseline.Write(GlobalExecutorMetrics{});
+		m_metricsAggregator = std::make_unique<MetricsAggregator>();
+		if (!m_metricsAggregator->Initialize(m_config.metrics))
+		{
+			JAMNET_LOG_ERROR("Failed to initialize MetricsAggregator output");
+			m_metricsAggregator.reset();
+		}
+		const uint64 processWindowIndex = m_metricsAggregator && m_metricsAggregator->IsEnabled()
+			? m_metricsAggregator->WindowIndex(NOW_NS())
+			: UINT64_MAX;
+		m_processMetrics.Initialize(std::max<DWORD>(1, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS)), processWindowIndex);
 
 		m_backend   = WinFiberBackend();
 		m_scheduler = std::make_unique<FiberScheduler>(m_backend);
@@ -92,6 +102,11 @@ namespace jam
 		// state belonging to the previous runtime.
 		m_directory.reset();
 		m_affinitySlots.clear();
+		if (m_metricsAggregator)
+		{
+			m_metricsAggregator->Shutdown();
+			m_metricsAggregator.reset();
+		}
 		m_offloadMetricSlots.reset();
 		m_offloadMetricSlotCount = 0;
 	}
@@ -113,6 +128,15 @@ namespace jam
 			PinCurrentThreadForRole("Main", 0, MainAffinitySlotIndex());
 
 		m_directory->Start();
+		if (m_metricsAggregator && m_metricsAggregator->IsEnabled())
+		{
+			const uint64 periodNs = m_metricsAggregator->WindowPeriodNs();
+			m_processMetricsPeriodic = ScheduleFixedRate(Job([this]
+				{
+					if (m_metricsAggregator)
+						m_processMetrics.SubmitCompletedWindow(NOW_NS(), *m_metricsAggregator);
+				}), PeriodicOptions{ .period_ns = periodNs, .initialDelay_ns = periodNs, .name = "GE.ProcessMetrics" });
+		}
 
 		std::vector<std::shared_ptr<IocpDomain>> domains;
 		{
@@ -233,6 +257,18 @@ namespace jam
 			return;
 
 		m_offload.enqueue(std::move(j));
+	}
+
+	void GlobalExecutor::SubmitMetrics(MetricSnapshot snapshot)
+	{
+		if (!m_metricsAggregator || !m_metricsAggregator->IsEnabled())
+			return;
+
+		Submit(Job([this, snapshot = std::move(snapshot)]() mutable
+			{
+				if (m_metricsAggregator)
+					m_metricsAggregator->Submit(std::move(snapshot));
+			}));
 	}
 
 	void GlobalExecutor::SubmitAfter(Job j, uint64 delay_ns)

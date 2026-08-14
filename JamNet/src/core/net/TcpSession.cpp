@@ -111,6 +111,8 @@ namespace jam::net
 
 	void TcpSession::Send(Packet packet)
 	{
+		JAM_ASSERT(IsCurrentShardContext());
+
 		if (!packet.IsValid())
 			return;
 
@@ -122,20 +124,11 @@ namespace jam::net
 			return;
 		}
 
-		const EndpointHandle endpointHandle = GetEndpointHandle();
-		const SessionId sessionId = GetSessionId();
-		const uint32 generation = GetServiceGeneration();
-		auto service = GetServiceRef();
-		Post(Job([service, endpointHandle, sessionId, generation, packet]
-			{
-				auto* self = service ? static_cast<TcpSession*>(service->FindOwnedSession(sessionId, endpointHandle, generation)) : nullptr;
-				if (!self) return;
+		const entt::entity e = GetEntity();
+		if (e == entt::null)
+			return;
 
-				const entt::entity e = self->GetEntity();
-				if (e == entt::null) return;
-
-				SendPacketToSession(e, packet);
-			}));
+		SendPacketToSession(e, std::move(packet));
 	}
 
 	HANDLE TcpSession::GetHandle()

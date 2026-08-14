@@ -9,6 +9,7 @@
 #include "jamnet/core/executor/ExecutorMetrics.h"
 #include "jamnet/core/executor/ExecutorPeriodic.h"
 #include "jamnet/core/executor/ShardDomain.h"
+#include "jamnet/core/net/NetworkMetrics.h"
 
 #include <condition_variable>
 #include <deque>
@@ -50,6 +51,7 @@ namespace jam
 	{
 		entt::registry										registry;
 		uint32												shardIndex	 = UINT32_MAX;
+		net::NetworkMetrics									networkMetrics;
 		FiberScheduler*										scheduler    = nullptr;
 
 		std::shared_ptr<net::SessionShardState>				sessionState = nullptr;

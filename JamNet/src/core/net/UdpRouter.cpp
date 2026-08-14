@@ -17,6 +17,22 @@
 
 namespace jam::net
 {
+	namespace
+	{
+		constexpr int32 kDefaultClientUdpSocketBufferSize = 256 * 1024;
+		constexpr int32 kDefaultServerUdpSocketBufferSize = 16 * 1024 * 1024;
+
+		int32 ResolveUdpSocketBufferSize(eServiceType serviceType, int32 configuredSize)
+		{
+			if (configuredSize > 0)
+				return configuredSize;
+
+			return serviceType == eServiceType::SERVER
+				? kDefaultServerUdpSocketBufferSize
+				: kDefaultClientUdpSocketBufferSize;
+		}
+	}
+
 	size_t UdpRouter::StartIngressIndex(uint64 endpointId)
 	{
 		return static_cast<size_t>((endpointId * 11400714819323198485ull) & (INGRESS_TABLE_CAPACITY - 1));
@@ -74,7 +90,21 @@ namespace jam::net
 		if (SocketUtils::SetReuseAddress(m_socket, true) == false)
 			return false;
 
-		if (m_service->GetServiceType() == eServiceType::CLIENT)
+		const eServiceType serviceType = m_service->GetServiceType();
+		const int32 recvBufferSize = ResolveUdpSocketBufferSize(serviceType, m_service->GetUdpRecvBufferSize());
+		const int32 sendBufferSize = ResolveUdpSocketBufferSize(serviceType, m_service->GetUdpSendBufferSize());
+		if (!SocketUtils::SetRecvBufferSize(m_socket, recvBufferSize)
+			|| !SocketUtils::SetSendBufferSize(m_socket, sendBufferSize))
+		{
+			JAMNET_LOG_ERROR(
+				"[UdpRouter] Failed to configure socket buffers. serviceType={}, recvBytes={}, sendBytes={}",
+				E2U(serviceType),
+				recvBufferSize,
+				sendBufferSize);
+			return false;
+		}
+
+		if (serviceType == eServiceType::CLIENT)
 		{
 			if (SocketUtils::BindAnyAddress(m_socket, 0) == false)
 				return false;

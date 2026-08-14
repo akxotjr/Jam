@@ -3,7 +3,6 @@
 #include "jamnet/core/utils/TimeUnits.h"
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/PacketBuilder.h"
-#include "jamnet/core/net/NetworkProfile.h"
 
 #include <bitset>
 #include <unordered_set>
@@ -134,8 +133,8 @@ namespace jam::net
 		static constexpr uint64 RetransmitTimout_ns			= 200_ms;
 		static constexpr uint32 AckTrackSize				= 1024;
 		static constexpr uint32 AckWindowSize				= 32;
-		static constexpr uint64 DelayPiggybackAckTimeout_ns = 200_ms;
-		static constexpr uint64	NackThrottleInterval_ns		= 2_ms;
+		static constexpr uint32 AckElicitingPacketThreshold	= 2;
+		static constexpr uint64 DelayPiggybackAckTimeout_ns = 20_ms;
 
 		struct PendingPacket
 		{
@@ -145,6 +144,7 @@ namespace jam::net
 			uint64							lastRetransmitTime_ns	= 0;
 			uint8							retryCount				= 0;
 			bool							hasInitialSend			= false;
+			bool							retransmitQueued		= false;
 			bool							hasRetransmitted		= false;
 			bool							countedGiveup			= false;
 			Packet							packet;
@@ -162,11 +162,8 @@ namespace jam::net
 		bool                                ackDirty				= false;
 		uint16                              pendingAckSeq			= 0;
 		uint32                              pendingAckBitfield		= 0;
+		uint32                              pendingAckPacketCount	= 0;
 		uint64                              firstPendingAckTime_ns	= 0;
-
-		// ordered gap 탐지 / NACK 보조
-		std::unordered_set<uint16>          sentNackSeqs;
-		uint64                              lastNackTime_ns			= 0;
 
 		bool							StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns);
 		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns) const;
@@ -182,7 +179,6 @@ namespace jam::net
 		void							ClearPendingAck();
 
 		uint32							BuildAckWindow() const;
-		uint32							BuildNackWindow(uint16 expectedSeq) const;
 	};
 
 	// ============================================================

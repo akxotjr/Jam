@@ -6,9 +6,11 @@
 #include "jamnet/core/executor/ShardRoutingPolicy.h"
 #include "jamnet/core/executor/CoreTopology.h"
 #include "jamnet/core/executor/ExecutorMetrics.h"
+#include "jamnet/core/executor/ProcessMetrics.h"
 #include "jamnet/core/executor/ExecutorPeriodic.h"
 #include "jamnet/core/executor/FiberScheduler.h"
 #include "jamnet/core/executor/SeqLock.h"
+#include "jamnet/core/utils/MetricsAggregator.h"
 
 #include "jamnet/core/net/IocpCore.h"
 
@@ -32,6 +34,7 @@ namespace jam
 		AutoCoreLayoutConfig	layoutCfg = {};
 		ExecutorAffinityConfig	affinity  = {};
 		RouteSeed				routeSeed = {};
+		MetricsAggregatorConfig metrics   = {};
 
 		ShardExecutorConfig		shardCfg  = {};
 	};
@@ -53,6 +56,8 @@ namespace jam
 
 		void											Submit(Job j) override;
 		void											SubmitAfter(Job j, uint64 delay_ns);
+		void											SubmitMetrics(MetricSnapshot snapshot);
+		MetricsAggregator*								GetMetricsAggregator() const { return m_metricsAggregator.get(); }
 
 		// shard/endpoint
 		uint32											GetShardCount() const { return m_directory ? static_cast<uint32>(m_directory->Size()) : 0; }
@@ -154,7 +159,7 @@ namespace jam
 
 		// offload (MPMC)	
 		BlockingConcurrentQueue<Job>							m_offload;
-		std::mutex										m_offloadLifecycleMutex;
+		std::mutex												m_offloadLifecycleMutex;
 
 		// worker
 		std::vector<std::thread>								m_offloadWorkers;
@@ -177,6 +182,9 @@ namespace jam
 		MetricsSlot<FiberWorkerMetrics>							m_fiberMetricSlot			= {};
 		SeqLockBox<GlobalExecutorMetrics>						m_metricBaseline			= {};
 		std::vector<ThreadAffinitySlot>							m_affinitySlots;
+		std::unique_ptr<MetricsAggregator>						m_metricsAggregator;
+		ProcessMetrics											m_processMetrics;
+		PeriodicHandle											m_processMetricsPeriodic = {};
 
 
 		struct PeriodicState

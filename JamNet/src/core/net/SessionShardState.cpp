@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "jamnet/core/executor/RuntimeId.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/core/net/SessionShardState.h"
 

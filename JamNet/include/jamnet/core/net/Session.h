@@ -107,6 +107,7 @@ namespace jam::net
 
 		virtual bool					Connect() = 0;
 		virtual void					Disconnect() = 0;
+		// Caller must enter the session's owning shard before sending.
 		virtual void					Send(Packet packet) = 0;
 
 		RuntimeId						GetShardOwnedRuntimeId()  const override { return m_sessionId; }
@@ -148,6 +149,7 @@ namespace jam::net
 		void							Post(Job j) const;
 		void							Submit(Job j) const;
 		void							SubmitAfter(Job j, uint64 delay_ns) const;
+		bool							IsCurrentShardContext() const;
 		void							Rehome(RouteKey newRouteKey, std::function<void(bool)> onDone = {});
 
 		entt::entity					GetEntity() const noexcept { return m_entity; }

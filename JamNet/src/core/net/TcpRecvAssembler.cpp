@@ -60,7 +60,7 @@ namespace jam::net
 
 		BYTE* base = m_storage->Begin() + m_readOffset;
 
-		// 1) 최소 헤더 3바이트는 있으니, 고정 비트만 먼저 해석 가능
+		// 1) 최소 고정 헤더가 있으니 channel을 포함한 고정 비트를 해석할 수 있다.
 		PacketHeader* header = reinterpret_cast<PacketHeader*>(base);
 
 		if (!header->IsValid())
@@ -168,9 +168,9 @@ namespace jam::net
 		// 다 소비했으면 cursor reset
 		if (m_readOffset == m_writeOffset)
 		{
-			m_readOffset  = 0;
-			m_writeOffset = 0;
-			SyncSliceWindow();
+			// Extracted packets share this block and are processed asynchronously.
+			// Drop the assembler's reference so the next append cannot overwrite them.
+			Reset();
 			return;
 		}
 

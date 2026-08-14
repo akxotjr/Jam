@@ -54,11 +54,10 @@ namespace jam::net
 	enum class eChannel : uint8
 	{
 		TCP_DEFAULT				= 0,
-
-		UNRELIABLE_UNORDERED	= 0,
-		RELIABLE_ORDERED		= 1,
+		UNRELIABLE_UNORDERED	= 1,
 		UNRELIABLE_SEQUENCED	= 2,
-		RELIABLE_UNORDERED		= 3
+		RELIABLE_UNORDERED		= 3,
+		RELIABLE_ORDERED		= 4,
 	};
 
 	constexpr bool IsTcp(eChannel channel)

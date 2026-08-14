@@ -1,4 +1,5 @@
 #include "pch.h"
+
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/executor/Job.h"
 #include "jamnet/core/executor/ShardExecutor.h"
@@ -31,6 +32,7 @@ namespace jam
 	{
 		m_scheduler	= std::make_unique<FiberScheduler>(m_backend);
 		m_local.shardIndex = static_cast<uint32>(m_config.index);
+		m_local.networkMetrics.Init(m_local.shardIndex);
 		m_metrics.shardIndex = m_config.index;
 	}
 

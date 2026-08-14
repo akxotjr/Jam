@@ -34,6 +34,8 @@ namespace jam::net
 		NetAddress		remoteUdpAddress   = {};
 		uint32			maxTcpSessionCount = 1;
 		uint32			maxUdpSessionCount = 1;
+		int32			udpRecvBufferSize  = 0; // 0 uses the service-type default
+		int32			udpSendBufferSize  = 0; // 0 uses the service-type default
 	};
 
 
@@ -89,6 +91,8 @@ namespace jam::net
 		const NetAddress&					GetLocalUdpNetAddress()		const { return m_config.localUdpAddress; }
 		const NetAddress&					GetRemoteTcpNetAddress()	const { return m_config.remoteTcpAddress; }
 		const NetAddress&					GetRemoteUdpNetAddress()	const { return m_config.remoteUdpAddress; }
+		int32								GetUdpRecvBufferSize()		const { return m_config.udpRecvBufferSize; }
+		int32								GetUdpSendBufferSize()		const { return m_config.udpSendBufferSize; }
 
 		void								SetLocalTcpNetAddress(const NetAddress& addr)  { m_config.localTcpAddress  = addr; }
 		void								SetLocalUdpNetAddress(const NetAddress& addr)  { m_config.localUdpAddress  = addr; }

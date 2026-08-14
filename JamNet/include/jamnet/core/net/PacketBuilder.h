@@ -15,7 +15,7 @@ namespace jam::net
 	enum class eRpcPacketId : uint8;
 
 
-	// fixed[3] = type(2) + id(5) + size(11) + flags(4) + channel(2) = 24bit
+	// fixed[4] = type(2) + id(5) + size(11) + flags(4) + channel(3) = 25bit
 	#pragma pack(push, 1)
 	struct PacketHeader
 	{
@@ -30,7 +30,7 @@ namespace jam::net
 			bits |= (static_cast<uint32>(id		 & MAX_ID)		<< ID_SHIFT);
 			bits |= (static_cast<uint32>(size    & MAX_PACKET_SIZE) << SIZE_SHIFT);
 			bits |= (static_cast<uint32>(flags   & MAX_FLAGS)	<< FLAGS_SHIFT);
-			bits |= (static_cast<uint32>(channel & MAX_CHANNEL) << CHANNEL_SHIFT);
+			bits |= (static_cast<uint32>(channel & CHANNEL_VALUE_MASK) << CHANNEL_SHIFT);
 			SetFixedBits(bits);
 		}
 
@@ -79,7 +79,7 @@ namespace jam::net
 		void SetChannel(eChannel channel)
 		{
 			uint32 bits = GetFixedBits();
-			bits = (bits & ~CHANNEL_MASK) | (static_cast<uint32>(E2U(channel) & MAX_CHANNEL) << CHANNEL_SHIFT);
+			bits = (bits & ~CHANNEL_MASK) | (static_cast<uint32>(E2U(channel) & CHANNEL_VALUE_MASK) << CHANNEL_SHIFT);
 			SetFixedBits(bits);
 		}
 
@@ -116,10 +116,10 @@ namespace jam::net
 			return CalcHeaderSize(U2E(eChannel, GetChannel()), GetFlags());
 		}
 
-		static constexpr uint32 BASE_SIZE = 3;
-		static constexpr uint32 HALF_SIZE = 5;
-		static constexpr uint32 FULL_SIZE = 7;
-		static constexpr uint32 MAX_WIRE_SIZE = 9;
+		static constexpr uint32 BASE_SIZE = 4;
+		static constexpr uint32 HALF_SIZE = 6;
+		static constexpr uint32 FULL_SIZE = 8;
+		static constexpr uint32 MAX_WIRE_SIZE = 10;
 		static constexpr uint16 MAX_PACKET_SIZE = 0x7FF;
 
 		static uint32 CalcHeaderSize(eChannel channel, uint8 flags)
@@ -147,7 +147,8 @@ namespace jam::net
 		{
 			return static_cast<uint32>(fixed[0])
 				| (static_cast<uint32>(fixed[1]) << 8)
-				| (static_cast<uint32>(fixed[2]) << 16);
+				| (static_cast<uint32>(fixed[2]) << 16)
+				| (static_cast<uint32>(fixed[3]) << 24);
 		}
 
 		void SetFixedBits(uint32 bits)
@@ -155,6 +156,7 @@ namespace jam::net
 			fixed[0] = static_cast<BYTE>(bits & 0xFFu);
 			fixed[1] = static_cast<BYTE>((bits >> 8) & 0xFFu);
 			fixed[2] = static_cast<BYTE>((bits >> 16) & 0xFFu);
+			fixed[3] = static_cast<BYTE>((bits >> 24) & 0xFFu);
 		}
 
 		BYTE		fixed[BASE_SIZE] = {};
@@ -167,7 +169,7 @@ namespace jam::net
 		static constexpr uint32 ID_MASK			 = 0x0000007Cu;  // bits [2-6]   (5비트)
 		static constexpr uint32 SIZE_MASK		 = 0x0003FF80u;  // bits [7-17]  (11비트)
 		static constexpr uint32 FLAGS_MASK		 = 0x003C0000u;  // bits [18-21] (4비트)
-		static constexpr uint32 CHANNEL_MASK	 = 0x00C00000u;  // bits [22-23] (2비트)
+		static constexpr uint32 CHANNEL_MASK	 = 0x01C00000u;  // bits [22-24] (3비트)
 
 		static constexpr uint32 GROUP_SHIFT		 = 1;   // type의 상위 비트
 		static constexpr uint32 TYPE_SHIFT		 = 0;
@@ -180,11 +182,12 @@ namespace jam::net
 		static constexpr uint8	MAX_GROUP				= 0x01;
 		static constexpr uint8  MAX_ID					= 0x1F;   // 5비트
 		static constexpr uint8  MAX_FLAGS				= 0x0F;   // 4비트
-		static constexpr uint8  MAX_CHANNEL				= 0x03;   // 2비트
+		static constexpr uint8  CHANNEL_VALUE_MASK		= 0x07;   // 3비트
+		static constexpr uint8  MAX_CHANNEL				= E2U(eChannel::RELIABLE_ORDERED);
 	};
 	#pragma pack(pop)
 
-	static_assert(sizeof(PacketHeader) == PacketHeader::MAX_WIRE_SIZE, "PacketHeader wire layout must remain packed to 9 bytes");
+	static_assert(sizeof(PacketHeader) == PacketHeader::MAX_WIRE_SIZE, "PacketHeader wire layout must remain packed to 10 bytes");
 
 	// 개별 ACK 패킷 크기 (BaseHeader + ACK_DATA)
 	constexpr uint16 ACK_PACKET_SIZE  = PacketHeader::BASE_SIZE + sizeof(ACK_DATA);
@@ -231,7 +234,19 @@ namespace jam::net
 
 			if (view.totalSize < view.headerSize || size < view.totalSize)
 			{
-				JAMNET_LOG_WARN("Invalid packet size. headerSize={}, totalSize={}, available={}", view.headerSize, view.totalSize, size);
+				JAMNET_LOG_WARN(
+					"Invalid packet size. headerSize={}, totalSize={}, available={}, type={}, id={}, flags=0x{:02X}, channel={}, rawHeader={:02X} {:02X} {:02X} {:02X}",
+					view.headerSize,
+					view.totalSize,
+					size,
+					static_cast<uint32>(view.header.GetType()),
+					static_cast<uint32>(view.header.GetId()),
+					static_cast<uint32>(view.header.GetFlags()),
+					static_cast<uint32>(view.header.GetChannel()),
+					static_cast<uint32>(buf[0]),
+					static_cast<uint32>(buf[1]),
+					static_cast<uint32>(buf[2]),
+					static_cast<uint32>(buf[3]));
 				return view;
 			}
 
@@ -307,4 +322,3 @@ namespace jam::net
 		static Packet		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 	};
 }
-
