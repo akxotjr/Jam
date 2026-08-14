@@ -134,11 +134,12 @@ namespace jam
 				continue;
 
 			shard->PinCoreSlot(slot.core, slot.numaNode);
-			JAMNET_LOG_DEBUG("ShardExecutor#{} affinity assigned. numaNode={}, group={}, mask=0x{:X}",
+			JAMNET_LOG_DEBUG("ShardExecutor#{} affinity assigned. numaNode={}, group={}, mask=0x{:X}, physicsSiblingMask=0x{:X}",
 				i,
 				slot.numaNode,
 				slot.core.group,
-				static_cast<unsigned long long>(slot.core.mask));
+				static_cast<unsigned long long>(slot.core.mask),
+				static_cast<unsigned long long>(slot.core.siblingMask));
 		}
 	}
 

@@ -104,6 +104,20 @@ namespace jam
 	bool FiberScheduler::Resume(FiberAwaitKey key)
 	{
 		auto it = m_waitMap.find(key);
+		if (it == m_waitMap.end())
+			return false;
+		auto fit = m_fibers.find(it->second);
+		if (fit == m_fibers.end())
+		{
+			m_waitMap.erase(it);
+			return false;
+		}
+		return Resume(key, fit->second->priority);
+	}
+
+	bool FiberScheduler::Resume(FiberAwaitKey key, int32 readyPriority)
+	{
+		auto it = m_waitMap.find(key);
 		if (it == m_waitMap.end()) 
 			return false;
 		const uint32_t id = it->second;
@@ -121,7 +135,7 @@ namespace jam
 		f->deadline_ns = 0_ns;
 		++f->sleepGeneration;
 		f->resume	   = eResumeCode::Signaled;
-		MakeReady(id);
+		MakeReady(id, readyPriority);
 		return true;
 	}
 
@@ -151,7 +165,13 @@ namespace jam
 	void FiberScheduler::PostResume(FiberAwaitKey key)
 	{
 		auto& ptok = TlsTokenFor(m_resumeInbox);
-		m_resumeInbox.enqueue(ptok, ResumeMsg{ key });
+		m_resumeInbox.enqueue(ptok, ResumeMsg{ .key = key });
+	}
+
+	void FiberScheduler::PostResume(FiberAwaitKey key, int32 readyPriority)
+	{
+		auto& ptok = TlsTokenFor(m_resumeInbox);
+		m_resumeInbox.enqueue(ptok, ResumeMsg{ .key = key, .readyPriority = readyPriority, .overridePriority = true });
 	}
 
 	void FiberScheduler::PostSpawn(FiberFn fn, const FiberDesc& desc)
@@ -172,14 +192,23 @@ namespace jam
 		m_cancelIdInbox.enqueue(ptok, CancelIdMsg{ .id = id, .code = code });
 	}
 
-	void FiberScheduler::DrainInbox()
+	void FiberScheduler::DrainResumeInbox()
 	{
 		ResumeMsg r;
 		while (m_resumeInbox.try_dequeue(m_resumeCtok, r))
 		{
-			Resume(r.key);
+			if (r.overridePriority)
+				Resume(r.key, r.readyPriority);
+			else
+				Resume(r.key);
 			++m_metrics.inboxResumeCount;
 		}
+	}
+
+	void FiberScheduler::DrainInbox()
+	{
+		DrainResumeInbox();
+
 		SpawnMsg s;
 		while (m_spawnInbox.try_dequeue(m_spawnCtok, s))
 		{
@@ -253,6 +282,11 @@ namespace jam
 				m_fibers.erase(id);
 				FiberPool::Push(dead);
 			}
+
+			// A fiber step may yield after an external worker completed another
+			// await. Promote those resumes into the ready queue before selecting
+			// the next fiber; spawn/cancel remain at the outer poll boundaries.
+			DrainResumeInbox();
 		}
 
 		// 3) 실행 중 경과된 시간 기준으로 한 번 더 기상
@@ -316,6 +350,14 @@ namespace jam
 	void FiberScheduler::MakeReady(uint32 id)
 	{
 		auto it = m_fibers.find(id);
+		if (it == m_fibers.end())
+			return;
+		MakeReady(id, it->second->priority);
+	}
+
+	void FiberScheduler::MakeReady(uint32 id, int32 readyPriority)
+	{
+		auto it = m_fibers.find(id);
 		if (it == m_fibers.end()) 
 			return;
 
@@ -325,7 +367,7 @@ namespace jam
 
 		f->state    = eFiberState::Ready;
 		f->inReadyQ = true;
-		m_readyPQ.push(ReadyItem{f->priority, m_readySeq++, f->id});
+		m_readyPQ.push(ReadyItem{readyPriority, m_readySeq++, f->id});
 	}
 
 	void FiberScheduler::OnFiberException(uint32_t id, const char* what)
@@ -432,9 +474,6 @@ namespace jam
 		while (!m_sleepPQ.empty() && m_sleepPQ.top().wakeup_ns <= wakeup_ns)
 		{
 			const auto& [wake, id, gen] = m_sleepPQ.top();
-			//const uint64 wake = wake;
-			//const uint32 id   = fiberId;
-			//const uint64 gen  = generation;
 
 			m_sleepPQ.pop();
 

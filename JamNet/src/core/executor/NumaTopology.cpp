@@ -59,7 +59,12 @@ namespace jam
 							if (localMask == 0)
 								continue;
 
-							CoreSlot slot{ gm.Group, LsbOne(localMask) };
+							const KAFFINITY primaryMask = LsbOne(localMask);
+							CoreSlot slot{
+								.group = gm.Group,
+								.mask = primaryMask,
+								.siblingMask = LsbOne(localMask & ~primaryMask)
+							};
 							info.cores.push_back(slot);
 							break;
 						}

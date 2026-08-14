@@ -34,8 +34,10 @@ namespace jam
 
 
 		ShardDomain											tag			  = {};
-		uint64												tickPeriod_ns = 0_ns;      // 이 그룹의 Tick 주기
+		uint64												tickPeriod_ns = 0_ns;
 		uint64												nextTick_ns   = 0_ns;
+		uint64												workerPreWakeLead_ns = 0_ns;
+		uint64												workerPreWakePublishedTick_ns = 0_ns;
 
 		std::vector<SystemFn>								systems;
 		std::vector<BootstrapFn>							bootstraps;
@@ -53,7 +55,7 @@ namespace jam
 		std::shared_ptr<net::SessionShardState>				sessionState = nullptr;
 		std::shared_ptr<net::WorldShardState>				worldState	 = nullptr;
 		std::shared_ptr<net::UserShardState>				usersState	 = nullptr;
-		std::shared_ptr<net::RuntimePacketScratch>		packetScratch = nullptr;
+		std::shared_ptr<net::RuntimePacketScratch>			packetScratch = nullptr;
 
 		std::vector<std::function<void(entt::registry&)>>	defers;
 
@@ -61,11 +63,13 @@ namespace jam
 	};
 
 
-	inline void RegisterShardSystemFn(ShardLocal& L, ShardDomain tag, uint64 tickPeriod_ns, ShardSystemGroup::SystemFn system)
+	inline void RegisterShardSystemFn(ShardLocal& L, ShardDomain tag, uint64 tickPeriod_ns, ShardSystemGroup::SystemFn system, uint64 workerPreWakeLead_ns = 0_ns)
 	{
 		auto& group = L.domainGroups[tag];
-		group.tag			= tag;
-		group.tickPeriod_ns = tickPeriod_ns;
+		group.tag				   = tag;
+		group.tickPeriod_ns		   = tickPeriod_ns;
+		group.workerPreWakeLead_ns = workerPreWakeLead_ns;
+
 		group.systems.push_back(std::move(system));
 	}
 
@@ -103,6 +107,7 @@ namespace jam
 		void							AttachSlot(ShardSlot* slot) { m_shardSlot = slot; }
 
 		void							Submit(Job j) override;
+		void							SubmitWorkerJob(Job j);
 		void							SubmitAfter(Job j, uint64 delay_ns);
 
 		MailboxRef						CreateMailboxRef(RuntimeId ownerId);
@@ -114,6 +119,7 @@ namespace jam
 
 		void							SpawnFiber(FiberFn fn, const FiberDesc& desc);
 		void							ResumeFiber(FiberAwaitKey key);
+		void							ResumeFiber(FiberAwaitKey key, int32 readyPriority);
 		void							CancelFiberByKey(FiberAwaitKey key, eCancelCode code);
 		void							CancelFiberById(uint32 id, eCancelCode code);
 		FiberAwaitKey					AllocateAwaitKey();
@@ -139,9 +145,12 @@ namespace jam
 		void							WaitUntilLoopExited() const;
 
 		void							Loop();
+		void							WorkerLoop();
 		bool							RunDueDomainGroups(uint64 now_ns);
+		void							PublishDueWorkerPreWakes(uint64 now_ns);
 		bool							ProcessDefers();
 		uint64							TimeUntilNextDomainDue(uint64 now_ns) const;
+		uint64							TimeUntilNextWorkerPreWake(uint64 now_ns) const;
 		void							NotifyWorkAvailable();
 		void							WaitForWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns);
 
@@ -160,6 +169,11 @@ namespace jam
 
 		std::atomic<bool>										m_running = false;
 		std::thread												m_thread;
+		std::atomic<bool>										m_workerRunning = false;
+		std::thread												m_workerThread;
+		ConcurrentQueue<Job>									m_workerIngress;
+		std::atomic<uint64>										m_workerWakeEpoch = 0;
+		std::atomic<uint64>										m_workerPreWakeDeadlineNs = 0;
 
 		std::atomic<uint64>										m_nextAwaitSeq = 1;
 		WinFiberBackend											m_backend;

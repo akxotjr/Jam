@@ -15,12 +15,13 @@ namespace jam::net
 
 	void ShardJobBridge::SubmitJob(std::function<void()> fn)
 	{
-		m_executor.Submit(Job(std::move(fn)));
+		m_executor.SubmitWorkerJob(Job(std::move(fn)));
 	}
 
 	void ShardJobBridge::NotifyComplete(uint64_t awaitKey)
 	{
-		m_executor.ResumeFiber(static_cast<FiberAwaitKey>(awaitKey));
+		constexpr int32 kPhysicsResumePriority = -1;
+		m_executor.ResumeFiber(static_cast<FiberAwaitKey>(awaitKey), kPhysicsResumePriority);
 	}
 
 	bool ShardJobBridge::IsInFiberContext() const
@@ -28,4 +29,5 @@ namespace jam::net
 		const auto* shard = CurrentShardLocal();
 		return shard && shard->scheduler && (shard->scheduler->Current() != 0);
 	}
+
 }

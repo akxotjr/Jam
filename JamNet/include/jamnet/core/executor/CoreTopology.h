@@ -28,14 +28,15 @@ namespace jam
 
 	enum eCoreUsageProfile : uint8
 	{
-		CoreProfileServer,   // 서버: 코어를 최대한 사용
-		CoreProfileClient    // 클라이언트: 여유를 남기되 대략 60~70% 수준 사용
+		CoreProfileServer,         // Maximize core usage without any room
+		CoreProfileClient,         // 60~70% core usage with some room
+		CoreProfileMultipleClient  // For running multiple client instances in a single process
 	};
 
 	struct AutoCoreLayoutConfig
 	{
 		eAutoCoreLayoutMode     mode             = Balance;
-		bool                    isSmt            = true;           // 하이퍼스레딩(논리>물리) 여부
+		bool                    isSmt            = true;
 		uint32                  logicalCores     = std::thread::hardware_concurrency();      
 		uint32                  physicalCores    = 0;
 		uint32                  numaNodes        = 1;      
@@ -67,6 +68,14 @@ namespace jam
 			cfg.pinOffloadWorkers = true;
 			cfg.pinFiberWorker    = true;
 		}
+		else if (profile == CoreProfileMultipleClient)
+		{
+			// Multiple clients share a process and may run beside a pinned server.
+			// Leave shard placement to the OS to avoid cross-process affinity overlap.
+			cfg.pinShardWorkers   = false;
+			cfg.pinOffloadWorkers = false;
+			cfg.pinFiberWorker    = false;
+		}
 		else
 		{
 			cfg.pinOffloadWorkers = false;
@@ -85,24 +94,22 @@ namespace jam
 		if (phys == 0)
 			phys = cfg.isSmt ? std::max<uint32>(1u, logical / 2u) : logical;
 
-		// reserved 만큼은 executor 쓰레드로 쓰지 않음.
 		const uint32 reserved  = std::min<uint32>(phys, cfg.reservedThreads);
 		const uint32 rawBudget = std::max<uint32>(1u, phys - reserved);
 
 		float usageScale = cfg.usageScale;
 		if (usageScale == 0.f)
 		{
-			usageScale = cfg.profile == CoreProfileServer ? 1.0f : (2.0f / 3.0f);
+			usageScale = cfg.profile == CoreProfileClient ? (2.0f / 3.0f) : 1.0f;
 		}
 
 		uint32 budget = rawBudget;
-		if (cfg.profile == CoreProfileClient)
+		if (cfg.profile == CoreProfileClient || cfg.profile == CoreProfileMultipleClient)
 		{
 			const float scaled = std::max(1.0f, static_cast<float>(rawBudget) * usageScale);
 			budget = static_cast<uint32>(std::ceil(scaled));
 		}
 
-		// GlobalExecutor roles: shard + iocp + fiber + offload
 		constexpr uint32 kMinRuntimeThreads = 4u;
 		budget = std::max<uint32>(budget, kMinRuntimeThreads);
 

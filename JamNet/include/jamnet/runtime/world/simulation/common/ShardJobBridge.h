@@ -1,9 +1,14 @@
 #pragma once
 #include <jampx/IPhysicsJobBridge.h>
 
+namespace jam
+{
+	class ShardExecutor;
+}
 
 namespace jam::net
 {
+
 	class ShardJobBridge final : public px::IPhysicsJobBridge
 	{
 	public:

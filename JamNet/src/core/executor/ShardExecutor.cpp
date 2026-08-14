@@ -44,6 +44,8 @@ namespace jam
 	{
 		if (m_running.exchange(true))
 			return;
+		m_workerRunning.store(true, std::memory_order_release);
+		m_workerThread = std::thread([this]() { WorkerLoop(); });
 
 		{
 			std::scoped_lock guard(m_metricSyncMutex);
@@ -113,6 +115,9 @@ namespace jam
 			return;
 
 		NotifyWorkAvailable();
+		m_workerRunning.store(false, std::memory_order_release);
+		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
+		m_workerWakeEpoch.notify_all();
 
 		if (m_shardSlot)
 		{
@@ -127,12 +132,113 @@ namespace jam
 	{
 		if (m_thread.joinable())
 			m_thread.join();
+		if (m_workerThread.joinable())
+			m_workerThread.join();
 	}
 
 	void ShardExecutor::Submit(Job j)
 	{
 		m_jobIngress.enqueue(std::move(j));
 		NotifyWorkAvailable();
+	}
+
+	void ShardExecutor::SubmitWorkerJob(Job j)
+	{
+		m_workerIngress.enqueue(std::move(j));
+		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
+		m_workerWakeEpoch.notify_one();
+	}
+
+	void ShardExecutor::WorkerLoop()
+	{
+		std::string threadName = std::format("ShardPhysics#{}", m_config.index);
+		InitThreadContext(threadName, nullptr);
+
+		if (m_pinEnabled && m_pinSlot.siblingMask != 0)
+		{
+			const CoreSlot siblingSlot{
+				.group = m_pinSlot.group,
+				.mask = m_pinSlot.siblingMask,
+			};
+
+			if (PinCurrentThreadTo(siblingSlot))
+			{
+				JAMNET_LOG_DEBUG("ShardPhysics#{} pinned. group={}, mask=0x{:X}",
+					m_config.index, siblingSlot.group, static_cast<unsigned long long>(siblingSlot.mask));
+			}
+			else
+			{
+				JAMNET_LOG_WARN_LOC("ShardPhysics#{} pinning failed. group={}, mask=0x{:X}, error={}",
+					m_config.index, siblingSlot.group, static_cast<unsigned long long>(siblingSlot.mask), GetLastError());
+			}
+		}
+		else if (m_pinEnabled)
+		{
+			JAMNET_LOG_WARN("ShardPhysics#{} has no SMT sibling affinity; worker remains unpinned", m_config.index);
+		}
+
+		constexpr uint32 kActiveSpinCount = 256;
+		constexpr uint64 kPreWakeSpinNs = 1_ms;
+		for (;;)
+		{
+			Job job;
+			if (m_workerIngress.try_dequeue(job))
+			{
+				job.Execute();
+				continue;
+			}
+
+			if (!m_workerRunning.load(std::memory_order_acquire))
+				break;
+
+			const uint64 preWakeDeadlineNs = m_workerPreWakeDeadlineNs.exchange(0, std::memory_order_acq_rel);
+			if (preWakeDeadlineNs != 0)
+			{
+				const uint64 spinStartNs = NOW_NS();
+				const uint64 spinEndNs = spinStartNs + kPreWakeSpinNs;
+				bool preWakeHit = false;
+				while (NOW_NS() < spinEndNs)
+				{
+					if (m_workerIngress.try_dequeue(job))
+					{
+						preWakeHit = true;
+						break;
+					}
+					_mm_pause();
+				}
+
+				if (preWakeHit)
+				{
+					job.Execute();
+					continue;
+				}
+			}
+
+			bool foundWork = false;
+			for (uint32 spin = 0; spin < kActiveSpinCount; ++spin)
+			{
+				if (m_workerIngress.try_dequeue(job))
+				{
+					job.Execute();
+					foundWork = true;
+					break;
+				}
+				_mm_pause();
+			}
+			if (foundWork)
+				continue;
+
+			const uint64 observedWakeEpoch = m_workerWakeEpoch.load(std::memory_order_acquire);
+			if (m_workerIngress.try_dequeue(job))
+			{
+				job.Execute();
+				continue;
+			}
+			if (!m_workerRunning.load(std::memory_order_acquire))
+				break;
+
+			m_workerWakeEpoch.wait(observedWakeEpoch, std::memory_order_acquire);
+		}
 	}
 
 	void ShardExecutor:: SubmitAfter(Job j, uint64 delay_ns)
@@ -241,6 +347,12 @@ namespace jam
 		NotifyWorkAvailable();
 	}
 
+	void ShardExecutor::ResumeFiber(FiberAwaitKey key, int32 readyPriority)
+	{
+		m_scheduler->PostResume(key, readyPriority);
+		NotifyWorkAvailable();
+	}
+
 	void ShardExecutor::CancelFiberByKey(FiberAwaitKey key, eCancelCode code)
 	{
 		m_scheduler->PostCancelByKey(key, code);
@@ -332,6 +444,36 @@ namespace jam
 		return didWork;
 	}
 
+	void ShardExecutor::PublishDueWorkerPreWakes(uint64 now_ns)
+	{
+		uint64 spinDeadlineNs = 0;
+		for (auto& group : m_local.domainGroups | std::views::values)
+		{
+			if (group.systems.empty() || group.tickPeriod_ns == 0 || group.nextTick_ns == 0
+				|| group.workerPreWakeLead_ns == 0 || group.workerPreWakePublishedTick_ns == group.nextTick_ns)
+				continue;
+
+			const uint64 preWakeNs = group.nextTick_ns > group.workerPreWakeLead_ns
+				? group.nextTick_ns - group.workerPreWakeLead_ns
+				: 0;
+			if (now_ns < preWakeNs)
+				continue;
+
+			group.workerPreWakePublishedTick_ns = group.nextTick_ns;
+			if (spinDeadlineNs == 0 || group.nextTick_ns < spinDeadlineNs)
+			{
+				spinDeadlineNs = group.nextTick_ns;
+			}
+		}
+
+		if (spinDeadlineNs == 0)
+			return;
+
+		m_workerPreWakeDeadlineNs.store(spinDeadlineNs, std::memory_order_release);
+		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
+		m_workerWakeEpoch.notify_one();
+	}
+
 	bool ShardExecutor::ProcessDefers()
 	{
 		auto& L = m_local;
@@ -370,6 +512,25 @@ namespace jam
 			wait_ns = std::min(wait_ns, group.nextTick_ns - now_ns);
 		}
 
+		return wait_ns;
+	}
+
+	uint64 ShardExecutor::TimeUntilNextWorkerPreWake(uint64 now_ns) const
+	{
+		uint64 wait_ns = UINT64_MAX;
+		for (const auto& group : m_local.domainGroups | std::views::values)
+		{
+			if (group.systems.empty() || group.tickPeriod_ns == 0 || group.nextTick_ns == 0
+				|| group.workerPreWakeLead_ns == 0 || group.workerPreWakePublishedTick_ns == group.nextTick_ns)
+				continue;
+
+			const uint64 preWakeNs = group.nextTick_ns > group.workerPreWakeLead_ns
+				? group.nextTick_ns - group.workerPreWakeLead_ns
+				: 0;
+			if (now_ns >= preWakeNs)
+				return 0_ns;
+			wait_ns = std::min(wait_ns, preWakeNs - now_ns);
+		}
 		return wait_ns;
 	}
 
@@ -519,6 +680,7 @@ namespace jam
 			++m_metrics.loopCount;
 			bool didWork = false;
 			const uint64 observedWakeEpoch = m_wakeEpoch.load(std::memory_order_acquire);
+			PublishDueWorkerPreWakes(NOW_NS());
 
 			didWork |= ProcessJobsOnce();
 			DrainReadyMailboxes(64, 64 * m_config.batchBudget, m_config.batchBudget);
@@ -541,22 +703,42 @@ namespace jam
 				didWork = true;
 
 			const uint64 now_ns = NOW_NS();
+			PublishDueWorkerPreWakes(now_ns);
 			didWork |= RunDueDomainGroups(now_ns);
 			didWork |= ProcessDefers();
+
+			// Domain work may submit asynchronous work whose completion resumes a
+			// fiber from another thread. Drain those resumes before sleeping or
+			// starting the next executor loop.
+			const uint64 secondPollStart_ns = NOW_NS();
+			m_scheduler->Poll(m_config.batchBudget, secondPollStart_ns);
+			const uint64 secondPollCost_ns = NOW_NS() - secondPollStart_ns;
+			++m_metrics.schedulerPollCount;
+			m_metrics.schedulerPollCost_ns += secondPollCost_ns;
+			const auto& secondFiberMetrics = m_scheduler->Profile();
+			if (secondFiberMetrics.lastPollCost_ns != 0 && secondFiberMetrics.lastPollReadyRunCount == 0)
+				++m_metrics.schedulerEmptyPollCount;
+			m_metrics.schedulerReadyRunCount = secondFiberMetrics.readyRunCount;
+			if (secondFiberMetrics.lastPollReadyRunCount > 0)
+				didWork = true;
 
 			if (!didWork)
 			{
 				++m_metrics.idleLoopCount;
 				const uint64 idleStart_ns = NOW_NS();
+				const uint64 idleNow_ns = idleStart_ns;
 				uint64 idleWait_ns = static_cast<uint64>(std::max(0, m_config.idleSleepMs)) * 1'000'000ull;
-				const uint64 nextDomainDue_ns = TimeUntilNextDomainDue(now_ns);
+				const uint64 nextDomainDue_ns = TimeUntilNextDomainDue(idleNow_ns);
 				if (nextDomainDue_ns != UINT64_MAX)
 					idleWait_ns = std::min(idleWait_ns, nextDomainDue_ns);
+				const uint64 nextWorkerPreWake_ns = TimeUntilNextWorkerPreWake(idleNow_ns);
+				if (nextWorkerPreWake_ns != UINT64_MAX)
+					idleWait_ns = std::min(idleWait_ns, nextWorkerPreWake_ns);
 				const uint64 nextFiberWakeup_ns = m_scheduler->NextWakeupTime();
 				if (nextFiberWakeup_ns != 0)
 				{
-					idleWait_ns = (now_ns < nextFiberWakeup_ns)
-						? std::min(idleWait_ns, nextFiberWakeup_ns - now_ns)
+					idleWait_ns = (idleNow_ns < nextFiberWakeup_ns)
+						? std::min(idleWait_ns, nextFiberWakeup_ns - idleNow_ns)
 						: 0_ns;
 				}
 				WaitForWorkOrTimeout(observedWakeEpoch, idleWait_ns);

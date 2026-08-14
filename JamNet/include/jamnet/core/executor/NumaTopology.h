@@ -5,8 +5,9 @@ namespace jam
 {
 	struct CoreSlot
 	{
-		USHORT		group = 0;	// Processor group
-		KAFFINITY	mask  = 0;	// One logical processor from a physical core.
+		USHORT		group		= 0;	// Processor group
+		KAFFINITY	mask		= 0;	// One logical processor from a physical core.
+		KAFFINITY	siblingMask = 0;	// SMT sibling of mask, when available.
 	};
 
 	struct NodeInfo

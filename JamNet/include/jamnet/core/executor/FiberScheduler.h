@@ -38,11 +38,13 @@ namespace jam
 
 		// inside
 		bool                    Resume(FiberAwaitKey key);
+		bool                    Resume(FiberAwaitKey key, int32 readyPriority);
 		bool                    CancelByKey(FiberAwaitKey key, eCancelCode code = eCancelCode::Manual);
 		bool                    CancelById(uint32 id, eCancelCode code = eCancelCode::Manual);
 
 		// outside
 		void                    PostResume(FiberAwaitKey key);
+		void                    PostResume(FiberAwaitKey key, int32 readyPriority);
 		void                    PostSpawn(FiberFn fn, const FiberDesc& desc = {});
 		void                    PostCancelByKey(FiberAwaitKey key, eCancelCode code);
 		void                    PostCancelById(uint32 id, eCancelCode code);
@@ -101,7 +103,9 @@ namespace jam
 
 		struct ResumeMsg
 		{
-			FiberAwaitKey    key     = 0;
+			FiberAwaitKey    key			  = 0;
+			int32            readyPriority	  = 0;
+			bool             overridePriority = false;
 		};
 
 		struct SpawnMsg
@@ -162,6 +166,7 @@ namespace jam
 		static VOID WINAPI          Trampoline(void* p);
 
 		void                        MakeReady(uint32 id);
+		void                        MakeReady(uint32 id, int32 readyPriority);
 		void                        OnFiberException(uint32 id, const char* what);
 		Fiber*                      CurrentFiber();
 		void                        BindFls(Fiber* f);
@@ -169,6 +174,7 @@ namespace jam
 		void                        EndRun(Fiber* f);
 		void                        ProbeFiberStack(Fiber* f);
 		void                        CompleteAwait(Fiber* f, eResumeCode rc, eCancelCode cc = eCancelCode::None);
+		void                        DrainResumeInbox();
 
 		void                        WakeupTimed(uint64 wakeup_ns);
 

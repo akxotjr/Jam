@@ -110,6 +110,7 @@ namespace jam::net
 		uint32								m_pipelineTickDebt = 0;
 		uint32								m_pipelineTickDebtCap = 8;
 		uint32								m_pipelineTickBurstBudget = 1;
+		uint32								m_pipelineMutationBudget = 8;
 		uint32								m_pipelineLastBurstCount = 0;
 		bool								m_pipelineActive = false;
 		bool								m_pipelineTickInProgress = false;
