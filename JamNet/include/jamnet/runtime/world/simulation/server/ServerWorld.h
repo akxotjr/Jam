@@ -2,8 +2,10 @@
 #include "jamnet/runtime/world/simulation/common/PhysicalWorld.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
 #include "jamnet/runtime/content/world/IWorldContent.h"
+#include "jamnet/runtime/world/simulation/server/WorldMetrics.h"
 
 #include <unordered_map>
+#include <array>
 #include <span>
 #include <vector>
 
@@ -40,7 +42,9 @@ namespace jam::net
 		void								Multicast(Packet packet) override;
 
 		ActorId								SpawnActor(SpawnParams params);
+		void								SpawnActorAsync(SpawnParams params, std::function<void(ActorId)> onDone);
 		bool								DespawnActor(ActorId actorId, UserId requester = kInvalidUserId);
+		void								DespawnActorAsync(ActorId actorId, UserId requester, std::function<void(bool)> onDone);
 		void								SpawnPlayerAsync(UserId userId, const WorldEventCorrelation& correlation, SpawnParams params, std::function<void(ActorId, ePlayerSpawnFailure)> onDone);
 		bool								DespawnPlayer(UserId userId, const WorldEventCorrelation& correlation, ActorId actorId);
 		bool								RestorePlayerControl(UserId userId, ActorId actorId);
@@ -66,11 +70,13 @@ namespace jam::net
 		void								OnUserLeft(UserId userId) override;
 		void								BootstrapLevelActors();
 
+		void								EnsureUserAoiRegistration(UserId userId);
 		void								ApplyInitialControl(entt::entity entity, UserId userId);
 
 		void								ProcessGameInput(UserId userId, const PacketHeaderView& pkt);
 		void								FinalizePendingPlayerSpawns();
 		void								CompletePendingPlayerSpawn(UserId userId, ActorId actorId, ePlayerSpawnFailure failure);
+		void                                SubmitWorldMetrics(uint64 nowNs);
 
 	private:
 		std::unordered_map<uint64, entt::entity>	m_userToControlledEntity;
@@ -91,9 +97,11 @@ namespace jam::net
 			uint64					deadlineNs = 0;
 			std::vector<std::function<void(ActorId, ePlayerSpawnFailure)>> completions;
 		};
+
 		std::unordered_map<uint64, PendingPlayerSpawn> m_pendingPlayerSpawns;
-		std::unique_ptr<IWorldContent>	m_content;
+		std::unique_ptr<IWorldContent>			m_content;
 		EnterWorldHandler						m_enterWorld;
 		bool									m_contentInitialized = false;
+		WorldMetrics                            m_metrics;
 	};
 }

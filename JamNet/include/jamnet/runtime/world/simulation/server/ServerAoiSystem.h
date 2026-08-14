@@ -9,10 +9,11 @@ namespace jam::px
 	class PhysicsFacade;
 }
 
-namespace jam::net
+	namespace jam::net
 {
 	class ServerWorld;
 	class ServerPhysicsSystem;
+	class WorldMetrics;
 
 	enum class eAoiCondition : uint8
 	{
@@ -56,6 +57,8 @@ namespace jam::net
 	struct AoiActorCellState
 	{
 		px::Vec3                   lastPos         = px::Vec3::Zero();
+		double                     travelX         = 0.0;
+		double                     travelZ         = 0.0;
 		AoiCellCoord               anchorCell      = {};
 		bool                       initialized     = false;
 	};
@@ -63,6 +66,8 @@ namespace jam::net
 	struct AoiUserCellState
 	{
 		px::Vec3                   lastPos        = px::Vec3::Zero();
+		double                     travelX        = 0.0;
+		double                     travelZ        = 0.0;
 		AoiCellCoord               anchorCell     = {};
 		std::vector<AoiCellCoord>  interestCells;
 		bool                       initialized    = false;
@@ -96,6 +101,7 @@ namespace jam::net
 	{
 		uint64                      userId  = 0;
 		entt::entity                actor   = entt::null;
+		uint32                      userGeneration  = 0;
 	};
 
 	struct AoiVisibilityKey
@@ -127,23 +133,29 @@ namespace jam::net
 
 	struct AoiVisibleMembershipEntry
 	{
-		size_t	actorUserIndex = 0;
-		size_t	userActorIndex = 0;
+		size_t actorUserIndex    = 0;
+		size_t userActorIndex    = 0;
+		double lastAbsDx         = 0.0;
+		double lastAbsDz         = 0.0;
+		double userTravelX       = 0.0;
+		double userTravelZ       = 0.0;
+		double actorTravelX      = 0.0;
+		double actorTravelZ      = 0.0;
+		bool   certificateValid  = false;
 	};
 
 	struct UserAoiState
 	{
 		std::unordered_set<ActorId>	visible;		// currently visible actors
-		std::vector<ActorId>			entered;		// actors entered this tick
-		std::vector<ActorId>			left;			// actors left this tick
+		std::vector<ActorId>		entered;		// actors entered this tick
+		std::vector<ActorId>		left;			// actors left this tick
 	};
 
 	struct AoiConfig
 	{
 		eAoiCondition   condition             = eAoiCondition::AABB_2D;
-		float           gridCellSize          = 20.0f;      // 
+		float           gridCellSize          = 30.0f;      // Matches the default AOI half extent.
 		float           hysteresisOffset      = 10.0f;
-		float           cellHysteresisOffset  = 10.0f;
 
 		float           aabbX                 = 30.0f;      // AABB half x
 		float           aabbY                 = 30.0f;      // AABB half y (only AABB_3D)
@@ -164,13 +176,14 @@ namespace jam::net
 	class ServerAoiSystem
 	{
 	public:
-		explicit ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics);
+		explicit ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics, WorldMetrics& metrics);
 
 		void									Init(const AoiConfig& cfg = {});
 		void									Tick();
 
 		void									OnUserEnter(uint64 userId);
 		void									OnUserLeave(uint64 userId);
+		void                                    OnControlledActorChanged(uint64 userId);
 
 		void									OnActorSpawned(entt::entity actor);
 		void									OnActorDestroyed(entt::entity actor);
@@ -180,13 +193,11 @@ namespace jam::net
 		bool									IsVisible(uint64 userId, ActorId actorId) const;
 		const UserAoiState*						GetState(uint64 userId) const;
 		const std::vector<AoiVisibleActorSlot>* GetVisibleActors(uint64 userId) const;
-		void									SetAlwaysVisible(ActorId actorId, bool always);
 
 	private:
 		void                            RefreshContext();
 		void                            ClearTransientEvents();
 
-		void                            CollectDirtyUsersFromControlledActors();
 		void                            CollectDirtyActorsFromPhysics();
 
 		void                            UpdateDirtyUserSubscriptions();
@@ -200,6 +211,8 @@ namespace jam::net
 		void                            OnActorCellChanged(entt::entity actor, const AoiCellCoord& oldCell, const AoiCellCoord& newCell);
 		void                            EnqueueVisibilityForUserCells(uint64 userId, std::span<const AoiCellCoord> cells);
 		void                            EnqueueVisibilityForActorCell(entt::entity actor, const AoiCellCoord& cell);
+		void                            EnqueueVisibilityForVisibleActors(uint64 userId);
+		void                            EnqueueVisibilityForVisibleUsers(entt::entity actor);
 
 		void                            EvaluateVisibility(uint64 userId, entt::entity actor);
 		bool                            PassesVisibilityTests(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible);
@@ -209,8 +222,7 @@ namespace jam::net
 		px::Vec3                        ResolveUserPosition(uint64 userId) const;
 
 		AoiCellCoord                    WorldToCell(const px::Vec3& pos) const;
-		bool                            ShouldMoveAnchorCell(const px::Vec3& pos, const AoiCellCoord& currentCell) const;
-		AoiCellRect                     BuildInterestRect(const px::Vec3& origin, float extraBias = 0.0f) const;
+		AoiCellRect                     BuildInterestRect(const px::Vec3& origin) const;
 		std::vector<AoiCellCoord>       BuildInterestCells(const px::Vec3& origin) const;
 
 		uint64                          MakeCellKey(const AoiCellCoord& cell) const;
@@ -221,6 +233,8 @@ namespace jam::net
 		void                            RemoveSubscriberFromCell(const AoiCellCoord& cell, uint64 userId);
 
 		void                            EnqueueVisibilityEval(uint64 userId, entt::entity actor);
+		void                            RemoveLosForUser(uint64 userId);
+		void                            RemoveLosForActor(entt::entity actor);
 		void                            MarkUserDirty(uint64 userId);
 		void                            MarkActorDirty(entt::entity actor);
 
@@ -233,13 +247,12 @@ namespace jam::net
 	private:
 		entt::registry&														m_registry;
 		px::PhysicsFacade*													m_physics          = nullptr;
-		ServerWorld*												m_world            = nullptr;
+		ServerWorld*														m_world            = nullptr;
 		ServerPhysicsSystem*												m_serverPhysics    = nullptr;
+		WorldMetrics*														m_metrics          = nullptr;
 		AoiConfig															m_cfg              = {};
 
 		std::unordered_map<uint64, UserAoiState>							m_states;
-		std::unordered_set<ActorId>											m_alwaysVisible;
-
 		std::unordered_map<entt::entity, AoiActorCellState>					m_actorStates;
 		std::unordered_map<uint64, AoiUserCellState>						m_userStates;
 
@@ -257,6 +270,9 @@ namespace jam::net
 
 		AoiVisibilityMap<AoiLosCacheEntry>									m_losCache;
 		AoiVisibilityMap<AoiVisibleMembershipEntry>							m_visibleMembership;
+		std::unordered_map<uint64, std::unordered_set<entt::entity>>		m_losActorsByUser;
+		std::unordered_map<entt::entity, std::unordered_set<uint64>>		m_losUsersByActor;
+		std::unordered_map<uint64, uint32>									m_userGenerations;
 
 		std::unordered_set<uint64>											m_dirtyUserDedup;
 		std::unordered_set<entt::entity>									m_dirtyActorDedup;

@@ -39,6 +39,11 @@ namespace jam::net
 		return m_config.worldContentFactory ? m_config.worldContentFactory(config) : nullptr;
 	}
 
+	std::optional<WorldArchetypeKey> ServerNetworkManager::ResolveEnterWorldDestination(AccountId accountId, UserId userId) const
+	{
+		return m_config.enterWorldDestinationResolver ? m_config.enterWorldDestinationResolver(accountId, userId) : std::nullopt;
+	}
+
 	bool ServerNetworkManager::Start()
 	{
 		if (m_running.load(std::memory_order_acquire))

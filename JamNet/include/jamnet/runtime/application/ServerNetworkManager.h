@@ -16,6 +16,7 @@
 
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,6 +43,7 @@ namespace jam::net
 	struct ServerConfig
 	{
 		using WorldContentFactory = std::function<std::unique_ptr<IWorldContent>(const WorldConfig&)>;
+		using EnterWorldDestinationResolver = std::function<std::optional<WorldArchetypeKey>(AccountId, UserId)>;
 
 		NetAddress				tcpAddress		= { "127.0.0.1", 7777 };
 		NetAddress				udpAddress		= { "127.0.0.1", 8888 };
@@ -49,6 +51,7 @@ namespace jam::net
 		uint64					reconnectTimeoutNs = 15'000'000'000ull;
 		std::string				sharedDataManifestPath;
 		WorldContentFactory		worldContentFactory;
+		EnterWorldDestinationResolver enterWorldDestinationResolver;
 		std::shared_ptr<ISocialContent>			socialContent = nullptr;
 		std::shared_ptr<IAuthenticationContent>	authenticationContent = nullptr;
 		std::shared_ptr<IGenericContent>					content = nullptr;
@@ -76,6 +79,7 @@ namespace jam::net
 		std::shared_ptr<ServerService>			GetService() const { return m_service; }
 		const SharedDataManifest*				GetSharedDataManifest() const { return &m_manifest; }
 		uint64									GetReconnectTimeoutNs() const { return m_config.reconnectTimeoutNs; }
+		std::optional<WorldArchetypeKey>		ResolveEnterWorldDestination(AccountId accountId, UserId userId) const;
 		std::unique_ptr<IWorldContent>	CreateWorldContent(const WorldConfig& config) const;
 
 		void									BootstrapWorldInstances(std::function<void(bool)> completed);

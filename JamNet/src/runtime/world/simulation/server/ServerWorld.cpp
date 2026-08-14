@@ -2,6 +2,7 @@
 
 #include "jamnet/core/net/PacketBuilder.h"
 #include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/utils/ScopedTimer.h"
 
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
@@ -52,13 +53,13 @@ namespace jam::net
 		}
 
 		template<typename SessionT>
-		void PostToSession(const SessionRef<SessionT>& sessionRef, Packet packet)
+		bool PostToSession(const SessionRef<SessionT>& sessionRef, Packet packet)
 		{
 			if (!packet.IsValid())
-				return;
+				return false;
 
 			const SessionRef<SessionT> target = sessionRef;
-			target.TryPost(Job([target, packet = std::move(packet)]() mutable
+			const bool posted = target.TryPost(Job([target, packet = std::move(packet)]() mutable
 				{
 					SessionT* session = target.TryGet();
 					if (!session || session->IsClosing() || !session->IsConnected())
@@ -66,21 +67,21 @@ namespace jam::net
 
 					session->Send(std::move(packet));
 				}));
+
+			return posted;
 		}
 
-		void PostToSession(const ServerSessionBundle& sessions, eProtocolType protocol, Packet packet)
+		bool PostToSession(const ServerSessionBundle& sessions, eProtocolType protocol, Packet packet)
 		{
 			if (protocol == eProtocolType::TCP)
-				PostToSession(sessions.tcp, std::move(packet));
-			else if (protocol == eProtocolType::UDP)
-				PostToSession(sessions.udp, std::move(packet));
+				return PostToSession(sessions.tcp, std::move(packet));
+			if (protocol == eProtocolType::UDP)
+				return PostToSession(sessions.udp, std::move(packet));
+
+			return false;
 		}
 
-		px::ActorId BindingTarget(
-			entt::registry& world,
-			const entt::entity e,
-			ActorId target,
-			const ActorDirectory& actors)
+		px::ActorId BindingTarget(entt::registry& world, const entt::entity e, ActorId target, const ActorDirectory& actors)
 		{
 			if (!target.IsValid()) return px::INVALID_ACTOR_ID;
 
@@ -93,6 +94,15 @@ namespace jam::net
 			}
 
 			return px::INVALID_ACTOR_ID;
+		}
+
+		void YieldCurrentWorldFiber()
+		{
+			auto* local = CurrentShardLocal();
+			if (!local || !local->scheduler || local->scheduler->Current() == 0)
+				return;
+
+			local->scheduler->YieldFiber();
 		}
 
 
@@ -127,6 +137,7 @@ namespace jam::net
 		m_userToControlledEntity.clear();
 		m_playerSpawnResults.clear();
 		m_pendingPlayerSpawns.clear();
+		m_metrics.Init(GetWorldId(), GetWorldShardIndex(GetWorldId()));
 
 		m_physics->SetJobBridge(m_bridge.get());
 		m_physics->Init();
@@ -135,8 +146,8 @@ namespace jam::net
 		m_registry.ctx().emplace<TickCounter>().Init();
 		m_registry.ctx().emplace<ServerInputSystem>(m_registry).Init();
 		m_registry.ctx().emplace<ServerPhysicsSystem>(m_registry, m_physics.get()).Init();
-		m_registry.ctx().emplace<ServerAoiSystem>(m_registry, m_physics.get()).Init();
-		m_registry.ctx().emplace<ServerReplicationSystem>(m_registry).Init();
+		m_registry.ctx().emplace<ServerAoiSystem>(m_registry, m_physics.get(), m_metrics).Init();
+		m_registry.ctx().emplace<ServerReplicationSystem>(m_registry, m_metrics).Init();
 
 		BootstrapLevelActors();
 
@@ -242,8 +253,14 @@ namespace jam::net
 		if (!view.IsValid())
 			return;
 
-		if (auto it = m_userContexts.find(userId); it != m_userContexts.end())
-			PostToSession(it->second.sessions, protocol, std::move(packet));
+		if (const auto it = m_userContexts.find(userId); it != m_userContexts.end())
+		{
+			if (!PostToSession(it->second.sessions, protocol, std::move(packet)))
+			{
+				JAMNET_LOG_WARN("[ServerWorldTx] failed to schedule packet. userId={}, type={}, id={}, channel={}",
+					userId, static_cast<uint8>(view.Type()), view.Id(), static_cast<uint8>(view.Channel()));
+			}
+		}
 	}
 
 	void ServerWorld::Multicast(Packet packet)
@@ -260,7 +277,12 @@ namespace jam::net
 			return;
 
 		for (const auto& p : m_userContexts | std::views::values)
-			PostToSession(p.sessions, protocol, ClonePacket(packet));
+		{
+			if (!PostToSession(p.sessions, protocol, ClonePacket(packet)))
+			{
+				JAMNET_LOG_WARN_LOC("[ServerWorld] failed send packet");
+			}
+		}
 	}
 
 
@@ -365,10 +387,12 @@ namespace jam::net
 
 		const entt::entity entity = ResolveActor(actorId);
 		if (entity == entt::null || !m_registry.valid(entity))
-			{
+		{
 			complete(ActorId::Invalid(), ePlayerSpawnFailure::SpawnFailed);
 			return;
 		}
+
+		EnsureUserAoiRegistration(userId);
 
 		PendingPlayerSpawn pending
 		{
@@ -406,6 +430,7 @@ namespace jam::net
 		}
 
 		ApplyInitialControl(player, userId);
+		EnsureUserAoiRegistration(userId);
 		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
 		{
 			replication->MarkActorDirty(player, true);
@@ -415,9 +440,7 @@ namespace jam::net
 		return GetControlledEntity(userId) == player;
 	}
 
-	void ServerWorld::PrepareMemberContent(
-		const ServerWorldMemberContentContext& context,
-		IWorldContent::PrepareMemberCompletion completion)
+	void ServerWorld::PrepareMemberContent(const ServerWorldMemberContentContext& context, IWorldContent::PrepareMemberCompletion completion)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
 		if (!m_content || !m_userContexts.contains(context.userId))
@@ -481,13 +504,44 @@ namespace jam::net
 			|| !m_registry.ctx().contains<ServerReplicationSystem>())
 			return;
 
+		std::array<uint64, 6> phases{};
+		const uint64 tickStartNs = NOW_NS();
 		m_registry.ctx().get<TickCounter>().Tick();
-		m_registry.ctx().get<ServerInputSystem>().Tick();
-		m_registry.ctx().get<ServerPhysicsSystem>().Tick();
-		m_registry.ctx().get<ServerAoiSystem>().Tick();
-		m_registry.ctx().get<ServerReplicationSystem>().Tick();
 
+		uint64 phaseStartNs = NOW_NS();
+		m_registry.ctx().get<ServerInputSystem>().Tick();
+		phases[1] = NOW_NS() - phaseStartNs;
+
+		phaseStartNs = NOW_NS();
+		m_registry.ctx().get<ServerPhysicsSystem>().Tick();
+		phases[2] = NOW_NS() - phaseStartNs;
+		YieldCurrentWorldFiber();
+
+		phaseStartNs = NOW_NS();
+		m_registry.ctx().get<ServerAoiSystem>().Tick();
+		phases[3] = NOW_NS() - phaseStartNs;
+		YieldCurrentWorldFiber();
+
+		phaseStartNs = NOW_NS();
+		m_registry.ctx().get<ServerReplicationSystem>().Tick();
+		phases[4] = NOW_NS() - phaseStartNs;
+
+		phaseStartNs = NOW_NS();
 		FinalizePendingPlayerSpawns();
+		const uint64 profileNowNs = NOW_NS();
+		phases[5] = profileNowNs - phaseStartNs;
+		phases[0] = profileNowNs - tickStartNs;
+		m_metrics.RecordTick(phases, m_userContexts.size(), profileNowNs);
+		SubmitWorldMetrics(profileNowNs);
+	}
+
+	void ServerWorld::SubmitWorldMetrics(uint64 nowNs)
+	{
+		if (!m_metrics.IsReadyToSubmit(nowNs))
+			return;
+
+		m_metrics.SubmitSnapshot(nowNs);
+		m_metrics.Reset();
 	}
 
 	void ServerWorld::FinalizePendingPlayerSpawns()
@@ -518,6 +572,8 @@ namespace jam::net
 				failedUsers.push_back(userId);
 				continue;
 			}
+
+			EnsureUserAoiRegistration(userId);
 
 			const auto* control = m_registry.try_get<ControlTag>(pending.entity);
 			const bool playerReady = m_registry.all_of<PhysicsSpawnedTag>(pending.entity)
@@ -579,12 +635,7 @@ namespace jam::net
 
 	void ServerWorld::OnUserEntered(UserId userId)
 	{
-		if (userId == 0)
-			return;
-
-		if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
-			aoi->OnUserEnter(userId);
-
+		EnsureUserAoiRegistration(userId);
 	}
 
 	void ServerWorld::OnUserLeft(UserId userId)
@@ -703,14 +754,14 @@ namespace jam::net
 				continue;
 			}
 
-			if (!m_registry.all_of<PhysicsSpawnedTag>(e) && !m_physics->IsStepPending())
+			if (!m_registry.all_of<PhysicsSpawnedTag>(e))
 			{
 				ReleaseActorId(e);
 				m_registry.destroy(e);
 				continue;
 			}
 
-			if (actorArchetype->allowReplication && m_registry.all_of<PhysicsSpawnedTag>(e))
+			if (!m_registry.all_of<ReplicationDisabledTag>(e) && m_registry.all_of<PhysicsSpawnedTag>(e))
 			{
 				if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
 					aoi->OnActorSpawned(e);
@@ -722,6 +773,9 @@ namespace jam::net
 	ActorId ServerWorld::SpawnActor(SpawnParams params)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsPipelineTickInProgress());
+		if (IsPipelineTickInProgress())
+			return ActorId::Invalid();
 
 		if (!IsValidAssetKey(params.actorArchetypeKey))
 			return ActorId::Invalid();
@@ -752,8 +806,11 @@ namespace jam::net
 		m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ params.desc.archetype });
 		m_registry.emplace<OwnershipTag>(e, OwnershipTag{ params.owner });
 		m_registry.emplace<ControlTag>(e);
+
 		if (!actorArchetype->allowReplication)
 			m_registry.emplace<ReplicationDisabledTag>(e);
+		else if (m_physics->FindMotionType(params.desc.archetype) == px::eMotionType::Static)
+			m_registry.emplace<ReplicationStaticTag>(e);
 		
 		if (body == px::eBodyType::Rigid)
 		{
@@ -786,7 +843,7 @@ namespace jam::net
 			return ActorId::Invalid();
 		}
 
-		if (!m_registry.all_of<PhysicsSpawnedTag>(e) && !m_physics->IsStepPending())
+		if (!m_registry.all_of<PhysicsSpawnedTag>(e))
 		{
 			ReleaseActorId(e);
 			m_registry.destroy(e);
@@ -799,7 +856,7 @@ namespace jam::net
 			return ActorId::Invalid();
 		}
 
-		if (actorArchetype->allowReplication && m_registry.all_of<PhysicsSpawnedTag>(e))
+		if (!m_registry.all_of<ReplicationDisabledTag>(e) && m_registry.all_of<PhysicsSpawnedTag>(e))
 		{
 			if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
 				aoi->OnActorSpawned(e);
@@ -810,9 +867,38 @@ namespace jam::net
 		return actorId;
 	}
 
+	void ServerWorld::SpawnActorAsync(SpawnParams params, std::function<void(ActorId)> onDone)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		if (IsPipelineTickInProgress())
+		{
+			const bool deferred = DeferUntilPipelineSafePoint(
+				[this, params = params, onDone = std::move(onDone)]() mutable
+				{
+					SpawnActorAsync(params, std::move(onDone));
+				});
+			JAM_ASSERT(deferred);
+			return;
+		}
+
+		const ActorId actorId = SpawnActor(params);
+		if (onDone)
+			onDone(actorId);
+	}
+
 	bool ServerWorld::DespawnActor(ActorId actorId, UserId requester)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
+		if (IsPipelineTickInProgress())
+		{
+			const bool deferred = DeferUntilPipelineSafePoint(
+				[this, actorId, requester]()
+				{
+					DespawnActor(actorId, requester);
+				});
+			JAM_ASSERT(deferred);
+			return deferred;
+		}
 
 		const entt::entity targetEntity = ResolveActor(actorId);
 
@@ -867,6 +953,39 @@ namespace jam::net
 		return true;
 	}
 
+	void ServerWorld::DespawnActorAsync(ActorId actorId, UserId requester, std::function<void(bool)> onDone)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		if (IsPipelineTickInProgress())
+		{
+			const bool deferred = DeferUntilPipelineSafePoint(
+				[this, actorId, requester, onDone = std::move(onDone)]() mutable
+				{
+					DespawnActorAsync(actorId, requester, std::move(onDone));
+				});
+			JAM_ASSERT(deferred);
+			return;
+		}
+
+		const bool succeeded = DespawnActor(actorId, requester);
+		if (onDone)
+			onDone(succeeded);
+	}
+
+	void ServerWorld::EnsureUserAoiRegistration(UserId userId)
+	{
+		if (userId == kInvalidUserId || !m_userContexts.contains(userId))
+			return;
+
+		const entt::entity controlled = GetControlledEntity(userId);
+		if (controlled == entt::null || !m_registry.valid(controlled)
+			|| !m_registry.all_of<PhysicsSpawnedTag>(controlled))
+			return;
+
+		if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>(); aoi && !aoi->GetState(userId))
+			aoi->OnUserEnter(userId);
+	}
+
 	void ServerWorld::ApplyInitialControl(entt::entity entity, UserId userId)
 	{
 		if (userId == 0 || !m_registry.valid(entity))
@@ -888,7 +1007,10 @@ namespace jam::net
 		m_registry.emplace_or_replace<ControlTag>(entity, ControlTag{ userId });
 		if (const auto* body = m_registry.try_get<ActorBodyType>(entity); body && body->body == px::eBodyType::Character)
 			m_registry.emplace_or_replace<px::CharacterMotorInput>(entity);
+
 		m_userToControlledEntity[userId] = entity;
+		if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
+			aoi->OnControlledActorChanged(userId);
 
 		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
 			replication->MarkActorDirty(entity, true);
@@ -905,20 +1027,32 @@ namespace jam::net
 			return;
 
 		CharacterControlCommand cmd{};
-		cmd.sequence = wireCommand->sequence();
-		cmd.intent.controlRevision = wireCommand->control_revision();
-		cmd.intent.moveReferenceYaw = wireCommand->move_reference_yaw();
-		cmd.intent.viewYaw = wireCommand->view_yaw();
-		cmd.intent.viewPitch = wireCommand->view_pitch();
-		cmd.intent.viewPolicy = static_cast<eCharacterViewPolicy>(wireCommand->view_policy());
+		cmd.sequence				 = wireCommand->sequence();
+		cmd.intent.controlRevision   = wireCommand->control_revision();
+		cmd.intent.moveReferenceYaw	 = wireCommand->move_reference_yaw();
+		cmd.intent.viewYaw			 = wireCommand->view_yaw();
+		cmd.intent.viewPitch		 = wireCommand->view_pitch();
+		cmd.intent.viewPolicy		 = static_cast<eCharacterViewPolicy>(wireCommand->view_policy());
 		cmd.intent.continuousActions = wireCommand->continuous_action_flags();
-		cmd.intent.edgeActions = wireCommand->edge_action_flags();
+		cmd.intent.edgeActions		 = wireCommand->edge_action_flags();
+		
 		switch (wireCommand->locomotion_kind())
 		{
-		case fb::fbLocomotionKind_Directional: cmd.intent.locomotion = DirectionalMoveIntent{ wireCommand->local_x(), wireCommand->local_y() }; break;
-		case fb::fbLocomotionKind_MoveToPosition: cmd.intent.locomotion = MoveToPositionIntent{ px::Vec3(wireCommand->target_x(), wireCommand->target_y(), wireCommand->target_z()) }; break;
-		case fb::fbLocomotionKind_FollowActor: cmd.intent.locomotion = FollowActorIntent{ ActorId(wireCommand->target_actor_id()) }; break;
-		default: cmd.intent.locomotion = StopMovementIntent{}; break;
+		case fb::fbLocomotionKind_Directional: 
+			cmd.intent.locomotion = DirectionalMoveIntent{ wireCommand->local_x(), wireCommand->local_y() }; 
+			break;
+
+		case fb::fbLocomotionKind_MoveToPosition: 
+			cmd.intent.locomotion = MoveToPositionIntent{ px::Vec3(wireCommand->target_x(), wireCommand->target_y(), wireCommand->target_z()) }; 
+			break;
+
+		case fb::fbLocomotionKind_FollowActor: 
+			cmd.intent.locomotion = FollowActorIntent{ ActorId(wireCommand->target_actor_id()) }; 
+			break;
+
+		default: 
+			cmd.intent.locomotion = StopMovementIntent{}; 
+			break;
 		}
 
 		if (m_registry.ctx().contains<ServerInputSystem>())

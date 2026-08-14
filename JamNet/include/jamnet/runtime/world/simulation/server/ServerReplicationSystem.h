@@ -12,6 +12,7 @@ namespace jam::net
 	class ServerWorld;
 	class ServerInputSystem;
 	class ServerPhysicsSystem;
+	class WorldMetrics;
 
 	struct RigidBaselineState
 	{
@@ -92,13 +93,12 @@ namespace jam::net
 	class ServerReplicationSystem
 	{
 	public:
-		ServerReplicationSystem(entt::registry& world);
+		ServerReplicationSystem(entt::registry& world, WorldMetrics& metrics);
 
 		void                                        Init();
 		void                                        Tick();
 
 		void                                        CaptureSnapshot();
-		void                                        ForceLifecycleSyncForUser(uint64 userId, int32 budget = 5);
 		void                                        MarkActorDirty(entt::entity e, bool forceMeta = false);
 
 		bool                                        AttachUser(uint64 userId);
@@ -164,7 +164,7 @@ namespace jam::net
 		void                                            QueueLifecycleMetaForKnownUser(uint64 userId, ActorId actorId);
 		void                                            QueueRemovalForUser(uint64 userId, ActorId actorId, fb::fbRemovalReason reason);
 		void                                            CancelRemovalForUser(uint64 userId, ActorId actorId);
-		void                                            QueueLifecycleForVisibleActors(uint64 userId, bool forceSyncUser);
+		void                                            QueueLifecycleForVisibleActors(uint64 userId);
 		void                                            EmitPendingLifecyclePackets(uint64 userId, uint32 tick);
 		void                                            CommitPendingLifecycleBatch(uint64 userId, const std::vector<std::pair<ActorId, PendingLifecycleEvent>>& sentEvents);
 
@@ -187,10 +187,10 @@ namespace jam::net
 		ServerInputSystem*                                                          m_inputSys      = nullptr;
 		ServerAoiSystem*                                                            m_aoiSys        = nullptr;
 		ServerPhysicsSystem*                                                        m_physSys       = nullptr;
+		WorldMetrics*																m_metrics       = nullptr;
 
         std::unordered_map<uint64, ReplicationUserState>                            m_userStates;                 // Per-user replication session state.
         std::unordered_map<ActorId, std::vector<KnownUserSlot>>                       m_knownUsersByActor;          // Reverse index from actor to users that know it.
-        std::unordered_map<uint64, int32>                                           m_forceLifecycleSyncPerUsers; // Pending forced meta/full sync budget per user.
         std::unordered_map<ActorId, SharedRigidState>                                 m_sharedRigidStates;          // Shared rigid full-baseline/delta cache per actor.
         std::unordered_map<ActorId, SharedCharState>                                  m_sharedCharacterStates;      // Shared character full-baseline/delta cache per actor.
         std::unordered_map<ActorId, ActorFrameCache>                                  m_actorFrameCache;            // Incremental per-actor frame metadata cache.

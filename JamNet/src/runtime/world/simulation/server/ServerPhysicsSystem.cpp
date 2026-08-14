@@ -5,7 +5,6 @@
 #include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
 #include "jamnet/runtime/world/simulation/server/ServerInputSystem.h"
-#include "jamnet/runtime/world/simulation/server/ServerAoiSystem.h"
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
 #include "jamnet/runtime/world/simulation/common/WorldContext.h"
 
@@ -77,18 +76,14 @@ namespace jam::net
 		if (!m_physics || !m_world.valid(e))
 			return;
 
+		const bool isSafePoint = !m_physics->IsStepPending();
+		JAM_ASSERT(isSafePoint && "Server actor spawn must run at the World pipeline safe point");
+		if (!isSafePoint)
+			return;
+
 		const px::ActorId physicsActorId = GetPhysicsActorId(m_world, e);
 		if (!m_physics->Spawn(physicsActorId, desc))
 			return;
-
-		if (m_physics->IsStepPending())
-		{
-			m_pendingActorOps.push_back(PendingActorOp{
-				.type	  = PendingActorOp::eType::Spawn,
-				.e        = e,
-			});
-			return;
-		}
 
 		m_world.emplace<PhysicsSpawnedTag>(e);
 
@@ -117,18 +112,14 @@ namespace jam::net
 		if (!m_physics || !m_world.valid(e))
 			return;
 
+		const bool isSafePoint = !m_physics->IsStepPending();
+		JAM_ASSERT(isSafePoint && "Server actor despawn must run at the World pipeline safe point");
+		if (!isSafePoint)
+			return;
+
 		const px::ActorId id = GetPhysicsActorId(m_world, e);
 		if (!m_physics->Despawn(id))
 			return;
-
-		if (m_physics->IsStepPending())
-		{
-			m_pendingActorOps.push_back(PendingActorOp{
-				.type	  = PendingActorOp::eType::Despawn,
-				.e		  = e,
-			});
-			return;
-		}
 
 		m_world.erase<PhysicsSpawnedTag>(e);
 	}
@@ -161,13 +152,12 @@ namespace jam::net
 		auto* executor = static_cast<ShardExecutor*>(CurrentExecutor());
 		const uint64 awaitKey = inFiber && executor ? executor->AllocateAwaitKey() : 0;
 
-		// BeginStep이 true를 반환하면 PhysX Task가 Shard에 제출되었으므로 파이버를 Suspend 합니다.
 		if (m_physics->BeginSimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
+		{
 			sched->Suspend(awaitKey, NOW_NS() + 2_s);
+		}
 
-		// 파이버가 Resume 된 후 (또는 동기 실행 시) 결과를 가져옵니다.
 		m_physics->EndSimulate();
-		CommitPendingActorOps();
 	}
 
 	void ServerPhysicsSystem::SyncActiveTransforms() const
@@ -242,84 +232,6 @@ namespace jam::net
 					if (auto* state = m_world.try_get<RigidAuthorityState>(e))
 						state->state = rs;
 				}
-			}
-		}
-	}
-
-	void ServerPhysicsSystem::CommitPendingActorOps()
-	{
-		if (m_pendingActorOps.empty())
-			return;
-
-		auto ops = std::move(m_pendingActorOps);
-		m_pendingActorOps.clear();
-
-
-		px::CharacterState	csBuf{};
-		px::RigidState		rsBuf{};
-		auto* aoi = m_world.ctx().find<ServerAoiSystem>();
-
-		for (const auto& op : ops)
-		{
-			if (!m_world.valid(op.e))
-				continue;
-
-			const px::ActorId physicsActorId = GetPhysicsActorId(m_world, op.e);
-			m_world.emplace_or_replace<PhysicsSpawnedTag>(op.e);
-
-			switch (op.type)
-			{
-			case PendingActorOp::eType::Spawn:
-			{
-				bool spawned = false;
-				if (auto* cs = m_world.try_get<CharAuthorityState>(op.e))
-				{
-					if (TryReadValidatedCharacterState(m_physics, physicsActorId, csBuf))
-					{
-						cs->state = csBuf;
-						spawned = true;
-					}
-					else
-						m_world.remove<PhysicsSpawnedTag>(op.e);
-				}
-				else if (auto* rs = m_world.try_get<RigidAuthorityState>(op.e))
-				{
-					if (TryReadValidatedRigidState(m_physics, physicsActorId, rsBuf))
-					{
-						rs->state = rsBuf;
-						spawned = true;
-					}
-					else
-						m_world.remove<PhysicsSpawnedTag>(op.e);
-				}
-				else
-				{
-					m_world.remove<PhysicsSpawnedTag>(op.e);
-				}
-
-				if (!spawned)
-				{
-					m_physics->Despawn(physicsActorId);
-					if (auto* serverWorld = m_world.ctx().find<ServerWorld*>(); serverWorld && *serverWorld)
-					{
-						if (const auto* actorId = m_world.try_get<ActorId>(op.e))
-							(*serverWorld)->DespawnActor(*actorId);
-					}
-					break;
-				}
-
-				if (aoi)
-					aoi->OnActorSpawned(op.e);
-				
-				break;
-			}
-
-			case PendingActorOp::eType::Despawn:
-				if (aoi)
-					aoi->OnActorDestroyed(op.e);
-				m_world.remove<PhysicsSpawnedTag>(op.e);
-
-				break;
 			}
 		}
 	}

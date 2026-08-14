@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "jamnet/runtime/world/simulation/server/ServerAoiSystem.h"
+#include "jamnet/runtime/world/simulation/server/WorldMetrics.h"
 
 #include <jampx/PhysicsFacade.h>
 
@@ -9,8 +10,8 @@
 
 namespace jam::net
 {
-	ServerAoiSystem::ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics)
-		: m_registry(world), m_physics(physics)
+	ServerAoiSystem::ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics, WorldMetrics& metrics)
+		: m_registry(world), m_physics(physics), m_metrics(&metrics)
 	{
 	}
 
@@ -19,7 +20,6 @@ namespace jam::net
 		m_cfg = cfg;
 
 		m_states.clear();
-		m_alwaysVisible.clear();
 		m_actorStates.clear();
 		m_userStates.clear();
 		m_cellActors.clear();
@@ -33,6 +33,9 @@ namespace jam::net
 		m_pendingVisibility.clear();
 		m_losCache.clear();
 		m_visibleMembership.clear();
+		m_losActorsByUser.clear();
+		m_losUsersByActor.clear();
+		m_userGenerations.clear();
 		m_dirtyUserDedup.clear();
 		m_dirtyActorDedup.clear();
 		m_pendingVisibilityDedup.clear();
@@ -42,10 +45,9 @@ namespace jam::net
 
 	void ServerAoiSystem::Tick()
 	{
-		RefreshContext();
+		//RefreshContext();
 		ClearTransientEvents();
 
-		CollectDirtyUsersFromControlledActors();
 		CollectDirtyActorsFromPhysics();
 
 		UpdateDirtyUserSubscriptions();
@@ -60,11 +62,11 @@ namespace jam::net
 
 		if (m_states.contains(userId)
 			|| m_userStates.contains(userId)
-			|| m_userVisibleActors.contains(userId)
-			|| std::ranges::any_of(m_pendingVisibility, [userId](const AoiPendingVisibility& pending) { return pending.userId == userId; }))
+			|| m_userVisibleActors.contains(userId))
 		{
 			OnUserLeave(userId);
 		}
+		++m_userGenerations[userId];
 
 		auto& state = m_states[userId];
 		state.visible.clear();
@@ -80,6 +82,7 @@ namespace jam::net
 	{
 		if (userId == 0)
 			return;
+		++m_userGenerations[userId];
 
 		if (auto it = m_userStates.find(userId); it != m_userStates.end())
 		{
@@ -124,22 +127,13 @@ namespace jam::net
 
 			m_userVisibleActors.erase(it);
 		}
-		std::erase_if(m_losCache, [userId](const auto& kv)
-		{
-			return kv.first.userId == userId;
-		});
-		std::erase_if(m_visibleMembership, [userId](const auto& kv)
-		{
-			return kv.first.userId == userId;
-		});
-		std::erase_if(m_pendingVisibility, [userId](const AoiPendingVisibility& pending)
-		{
-			return pending.userId == userId;
-		});
-		std::erase_if(m_pendingVisibilityDedup, [userId](const AoiVisibilityKey& key)
-		{
-			return key.userId == userId;
-		});
+		RemoveLosForUser(userId);
+	}
+
+	void ServerAoiSystem::OnControlledActorChanged(uint64 userId)
+	{
+		if (userId != 0 && m_states.contains(userId))
+			MarkUserDirty(userId);
 	}
 
 	bool ServerAoiSystem::IsUserReady(uint64 userId) const
@@ -156,11 +150,9 @@ namespace jam::net
 
 	void ServerAoiSystem::OnActorSpawned(entt::entity actor)
 	{
-		if (actor == entt::null || !m_registry.valid(actor))
+		if (actor == entt::null || !m_registry.valid(actor)
+			|| m_registry.all_of<ReplicationDisabledTag>(actor))
 			return;
-
-		if (const auto* actorId = m_registry.try_get<ActorId>(actor); actorId && m_registry.all_of<ReplicationStaticTag>(actor))
-			SetAlwaysVisible(*actorId, true);
 
 		m_actorStates.erase(actor);
 		MarkActorDirty(actor);
@@ -168,10 +160,6 @@ namespace jam::net
 
 	void ServerAoiSystem::OnActorDestroyed(entt::entity actor)
 	{
-		if (m_registry.valid(actor))
-			if (const auto* actorId = m_registry.try_get<ActorId>(actor); actorId)
-				SetAlwaysVisible(*actorId, false);
-
 		auto stIt = m_actorStates.find(actor);
 		if (stIt != m_actorStates.end() && stIt->second.initialized)
 			RemoveActorFromCell(stIt->second.anchorCell, actor);
@@ -207,22 +195,7 @@ namespace jam::net
 		m_actorStates.erase(actor);
 		m_entityPositions.erase(actor);
 		m_dirtyActorDedup.erase(actor);
-		std::erase_if(m_losCache, [actor](const auto& kv)
-		{
-			return kv.first.actor == actor;
-		});
-		std::erase_if(m_visibleMembership, [actor](const auto& kv)
-		{
-			return kv.first.actor == actor;
-		});
-		std::erase_if(m_pendingVisibility, [actor](const AoiPendingVisibility& pending)
-		{
-			return pending.actor == actor;
-		});
-		std::erase_if(m_pendingVisibilityDedup, [actor](const AoiVisibilityKey& key)
-		{
-			return key.actor == actor;
-		});
+		RemoveLosForActor(actor);
 
 		if (!m_registry.valid(actor) || !m_registry.all_of<ActorId>(actor))
 			return;
@@ -233,7 +206,11 @@ namespace jam::net
 			if (auto stateIt = m_states.find(userId); stateIt != m_states.end())
 			{
 				if (stateIt->second.visible.erase(actorId) > 0)
+				{
 					stateIt->second.left.push_back(actorId);
+					if (m_metrics)
+						m_metrics->RecordAoiLeftActor();
+				}
 			}
 
 			if (auto userIt = m_userVisibleActors.find(userId); userIt != m_userVisibleActors.end())
@@ -247,9 +224,6 @@ namespace jam::net
 
 	bool ServerAoiSystem::IsVisible(uint64 userId, ActorId actorId) const
 	{
-		if (m_alwaysVisible.contains(actorId))
-			return true;
-
 		if (auto it = m_states.find(userId); it != m_states.end())
 			return it->second.visible.contains(actorId);
 		return false;
@@ -269,14 +243,6 @@ namespace jam::net
 		return nullptr;
 	}
 
-	void ServerAoiSystem::SetAlwaysVisible(ActorId actorId, bool always)
-	{
-		if (always)
-			m_alwaysVisible.insert(actorId);
-		else
-			m_alwaysVisible.erase(actorId);
-	}
-
 	void ServerAoiSystem::RefreshContext()
 	{
 		if (auto* nwPtr = m_registry.ctx().find<ServerWorld*>(); nwPtr)
@@ -294,30 +260,21 @@ namespace jam::net
 		}
 	}
 
-	void ServerAoiSystem::CollectDirtyUsersFromControlledActors()
-	{
-		if (!m_world)
-			return;
-
-		for (const auto& userId : m_states | std::views::keys)
-		{
-			const px::Vec3 newPos = ResolveUserPosition(userId);
-			auto it = m_userPositions.find(userId);
-			if (it == m_userPositions.end() || it->second != newPos)
-			{
-				m_userPositions[userId] = newPos;
-				MarkUserDirty(userId);
-			}
-		}
-	}
-
 	void ServerAoiSystem::CollectDirtyActorsFromPhysics()
 	{
 		if (!m_serverPhysics)
 			return;
 
 		for (entt::entity actor : m_serverPhysics->GetLastActiveEntities())
+		{
 			MarkActorDirty(actor);
+
+			if (actor == entt::null || !m_registry.valid(actor))
+				continue;
+
+			if (const auto* control = m_registry.try_get<ControlTag>(actor); control && control->userId != 0)
+				MarkUserDirty(control->userId);
+		}
 	}
 
 	void ServerAoiSystem::UpdateDirtyUserSubscriptions()
@@ -358,17 +315,28 @@ namespace jam::net
 	
 	void ServerAoiSystem::ResolvePendingVisibility()
 	{
-		std::erase_if(m_pendingVisibility, [this](const AoiPendingVisibility& pending)
+		std::unordered_set<uint64> evaluatedUsers;
+		evaluatedUsers.reserve(m_pendingVisibility.size());
+		for (const AoiPendingVisibility& pending : m_pendingVisibility)
 		{
 			if (pending.userId == 0 || pending.actor == entt::null || !m_states.contains(pending.userId))
-				return true;
+				continue;
 			if (!m_registry.valid(pending.actor) || !m_registry.all_of<ActorId>(pending.actor))
-				return true;
-			return false;
-		});
-
-		for (const AoiPendingVisibility& pending : m_pendingVisibility)
+				continue;
+			if (m_userGenerations[pending.userId] != pending.userGeneration)
+			{
+				MarkUserDirty(pending.userId);
+				continue;
+			}
 			EvaluateVisibility(pending.userId, pending.actor);
+			evaluatedUsers.insert(pending.userId);
+		}
+
+		if (m_metrics)
+		{
+			for (const uint64 userId : evaluatedUsers)
+				m_metrics->RecordAoiNeighbors(m_states[userId].visible.size());
+		}
 
 		m_pendingVisibility.clear();
 		m_pendingVisibilityDedup.clear();
@@ -391,11 +359,16 @@ namespace jam::net
 			OnUserCellsChanged(userId, oldCells, userState.interestCells);
 			return;
 		}
+		if (userState.lastPos == userPos)
+			return;
+		userState.travelX += std::abs(static_cast<double>(userPos.x) - static_cast<double>(userState.lastPos.x));
+		userState.travelZ += std::abs(static_cast<double>(userPos.z) - static_cast<double>(userState.lastPos.z));
 
-		if (!ShouldMoveAnchorCell(userPos, userState.anchorCell))
+		if (newAnchor == userState.anchorCell)
 		{
 			userState.lastPos = userPos;
 			EnqueueVisibilityForUserCells(userId, userState.interestCells);
+			EnqueueVisibilityForVisibleActors(userId);
 			return;
 		}
 
@@ -406,6 +379,7 @@ namespace jam::net
 
 		OnUserCellsChanged(userId, oldCells, userState.interestCells);
 		EnqueueVisibilityForUserCells(userId, userState.interestCells);
+		EnqueueVisibilityForVisibleActors(userId);
 	}
 
 	void ServerAoiSystem::UpdateActorAnchorCell(entt::entity actor, const px::Vec3& actorPos)
@@ -429,11 +403,16 @@ namespace jam::net
 			}
 			return;
 		}
+		if (actorState.lastPos == actorPos)
+			return;
+		actorState.travelX += std::abs(static_cast<double>(actorPos.x) - static_cast<double>(actorState.lastPos.x));
+		actorState.travelZ += std::abs(static_cast<double>(actorPos.z) - static_cast<double>(actorState.lastPos.z));
 
-		if (!ShouldMoveAnchorCell(actorPos, actorState.anchorCell))
+		if (newAnchor == actorState.anchorCell)
 		{
 			actorState.lastPos = actorPos;
 			EnqueueVisibilityForActorCell(actor, actorState.anchorCell);
+			EnqueueVisibilityForVisibleUsers(actor);
 			return;
 		}
 
@@ -442,6 +421,7 @@ namespace jam::net
 		actorState.anchorCell = newAnchor;
 
 		OnActorCellChanged(actor, oldAnchor, newAnchor);
+		EnqueueVisibilityForVisibleUsers(actor);
 	}
 
 	void ServerAoiSystem::OnUserCellsChanged(uint64 userId, std::span<const AoiCellCoord> oldCells, std::span<const AoiCellCoord> newCells)
@@ -457,14 +437,6 @@ namespace jam::net
 				continue;
 
 			RemoveSubscriberFromCell(oldCell, userId);
-
-			const uint64 cellKey = MakeCellKey(oldCell);
-			if (auto it = m_cellActors.find(cellKey); it != m_cellActors.end())
-			{
-				for (const AoiActorSlot& slot : it->second)
-					if (slot.alive)
-						EnqueueVisibilityEval(userId, slot.actor);
-			}
 		}
 
 		std::unordered_set<AoiCellCoord, AoiCellCoordHash> oldCellSet;
@@ -497,28 +469,7 @@ namespace jam::net
 		RemoveActorFromCell(oldCell, actor);
 		AddActorToCell(newCell, actor);
 
-		std::unordered_set<uint64> affectedUsers;
-		affectedUsers.reserve(32);
-
-		const auto collectSubscribers = [&](const AoiCellCoord& cell)
-		{
-			const uint64 cellKey = MakeCellKey(cell);
-			if (auto it = m_cellSubscribers.find(cellKey); it != m_cellSubscribers.end())
-			{
-				for (const AoiSubscriberSlot& slot : it->second)
-				{
-					if (!slot.alive)
-						continue;
-					affectedUsers.insert(slot.userId);
-				}
-			}
-		};
-
-		collectSubscribers(oldCell);
-		collectSubscribers(newCell);
-
-		for (uint64 userId : affectedUsers)
-			EnqueueVisibilityEval(userId, actor);
+		EnqueueVisibilityForActorCell(actor, newCell);
 	}
 
 	void ServerAoiSystem::EnqueueVisibilityForUserCells(uint64 userId, std::span<const AoiCellCoord> cells)
@@ -546,6 +497,26 @@ namespace jam::net
 		}
 	}
 
+	void ServerAoiSystem::EnqueueVisibilityForVisibleActors(uint64 userId)
+	{
+		if (auto it = m_userVisibleActors.find(userId); it != m_userVisibleActors.end())
+		{
+			for (const AoiVisibleActorSlot& slot : it->second)
+				if (slot.alive)
+					EnqueueVisibilityEval(userId, slot.actor);
+		}
+	}
+
+	void ServerAoiSystem::EnqueueVisibilityForVisibleUsers(entt::entity actor)
+	{
+		if (auto it = m_actorVisibleUsers.find(actor); it != m_actorVisibleUsers.end())
+		{
+			for (const AoiVisibleUserSlot& slot : it->second)
+				if (slot.alive)
+					EnqueueVisibilityEval(slot.userId, actor);
+		}
+	}
+
 	void ServerAoiSystem::EvaluateVisibility(uint64 userId, entt::entity actor)
 	{
 		if (userId == 0 || actor == entt::null || !m_registry.valid(actor) || !m_registry.all_of<ActorId>(actor))
@@ -557,98 +528,156 @@ namespace jam::net
 
 		UserAoiState& state = stateIt->second;
 		const ActorId actorId = m_registry.get<ActorId>(actor);
-		auto& visibleUsers  = m_actorVisibleUsers[actor];
-		auto& visibleActors = m_userVisibleActors[userId];
 		const AoiVisibilityKey visibilityKey = MakeVisibilityKey(userId, actor);
+		const auto visibleIt = state.visible.find(actorId);
+		const bool wasVisible = visibleIt != state.visible.end();
+		auto membershipIt = m_visibleMembership.find(visibilityKey);
 
-		const auto addVisibleUser = [&](uint64 uid)
+		const AoiUserCellState* userCellState = nullptr;
+		const AoiActorCellState* actorCellState = nullptr;
+		if (wasVisible
+			&& membershipIt != m_visibleMembership.end()
+			&& membershipIt->second.certificateValid
+			&& m_cfg.condition == eAoiCondition::AABB_2D
+			&& !m_cfg.enableLos)
 		{
-			visibleUsers.push_back(AoiVisibleUserSlot{ uid, true });
-		};
-		const auto addVisibleActor = [&](entt::entity e)
-		{
-			visibleActors.push_back(AoiVisibleActorSlot{ e, true });
-		};
+			if (const auto userCellIt = m_userStates.find(userId); userCellIt != m_userStates.end())
+				userCellState = &userCellIt->second;
+			if (const auto actorCellIt = m_actorStates.find(actor); actorCellIt != m_actorStates.end())
+				actorCellState = &actorCellIt->second;
 
-		if (m_registry.all_of<ReplicationStaticTag>(actor) || m_alwaysVisible.contains(actorId))
-		{
-			if (!m_visibleMembership.contains(visibilityKey))
+			if (userCellState && actorCellState)
 			{
-				const size_t actorUserIndex = visibleUsers.size();
-				const size_t userActorIndex = visibleActors.size();
-				addVisibleUser(userId);
-				addVisibleActor(actor);
-				m_visibleMembership.emplace(visibilityKey, AoiVisibleMembershipEntry{ actorUserIndex, userActorIndex });
-			}
-			if (state.visible.insert(actorId).second)
-			{
-				state.entered.push_back(actorId);
-			}
-			return;
-		}
-
-		const px::Vec3 userPos    = ResolveUserPosition(userId);
-		const px::Vec3 actorPos   = ResolveActorPosition(actor);
-		const bool	   wasVisible = state.visible.contains(actorId);
-		const bool	   nowVisible = PassesVisibilityTests(userId, actor, userPos, actorPos, wasVisible);
-
-		if (nowVisible)
-		{
-			if (!m_visibleMembership.contains(visibilityKey))
-			{
-				const size_t actorUserIndex = visibleUsers.size();
-				const size_t userActorIndex = visibleActors.size();
-				addVisibleUser(userId);
-				addVisibleActor(actor);
-				m_visibleMembership.emplace(visibilityKey, AoiVisibleMembershipEntry{ actorUserIndex, userActorIndex });
-			}
-			if (state.visible.insert(actorId).second)
-			{
-				state.entered.push_back(actorId);
-			}
-		}
-		else
-		{
-			const bool erasedVisible = state.visible.erase(actorId) > 0;
-			if (erasedVisible)
-				state.left.push_back(actorId);
-
-			if (erasedVisible || m_visibleMembership.contains(visibilityKey))
-			{
-				if (auto membershipIt = m_visibleMembership.find(visibilityKey); membershipIt != m_visibleMembership.end())
+				const AoiVisibleMembershipEntry& certificate = membershipIt->second;
+				const double movementBoundX = std::max(0.0, userCellState->travelX - certificate.userTravelX)
+					+ std::max(0.0, actorCellState->travelX - certificate.actorTravelX);
+				const double movementBoundZ = std::max(0.0, userCellState->travelZ - certificate.userTravelZ)
+					+ std::max(0.0, actorCellState->travelZ - certificate.actorTravelZ);
+				const double leaveExtentX = static_cast<double>(m_cfg.aabbX + m_cfg.hysteresisOffset);
+				const double leaveExtentZ = static_cast<double>(m_cfg.aabbZ + m_cfg.hysteresisOffset);
+				constexpr double kCertificateSafetyMargin = 1.0e-4;
+				if (certificate.lastAbsDx + movementBoundX + kCertificateSafetyMargin <= leaveExtentX
+					&& certificate.lastAbsDz + movementBoundZ + kCertificateSafetyMargin <= leaveExtentZ)
 				{
-					if (membershipIt->second.actorUserIndex < visibleUsers.size())
-					{
-						AoiVisibleUserSlot& slot = visibleUsers[membershipIt->second.actorUserIndex];
-						if (slot.alive && slot.userId == userId)
-							slot.alive = false;
-					}
-
-					if (membershipIt->second.userActorIndex < visibleActors.size())
-					{
-						AoiVisibleActorSlot& slot = visibleActors[membershipIt->second.userActorIndex];
-						if (slot.alive && slot.actor == actor)
-							slot.alive = false;
-					}
-
-					m_visibleMembership.erase(membershipIt);
+					return;
 				}
 			}
 		}
 
+		const auto userPosIt = m_userPositions.find(userId);
+		const px::Vec3 userPos = userPosIt != m_userPositions.end()
+			? userPosIt->second
+			: ResolveUserPosition(userId);
+		const auto actorPosIt = m_entityPositions.find(actor);
+		const px::Vec3 actorPos = actorPosIt != m_entityPositions.end()
+			? actorPosIt->second
+			: ResolveActorPosition(actor);
+		const bool nowVisible = PassesVisibilityTests(userId, actor, userPos, actorPos, wasVisible);
+
+		const auto refreshCertificate = [&](AoiVisibleMembershipEntry& certificate)
+		{
+			if (!userCellState)
+				if (const auto it = m_userStates.find(userId); it != m_userStates.end())
+					userCellState = &it->second;
+			if (!actorCellState)
+				if (const auto it = m_actorStates.find(actor); it != m_actorStates.end())
+					actorCellState = &it->second;
+
+			if (m_cfg.condition != eAoiCondition::AABB_2D || m_cfg.enableLos || !userCellState || !actorCellState)
+			{
+				certificate.certificateValid = false;
+				return;
+			}
+
+			certificate.lastAbsDx = std::abs(static_cast<double>(actorPos.x) - static_cast<double>(userPos.x));
+			certificate.lastAbsDz = std::abs(static_cast<double>(actorPos.z) - static_cast<double>(userPos.z));
+			certificate.userTravelX = userCellState->travelX;
+			certificate.userTravelZ = userCellState->travelZ;
+			certificate.actorTravelX = actorCellState->travelX;
+			certificate.actorTravelZ = actorCellState->travelZ;
+			certificate.certificateValid = true;
+		};
+
+		if (nowVisible)
+		{
+			if (membershipIt == m_visibleMembership.end())
+			{
+				auto& visibleUsers = m_actorVisibleUsers[actor];
+				auto& visibleActors = m_userVisibleActors[userId];
+				const size_t actorUserIndex = visibleUsers.size();
+				const size_t userActorIndex = visibleActors.size();
+				visibleUsers.push_back(AoiVisibleUserSlot{ userId, true });
+				visibleActors.push_back(AoiVisibleActorSlot{ actor, true });
+				const auto [insertedIt, inserted] = m_visibleMembership.emplace(
+					visibilityKey,
+					AoiVisibleMembershipEntry{
+						.actorUserIndex = actorUserIndex,
+						.userActorIndex = userActorIndex,
+					});
+				(void)inserted;
+				membershipIt = insertedIt;
+			}
+			refreshCertificate(membershipIt->second);
+			if (!wasVisible)
+			{
+				state.visible.insert(actorId);
+				state.entered.push_back(actorId);
+				if (m_metrics)
+					m_metrics->RecordAoiEnteredActor();
+			}
+			return;
+		}
+
+		if (wasVisible)
+		{
+			state.visible.erase(visibleIt);
+			state.left.push_back(actorId);
+			if (m_metrics)
+				m_metrics->RecordAoiLeftActor();
+		}
+
+		if (membershipIt == m_visibleMembership.end())
+			return;
+
+		auto actorUsersIt = m_actorVisibleUsers.find(actor);
+		auto userActorsIt = m_userVisibleActors.find(userId);
+		if (actorUsersIt != m_actorVisibleUsers.end()
+			&& membershipIt->second.actorUserIndex < actorUsersIt->second.size())
+		{
+			AoiVisibleUserSlot& slot = actorUsersIt->second[membershipIt->second.actorUserIndex];
+			if (slot.alive && slot.userId == userId)
+				slot.alive = false;
+		}
+
+		if (userActorsIt != m_userVisibleActors.end()
+			&& membershipIt->second.userActorIndex < userActorsIt->second.size())
+		{
+			AoiVisibleActorSlot& slot = userActorsIt->second[membershipIt->second.userActorIndex];
+			if (slot.alive && slot.actor == actor)
+				slot.alive = false;
+		}
+
+		m_visibleMembership.erase(membershipIt);
 		CompactVisibleUsersIfNeeded(actor);
 		CompactVisibleActorsIfNeeded(userId);
-		if (std::ranges::none_of(visibleUsers, [](const AoiVisibleUserSlot& slot) { return slot.alive; }))
-			m_actorVisibleUsers.erase(actor);
-		if (std::ranges::none_of(visibleActors, [](const AoiVisibleActorSlot& slot) { return slot.alive; }))
-			m_userVisibleActors.erase(userId);
+
+		actorUsersIt = m_actorVisibleUsers.find(actor);
+		if (actorUsersIt != m_actorVisibleUsers.end()
+			&& std::ranges::none_of(actorUsersIt->second, [](const AoiVisibleUserSlot& slot) { return slot.alive; }))
+		{
+			m_actorVisibleUsers.erase(actorUsersIt);
+		}
+
+		userActorsIt = m_userVisibleActors.find(userId);
+		if (userActorsIt != m_userVisibleActors.end()
+			&& std::ranges::none_of(userActorsIt->second, [](const AoiVisibleActorSlot& slot) { return slot.alive; }))
+		{
+			m_userVisibleActors.erase(userActorsIt);
+		}
 	}
 
 	bool ServerAoiSystem::PassesVisibilityTests(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible)
 	{
-		//JAM_UNUSED(userId);
-		//JAM_UNUSED(actor);
-
 		const float bias = wasVisible ? m_cfg.hysteresisOffset : 0.0f;
 		const px::Vec3 d = actorPos - userPos;
 
@@ -701,7 +730,13 @@ namespace jam::net
 
 		const px::Vec3 eyeOffset{ 0.0f, m_cfg.losEyeOffset, 0.0f };
 		const bool visible = m_physics->RaycastLOS(userPos + eyeOffset, actorPos + eyeOffset);
-		m_losCache[key] = AoiLosCacheEntry{ .lastTick = currentTick, .lastVisible = visible };
+		const auto [it, inserted] = m_losCache.insert_or_assign(key, AoiLosCacheEntry{ .lastTick = currentTick, .lastVisible = visible });
+		(void)it;
+		if (inserted)
+		{
+			m_losActorsByUser[userId].insert(actor);
+			m_losUsersByActor[actor].insert(userId);
+		}
 		return visible;
 	}
 
@@ -735,18 +770,7 @@ namespace jam::net
 		};
 	}
 
-	bool ServerAoiSystem::ShouldMoveAnchorCell(const px::Vec3& pos, const AoiCellCoord& currentCell) const
-	{
-		const float cellSize = std::max(1.0f, m_cfg.gridCellSize);
-		const float minX	 = (static_cast<float>(currentCell.x)	  * cellSize) - m_cfg.cellHysteresisOffset;
-		const float maxX	 = (static_cast<float>(currentCell.x + 1) * cellSize) + m_cfg.cellHysteresisOffset;
-		const float minZ	 = (static_cast<float>(currentCell.z)     * cellSize) - m_cfg.cellHysteresisOffset;
-		const float maxZ	 = (static_cast<float>(currentCell.z + 1) * cellSize) + m_cfg.cellHysteresisOffset;
-
-		return pos.x < minX || pos.x >= maxX || pos.z < minZ || pos.z >= maxZ;
-	}
-
-	AoiCellRect ServerAoiSystem::BuildInterestRect(const px::Vec3& origin, float extraBias) const
+	AoiCellRect ServerAoiSystem::BuildInterestRect(const px::Vec3& origin) const
 	{
 		const float cellSize = std::max(1.0f, m_cfg.gridCellSize);
 
@@ -757,9 +781,6 @@ namespace jam::net
 			hx = m_cfg.aabbX;
 			hz = m_cfg.aabbZ;
 		}
-
-		hx += m_cfg.hysteresisOffset + extraBias;
-		hz += m_cfg.hysteresisOffset + extraBias;
 
 		return AoiCellRect
 		{
@@ -848,7 +869,49 @@ namespace jam::net
 		if (!m_pendingVisibilityDedup.insert(key).second)
 			return;
 
-		m_pendingVisibility.push_back(AoiPendingVisibility{ userId, actor });
+		m_pendingVisibility.push_back(AoiPendingVisibility{
+			.userId = userId,
+			.actor = actor,
+			.userGeneration = m_userGenerations[userId],
+		});
+	}
+
+	void ServerAoiSystem::RemoveLosForUser(uint64 userId)
+	{
+		auto actorsIt = m_losActorsByUser.find(userId);
+		if (actorsIt == m_losActorsByUser.end())
+			return;
+
+		for (entt::entity actor : actorsIt->second)
+		{
+			m_losCache.erase(MakeVisibilityKey(userId, actor));
+			if (auto usersIt = m_losUsersByActor.find(actor); usersIt != m_losUsersByActor.end())
+			{
+				usersIt->second.erase(userId);
+				if (usersIt->second.empty())
+					m_losUsersByActor.erase(usersIt);
+			}
+		}
+		m_losActorsByUser.erase(actorsIt);
+	}
+
+	void ServerAoiSystem::RemoveLosForActor(entt::entity actor)
+	{
+		auto usersIt = m_losUsersByActor.find(actor);
+		if (usersIt == m_losUsersByActor.end())
+			return;
+
+		for (uint64 userId : usersIt->second)
+		{
+			m_losCache.erase(MakeVisibilityKey(userId, actor));
+			if (auto actorsIt = m_losActorsByUser.find(userId); actorsIt != m_losActorsByUser.end())
+			{
+				actorsIt->second.erase(actor);
+				if (actorsIt->second.empty())
+					m_losActorsByUser.erase(actorsIt);
+			}
+		}
+		m_losUsersByActor.erase(usersIt);
 	}
 
 	AoiVisibilityKey ServerAoiSystem::MakeVisibilityKey(uint64 userId, entt::entity actor) const
@@ -865,7 +928,9 @@ namespace jam::net
 
 	void ServerAoiSystem::MarkActorDirty(entt::entity actor)
 	{
-		if (actor == entt::null || !m_dirtyActorDedup.insert(actor).second)
+		if (actor == entt::null || !m_registry.valid(actor)
+			|| m_registry.all_of<ReplicationDisabledTag>(actor)
+			|| !m_dirtyActorDedup.insert(actor).second)
 			return;
 		m_dirtyActors.push_back(actor);
 	}

@@ -569,14 +569,16 @@ namespace jam::net
 			{
 				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
 				if (!physicalWorld) return;
-				const ActorId actorId = physicalWorld->SpawnActor(std::move(params));
-				if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
-					shard->Submit(Job([sessionId, e, requestId, clientRequestId, actorId]()
+				physicalWorld->SpawnActorAsync(std::move(params), [sessionId, e, requestId, clientRequestId](ActorId actorId)
 					{
-						auto* self = static_cast<ServerUdpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
-						if (self && self->GetEntity() == e)
-							SendSpawnActorResponse(e, actorId.IsValid() ? fb::fbSpawnActorFailure_None : fb::fbSpawnActorFailure_SpawnFailed, clientRequestId, actorId, requestId);
-					}));
+						if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
+							shard->Submit(Job([sessionId, e, requestId, clientRequestId, actorId]()
+								{
+									auto* self = static_cast<ServerUdpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
+									if (self && self->GetEntity() == e)
+										SendSpawnActorResponse(e, actorId.IsValid() ? fb::fbSpawnActorFailure_None : fb::fbSpawnActorFailure_SpawnFailed, clientRequestId, actorId, requestId);
+								}));
+					});
 			}))
 		{
 			SendSpawnActorResponse(e, fb::fbSpawnActorFailure_SpawnFailed, req.client_request_id(), ActorId::Invalid(), requestId);
@@ -606,14 +608,16 @@ namespace jam::net
 			{
 				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
 				if (!physicalWorld) return;
-				const bool ok = physicalWorld->DespawnActor(actorId, userId);
-				if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
-					shard->Submit(Job([sessionId, e, requestId, ok]()
+				physicalWorld->DespawnActorAsync(actorId, userId, [sessionId, e, requestId](bool ok)
 					{
-						auto* self = static_cast<ServerUdpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
-						if (self && self->GetEntity() == e)
-							SendDespawnActorResponse(e, ok, requestId);
-					}));
+						if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
+							shard->Submit(Job([sessionId, e, requestId, ok]()
+								{
+									auto* self = static_cast<ServerUdpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
+									if (self && self->GetEntity() == e)
+										SendDespawnActorResponse(e, ok, requestId);
+								}));
+					});
 			}))
 		{
 			SendDespawnActorResponse(e, false, requestId);

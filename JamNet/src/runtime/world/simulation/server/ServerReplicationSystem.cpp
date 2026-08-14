@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "jamnet/runtime/world/simulation/server/ServerReplicationSystem.h"
+#include "jamnet/runtime/world/simulation/server/WorldMetrics.h"
 
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
 #include "jamnet/runtime/world/simulation/common/WorldContext.h"
@@ -34,8 +35,8 @@ namespace jam::net
 		};
 	}
 
-	ServerReplicationSystem::ServerReplicationSystem(entt::registry& world)
-		: m_world(world)
+	ServerReplicationSystem::ServerReplicationSystem(entt::registry& world, WorldMetrics& metrics)
+		: m_world(world), m_metrics(&metrics)
 	{
 		m_fbb.reset(new flatbuffers::FlatBufferBuilder(JAMNET_MTU));
 	}
@@ -52,7 +53,6 @@ namespace jam::net
 
 		m_userStates.clear();
 		m_knownUsersByActor.clear();
-		m_forceLifecycleSyncPerUsers.clear();
 		m_sharedRigidStates.clear();
 		m_sharedCharacterStates.clear();
 		m_actorFrameCache.clear();
@@ -103,20 +103,12 @@ namespace jam::net
 			{
 				userState.baselineDelivery.clear();
 				userState.phase = eReplicationPhase::InitialSync;
-				ForceLifecycleSyncForUser(user, 30);
 			}
 			const uint32 ack		= inputSys ? inputSys->LastAppliedSeq(user) : 0;
 			const uint32 inputEpoch = inputSys ? inputSys->LastAppliedControlRevision(user) : 0;
-			uint32 snapshotPacketCount = 0;
-			uint32 snapshotActorCount = 0;
-			uint32 visibleActorCount = 0;
 
 			m_sentThisTickScratch.clear();
 			m_sentThisTickScratch.reserve(256);
-
-			bool forceSyncUser = false;
-			if (auto it = m_forceLifecycleSyncPerUsers.find(user); it != m_forceLifecycleSyncPerUsers.end() && it->second > 0)
-				forceSyncUser = true;
 
 			m_enteredScratch.clear();
 
@@ -127,21 +119,8 @@ namespace jam::net
 					m_enteredScratch.insert(id.Value());
 			}
 
-			QueueLifecycleForVisibleActors(user, forceSyncUser);
-			//QueueLifecycleForStaticActors(user, forceSyncUser);
+			QueueLifecycleForVisibleActors(user);
 			EmitPendingLifecyclePackets(user, tick);
-
-			if (forceSyncUser)
-			{
-				auto it = m_forceLifecycleSyncPerUsers.find(user);
-				if (it != m_forceLifecycleSyncPerUsers.end())
-				{
-					if (it->second > 0)
-						--it->second;
-					if (it->second <= 0)
-						m_forceLifecycleSyncPerUsers.erase(it);
-				}
-			}
 
 			for (auto& bucket : m_candidateBucketsScratch)
 				bucket.clear();
@@ -183,7 +162,6 @@ namespace jam::net
 
 			if (const auto* visibleActors = m_aoiSys->GetVisibleActors(user))
 			{
-				visibleActorCount = static_cast<uint32>(visibleActors->size());
 				for (const AoiVisibleActorSlot& slot : *visibleActors)
 				{
 					if (!slot.alive || slot.actor == entt::null || !m_world.valid(slot.actor) || !m_world.all_of<ActorId>(slot.actor))
@@ -306,23 +284,18 @@ namespace jam::net
 					continue;
 
 				m_netWorld->SendTo(pkt, user);
+				m_metrics->RecordSnapshotPacket(pkt->Size(), m_actorOffsScratch.size(), m_fullActorIdsScratch.size());
 				for (const ActorId actorId : m_fullActorIdsScratch)
 					MarkFullStateSent(user, actorId);
-				++snapshotPacketCount;
-				snapshotActorCount += static_cast<uint32>(m_actorOffsScratch.size());
 			}
 
 			TryCompleteInitialSync(user);
 		}
-	}
 
-	void ServerReplicationSystem::ForceLifecycleSyncForUser(uint64 userId, int32 budget)
-	{
-		if (userId == 0 || budget <= 0)
-			return;
-
-		auto& slot = m_forceLifecycleSyncPerUsers[userId];
-		slot = std::max(slot, budget);
+		uint64 pendingLifecycleTotal = 0;
+		for (const auto& state : m_userStates | std::views::values)
+			pendingLifecycleTotal += state.pendingLifecycle.size();
+		m_metrics->SetLifecyclePending(pendingLifecycleTotal);
 	}
 
 	const ReplicationUserState* ServerReplicationSystem::FindUserState(uint64 userId) const
@@ -579,7 +552,6 @@ namespace jam::net
 		if (!inserted)
 			return it->second.phase == eReplicationPhase::AwaitingPlayer;
 
-		JAMNET_LOG_DEBUG("[ServerReplicationSystem] AttachUser() : userId= {}", userId);
 		return true;
 	}
 
@@ -590,8 +562,6 @@ namespace jam::net
 			return false;
 
 		userState->phase = eReplicationPhase::InitialSync;
-		ForceLifecycleSyncForUser(userId, 30);
-		JAMNET_LOG_DEBUG("[ServerReplicationSystem] BeginInitialSync() : userId= {}", userId);
 		return true;
 	}
 
@@ -602,7 +572,6 @@ namespace jam::net
 			return false;
 
 		userState->phase = eReplicationPhase::Suspended;
-		m_forceLifecycleSyncPerUsers.erase(userId);
 		return true;
 	}
 
@@ -618,7 +587,6 @@ namespace jam::net
 		userState->baselineDelivery.clear();
 		userState->pendingLifecycle.clear();
 		userState->phase = eReplicationPhase::InitialSync;
-		ForceLifecycleSyncForUser(userId, 30);
 		return true;
 	}
 
@@ -651,6 +619,7 @@ namespace jam::net
 
 			if (entry->request_full())
 			{
+				m_metrics->RecordBaselineFullRequest();
 				delivery.sentBaselineRev = 0;
 				delivery.ackedBaselineRev = 0;
 				delivery.resendCount = 0;
@@ -684,7 +653,6 @@ namespace jam::net
 		}
 
 		m_userStates.erase(userId);
-		m_forceLifecycleSyncPerUsers.erase(userId);
 	}
 
 	void ServerReplicationSystem::OnActorDestroyed(entt::entity e)
@@ -1012,7 +980,7 @@ namespace jam::net
 		}
 	}
 
-	void ServerReplicationSystem::QueueLifecycleForVisibleActors(uint64 userId, bool forceSyncUser)
+	void ServerReplicationSystem::QueueLifecycleForVisibleActors(uint64 userId)
 	{
 		if (userId == 0)
 			return;
@@ -1040,13 +1008,13 @@ namespace jam::net
 
 		for (const ActorId id : state->entered)
 		{
-		   if (!id.IsValid())
+			if (!id.IsValid())
 				continue;
 
 			enteredSet.insert(id.Value());
 			CancelRemovalForUser(userId, id);
 
-		 if (isKnownActor(id))
+			if (isKnownActor(id))
 				QueueLifecycleMetaForKnownUser(userId, id);
 			else
 				QueueLifecycleCreateForUser(userId, id);
@@ -1062,9 +1030,6 @@ namespace jam::net
 				QueueLifecycleCreateForUser(userId, id);
 				continue;
 			}
-
-			if (forceSyncUser)
-			  QueueLifecycleMetaForKnownUser(userId, id);
 		}
 	}
 
@@ -1114,7 +1079,7 @@ namespace jam::net
 
 				if ((usedPayloadBudget + est) > kPacketPayloadBudget && !actorOffs.empty())
 				{
-					JAMNET_LOG_WARN("[EmitPendingLifecyclePackets] user id= {}, pending packets size is over budget");
+					m_metrics->RecordLifecyclePacketSplit();
 					break;
 				}
 
@@ -1142,10 +1107,14 @@ namespace jam::net
 
 			auto pkt = PacketBuilder::CreateCustomPacket(CustomPacketId::LIFECYCLE, PacketFlags::NONE, eChannel::RELIABLE_ORDERED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
 			if (!pkt.IsValid())
+			{
+				JAMNET_LOG_WARN("[LifecycleTx] packet build failed. userId={}, worldId={}, tick={}, actors={}, payloadBytes={}",
+					userId, m_netWorld->GetWorldId(), tick, actorOffs.size(), m_fbb->GetSize());
 				continue;
-
+			}
 
 			m_netWorld->SendTo(pkt, userId);
+			m_metrics->RecordLifecyclePacket(pkt->Size(), sentEvents.size());
 
 			CommitPendingLifecycleBatch(userId, sentEvents);
 		}
@@ -1302,7 +1271,11 @@ namespace jam::net
 			return false;
 		if (delivery.resendCount >= kBaselineResendBudget)
 		{
-			userState->phase = eReplicationPhase::NeedsResync;
+			if (userState->phase != eReplicationPhase::NeedsResync)
+			{
+				m_metrics->RecordBaselineResync();
+				userState->phase = eReplicationPhase::NeedsResync;
+			}
 			return false;
 		}
 		return true;
@@ -1365,6 +1338,7 @@ namespace jam::net
 			}
 			else if (delivery.lastSentTick != 0)
 			{
+				m_metrics->RecordBaselineResend();
 				++delivery.resendCount;
 			}
 			delivery.lastSentTick = m_tickCounter;

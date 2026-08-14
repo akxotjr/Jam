@@ -796,7 +796,15 @@ namespace jam::net
 			return;
 		}
 
-		const auto instance = ResolveDestination(request);
+		EnterWorldRequest resolvedRequest = request;
+		if (resolvedRequest.IsServerResolved())
+		{
+			const auto archetypeKey = m_owner->ResolveEnterWorldDestination(user->accountId, userId);
+			if (archetypeKey)
+				resolvedRequest.archetypeKey = *archetypeKey;
+		}
+
+		const auto instance = ResolveDestination(resolvedRequest);
 		if (!instance)
 		{
 			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
@@ -945,7 +953,7 @@ namespace jam::net
 				return;
 			}
 
-			JAMNET_LOG_INFO("[EnterWorld] world ready. userId={}, token={}, worldId={}", transition.userId, transition.token.value, ready->world->worldId);
+			//JAMNET_LOG_INFO("[EnterWorld] world ready. userId={}, token={}, worldId={}", transition.userId, transition.token.value, ready->world->worldId);
 			if (transition.source && *transition.source == *ready->world)
 			{
 				CompleteEnter(*user, user->worldState);
@@ -1058,7 +1066,7 @@ namespace jam::net
 			}
 			else
 			{
-				JAMNET_LOG_INFO("[EnterWorld] target reserved. userId={}, token={}; sending prepare", transition.userId, transition.token.value);
+				//JAMNET_LOG_INFO("[EnterWorld] target reserved. userId={}, token={}; sending prepare", transition.userId, transition.token.value);
 				AdvanceTransition(*user, eWorldTransitionPhase::WaitingClientPrepared);
 			}
 			return;

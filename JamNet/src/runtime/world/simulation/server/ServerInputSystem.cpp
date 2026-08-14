@@ -74,6 +74,8 @@ namespace jam::net
 		m_pendingInputs.clear();
 		m_currentInputs.clear();
 		m_appliedInputs.clear();
+		m_latestControlRevisions.clear();
+		m_moveToDiagnostics.clear();
 	}
 
 	void ServerInputSystem::Tick()
@@ -107,6 +109,62 @@ namespace jam::net
 				context.hasFollowTargetPosition = TryResolveTargetPos(m_world, follow->target.Value(), context.followTargetPosition);
 			input = CharacterControlResolver::Resolve(cmd.intent, context, m_controlResolveConfig);
 			m_currentInputs[control.userId] = cmd;
+
+			const auto* moveTo = std::get_if<MoveToPositionIntent>(&cmd.intent.locomotion);
+			if (!moveTo || !context.selfState)
+			{
+				m_moveToDiagnostics.erase(control.userId);
+				continue;
+			}
+
+			auto& diagnostic = m_moveToDiagnostics[control.userId];
+			const px::Vec3 targetDelta = moveTo->target - diagnostic.target;
+			if (!diagnostic.initialized || targetDelta.MagnitudeSquared() > 0.01f)
+			{
+				diagnostic.target = moveTo->target;
+				diagnostic.lastPosition = context.selfState->pos;
+				diagnostic.lastSampleTick = serverTick;
+				diagnostic.stationarySamples = 0;
+				diagnostic.initialized = true;
+				diagnostic.reported = false;
+				continue;
+			}
+
+			constexpr uint32 kDiagnosticSampleTicks = 30;
+			if (serverTick - diagnostic.lastSampleTick < kDiagnosticSampleTicks)
+				continue;
+
+			px::Vec3 moved = context.selfState->pos - diagnostic.lastPosition;
+			moved.y = 0.0f;
+			px::Vec3 remaining = moveTo->target - context.selfState->pos;
+			remaining.y = 0.0f;
+			const float movedDistanceSq = moved.MagnitudeSquared();
+			const float remainingDistanceSq = remaining.MagnitudeSquared();
+			const bool expectsMovement = remainingDistanceSq > (m_controlResolveConfig.stopRadius * m_controlResolveConfig.stopRadius)
+				&& (input.inputFlags & px::INPUT_FORWARD) != 0;
+			if (expectsMovement && movedDistanceSq < 0.01f)
+				diagnostic.stationarySamples = static_cast<uint8>(std::min<uint32>(diagnostic.stationarySamples + 1, 255));
+			else
+				diagnostic.stationarySamples = 0;
+
+			diagnostic.lastPosition = context.selfState->pos;
+			diagnostic.lastSampleTick = serverTick;
+			if (!diagnostic.reported && diagnostic.stationarySamples >= 3)
+			{
+				uint64 worldId = 0;
+				if (auto* world = m_world.ctx().find<ServerWorld*>(); world && *world)
+					worldId = (*world)->GetWorldId();
+				const auto pendingIt = m_pendingInputs.find(control.userId);
+				const std::size_t pendingCount = pendingIt != m_pendingInputs.end() ? pendingIt->second.size() : 0;
+				JAMNET_LOG_WARN(
+					"[MoveToStallDiag] userId={}, worldId={}, tick={}, pos=({:.2f},{:.2f},{:.2f}), target=({:.2f},{:.2f},{:.2f}), remaining={:.2f}, moved1s={:.3f}, speed={:.3f}, flags=0x{:08X}, seq={}, revision={}, pending={}",
+					control.userId, worldId, serverTick,
+					context.selfState->pos.x, context.selfState->pos.y, context.selfState->pos.z,
+					moveTo->target.x, moveTo->target.y, moveTo->target.z,
+					std::sqrt(remainingDistanceSq), std::sqrt(movedDistanceSq), context.selfState->horizontalSpeed,
+					input.inputFlags, cmd.sequence, cmd.intent.controlRevision, pendingCount);
+				diagnostic.reported = true;
+			}
 		}
 	}
 
@@ -123,6 +181,8 @@ namespace jam::net
 		m_pendingInputs.erase(userId);
 		m_currentInputs.erase(userId);
 		m_appliedInputs.erase(userId);
+		m_latestControlRevisions.erase(userId);
+		m_moveToDiagnostics.erase(userId);
 	}
 
 	void ServerInputSystem::MarkInputApplied(uint64 userId)
@@ -160,13 +220,53 @@ namespace jam::net
 		if (!IsValidIntent(cmd.intent))
 			return;
 
-		const uint32 appliedSeq = LastAppliedSeq(userId);
+		const bool hasInputBaseline = m_appliedInputs.contains(userId)
+			|| m_currentInputs.contains(userId)
+			|| m_pendingInputs.contains(userId)
+			|| m_latestControlRevisions.contains(userId);
+
+		auto& latestRevision = m_latestControlRevisions[userId];
+		if (cmd.intent.controlRevision < latestRevision)
+			return;
+
+		uint32 appliedSeq = LastAppliedSeq(userId);
+		const auto pendingIt = m_pendingInputs.find(userId);
+		const bool precedesPending = pendingIt != m_pendingInputs.end()
+			&& !pendingIt->second.empty()
+			&& cmd.sequence < pendingIt->second.begin()->first;
+		const bool sequenceRestarted = cmd.intent.controlRevision > latestRevision
+			&& (cmd.sequence <= appliedSeq || precedesPending);
+		if (sequenceRestarted)
+		{
+			// A ClientWorld recreated for a new membership starts its input sequence
+			// from zero. The runtime-wide control revision distinguishes it from late
+			// packets belonging to the previous visit to the same WorldId.
+			m_pendingInputs.erase(userId);
+			m_currentInputs.erase(userId);
+			m_appliedInputs.erase(userId);
+		}
+
+		if ((!hasInputBaseline || sequenceRestarted) && cmd.sequence > 1)
+		{
+			// The ClientWorld can tick while membership/player materialization is in
+			// progress. Treat the first input that the ready server actor can receive as
+			// the membership baseline instead of replaying the unavailable prefix as
+			// synthetic Stop commands one slot per simulation tick.
+			CharacterControlCommand baseline{};
+			baseline.sequence = cmd.sequence - 1;
+			m_appliedInputs.insert_or_assign(userId, baseline);
+			appliedSeq = baseline.sequence;
+		}
+		else if (sequenceRestarted)
+		{
+			appliedSeq = 0;
+		}
+		latestRevision = cmd.intent.controlRevision;
+
 		if (cmd.sequence <= appliedSeq)
 		{
 			return;
 		}
-		if (cmd.intent.controlRevision < LastAppliedControlRevision(userId))
-			return;
 
 		auto& pending = m_pendingInputs[userId];
 		if (auto it = pending.find(cmd.sequence); it != pending.end())
