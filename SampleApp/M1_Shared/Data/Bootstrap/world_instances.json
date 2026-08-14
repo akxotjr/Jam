@@ -1,21 +1,20 @@
 {
   "version": 1,
   "world_instances": {
-    "town-01": {
-      "archetype": "Town01",
-      "startup": "bootstrap",
-      "lifecycle": "persistent",
-      "default": true
-    },
     "field-01": {
-      "archetype": "Field01",
+      "archetype": "Field",
       "startup": "bootstrap",
       "lifecycle": "persistent",
       "default": true
     },
     "field-02": {
-      "archetype": "Field02",
-      "startup": "on_demand",
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
+    },
+    "field-03": {
+      "archetype": "Field",
+      "startup": "bootstrap",
       "lifecycle": "persistent"
     }
   }

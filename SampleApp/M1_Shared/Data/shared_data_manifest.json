@@ -25,14 +25,8 @@
       }
     },
     "actor_level_set": {
-      "Town01": {
-        "path": "Levels/Town01.actor_level.json"
-      },
-      "Field01": {
-        "path": "Levels/Field01.actor_level.json"
-      },
-      "Field02": {
-        "path": "Levels/Field02.actor_level.json"
+      "Field": {
+        "path": "Levels/Field.actor_level.json"
       }
     }
   }

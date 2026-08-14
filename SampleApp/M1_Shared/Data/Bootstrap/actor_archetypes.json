@@ -15,11 +15,6 @@
       "physics_archetype": "Portal",
       "spawn_policy": "level_only",
       "allow_replication": false
-    },
-    "Box": {
-      "physics_archetype": "Box",
-      "spawn_policy": "level_only",
-      "allow_replication": false
     }
   }
 }

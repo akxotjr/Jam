@@ -1,19 +1,9 @@
 {
   "version": 1,
   "world_archetypes": {
-    "Town01": {
-      "template_name": "Town",
-      "actor_level_name": "Town01",
-      "physics_asset_name": "Common"
-    },
-    "Field01": {
+    "Field": {
       "template_name": "Field",
-      "actor_level_name": "Field01",
-      "physics_asset_name": "Field"
-    },
-    "Field02": {
-      "template_name": "Field",
-      "actor_level_name": "Field02",
+      "actor_level_name": "Field",
       "physics_asset_name": "Field"
     }
   }
