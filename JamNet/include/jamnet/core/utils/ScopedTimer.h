@@ -9,11 +9,11 @@ namespace jam
 	class ScopedTimer
 	{
 	public:
-		ScopedTimer(std::string_view name, eTimeUnit unit = eTimeUnit::Us)
+		ScopedTimer(std::string_view name, eTimeUnit unit = eTimeUnit::Us, uint64 threshold = 0)
+			: m_name(name)
+			, m_unit(unit)
+			, m_threshold(threshold)
 		{
-			m_name = name;
-			m_unit = unit;
-
 			if (m_unit == eTimeUnit::Ns)
 				m_start = NOW_NS();
 			else if (m_unit == eTimeUnit::Us)
@@ -26,33 +26,37 @@ namespace jam
 
 		~ScopedTimer()
 		{
-			uint64 now;
+			uint64 now = 0;
+
 			if (m_unit == eTimeUnit::Ns)
-			{
 				now = NOW_NS();
-				JAMNET_LOG_TRACE("[{}] start= {}ns, elapsed= {}ns", m_name, m_start, now - m_start);
-			}
 			else if (m_unit == eTimeUnit::Us)
-			{
 				now = NOW_US();
-				JAMNET_LOG_TRACE("[{}] start= {}us, elapsed= {}us", m_name, m_start, now - m_start);
-			}
 			else if (m_unit == eTimeUnit::Ms)
-			{
 				now = NOW_MS();
-				JAMNET_LOG_TRACE("[{}] start= {}ms, elapsed= {}ms", m_name, m_start, now - m_start);
-			}
 			else if (m_unit == eTimeUnit::Sec)
-			{
 				now = NOW_SEC();
-				JAMNET_LOG_TRACE("[{}] start= {}sec, elapsed= {}sec", m_name, m_start, now - m_start);
-			}
+
+			const uint64 elapsed = now - m_start;
+
+			if (elapsed < m_threshold)
+				return;
+
+			if (m_unit == eTimeUnit::Ns)
+				JAMNET_LOG_TRACE("[{}] start= {}ns, elapsed= {}ns", m_name, m_start, elapsed);
+			else if (m_unit == eTimeUnit::Us)
+				JAMNET_LOG_TRACE("[{}] start= {}us, elapsed= {}us", m_name, m_start, elapsed);
+			else if (m_unit == eTimeUnit::Ms)
+				JAMNET_LOG_TRACE("[{}] start= {}ms, elapsed= {}ms", m_name, m_start, elapsed);
+			else if (m_unit == eTimeUnit::Sec)
+				JAMNET_LOG_TRACE("[{}] start= {}sec, elapsed= {}sec", m_name, m_start, elapsed);
 		}
 
 	private:
 		std::string		m_name;
 		eTimeUnit		m_unit	= eTimeUnit::Us;
 		uint64			m_start = 0;
+		uint64			m_threshold = 0;
 	};
 
 } // namespace jam
@@ -64,3 +68,8 @@ namespace jam
 #define SCOPED_TIMER_US()  jam::ScopedTimer timer(__FUNCTION__, jam::eTimeUnit::Us);
 #define SCOPED_TIMER_MS()  jam::ScopedTimer timer(__FUNCTION__, jam::eTimeUnit::Ms);
 #define SCOPED_TIMER_SEC() jam::ScopedTimer timer(__FUNCTION__, jam::eTimeUnit::Sec);
+
+#define SCOPED_TIMER_IF_NS(threshold)  jam::ScopedTimer timer(__FUNCTION__, jam::eTimeUnit::Ns, threshold);
+#define SCOPED_TIMER_IF_US(threshold)  jam::ScopedTimer timer(__FUNCTION__, jam::eTimeUnit::Us, threshold);
+#define SCOPED_TIMER_IF_MS(threshold)  jam::ScopedTimer timer(__FUNCTION__, jam::eTimeUnit::Ms, threshold);
+#define SCOPED_TIMER_IF_SEC(threshold) jam::ScopedTimer timer(__FUNCTION__, jam::eTimeUnit::Sec, threshold);

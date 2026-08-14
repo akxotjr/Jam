@@ -1,6 +1,11 @@
 #pragma once
 
 #include <cstdio>
+#include <chrono>
+#include <ctime>
+#include <cstdlib>
+#include <filesystem>
+#include <format>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -19,6 +24,34 @@ namespace jam
 
 	namespace detail
 	{
+		inline std::string ExecutableName()
+		{
+			char* executablePath = nullptr;
+			if (_get_pgmptr(&executablePath) != 0 || !executablePath || *executablePath == '\0')
+				return "jam";
+			return std::filesystem::path(executablePath).stem().string();
+		}
+
+		inline std::string LocalTimestamp()
+		{
+			const auto now = std::chrono::system_clock::now();
+			const std::time_t time = std::chrono::system_clock::to_time_t(now);
+			std::tm local{};
+			localtime_s(&local, &time);
+			return std::format("{:04}{:02}{:02}_{:02}{:02}{:02}",
+				local.tm_year + 1900,
+				local.tm_mon + 1,
+				local.tm_mday,
+				local.tm_hour,
+				local.tm_min,
+				local.tm_sec);
+		}
+
+		inline std::string TimestampedStem()
+		{
+			return ExecutableName() + '_' + LocalTimestamp();
+		}
+
 		template <typename... Args>
 		inline std::string FormatLogMessage(std::string_view format, Args&&... args)
 		{
@@ -42,7 +75,7 @@ namespace jam
 			return instance;
 		}
 
-		void Init(std::string_view name = "Jam", std::string_view filePath = "logs/jam.log")
+		void Init(std::string_view name = "Jam", std::string_view filePath = "auto")
 		{
 			std::lock_guard lock(m_mutex);
 			if (m_logger)
@@ -64,7 +97,12 @@ namespace jam
 			{
 				try
 				{
-					sinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(std::string(filePath), true));
+					const std::filesystem::path resolvedPath = filePath == "auto"
+						? std::filesystem::path("logs") / (detail::TimestampedStem() + ".log")
+						: std::filesystem::path(filePath);
+					if (resolvedPath.has_parent_path())
+						std::filesystem::create_directories(resolvedPath.parent_path());
+					sinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(resolvedPath.string(), true));
 				}
 				catch (...)
 				{
@@ -223,5 +261,5 @@ namespace jam
 
 #define JAMNET_LOG_IF(condition, level, ...) JAM_LOG_IF(condition, level, __VA_ARGS__)
 #define JAMNET_LOG JAM_LOG
-#define LOGGER_INIT() JAM_LOG_INIT("JamNet", "logs/jamnet.log")
+#define LOGGER_INIT() JAM_LOG_INIT("JamNet")
 #define LOGGER_SHUTDOWN() JAM_LOG_SHUTDOWN()

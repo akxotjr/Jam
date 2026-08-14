@@ -1,6 +1,8 @@
 #pragma once
 #include "jamnet/core/executor/GlobalExecutor.h"
 
+#include <string>
+
 
 namespace jam::net
 {
@@ -8,6 +10,7 @@ namespace jam::net
 	{
 		uint32					clockTick = 30;
 		GlobalExecutorConfig	geConfig  = {};
+		std::string				logFilePath = "logs/jamnet.log";
 	};
 
 	class NetRuntime
