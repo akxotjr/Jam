@@ -167,12 +167,20 @@ namespace JamUnity.Authoring.Physics
 
         public static SharedGen.eCctBodyDtoPolicy ToGeneratedCctPolicy(eCCTPolicy value)
         {
-            return SharedGen.eCctBodyDtoPolicy.Default;
+            return value switch
+            {
+                eCCTPolicy.IgnoreControllers => SharedGen.eCctBodyDtoPolicy.IgnoreControllers,
+                _ => SharedGen.eCctBodyDtoPolicy.Default,
+            };
         }
 
         public static eCCTPolicy ToRuntimeCctPolicy(SharedGen.eCctBodyDtoPolicy value)
         {
-            return eCCTPolicy.Default;
+            return value switch
+            {
+                SharedGen.eCctBodyDtoPolicy.IgnoreControllers => eCCTPolicy.IgnoreControllers,
+                _ => eCCTPolicy.Default,
+            };
         }
 
         public static SharedGen.eShapeDtoType ToGeneratedShapeType(eShapeType value)

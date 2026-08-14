@@ -15,6 +15,4 @@ MonoBehaviour:
   worldArchetypesAssetPath: Bootstrap/world_archetypes.json
   version: 1
   entries:
-  - {fileID: 11400000, guid: 13d5fa8cae0463c4197a99753c513ff7, type: 2}
-  - {fileID: 11400000, guid: c597035733f054e459223e608c7e5822, type: 2}
-  - {fileID: 11400000, guid: a6d8ad1984b397d4e9251a0a7c394eb6, type: 2}
+  - {fileID: 11400000, guid: 464c051026eb4a547adbb586aa47b46c, type: 2}

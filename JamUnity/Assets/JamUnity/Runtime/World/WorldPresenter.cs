@@ -52,6 +52,7 @@ namespace JamUnity.World.Runtime
         [SerializeField] private bool           createCubeFallback = true;
     
         private readonly Dictionary<ActorId, ActorView> actors = new();
+        private readonly Dictionary<ulong, Stack<ActorView>> pooledActors = new();
         private float localActorSmoothSpeed;
 
         public void ConfigureLocalActorSmoothing(float smoothSpeed)
@@ -106,6 +107,17 @@ namespace JamUnity.World.Runtime
                 existing.isLocal = isLocal;
                 return;
             }
+
+            if (TryRentActor(actorArchetypeKey, out ActorView pooled))
+            {
+                pooled.actorArchetypeKey = actorArchetypeKey;
+                pooled.isLocal = isLocal;
+                pooled.hasPresentedTransform = false;
+                pooled.go.name = $"Actor_{actorId}";
+                pooled.go.SetActive(true);
+                actors[actorId] = pooled;
+                return;
+            }
     
             GameObject go = CreateActorObject(actorId, actorArchetypeKey);
             if (go == null)
@@ -129,6 +141,31 @@ namespace JamUnity.World.Runtime
 
             Destroy(actor.go);
 			actors.Remove(actorId);
+        }
+
+        public void PoolActorPresentation(ActorId actorId)
+        {
+            if (!actors.TryGetValue(actorId, out ActorView actor)
+                || actor == null
+                || actor.isLevelActor)
+            {
+                return;
+            }
+
+            actors.Remove(actorId);
+            if (actor.go == null)
+                return;
+
+            actor.isLocal = false;
+            actor.hasPresentedTransform = false;
+            actor.go.SetActive(false);
+
+            if (!pooledActors.TryGetValue(actor.actorArchetypeKey, out Stack<ActorView> pool))
+            {
+                pool = new Stack<ActorView>();
+                pooledActors.Add(actor.actorArchetypeKey, pool);
+            }
+            pool.Push(actor);
         }
     
         public void ApplyActorRenderSample(in ActorRenderSample sample, float deltaTime)
@@ -181,6 +218,33 @@ namespace JamUnity.World.Runtime
 
             foreach (ActorId actorId in runtimeActorIds)
                 actors.Remove(actorId);
+
+            foreach (Stack<ActorView> pool in pooledActors.Values)
+            {
+                while (pool.Count > 0)
+                {
+                    ActorView actor = pool.Pop();
+                    if (actor?.go != null)
+                        Destroy(actor.go);
+                }
+            }
+            pooledActors.Clear();
+        }
+
+        private bool TryRentActor(ulong actorArchetypeKey, out ActorView actor)
+        {
+            if (pooledActors.TryGetValue(actorArchetypeKey, out Stack<ActorView> pool))
+            {
+                while (pool.Count > 0)
+                {
+                    actor = pool.Pop();
+                    if (actor?.go != null)
+                        return true;
+                }
+            }
+
+            actor = null;
+            return false;
         }
 
         private void RegisterAuthoredActors()

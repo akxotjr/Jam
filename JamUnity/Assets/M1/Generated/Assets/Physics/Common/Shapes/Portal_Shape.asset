@@ -39,7 +39,7 @@ MonoBehaviour:
     customFlagBits: 0
   contactOffset: 0
   restOffset: 0.02
-  halfExtents: {x: 1.5, y: 2, z: 1}
+  halfExtents: {x: 3, y: 2, z: 1}
   radius: 0.5
   halfHeight: 0.5
   mesh: {fileID: 0}

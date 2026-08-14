@@ -139,7 +139,12 @@ namespace JamUnity.Runtime.Client
                     LocalPlayerAvailabilityChanged?.Invoke(ev.worldId, false);
                 actorIdentities.Remove((ev.worldId, ev.actorId));
                 if (ev.worldId == activeMainWorldId)
-                    activeWorldPresenter?.OnActorDespawned(ev.actorId);
+                {
+                    if (ev.reason is CoreNative.eActorLifecycleReason.AoiLeft or CoreNative.eActorLifecycleReason.Despawned)
+                        activeWorldPresenter?.PoolActorPresentation(ev.actorId);
+                    else
+                        activeWorldPresenter?.OnActorDespawned(ev.actorId);
+                }
             }
         }
 
@@ -186,7 +191,6 @@ namespace JamUnity.Runtime.Client
             if (result != CoreNative.eResult.Ok || currentFrame.sequence == 0)
                 return;
 
-            RecordPresentationFrame(currentFrame.sequence);
             float interpolationAlpha = ResolvePresentationInterpolationAlpha(previousFrame, currentFrame);
 
             int actorCount = currentFrame.actorCount;
@@ -210,11 +214,6 @@ namespace JamUnity.Runtime.Client
             }
         }
 
-        private ulong lastPresentationSequence;
-        private int presentationFrames;
-        private int presentationRepeatedFrames;
-        private int presentationSequenceChanges;
-        private float presentationLogElapsed;
         private ulong presentationInterpolationSequence;
         private float presentationInterpolationElapsed;
 
@@ -239,28 +238,6 @@ namespace JamUnity.Runtime.Client
 
             const float simulationTickInterval = 1.0f / 30.0f;
             return Mathf.Clamp01(presentationInterpolationElapsed / simulationTickInterval);
-        }
-
-        private void RecordPresentationFrame(ulong sequence)
-        {
-            ++presentationFrames;
-            if (sequence == lastPresentationSequence)
-                ++presentationRepeatedFrames;
-            else
-            {
-                lastPresentationSequence = sequence;
-                ++presentationSequenceChanges;
-            }
-
-            presentationLogElapsed += Time.unscaledDeltaTime;
-            if (presentationLogElapsed < 1.0f)
-                return;
-
-            Debug.Log($"[MovementDiag][Presentation] frames={presentationFrames}, repeated={presentationRepeatedFrames}, sequenceChanges={presentationSequenceChanges}, lastSequence={lastPresentationSequence}");
-            presentationFrames = 0;
-            presentationRepeatedFrames = 0;
-            presentationSequenceChanges = 0;
-            presentationLogElapsed = 0.0f;
         }
 
         private void ResizeActorBuffers(CoreNative.FrameCopyInfo copyInfo)
@@ -376,9 +353,6 @@ namespace JamUnity.Runtime.Client
 
 			bool isLocal = current.isLocal != 0 || identity.IsLocal;
             ulong actorArchetypeKey = identity.ActorArchetypeKey;
-
-            // if (isLocal)
-            //     Debug.Log($"[MovementDiag][PlayerPosition] pos={position}");
 
             return new WorldPresenter.ActorRenderSample(
 				current.actorId,

@@ -4,7 +4,7 @@ using System.Collections;
 public class GroundClickMarker : MonoBehaviour
 {
     [SerializeField]
-    private ParticleSystem particleSystem;
+    private ParticleSystem clickParticleSystem;
 
     [SerializeField]
     private float heightOffset = 0.02f;
@@ -21,7 +21,7 @@ public class GroundClickMarker : MonoBehaviour
 
     public void Show(Vector3 position, Vector3 normal)
     {
-        if (particleSystem == null)
+        if (GetComponent<ParticleSystem>() == null)
             return;
 
         if (!gameObject.activeSelf)
@@ -32,11 +32,11 @@ public class GroundClickMarker : MonoBehaviour
         if (hideRoutine != null)
             StopCoroutine(hideRoutine);
 
-        particleSystem.gameObject.SetActive(true);
-        var main = particleSystem.main;
+        GetComponent<ParticleSystem>().gameObject.SetActive(true);
+        var main = GetComponent<ParticleSystem>().main;
         main.loop = false;
-        particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-        particleSystem.Play(true);
+        GetComponent<ParticleSystem>().Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        GetComponent<ParticleSystem>().Play(true);
         hideRoutine = StartCoroutine(HideAfterPlayback());
     }
 
@@ -44,9 +44,9 @@ public class GroundClickMarker : MonoBehaviour
     {
         yield return new WaitForSeconds(visibleDuration);
 
-        if (particleSystem != null)
+        if (GetComponent<ParticleSystem>() != null)
         {
-            particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            GetComponent<ParticleSystem>().Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
 
         hideRoutine = null;

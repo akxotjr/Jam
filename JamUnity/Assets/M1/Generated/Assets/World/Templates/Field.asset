@@ -16,6 +16,6 @@ MonoBehaviour:
   group: 1
   allowMultipleInstancePerUser: 0
   persistent: 1
-  destroyWhenEmpty: 1
+  destroyWhenEmpty: 0
   isPrivate: 0
-  capacity: 32
+  capacity: 200

@@ -15822,8 +15822,8 @@ MonoBehaviour:
     SharedDataManifestPath: C:/Users/akxotjr/GameWorkSpace/Jam-dev/SampleApp/M1_Shared/Data/shared_data_manifest.json
     HeadlessMode: 0
     LogNativeMessages: 1
-  cameraProfile: {fileID: 11400000, guid: 70f09d19f4754b3092d9ef0d2bccf05e, type: 2}
-  movementProfile: {fileID: 11400000, guid: 8d7169610b1a464581b4b3bc72f9d9ce, type: 2}
+  cameraProfile: {fileID: 11400000, guid: 7fedf6becaeb455896e3111781f69ae1, type: 2}
+  movementProfile: {fileID: 11400000, guid: f1aa3a489a354e2593a58f85e5df1bef, type: 2}
   pointerCamera: {fileID: 1634895130}
   worldPresentationRoot: {fileID: 2099969356}
   worldPresentationDB: {fileID: 11400000, guid: 47ca6b1da2fd73c46b349061fa4a9ec2, type: 2}

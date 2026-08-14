@@ -103,6 +103,8 @@ namespace JamUnity.Authoring.Physics
     {
         [EnumMember(Value = "default")]
         Default = 0,
+        [EnumMember(Value = "ignore_controllers")]
+        IgnoreControllers = 1,
     }
     
     public enum eRigidBehaviorKind

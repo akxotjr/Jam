@@ -13,12 +13,6 @@ MonoBehaviour:
   m_Name: WorldPresentationDatabase
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.World.Presentation.WorldPresentationDatabase
   entries:
-  - worldArchetypeName: Field01
-    worldArchetypeKey: 2140038526471192876
-    worldPrefab: {fileID: 5080211160214349264, guid: e554a43d2434850489026fcc50ad6970, type: 3}
-  - worldArchetypeName: Field02
-    worldArchetypeKey: 2140041825006077509
-    worldPrefab: {fileID: 2665742596063128455, guid: 0712cd5b58b58854c80816818ecf3c5e, type: 3}
-  - worldArchetypeName: Town01
-    worldArchetypeKey: 10727285285580038842
-    worldPrefab: {fileID: 3304558728053758351, guid: b6a40402d5fc4744fb8ebba6a47abb36, type: 3}
+  - worldArchetypeName: Field
+    worldArchetypeKey: 4801378031484380967
+    worldPrefab: {fileID: 555379802442336616, guid: e5b719c2a88a5624794c5416b5182214, type: 3}

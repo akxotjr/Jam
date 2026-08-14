@@ -17,7 +17,7 @@ MonoBehaviour:
   height: 0.75
   material: {fileID: 11400000, guid: f5e80063f03aaaa42b23f3535a0df515, type: 2}
   density: 10
-  policy: 0
+  policy: 1
   simFilter:
     category: 4
     mask: 19

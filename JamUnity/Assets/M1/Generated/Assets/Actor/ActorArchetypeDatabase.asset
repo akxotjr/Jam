@@ -15,7 +15,6 @@ MonoBehaviour:
   sharedDataPath: Bootstrap/actor_archetypes.json
   sharedDataVersion: 1
   archetypes:
-  - {fileID: 11400000, guid: aabc416af629af44887300ebcbd77654, type: 2}
   - {fileID: 11400000, guid: 2e59d0f504410884589b5cc8f68afd9c, type: 2}
   - {fileID: 11400000, guid: c46db9932eb24084095bfa5531870c3b, type: 2}
   - {fileID: 11400000, guid: d228bfd2a015d884fa873cd89a94df03, type: 2}

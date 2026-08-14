@@ -42,6 +42,7 @@ namespace JamUnity.UI.Chat
         [SerializeField] private RectTransform content;
         [SerializeField] private ScrollRect scrollRect;
         [SerializeField] private TMP_Text messagePrefab;
+        [SerializeField, Min(1)] private int maxHistoryEntries = 200;
 
         [Header("Channels")]
         [SerializeField] private Button allButton;
@@ -58,10 +59,13 @@ namespace JamUnity.UI.Chat
         [SerializeField] private Button dmCancelButton;
 
         private readonly List<ChatEntry> history = new();
+        private readonly Queue<TMP_Text> visibleMessages = new();
+        private readonly Queue<TMP_Text> messagePool = new();
         private readonly Dictionary<string, Button> dmButtons = new(StringComparer.OrdinalIgnoreCase);
         private SocialManager socialManager;
         private ChannelKind activeChannel = ChannelKind.All;
         private string activeDirectCharacterName = string.Empty;
+        private bool scrollToBottomPending;
 
         public bool HasInputFocus => (inputField != null && inputField.isFocused)
             || (dmRecipientInput != null && dmRecipientInput.isFocused);
@@ -218,6 +222,7 @@ namespace JamUnity.UI.Chat
             ChatEntry entry = new(message.Audience, message.ScopeId, directPeer,
 				$"[{channel}] {senderCharacterName}: {text}");
             history.Add(entry);
+            TrimHistory();
             if (IsVisible(entry))
                 AddVisibleMessage(entry.Text);
         }
@@ -333,8 +338,8 @@ namespace JamUnity.UI.Chat
 
         private void RebuildMessages()
         {
-            for (int i = content.childCount - 1; i >= 0; --i)
-                Destroy(content.GetChild(i).gameObject);
+            while (visibleMessages.Count > 0)
+                ReturnMessageToPool(visibleMessages.Dequeue());
             foreach (ChatEntry entry in history)
             {
                 if (IsVisible(entry))
@@ -345,16 +350,55 @@ namespace JamUnity.UI.Chat
 
         private void AddVisibleMessage(string message, bool scroll = true)
         {
-            TMP_Text messageText = Instantiate(messagePrefab, content);
+            TMP_Text messageText = RentMessage();
             messageText.text = message;
+            visibleMessages.Enqueue(messageText);
+            int historyLimit = Mathf.Max(1, maxHistoryEntries);
+            while (visibleMessages.Count > historyLimit)
+                ReturnMessageToPool(visibleMessages.Dequeue());
             if (scroll)
                 ScrollToBottom();
         }
 
+        private TMP_Text RentMessage()
+        {
+            TMP_Text message = messagePool.Count > 0
+                ? messagePool.Dequeue()
+                : Instantiate(messagePrefab, content);
+            message.gameObject.SetActive(true);
+            message.transform.SetAsLastSibling();
+            return message;
+        }
+
+        private void ReturnMessageToPool(TMP_Text message)
+        {
+            if (message == null)
+                return;
+            message.text = string.Empty;
+            message.gameObject.SetActive(false);
+            messagePool.Enqueue(message);
+        }
+
         private void ScrollToBottom()
         {
+            scrollToBottomPending = true;
+        }
+
+        private void LateUpdate()
+        {
+            if (!scrollToBottomPending)
+                return;
+
+            scrollToBottomPending = false;
             Canvas.ForceUpdateCanvases();
             scrollRect.verticalNormalizedPosition = 0f;
+        }
+
+        private void TrimHistory()
+        {
+            int overflow = history.Count - Mathf.Max(1, maxHistoryEntries);
+            if (overflow > 0)
+                history.RemoveRange(0, overflow);
         }
 
         private IEnumerator RefocusInputFieldNextFrame()

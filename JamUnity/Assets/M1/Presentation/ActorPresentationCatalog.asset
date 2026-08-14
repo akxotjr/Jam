@@ -13,9 +13,6 @@ MonoBehaviour:
   m_Name: ActorPresentationCatalog
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Actor.Runtime.ActorPresentationCatalog
   entries:
-  - actorArchetypeName: Box
-    actorArchetypeKey: 1609559789082440018
-    actorPrefab: {fileID: 6788379168228639983, guid: 9d434aebece16934ba5c0106db837bb6, type: 3}
   - actorArchetypeName: Floor
     actorArchetypeKey: 13150330638402972445
     actorPrefab: {fileID: 6933738838538964133, guid: c27a1262b41736b4186eb8467d651f6d, type: 3}

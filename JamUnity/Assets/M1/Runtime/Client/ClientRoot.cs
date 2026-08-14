@@ -1,20 +1,17 @@
 using System;
 using JamUnity.Core.Native;
-using JamUnity.Core.Util;
 using JamUnity.World.Presentation;
 using JamUnity.UI.Chat;
 using UnityEngine;
 using JamUnity.Client.Runtime;
 using JamUnity.Actor.Runtime;
 using System.Collections.Generic;
+using UnityEngine.InputSystem;
 
 namespace JamUnity.Runtime.Client
 {
     public sealed class ClientRoot : MonoBehaviour
     {
-        private const string InitialWorldArchetypeName = "Town01";
-        private const string InitialWorldDestinationName = "town-01";
-
         [Serializable]
         public struct Config
         {
@@ -104,7 +101,11 @@ namespace JamUnity.Runtime.Client
 
         private void Update()
         {
-            inputManager?.SetInputSuppressed(chatUI != null && chatUI.HasInputFocus);
+            bool hasTextInputFocus = chatUI != null && chatUI.HasInputFocus;
+            inputManager?.SetInputSuppressed(hasTextInputFocus);
+
+            if (!hasTextInputFocus && cameraFollow != null && Keyboard.current?.vKey.wasPressedThisFrame == true)
+                cameraFollow.ToggleAoiDebugView();
 
             if (nativeManager.IsInitialized && characterControlEnabled)
             {
@@ -207,9 +208,6 @@ namespace JamUnity.Runtime.Client
                 kind = CoreNative.eWorldActionKind.Enter,
                 enter = new CoreNative.EnterWorldRequest
                 {
-                    worldArchetypeKey = StableKey.MakeStableKey(InitialWorldArchetypeName),
-                    selector = CoreNative.eWorldDestinationSelector.AuthoredDestination,
-                    destinationName = InitialWorldDestinationName,
                     expectedMainRevision = 0,
                 },
             };
@@ -222,7 +220,7 @@ namespace JamUnity.Runtime.Client
             }
 
             initialWorldRequested = true;
-            Debug.Log($"ClientRoot: initial world entry requested. archetype={InitialWorldArchetypeName}, destination={InitialWorldDestinationName}, request={submission.receipt.requestId}");
+			Debug.Log($"ClientRoot: initial world entry requested. request={submission.receipt.requestId}");
 			return true;
         }
 

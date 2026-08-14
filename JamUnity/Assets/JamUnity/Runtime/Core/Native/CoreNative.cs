@@ -9,7 +9,7 @@ namespace JamUnity.Core.Native
         public const uint AbiVersion = 15;
 
         private const string DllName =
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+#if JAM_NATIVE_DEBUG
             "JamUnityBridge_d";
 #else
             "JamUnityBridge";
