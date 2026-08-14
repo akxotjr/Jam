@@ -7727,6 +7727,7 @@ MonoBehaviour:
   content: {fileID: 1263969810}
   scrollRect: {fileID: 1070483363}
   messagePrefab: {fileID: 6604313664907086326, guid: c6caf5a088e3d104781d9aa7743ef9d5, type: 3}
+  maxHistoryEntries: 200
   allButton: {fileID: 1585736191}
   worldButton: {fileID: 1433249301}
   dmPlusButton: {fileID: 1823108106}
@@ -11064,6 +11065,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Client.Runtime.CameraFollow
   presenter: {fileID: 0}
+  aoiHalfExtent: 30
+  aoiHysteresis: 10
+  aoiViewPadding: 10
+  aoiDebugHeight: 100
 --- !u!114 &1634895133
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15816,7 +15821,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Runtime.Client.ClientRoot
   config:
-    ServerIp: 127.0.0.1
+    ServerIp: 119.198.44.208
     TcpPort: 7777
     UdpPort: 8888
     SharedDataManifestPath: C:/Users/akxotjr/GameWorkSpace/Jam-dev/SampleApp/M1_Shared/Data/shared_data_manifest.json
