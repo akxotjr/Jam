@@ -86,8 +86,16 @@ namespace jam::net
 
 	bool TcpSession::Connect()
 	{
-		if (!GetService() || !GetService()->RegisterIocpObject(this))
+		if (!GetService())
+		{
+			JAMNET_LOG_ERROR("[TcpSession] Cannot connect without a service");
 			return false;
+		}
+		if (!GetService()->RegisterIocpObject(this))
+		{
+			JAMNET_LOG_ERROR("[TcpSession] Failed to register socket with IOCP");
+			return false;
+		}
 
 		return RegisterConnect();
 	}
@@ -162,12 +170,23 @@ namespace jam::net
 
 	bool TcpSession::RegisterConnect()
 	{
-		if (SocketUtils::SetReuseAddress(m_socket, true) == false) return false;
-		if (SocketUtils::BindAnyAddress(m_socket, 0) == false)	   return false;
+		if (SocketUtils::SetReuseAddress(m_socket, true) == false)
+		{
+			win_error::LogLastWsaError("[TcpSession] SO_REUSEADDR before ConnectEx");
+			return false;
+		}
+		if (SocketUtils::BindAnyAddress(m_socket, 0) == false)
+		{
+			win_error::LogLastWsaError("[TcpSession] bind before ConnectEx");
+			return false;
+		}
 
 		m_connectEvent.Init();
 		if (!TryAddPendingDispatch())
+		{
+			JAMNET_LOG_ERROR("[TcpSession] Failed to reserve ConnectEx dispatch");
 			return false;
+		}
 
 		DWORD		bytes	 = 0;
 		SOCKADDR_IN sockAddr = GetService()->GetRemoteTcpNetAddress().GetSockAddr();
@@ -178,6 +197,7 @@ namespace jam::net
 			if (!win_error::IsIoPending(errorCode))
 			{
 				ReleasePendingDispatch();
+				win_error::LogWsaError("[TcpSession] ConnectEx", errorCode);
 				return false;
 			}
 		}
@@ -312,6 +332,14 @@ namespace jam::net
 
 	void TcpSession::ProcessOutboundConnect()
 	{
+		const ULONG_PTR nativeStatus = win_error::GetOverlappedNativeStatus(m_connectEvent);
+		if (!win_error::IsNativeStatusSuccess(nativeStatus))
+		{
+			win_error::LogNativeStatus("[TcpSession] ConnectEx completion", nativeStatus);
+			Disconnect();
+			return;
+		}
+
 		if (!SocketUtils::SetUpdateConnectSocket(m_socket))
 		{
 			win_error::LogLastWsaError("[TcpSession] SO_UPDATE_CONNECT_CONTEXT");

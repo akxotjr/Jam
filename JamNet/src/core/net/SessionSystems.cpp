@@ -136,7 +136,7 @@ namespace jam::net
 				metrics.RecordRetransmitGiveup();
 		}
 
-		void ProcessAck(ShardLocal& L, const entt::entity e, const uint16 latestSeq, const uint32 wnd)
+		void ProcessAck(ShardLocal& L, const entt::entity e, const uint16 latestReliableSeq, const uint32 wnd)
 		{
 			auto& R = L.registry;
 			auto* reliability = R.try_get<ReliabilityState>(e);
@@ -163,14 +163,14 @@ namespace jam::net
 					};
 				};
 
-			capture(latestSeq);
+			capture(latestReliableSeq);
 			for (uint16 i = 1; i <= ReliabilityState::AckWindowSize; ++i)
 			{
 				if (wnd & (1u << (i - 1)))
-					capture(static_cast<uint16>(latestSeq - i));
+					capture(static_cast<uint16>(latestReliableSeq - i));
 			}
 
-			reliability->ProcessAck(latestSeq, wnd);
+			reliability->ProcessAck(latestReliableSeq, wnd);
 			auto& metrics = L.networkMetrics;
 			metrics.RemoveReliablePending(ackedCount);
 
@@ -292,7 +292,7 @@ namespace jam::net
 			const BYTE* tail = ctx.view.Payload() + (payloadSize - sizeof(ACK_DATA));
 			const auto* ack  = reinterpret_cast<const ACK_DATA*>(tail);
 
-			ProcessAck(ctx.L, ctx.e, ack->latestSeq, ack->wnd);
+			ProcessAck(ctx.L, ctx.e, ack->latestReliableSeq, ack->wnd);
 
 			ctx.view.Header()->SetFlags(ClearFlag(ctx.view.Header()->GetFlags(), PacketFlags::PIGGYBACK_ACK));
 			ctx.view.Header()->SetSize(static_cast<uint16>(ctx.view.TotalSize() - sizeof(ACK_DATA)));
@@ -445,16 +445,16 @@ namespace jam::net
 		if (!reliability)
 			return false;
 
-		const uint16 packetSeq = ctx.view.Sequence();
+		const uint16 reliableSeq = ctx.view.ReliableSequence();
 
-		if (!SeqGreater(packetSeq, reliability->latestRecvSeq - ReliabilityState::AckTrackSize))
+		if (!SeqGreater(reliableSeq, reliability->latestReliableRecvSeq - ReliabilityState::AckTrackSize))
 			return false;
 
-		if (!(reliability->ackTrack.none() && reliability->latestRecvSeq == 0))
+		if (!(reliability->ackTrack.none() && reliability->latestReliableRecvSeq == 0))
 		{
-			if (!SeqGreater(packetSeq, reliability->latestRecvSeq))
+			if (!SeqGreater(reliableSeq, reliability->latestReliableRecvSeq))
 			{
-				const uint16 dist = SeqDistance(reliability->latestRecvSeq, packetSeq);
+				const uint16 dist = SeqDistance(reliability->latestReliableRecvSeq, reliableSeq);
 				if (dist >= ReliabilityState::AckTrackSize)
 				{
 					ctx.shouldDrop = true;
@@ -470,7 +470,7 @@ namespace jam::net
 			}
 		}
 
-		reliability->MarkReceived(packetSeq, ctx.now_ns);
+		reliability->MarkReceived(reliableSeq, ctx.now_ns);
 		return true;
 	}
 
@@ -514,6 +514,9 @@ namespace jam::net
 		const uint16 orderedBaseSeq = (ctx.view.Channel() == eChannel::RELIABLE_ORDERED)
 			? static_cast<uint16>(ctx.view.OrderedSequence() - fragIdx)
 			: 0;
+		const uint16 reliableBaseSeq = IsReliableChannel(ctx.view.Channel())
+			? static_cast<uint16>(ctx.view.ReliableSequence() - fragIdx)
+			: 0;
 
 		auto rebuilt = PacketBuilder::CreatePacket(
 			ctx.view.Type(), ctx.view.Id(),
@@ -521,6 +524,7 @@ namespace jam::net
 			ctx.view.Channel(),
 			reassembled->data(), static_cast<uint32>(reassembled->size()),
 			fragmentId,
+			reliableBaseSeq,
 			orderedBaseSeq);
 
 		if (!rebuilt.IsValid()) return false;
@@ -721,7 +725,7 @@ namespace jam::net
 				return;
 
 			const auto* ack = reinterpret_cast<const ACK_DATA*>(ctx.view.Payload());
-			ProcessAck(ctx.L, ctx.e, ack->latestSeq, ack->wnd);
+			ProcessAck(ctx.L, ctx.e, ack->latestReliableSeq, ack->wnd);
 			break;
 		}
 		case eAckPacketId::NACK:
@@ -799,8 +803,9 @@ namespace jam::net
 		if (fragTotal > FragmentState::MaxFragments)
 			return false;
 
-		const BYTE*  basePayload    = ctx.header.Payload();
-		const uint16 basePacketSeq  = seqState->AllocPacketSeq(fragTotal);
+		const BYTE*  basePayload     = ctx.header.Payload();
+		const uint16 basePacketSeq   = seqState->AllocPacketSeq(fragTotal);
+		const uint16 baseReliableSeq = IsReliableChannel(ch) ? seqState->AllocReliableSeq(fragTotal) : 0;
 
 		bool isOrdered = IsOrderedChannel(ch);
 		const uint16 baseOrderedSeq = isOrdered ? seqState->AllocOrderedSeq(fragTotal) : 0;
@@ -823,6 +828,7 @@ namespace jam::net
 				basePayload + offset,
 				chunk,
 				static_cast<uint16>(basePacketSeq + i),
+				IsReliableChannel(ch) ? static_cast<uint16>(baseReliableSeq + i) : 0,
 				isOrdered ? static_cast<uint16>(baseOrderedSeq + i) : 0,
 				static_cast<uint8>(i),
 				static_cast<uint8>(fragTotal)
@@ -832,7 +838,7 @@ namespace jam::net
 
 			if (IsReliableChannel(ch))
 			{
-				if (!reliability->StoreSendPacket(ch, frag, static_cast<uint16>(basePacketSeq + i), ctx.now_ns))
+				if (!reliability->StoreSendPacket(ch, frag, static_cast<uint16>(baseReliableSeq + i), ctx.now_ns))
 					return false;
 				OnReliablePendingAdded(ctx.L);
 
@@ -870,6 +876,9 @@ namespace jam::net
 				if (!reliability)
 					return false;
 
+				const uint16 reliableSeq = seqState->AllocReliableSeq(1);
+				ctx.header.Header()->SetReliableSequence(reliableSeq);
+
 				if (IsOrderedChannel(ch))
 				{
 					const uint16 orderdSeq = seqState->AllocOrderedSeq(1);
@@ -878,7 +887,7 @@ namespace jam::net
 
 				ctx.header.WriteHeaderTo(ctx.packet);
 
-				if (!reliability->StoreSendPacket(ch, ctx.packet, packetSeq, ctx.now_ns))
+				if (!reliability->StoreSendPacket(ch, ctx.packet, reliableSeq, ctx.now_ns))
 					return false;
 				OnReliablePendingAdded(ctx.L);
 
@@ -1111,7 +1120,7 @@ namespace jam::net
 				ReliabilityState::PendingPacket* pending = nullptr;
 				if (isUdp && reliabilityState && v.IsReliable())
 				{
-					pending = reliabilityState->TryGetPending(v.Sequence());
+					pending = reliabilityState->TryGetPending(v.ReliableSequence());
 					if (pkt.priority == TxPriority::RETRANSMIT && !pending)
 						continue;
 				}

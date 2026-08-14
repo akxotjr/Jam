@@ -35,9 +35,9 @@ namespace jam::net
 		}
 	}
 
-	Packet PacketBuilder::CreatePacket(ePacketType type, uint8 id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize, uint16 packetSeq, uint16 orderdSeq, uint8 fragIndex, uint8 fragTotal)
+	Packet PacketBuilder::CreatePacket(ePacketType type, uint8 id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize, uint16 packetSeq, uint16 reliableSeq, uint16 orderedSeq, uint8 fragIndex, uint8 fragTotal)
 	{
-		return CreatePacketInternal(E2U(type), id, flags, E2U(channel), payload, payloadSize, packetSeq, orderdSeq, fragIndex, fragTotal);
+		return CreatePacketInternal(E2U(type), id, flags, E2U(channel), payload, payloadSize, packetSeq, reliableSeq, orderedSeq, fragIndex, fragTotal);
 	}
 
 	Packet PacketBuilder::CreateSystemPacket(eSystemPacketId id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize)
@@ -88,7 +88,7 @@ namespace jam::net
 		BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Packet));
 		BufferSlice slice = writer.OpenForPacket(sizeof(RpcHeader) + payloadSize, headerSize, alignof(PacketHeader));
 
-		PacketHeader header(E2U(ePacketType::RPC), E2U(eRpcPacketId::FLATBUFFER_RPC), static_cast<uint16>(visibleSize), flags, E2U(ch), 0, 0, 0, 0);
+		PacketHeader header(E2U(ePacketType::RPC), E2U(eRpcPacketId::FLATBUFFER_RPC), static_cast<uint16>(visibleSize), flags, E2U(ch), 0, 0, 0, 0, 0);
 		WriteHeader(slice, header, headerSize);
 
 		if (rpc)
@@ -108,7 +108,7 @@ namespace jam::net
 	}
 
 
-	Packet PacketBuilder::CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 packetSeq, uint16 orderedSeq, uint8 fragIndex, uint8 fragTotal)
+	Packet PacketBuilder::CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 packetSeq, uint16 reliableSeq, uint16 orderedSeq, uint8 fragIndex, uint8 fragTotal)
 	{
 		const eChannel channel	    = U2E(eChannel, ch);
 		const uint32   headerSize   = PacketHeader::CalcHeaderSize(channel, flags);
@@ -117,7 +117,7 @@ namespace jam::net
 		if (!ValidatePacketBuild(visibleSize, payload, payloadSize))
 			return {};
 
-		PacketHeader header(type, id, static_cast<uint16>(visibleSize), flags, ch, packetSeq, orderedSeq, fragIndex, fragTotal);
+		PacketHeader header(type, id, static_cast<uint16>(visibleSize), flags, ch, packetSeq, reliableSeq, orderedSeq, fragIndex, fragTotal);
 		if (payloadSize == 0)
 			return CreateHeaderOnlyPacket(header, headerSize);
 

@@ -22,8 +22,8 @@ namespace jam::net
 	public:
 		PacketHeader() = default;
 
-		PacketHeader(uint8 type, uint8 id, uint16 size, uint8 flags, uint8 channel, uint16 packetSeq = 0, uint16 orderedSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0)
-			: packetSeq(packetSeq), orderedSeq(orderedSeq), fragInfo(PackFragInfo(fragIndex, fragTotal))
+		PacketHeader(uint8 type, uint8 id, uint16 size, uint8 flags, uint8 channel, uint16 packetSeq = 0, uint16 reliableSeq = 0, uint16 orderedSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0)
+			: packetSeq(packetSeq), reliableSeq(reliableSeq), orderedSeq(orderedSeq), fragInfo(PackFragInfo(fragIndex, fragTotal))
 		{
 			uint32 bits = 0;
 			bits |= (static_cast<uint32>(type	 & MAX_TYPE)	<< TYPE_SHIFT);
@@ -41,6 +41,7 @@ namespace jam::net
 		uint8			GetFlags()			 const { return static_cast<uint8>((GetFixedBits() & FLAGS_MASK) >> FLAGS_SHIFT); }				// 4 bit
 		uint8			GetChannel()		 const { return static_cast<uint8>((GetFixedBits() & CHANNEL_MASK) >> CHANNEL_SHIFT); }
 		uint16			GetSequence()		 const { return packetSeq; }
+		uint16			GetReliableSequence() const { return reliableSeq; }
 		uint16			GetOrderedSequence() const { return orderedSeq; }
 		uint16			GetFragmentInfo()	 const { return fragInfo; }
 		uint8			GetFragmentIndex()	 const { return static_cast<uint8>(fragInfo & 0x00FFu); }
@@ -88,6 +89,11 @@ namespace jam::net
 			packetSeq = seq;
 		}
 
+		void SetReliableSequence(uint16 seq)
+		{
+			reliableSeq = seq;
+		}
+
 		void SetOrderedSequence(uint16 seq)
 		{
 			orderedSeq = seq;
@@ -118,8 +124,8 @@ namespace jam::net
 
 		static constexpr uint32 BASE_SIZE = 4;
 		static constexpr uint32 HALF_SIZE = 6;
-		static constexpr uint32 FULL_SIZE = 8;
-		static constexpr uint32 MAX_WIRE_SIZE = 10;
+		static constexpr uint32 FULL_SIZE = 10;
+		static constexpr uint32 MAX_WIRE_SIZE = 12;
 		static constexpr uint16 MAX_PACKET_SIZE = 0x7FF;
 
 		static uint32 CalcHeaderSize(eChannel channel, uint8 flags)
@@ -128,8 +134,8 @@ namespace jam::net
 				return BASE_SIZE;
 
 			uint32 size = HALF_SIZE; // fixed + packetSeq
-			if (HasOrderedSequence(channel))
-				size += sizeof(uint16);
+			if (IsReliableChannel(channel))
+				size += sizeof(uint16) * 2; // reliableSeq + orderedSeq (zero for reliable-unordered)
 			if (HasFlag(flags, PacketFlags::FRAGMENTED))
 				size += sizeof(uint16);
 
@@ -161,6 +167,7 @@ namespace jam::net
 
 		BYTE		fixed[BASE_SIZE] = {};
 		uint16		packetSeq = 0;
+		uint16		reliableSeq = 0;
 		uint16		orderedSeq = 0;
 		uint16		fragInfo = 0;
 
@@ -187,7 +194,7 @@ namespace jam::net
 	};
 	#pragma pack(pop)
 
-	static_assert(sizeof(PacketHeader) == PacketHeader::MAX_WIRE_SIZE, "PacketHeader wire layout must remain packed to 10 bytes");
+	static_assert(sizeof(PacketHeader) == PacketHeader::MAX_WIRE_SIZE, "PacketHeader wire layout must remain packed to 12 bytes");
 
 	// 개별 ACK 패킷 크기 (BaseHeader + ACK_DATA)
 	constexpr uint16 ACK_PACKET_SIZE  = PacketHeader::BASE_SIZE + sizeof(ACK_DATA);
@@ -270,6 +277,7 @@ namespace jam::net
 		uint8           Flags()			  const { return header.GetFlags(); }
 		eChannel		Channel()		  const { return U2E(eChannel, header.GetChannel()); }
 		uint16          Sequence()		  const { return header.GetSequence(); }
+		uint16          ReliableSequence() const { return header.GetReliableSequence(); }
 		uint16			OrderedSequence() const { return header.GetOrderedSequence(); }
 		uint8           FragmentIndex()   const { return header.GetFragmentIndex(); }
 		uint8           TotalFragments()  const { return header.GetTotalFragments(); }
@@ -299,7 +307,7 @@ namespace jam::net
 	{
 	public:
 		// Common
-		static Packet		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static Packet		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0, uint16 packetSeq = 0, uint16 reliableSeq = 0, uint16 orderedSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 
 		// System 
 		static Packet		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UNRELIABLE_UNORDERED, const void* payload = nullptr, uint32 payloadSize = 0);
@@ -319,6 +327,6 @@ namespace jam::net
 
 
 	private:
-		static Packet		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 packetSeq = 0, uint16 orderdSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
+		static Packet		CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 packetSeq = 0, uint16 reliableSeq = 0, uint16 orderedSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 	};
 }

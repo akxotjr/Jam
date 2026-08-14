@@ -68,9 +68,12 @@ namespace jam::net
 
 	struct SequenceState
 	{
-		// global packet sequence (ACK/Retransmit 대상)
+		// transport packet sequence (all sequenced UDP packets)
 		uint16 nextPacketSeq			= 0;
 		uint16 latestPacketRecvSeq		= 0;
+
+		// reliability sequence (reliable UDP packets only)
+		uint16 nextReliableSeq			= 0;
 
 		// channel-specific
 		uint16 latestSequencedRecvSeq	= 0;	// UNRELIABLE_SEQUENCED 전용
@@ -92,6 +95,15 @@ namespace jam::net
 
 			const uint16 base = nextOrdredSeq;
 			nextOrdredSeq = static_cast<uint16>(nextOrdredSeq + count);
+			return base;
+		}
+
+		uint16 AllocReliableSeq(uint16 count = 1)
+		{
+			JAM_ASSERT(count < 0x8000);
+
+			const uint16 base = nextReliableSeq;
+			nextReliableSeq = static_cast<uint16>(nextReliableSeq + count);
 			return base;
 		}
 
@@ -138,7 +150,7 @@ namespace jam::net
 
 		struct PendingPacket
 		{
-			uint16							seq						= 0;
+			uint16							reliableSeq				= 0;
 			eChannel						channel					= eChannel::UNRELIABLE_UNORDERED;
 			uint64							sendTime_ns				= 0;
 			uint64							lastRetransmitTime_ns	= 0;
@@ -154,10 +166,10 @@ namespace jam::net
 		std::map<uint16, PendingPacket>     reliablePendings;
 		uint32                              inflightSize			= 0;
 
-		// 전역 ACK 수신 상태 (peer 전체)
-		uint16                              latestRecvSeq			= 0;		// 가장 최신으로 관측한 수신 seq
-		uint16                              lastAckedSeq			= 0;		// 내가 상대에게 반영한 최신 ack
-		std::bitset<AckTrackSize>			ackTrack;							// latestRecvSeq 기준 과거 수신 상태
+		// reliable-only ACK receive state
+		uint16                              latestReliableRecvSeq	= 0;
+		uint16                              lastAckedReliableSeq	= 0;
+		std::bitset<AckTrackSize>			ackTrack;							// latestReliableRecvSeq-relative receive state
 
 		bool                                ackDirty				= false;
 		uint16                              pendingAckSeq			= 0;

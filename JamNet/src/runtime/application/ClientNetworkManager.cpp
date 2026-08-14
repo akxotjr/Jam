@@ -498,7 +498,12 @@ namespace jam::net
 			return false;
 
 		m_principal.tcp = session;
-		session->Connect();
+		if (!session->Connect())
+		{
+			const NetAddress& remote = m_service->GetRemoteTcpNetAddress();
+			JAMNET_LOG_ERROR("[ClientNetworkManager] Failed to register TCP connect. remote={}:{}", remote.GetIpAddress(), remote.GetPort());
+			return false;
+		}
 
 		return true;
 	}
@@ -775,8 +780,6 @@ namespace jam::net
 		const eBootstrapKind bootstrapKind = m_bootstrapKind.load(std::memory_order_acquire);
 		const bool ready = tcpBound && udpBound && bootstrapKind != eBootstrapKind::Pending;
 		const bool previous = m_sessionReady.exchange(ready, std::memory_order_acq_rel);
-		JAMNET_LOG_INFO("[NetworkReady] evaluated. userId={}, tcpBound={}, udpBound={}, bootstrapKind={}, ready={}, previous={}",
-			m_principal.userId, tcpBound, udpBound, static_cast<uint32>(bootstrapKind), ready, previous);
 
 		if (m_principal.tcp) m_principal.tcp->SetReady(ready);
 		if (m_principal.udp) m_principal.udp->SetReady(ready);

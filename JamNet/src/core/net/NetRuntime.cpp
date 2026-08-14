@@ -25,7 +25,7 @@ namespace jam::net
 
 	void NetRuntime::Init()
 	{
-		LOGGER_INIT();
+		JAM_LOG_INIT("JamNet", m_config.logFilePath);
 		DEFAULT_ALLOCATOR_INIT();
 		SocketUtils::Init();
 		CLOCK.Start(m_config.clockTick);

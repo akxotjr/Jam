@@ -105,14 +105,6 @@ namespace jam
 		std::scoped_lock lock(m_mutex);
 		if (config.windowPeriodNs == 0)
 			return false;
-		if (config.fileName.empty() || config.histogramFileName.empty())
-		{
-			const std::string stem = detail::TimestampedStem();
-			if (config.fileName.empty())
-				config.fileName = stem + ".csv";
-			if (config.histogramFileName.empty())
-				config.histogramFileName = stem + ".hlog";
-		}
 
 		m_config = std::move(config);
 		m_windows.clear();
@@ -122,8 +114,20 @@ namespace jam
 		if (m_output.is_open())
 			m_output.close();
 		m_histogramLog.reset();
-		
-		return !m_config.enabled || EnsureOutputOpen();
+
+		if (!m_config.enabled)
+			return true;
+
+		if (m_config.fileName.empty() || m_config.histogramFileName.empty())
+		{
+			const std::string stem = detail::TimestampedStem();
+			if (m_config.fileName.empty())
+				m_config.fileName = stem + ".csv";
+			if (m_config.histogramFileName.empty())
+				m_config.histogramFileName = stem + ".hlog";
+		}
+
+		return EnsureOutputOpen();
 	}
 
 	void MetricsAggregator::Submit(MetricSnapshot snapshot)

@@ -140,16 +140,16 @@ namespace jam::net
 	//  ReliabilityState
 	// ============================================================
 
-	bool ReliabilityState::StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns)
+	bool ReliabilityState::StoreSendPacket(eChannel ch, Packet packet, uint16 reliableSeq, uint64 now_ns)
 	{
 		if (!IsReliableChannel(ch))
 			return false;
 
-		if (reliablePendings.contains(seq))
+		if (reliablePendings.contains(reliableSeq))
 			return false;
 
-		reliablePendings.emplace(seq, PendingPacket{
-				.seq				   = seq,
+		reliablePendings.emplace(reliableSeq, PendingPacket{
+				.reliableSeq		   = reliableSeq,
 				.channel			   = ch,
 				.sendTime_ns		   = now_ns,
 				.lastRetransmitTime_ns = now_ns,
@@ -211,27 +211,27 @@ namespace jam::net
 
 	void ReliabilityState::MarkReceived(uint16 seq, uint64 now_ns)
 	{
-		if (ackTrack.none() && latestRecvSeq == 0)
+		if (ackTrack.none() && latestReliableRecvSeq == 0)
 		{
-			latestRecvSeq = seq;
+			latestReliableRecvSeq = seq;
 			ackTrack.reset();
 			ackTrack.set(0);
 		}
-		else if (SeqGreater(seq, latestRecvSeq))
+		else if (SeqGreater(seq, latestReliableRecvSeq))
 		{
-			const uint16 advance = SeqDistance(seq, latestRecvSeq);
+			const uint16 advance = SeqDistance(seq, latestReliableRecvSeq);
 
 			if (advance >= AckTrackSize)
 				ackTrack.reset();
 			else
 				ackTrack <<= advance;
 
-			latestRecvSeq = seq;
+			latestReliableRecvSeq = seq;
 			ackTrack.set(0);
 		}
 		else
 		{
-			const uint16 dist = SeqDistance(latestRecvSeq, seq);
+			const uint16 dist = SeqDistance(latestReliableRecvSeq, seq);
 			if (dist < AckTrackSize)
 				ackTrack.set(dist);
 		}
@@ -251,7 +251,7 @@ namespace jam::net
 		if (!ackDirty)
 			return;
 
-		pendingAckSeq	   = latestRecvSeq;
+		pendingAckSeq	   = latestReliableRecvSeq;
 		pendingAckBitfield = BuildAckWindow();
 	}
 
@@ -280,8 +280,8 @@ namespace jam::net
 				ackOne(static_cast<uint16>(ackSeq - i));
 		}
 
-		if (SeqGreater(ackSeq, lastAckedSeq))
-			lastAckedSeq = ackSeq;
+		if (SeqGreater(ackSeq, lastAckedReliableSeq))
+			lastAckedReliableSeq = ackSeq;
 	}
 
 	bool ReliabilityState::ShouldSendAck(uint64 now_ns) const

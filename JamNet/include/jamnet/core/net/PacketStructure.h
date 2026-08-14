@@ -106,7 +106,7 @@ namespace jam::net
 #pragma pack(push, 1)
 	struct ACK_DATA
 	{
-		uint16 latestSeq = 0;
+		uint16 latestReliableSeq = 0;
 		uint32 wnd;
 	};
 #pragma pack(pop)
