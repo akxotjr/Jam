@@ -66,7 +66,6 @@ namespace jam::net
 
 		void									SubmitCharacterControl(const CharacterControlIntent& intent);
 
-		// temp
 		uint64									GetClientInstanceId() const { return m_clientInstanceId; }
 
 	protected:
@@ -146,7 +145,7 @@ namespace jam::net
 		std::mutex								m_characterControlMutex;
 		std::optional<CharacterControlIntent>	m_pendingCharacterControl;
 		bool									m_characterControlDrainPending = false;
-		uint16									m_nextWorldPipelineSubtype = 0;
+		uint32									m_characterControlRevision = 0;
 
 	};
 }

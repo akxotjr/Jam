@@ -4,9 +4,12 @@
 #include "jamnet/runtime/protocol/schema/gen/snapshot_generated.h"
 #include "jamnet/runtime/protocol/schema/gen/baseline_ack_generated.h"
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace jam::net
 {
@@ -116,13 +119,14 @@ namespace jam::net
 
         void                                EnqueueLifecycle(fb::fbLifecycleBatchT batch);
         void                                EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs);
+        void                                AcceptHeadlessSnapshot(const fb::fbSnapshot& snapshot);
 
         bool                                IsLocalActor(ActorId actorId) const { return actorId == m_localActorId; }
 
         uint64                              GetLastServerTick() const { return m_lastServerTick; }
         uint32                              GetLastInputAck() const { return m_lastInputAck; }
 
-        ActorId                               GetLocalActorId() const { return m_localActorId; }
+        ActorId                             GetLocalActorId() const { return m_localActorId; }
         void                                SetLocalActorId(ActorId actorId) { m_localActorId = actorId; }
         entt::entity                        GetLocalEntity() const { return m_localEntity; }
 
@@ -159,7 +163,7 @@ namespace jam::net
 
     private:
         entt::registry&                     m_world;
-        ClientWorld*                m_netWorld            = nullptr;
+        ClientWorld*						m_netWorld            = nullptr;
         ClientPhysicsSystem*                m_clientPhysics       = nullptr;
         EstimatedServerTick*                m_estimatedServerTick = nullptr;
         LocalActorRef*                      m_localActorRef       = nullptr;
@@ -178,13 +182,31 @@ namespace jam::net
 		uint64                              m_lastServerTick    = 0;
         uint64                              m_lastLifecycleTick = 0;
         uint64                              m_latestQueuedSnapshotTick = 0;
-        uint64                              m_lastAppliedSnapshotTick = 0;
+		uint64                              m_lastAppliedSnapshotTick = 0;
         uint32                              m_lastInputAck      = 0;
+
 		struct PendingBaselineFeedback
 		{
 			uint32 baselineRev = 0;
 			bool requestFull = false;
 		};
 		std::unordered_map<ActorId, PendingBaselineFeedback> m_pendingBaselineFeedback;
+
+		struct HeadlessSnapshotBatch
+		{
+			uint64 serverTick = 0;
+			uint16 expectedChunkCount = 0;
+			std::vector<uint8> receivedChunks;
+			std::unordered_map<ActorId, uint32> baselines;
+
+			bool IsComplete() const
+			{
+				return expectedChunkCount != 0
+					&& receivedChunks.size() >= expectedChunkCount
+					&& std::ranges::all_of(receivedChunks, [](uint8 received) { return received != 0; });
+			}
+		};
+		std::optional<HeadlessSnapshotBatch> m_headlessSnapshotBatch;
+		std::unordered_map<ActorId, uint32> m_headlessBaselines;
 	};
 }

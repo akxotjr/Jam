@@ -15,9 +15,16 @@ namespace jam::net
 	void ClientCharacterControlCoordinator::Submit(CharacterControlIntent intent)
 	{
 		JAM_ASSERT(m_world.IsCurrentShardContext());
-		intent.controlRevision = ++m_controlRevision;
 		if (intent.controlRevision == 0)
+		{
 			intent.controlRevision = ++m_controlRevision;
+			if (intent.controlRevision == 0)
+				intent.controlRevision = ++m_controlRevision;
+		}
+		else
+		{
+			m_controlRevision = intent.controlRevision;
+		}
 		if (std::holds_alternative<MoveByWorldRayIntent>(intent.locomotion))
 			ResolveWorldRay(intent);
 

@@ -56,10 +56,10 @@ namespace jam::net
 		m_registry.ctx().emplace<TickCounter>().Init();
 		m_registry.ctx().emplace<ClientInputSystem>(m_registry).Init();
 		m_registry.ctx().emplace<ClientCharacterControlCoordinator>(*this);
+		m_registry.ctx().emplace<ClientReplicationSystem>(m_registry).Init();
 
 		if (!m_headless)
 		{
-			m_registry.ctx().emplace<ClientReplicationSystem>(m_registry).Init();
 			m_registry.ctx().emplace<ClientReplaySystem>(m_registry).Init();
 			m_registry.ctx().emplace<ClientPhysicsSystem>(m_registry, m_physics.get()).Init();
 			m_registry.ctx().emplace<ClientSamplingSystem>(m_registry).Init();
@@ -72,7 +72,6 @@ namespace jam::net
 
 	void ClientWorld::Start(uint64 dt_ns)
 	{
-		JAMNET_LOG_DEBUG("[ClientWorld] domain subtype is {}", m_pipelineSubtype);
 		StartTickPipeline({ DOMAIN_PHYSICS, m_pipelineSubtype }, dt_ns);
 	}
 
@@ -115,9 +114,6 @@ namespace jam::net
 
 	void ClientWorld::HandleWorldPacket(uint64 callerUserId, Packet packet)
 	{
-		if (m_headless)
-			return;
-
 		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
 
 		switch (view.Id())
@@ -228,12 +224,12 @@ namespace jam::net
 
 		outParams = {};
 		outParams.actorArchetypeKey = spec.actorArchetypeKey;
-		outParams.clientRequestId = requestId;
-		outParams.owner = spec.requestOwnership ? GetUserId() : 0;
-		outParams.targetActorId = spec.targetActorId;
-		outParams.desc.archetype = physicsArchetype;
-		outParams.desc.pose = spec.pose;
-		outParams.desc.spawnSrc = px::eSpawnSource::Runtime;
+		outParams.clientRequestId	= requestId;
+		outParams.owner				= spec.requestOwnership ? GetUserId() : 0;
+		outParams.targetActorId		= spec.targetActorId;
+		outParams.desc.archetype	= physicsArchetype;
+		outParams.desc.pose			= spec.pose;
+		outParams.desc.spawnSrc	 = px::eSpawnSource::Runtime;
 		if (bodyType == px::eBodyType::Rigid)
 		{
 			px::RigidSpawnOverrides overrides{};
@@ -427,6 +423,27 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		return existing;
 	}
 
+	ActorId occupantId = ActorId::Invalid();
+	if (const entt::entity occupant = m_actorDirectory.ResolveSlotOccupant(actorId, occupantId);
+		occupant != entt::null && occupantId != actorId)
+	{
+		if (!m_registry.valid(occupant))
+		{
+			m_actorDirectory.Unbind(occupantId);
+		}
+		else if (m_registry.all_of<OutOfAoiTag>(occupant) && occupantId != m_localActorId)
+		{
+			DespawnActorImpl(occupantId);
+		}
+		else
+		{
+			JAMNET_LOG_WARN("[EnsureReplicatedActor] active slot generation conflict. requestedActorId={}, occupantActorId={}",
+				actorId.Value(), occupantId.Value());
+			if (outCreated) *outCreated = false;
+			return entt::null;
+		}
+	}
+
 	px::PhysicsArchetypeKey physicsArchetypeKey{};
 	if (!TryResolvePhysicsArchetypeKey(actorArchetypeKey, physicsArchetypeKey))
 	{
@@ -477,7 +494,8 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		m_registry.ctx().get<TickCounter>().Tick();
 		m_registry.ctx().get<ClientInputSystem>().Tick();
 
-		if (m_headless) return;
+		if (m_headless)
+			return;
 
 		m_registry.ctx().get<ClientReplicationSystem>().Tick();
 		m_registry.ctx().get<ClientReplaySystem>().Tick();
@@ -487,17 +505,30 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 
 	void ClientWorld::ProcessLifecyclePacket(const PacketHeaderView& view)
 	{
+		if (m_headless) return;
+
 		flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
 		if (!fb::VerifyfbLifecycleBatchBuffer(verifier))
+		{
+			JAMNET_LOG_WARN("[LifecycleRx] FlatBuffer verification failed. worldId={}, packetSeq={}, orderedSeq={}, payloadBytes={}",
+				GetWorldId(), view.Sequence(), view.OrderedSequence(), view.PayloadSize());
 			return;
+		}
 
 		const auto fbBatch = fb::UnPackfbLifecycleBatch(view.Payload());
-		if (!fbBatch) return;
+		if (!fbBatch)
+		{
+			JAMNET_LOG_WARN("[LifecycleRx] FlatBuffer unpack failed. worldId={}, packetSeq={}, orderedSeq={}, payloadBytes={}",
+				GetWorldId(), view.Sequence(), view.OrderedSequence(), view.PayloadSize());
+			return;
+		}
 
 		const auto batch = std::make_shared<fb::fbLifecycleBatchT>(std::move(*fbBatch));
 		
 		if (auto* repl = m_registry.ctx().find<ClientReplicationSystem>())
 			repl->EnqueueLifecycle(std::move(*batch));
+		else
+			JAMNET_LOG_WARN("[LifecycleRx] replication system unavailable. worldId={}, tick={}", GetWorldId(), batch->server_tick);
 	}
 
 	void ClientWorld::ProcessSnapshot(const PacketHeaderView& view)
@@ -506,18 +537,23 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		if (!fb::VerifyfbSnapshotBuffer(verifier))
 			return;
 
-		const uint64 recvNs = NOW_NS();
+		auto* repl = m_registry.ctx().find<ClientReplicationSystem>();
+		if (!repl)
+			return;
 
-		const auto fbSnap = fb::UnPackfbSnapshot(view.Payload());
-		if (!fbSnap) return;
+		const auto* snapshot = fb::GetfbSnapshot(view.Payload());
+		if (!snapshot)
+			return;
 
-		const auto snap = std::make_shared<fb::fbSnapshotT>(std::move(*fbSnap));
-
-		if (auto* repl = m_registry.ctx().find<ClientReplicationSystem>())
+		if (m_headless)
 		{
-			repl->EnqueueSnapshot(std::move(*snap), recvNs);
+			repl->AcceptHeadlessSnapshot(*snapshot);
+			return;
 		}
 
+		const auto unpacked = fb::UnPackfbSnapshot(view.Payload());
+		if (unpacked)
+			repl->EnqueueSnapshot(std::move(*unpacked), NOW_NS());
 	}
 
 

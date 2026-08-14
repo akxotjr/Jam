@@ -28,14 +28,13 @@ namespace jam::net
 	private:
 		entt::registry&									m_registry;
 
-		ClientWorld*							m_world			 = nullptr;
+		ClientWorld*									m_world			 = nullptr;
 		UserId											m_userId		 = kInvalidUserId;
 
 		bool											m_bInitialized   = false;
 		std::unique_ptr<flatbuffers::FlatBufferBuilder>	m_fbb			 = nullptr;
 
-		CharacterControlIntent								m_intentSample   = {};
-
+		CharacterControlIntent							m_intentSample   = {};
 		static constexpr size_t							k_maxHistorySize = 512;
 	};
 }

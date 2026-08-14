@@ -117,6 +117,23 @@ namespace jam::net
 		return (slot.generation == generation) ? slot.entity : entt::null;
 	}
 
+	entt::entity ActorDirectory::ResolveSlotOccupant(ActorId actorId, OUT ActorId& occupantId) const
+	{
+		occupantId = ActorId::Invalid();
+
+		uint32 index = 0;
+		uint32 generation = 0;
+		if (!Decode(actorId, index, generation) || index >= m_slots.size())
+			return entt::null;
+
+		const ActorSlot& slot = m_slots[index];
+		if (slot.entity == entt::null || slot.generation == 0)
+			return entt::null;
+
+		occupantId = MakeId(index, slot.generation);
+		return slot.entity;
+	}
+
 	bool ActorDirectory::Validate() const
 	{
 		if (m_slots.empty())

@@ -45,8 +45,19 @@ namespace jam::net
 		std::string					contentEntryPoint;
 		WorldStateRevision			expectedMainRevision	= 0;
 
+		bool IsServerResolved() const noexcept
+		{
+			return !IsValidAssetKey(archetypeKey)
+				&& selector == eWorldDestinationSelector::DefaultForArchetype
+				&& !explicitInstanceId.IsValid()
+				&& destinationName.empty()
+				&& contentEntryPoint.empty();
+		}
+
 		bool IsValid() const noexcept
 		{
+			if (IsServerResolved())
+				return true;
 			if (!IsValidAssetKey(archetypeKey))
 				return false;
 			if (selector == eWorldDestinationSelector::ExplicitInstance)

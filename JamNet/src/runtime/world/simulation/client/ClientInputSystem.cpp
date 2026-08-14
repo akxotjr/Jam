@@ -54,7 +54,9 @@ namespace jam::net
 
 		auto pkt = PacketBuilder::CreateCustomPacket(CustomPacketId::INPUT, PacketFlags::NONE, eChannel::UNRELIABLE_SEQUENCED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
 		if (pkt.IsValid() && m_world)
+		{
 			m_world->Send(pkt);
+		}
 	}
 
 

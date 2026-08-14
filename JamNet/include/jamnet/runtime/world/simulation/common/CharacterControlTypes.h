@@ -76,7 +76,6 @@ namespace jam::net
 		CharacterActionFlags	continuousActions = 0;
 		CharacterActionFlags	edgeActions		  = 0;
 		LocomotionIntent		locomotion		  = StopMovementIntent{};
-
 		CharacterActionFlags ActionsForTick() const
 		{
 			return continuousActions | edgeActions;

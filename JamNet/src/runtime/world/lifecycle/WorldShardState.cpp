@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/runtime/world/lifecycle/WorldShardState.h"
 #include "jamnet/runtime/world/lifecycle/WorldBase.h"

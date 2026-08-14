@@ -63,7 +63,8 @@ namespace jam::net
 			[this](ShardLocal&, uint64, uint64)
 			{
 				RequestPipelineTick();
-			});
+			},
+			250_us);
 
 		if (m_pipelineFiberId == 0)
 		{
@@ -203,14 +204,22 @@ namespace jam::net
 
 	void PhysicalWorld::DrainPipelineMutations()
 	{
-		while (!m_pendingPipelineMutations.empty())
-		{
-			auto mutations = std::move(m_pendingPipelineMutations);
-			m_pendingPipelineMutations.clear();
+		if (m_pendingPipelineMutations.empty())
+			return;
 
-			for (auto& mutation : mutations)
-				mutation();
+		auto mutations = std::move(m_pendingPipelineMutations);
+		m_pendingPipelineMutations.clear();
+
+		const size_t count = std::min<size_t>(mutations.size(), m_pipelineMutationBudget);
+		if (count < mutations.size())
+		{
+			m_pendingPipelineMutations.reserve(mutations.size() - count);
+			for (size_t i = count; i < mutations.size(); ++i)
+				m_pendingPipelineMutations.push_back(std::move(mutations[i]));
 		}
+
+		for (size_t i = 0; i < count; ++i)
+			mutations[i]();
 	}
 
 	void PhysicalWorld::FinishTickPipeline()

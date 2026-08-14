@@ -25,6 +25,17 @@ namespace jam::net
 	namespace
 	{
 		std::atomic<uint64> g_nextClientInstanceId = 1;
+		// A stopped PhysicalWorld erases its complete ShardDomain group. Every
+		// concurrently alive ClientWorld therefore needs its own process-wide key.
+		std::atomic<uint32> g_nextClientWorldPipelineSubtype = 1;
+
+		uint32 AllocateClientWorldPipelineSubtype()
+		{
+			uint32 subtype = g_nextClientWorldPipelineSubtype.fetch_add(1, std::memory_order_relaxed);
+			if (subtype == 0)
+				subtype = g_nextClientWorldPipelineSubtype.fetch_add(1, std::memory_order_relaxed);
+			return subtype;
+		}
 	}
 
 	ClientNetworkManager::ClientNetworkManager(const ClientConfig& config)
@@ -364,6 +375,9 @@ namespace jam::net
 			std::scoped_lock lock(m_characterControlMutex);
 			const CharacterActionFlags pendingEdges = m_pendingCharacterControl ? m_pendingCharacterControl->edgeActions : 0;
 			m_pendingCharacterControl = intent;
+			m_pendingCharacterControl->controlRevision = ++m_characterControlRevision;
+			if (m_pendingCharacterControl->controlRevision == 0)
+				m_pendingCharacterControl->controlRevision = ++m_characterControlRevision;
 			m_pendingCharacterControl->edgeActions |= pendingEdges;
 			if (!m_characterControlDrainPending)
 			{
@@ -390,7 +404,6 @@ namespace jam::net
 
 		if (!intent)
 			return;
-
 		const auto current = m_principal.mainWorld.Current();
 		if (!current || !current->worldObject)
 			return;
@@ -623,7 +636,7 @@ namespace jam::net
 
 		ClientWorldBinding binding;
 		auto world = std::make_shared<ClientWorld>(config);
-		world->SetPipelineSubtype(m_nextWorldPipelineSubtype++);
+		world->SetPipelineSubtype(AllocateClientWorldPipelineSubtype());
 		world->SetPrincipalState(&m_principal);
 		world->SetHeadless(m_config.headlessMode);
 

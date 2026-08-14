@@ -36,6 +36,8 @@ namespace jam::net
 		m_pendingLifecycle.clear();
 		m_pendingSnapshotBatches.clear();
 		m_pendingBaselineFeedback.clear();
+		m_headlessSnapshotBatch.reset();
+		m_headlessBaselines.clear();
 		m_localActorId = ActorId::Invalid();
 		m_localEntity = entt::null;
 		ClearLocalActorRef();
@@ -64,7 +66,6 @@ namespace jam::net
 		{
 			PendingLifecycleBatch pending = std::move(m_pendingLifecycle.front());
 			m_pendingLifecycle.pop_front();
-
 			m_lastLifecycleTick = std::max<uint64>(pending.batch.server_tick, m_lastLifecycleTick);
 			m_lastServerTick = std::max(m_lastLifecycleTick, m_lastAppliedSnapshotTick);
 
@@ -196,6 +197,75 @@ namespace jam::net
 
 	}
 
+	void ClientReplicationSystem::AcceptHeadlessSnapshot(const fb::fbSnapshot& snapshot)
+	{
+		const auto* header = snapshot.header();
+		if (!header)
+			return;
+
+		const uint64 serverTick = header->server_tick();
+		const uint16 chunkCount = std::max<uint16>(1, header->chunk_count());
+		const uint16 chunkIndex = header->chunk_index();
+		if (serverTick == 0 || chunkIndex >= chunkCount)
+			return;
+
+		if (!m_headlessSnapshotBatch || serverTick > m_headlessSnapshotBatch->serverTick)
+		{
+			m_headlessSnapshotBatch = HeadlessSnapshotBatch{
+				.serverTick = serverTick,
+				.expectedChunkCount = chunkCount,
+				.receivedChunks = std::vector<uint8>(chunkCount, 0),
+			};
+		}
+		else if (serverTick < m_headlessSnapshotBatch->serverTick)
+		{
+			return;
+		}
+
+		HeadlessSnapshotBatch& batch = *m_headlessSnapshotBatch;
+		if (batch.expectedChunkCount != chunkCount || batch.receivedChunks[chunkIndex] != 0)
+			return;
+
+		if (const auto* entities = snapshot.entities())
+		{
+			for (const fb::fbActorEntity* entity : *entities)
+			{
+				if (!entity)
+					continue;
+
+				const ActorId actorId(entity->actor_id());
+				const uint32 baselineRev = entity->baseline_rev();
+				if (!actorId.IsValid() || baselineRev == 0)
+					continue;
+
+				if (entity->character_full() || entity->transform_full())
+				{
+					batch.baselines[actorId] = baselineRev;
+					continue;
+				}
+
+				if (entity->character_delta() || entity->transform_delta())
+				{
+					const auto accepted = m_headlessBaselines.find(actorId);
+					if (accepted == m_headlessBaselines.end() || accepted->second != baselineRev)
+						QueueFullRequest(actorId, baselineRev);
+				}
+			}
+		}
+
+		batch.receivedChunks[chunkIndex] = 1;
+		if (!batch.IsComplete())
+			return;
+
+		for (const auto& [actorId, baselineRev] : batch.baselines)
+		{
+			m_headlessBaselines[actorId] = baselineRev;
+			QueueBaselineAck(actorId, baselineRev);
+		}
+		m_headlessSnapshotBatch.reset();
+		FlushBaselineFeedback();
+	}
+
 	void ClientReplicationSystem::ProcessLifecycleActor(const fb::fbLifecycleActorT& actor)
 	{
 		const ActorId actorId = ActorId(actor.actor_id);
@@ -301,7 +371,6 @@ namespace jam::net
 		if (resolved == entt::null || !m_world.valid(resolved))
 		{
 			StoreDeferredBaselineSnapshot(ent, serverTick, inputAck, inputEpoch);
-			JAMNET_LOG_WARN("[ProcessEntity] actor id= {}, failed to resolve Entity for snapshot", actorId.Value());
 			return;
 		}
 
@@ -398,6 +467,7 @@ namespace jam::net
 		if (m_clientPhysics)
 			m_clientPhysics->SpawnActor(resolved, replica.isLocal);
 	}
+
 
 	entt::entity ClientReplicationSystem::ResolveEntityForSnapshot(ActorId actorId)
 	{
@@ -620,17 +690,6 @@ namespace jam::net
 				signal.inputAck   = inputAck;
 				signal.dirty	  = true;
 			}
-			else if (inputAck > signal.inputAck)
-			{
-				JAMNET_LOG_DEBUG(
-					"[MovementDiag][ReconcileGate] accepted=false, snapshot=full, serverTick={}, inputAck={}, previousSignalAck={}, inputEpoch={}, currentControlRevision={}, revisionLag={}",
-					serverTick,
-					inputAck,
-					signal.inputAck,
-					inputEpoch,
-					currentControlRevision,
-					currentControlRevision - inputEpoch);
-			}
 
 			auto& history = m_world.get<CharReplayHistory>(replica.e);
 			history.Push(serverTick, unpacked);
@@ -681,17 +740,6 @@ namespace jam::net
 				signal.serverTick = serverTick;
 				signal.inputAck   = inputAck;
 				signal.dirty	  = true;
-			}
-			else if (inputAck > signal.inputAck)
-			{
-				JAMNET_LOG_DEBUG(
-					"[MovementDiag][ReconcileGate] accepted=false, snapshot=delta, serverTick={}, inputAck={}, previousSignalAck={}, inputEpoch={}, currentControlRevision={}, revisionLag={}",
-					serverTick,
-					inputAck,
-					signal.inputAck,
-					inputEpoch,
-					currentControlRevision,
-					currentControlRevision - inputEpoch);
 			}
 
 			auto& history = m_world.get<CharReplayHistory>(replica.e);
@@ -749,19 +797,10 @@ namespace jam::net
 		}
 
 		const auto entryVector = fbb.CreateVector(entries);
-		const auto batch = fb::CreatefbBaselineAckBatch(
-			fbb,
-			world.worldId,
-			world.instance.instanceId.value,
-			entryVector);
+		const auto batch = fb::CreatefbBaselineAckBatch(fbb, world.worldId, world.instance.instanceId.value, entryVector);
 		fbb.Finish(batch, fb::fbBaselineAckBatchIdentifier());
 
-		auto packet = PacketBuilder::CreateCustomPacket(
-			CustomPacketId::BASELINE_ACK,
-			PacketFlags::NONE,
-			eChannel::RELIABLE_ORDERED,
-			fbb.GetBufferPointer(),
-			fbb.GetSize());
+		auto packet = PacketBuilder::CreateCustomPacket(CustomPacketId::BASELINE_ACK, PacketFlags::NONE, eChannel::RELIABLE_ORDERED, fbb.GetBufferPointer(), fbb.GetSize());
 		if (!packet.IsValid())
 			return;
 

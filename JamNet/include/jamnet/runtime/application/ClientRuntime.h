@@ -128,9 +128,15 @@ namespace jam::net
 		UserId									GetUserId() const;
 		WorldRef								GetMainWorldRef() const;
 		NetworkState							GetNetworkState() const;
+
+		// only usage for multi-client instance
+		uint64									GetInstanceId() const;
+
 		// Returned spans remain valid until the next Pump(), Disconnect(), or destruction.
 		ActorPresentationFramePairView			GetActorPresentationFramePair(WorldId worldId) const;
 	
+
+		
 
 		ClientRequestSubmission					RequestWorldAction(const WorldActionCommand& command);
 

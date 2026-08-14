@@ -414,6 +414,12 @@ namespace jam::net
 		return m_frontendState.networkState;
 	}
 
+	uint64 ClientRuntime::GetInstanceId() const
+	{
+		AssertFrontendThread();
+		return m_networkManager->GetClientInstanceId();
+	}
+
 	ActorPresentationFramePairView ClientRuntime::GetActorPresentationFramePair(WorldId worldId) const
 	{
 		AssertFrontendThread();

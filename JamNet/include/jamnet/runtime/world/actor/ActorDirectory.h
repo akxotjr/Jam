@@ -32,6 +32,7 @@ namespace jam::net
 		ActorId					Allocate(entt::entity entity);
 		bool					Release(ActorId actorId);
 		entt::entity			Resolve(ActorId actorId) const;
+		entt::entity            ResolveSlotOccupant(ActorId actorId, OUT ActorId& occupantId) const;
 		bool					Validate() const;
 		void					Clear();
 		static ActorId			MakeInitialId(uint32 slotIndex);

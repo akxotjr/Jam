@@ -37,7 +37,7 @@ namespace jam::net
 		void								Stop() override;
 		void								SetHeadless(bool headless) { m_headless = headless; }
 		bool								IsHeadless() const { return m_headless; }
-		void								SetPipelineSubtype(uint16 subtype) { m_pipelineSubtype = subtype; }
+		void								SetPipelineSubtype(uint32 subtype) { m_pipelineSubtype = subtype; }
 
 		void								SetPrincipalState(ClientPrincipalState* principal) { m_principal = principal; }
 		uint64								GetAccountId() const { return m_principal ? m_principal->accountId : kInvalidAccountId; }
@@ -96,9 +96,8 @@ namespace jam::net
 	private:
 		ClientPrincipalState*				m_principal		  = nullptr;
 
-		uint16								m_pipelineSubtype = 0;
+		uint32								m_pipelineSubtype = 0;
 		bool								m_headless = false;
 		ActorId								m_localActorId = ActorId::Invalid();
-
 	};
 }
