@@ -128,6 +128,17 @@ namespace jam::px
 			throw std::runtime_error("unsupported shape dto type");
 		}
 
+		eCCTPolicy ToCCTPolicy(jam::shared::gen::eCctBodyDtoPolicy policy)
+		{
+			switch (policy)
+			{
+			case jam::shared::gen::eCctBodyDtoPolicy::Default: return eCCTPolicy::Default;
+			case jam::shared::gen::eCctBodyDtoPolicy::IgnoreControllers: return eCCTPolicy::IgnoreControllers;
+			}
+
+			throw std::runtime_error("unsupported CCT policy");
+		}
+
 		eShapeFlag ToShapeFlag(jam::shared::gen::eShapeDtoShapeFlag flag)
 		{
 			switch (flag)
@@ -486,7 +497,7 @@ namespace jam::px
 			data.height = cctDto.height;
 			data.material = MakeNamedHandle<MaterialHandle>(cctDto.material);
 			data.density = cctDto.density;
-			data.policy = eCCTPolicy::Default;
+			data.policy = ToCCTPolicy(cctDto.policy);
 			data.simFD = ToSimFD(cctDto.simFilter);
 			data.qryFD = ToQueryFD(cctDto.qryFilter);
 			data.slopeLimit = cctDto.slopeLimit;

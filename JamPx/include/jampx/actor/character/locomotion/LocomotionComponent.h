@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include "jampx/PhysXTypes.h"
 
 #include "jampx/actor/character/CharacterMovementTypes.h"
 #include "jampx/actor/character/locomotion/IAccelerator.h"
@@ -11,7 +12,7 @@ namespace jam::px
     class LocomotionComponent
     {
     public:
-        explicit LocomotionComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox);
+        explicit LocomotionComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox, bool collideWithControllers = true);
 
         void                            SetConfig(const CharacterMoveConfig& cfg) { m_cfg = cfg; }
         const CharacterMoveConfig&      GetConfig() const { return m_cfg; }

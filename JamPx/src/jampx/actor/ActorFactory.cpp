@@ -284,7 +284,8 @@ namespace jam::px
 
 		}
 
-		CharacterBody body{ mainCCT, replayCCT, hitbox, moveCfg };
+		const bool collideWithControllers = cctDef.policy != eCCTPolicy::IgnoreControllers;
+		CharacterBody body{ mainCCT, replayCCT, hitbox, moveCfg, collideWithControllers };
 
 		const eMotionType resolvedMotion = ResolveMotionType(desc.spawnSrc, data);
 

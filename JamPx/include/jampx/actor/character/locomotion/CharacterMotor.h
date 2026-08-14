@@ -36,7 +36,7 @@ namespace jam::px
 	class CharacterMotor
 	{
     public:
-        explicit CharacterMotor(PxCapsuleController* controller, PxRigidActor* hitbox = nullptr);
+        explicit CharacterMotor(PxCapsuleController* controller, PxRigidActor* hitbox = nullptr, bool collideWithControllers = true);
         ~CharacterMotor();
 
         /// @brief Read sensing info before update(grounded/ceiling/flags/etc.)

@@ -15,7 +15,8 @@ namespace jam::px
 			PxCapsuleController* mainCCT, 
 			PxCapsuleController* replayCCT, 
 			PxRigidActor* hitbox, 
-			const CharacterMoveConfig& cfg);
+			const CharacterMoveConfig& cfg,
+			bool collideWithControllers = true);
 
 
 		// --- brain (Player / AI) ---

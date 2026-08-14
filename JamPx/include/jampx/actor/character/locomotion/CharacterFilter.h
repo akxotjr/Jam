@@ -10,12 +10,16 @@ namespace jam::px
 
         bool ignoreRemote   = false;
         bool ignoreGhost    = false;
+        bool ignoreControllers = false;
         bool unknownDefault = true;     // fallback for if userData isn't set
 
         bool ShouldCollide(const PxController& a, const PxController& b) const noexcept
         {
             // self check (usually not needed; PhysX won't pass same object, but safe)
             if (&a == &b) return false;
+
+            if (ignoreControllers)
+                return false;
 
             const CharacterUserData* ua = GetCharacterUserData(a);
             const CharacterUserData* ub = GetCharacterUserData(b);

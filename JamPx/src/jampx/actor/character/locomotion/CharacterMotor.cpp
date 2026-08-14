@@ -20,16 +20,17 @@ namespace jam::px
 
 	}
 
-	CharacterMotor::CharacterMotor(PxCapsuleController* controller, PxRigidActor* hitbox)
+	CharacterMotor::CharacterMotor(PxCapsuleController* controller, PxRigidActor* hitbox, bool collideWithControllers)
 		: m_controller(controller)
 	{
-		if (!hitbox) return;
-
-		if (auto* dyn = hitbox->is<PxRigidDynamic>())
+		if (hitbox)
 		{
-			// hitbox는 follow 대상이므로 kinematic만 허용
-			if (dyn->getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC))
-				m_hitbox = dyn;
+			if (auto* dyn = hitbox->is<PxRigidDynamic>())
+			{
+				// hitbox는 follow 대상이므로 kinematic만 허용
+				if (dyn->getRigidBodyFlags().isSet(PxRigidBodyFlag::eKINEMATIC))
+					m_hitbox = dyn;
+			}
 		}
 
 		m_rqfd = MakeRequestQueryFD(
@@ -46,7 +47,9 @@ namespace jam::px
 			qryPolicy.selfActor = m_controller->getActor();
 
 		m_qryCallback = std::make_unique<QueryFilterCallbackT<>>(qryPolicy, QueryHitTypeMap{});
-		m_cctCallback = std::make_unique<CharacterFilterCallbackT<>>(DefaultCharacterFilterPolicy{});
+		DefaultCharacterFilterPolicy cctPolicy{};
+		cctPolicy.ignoreControllers = !collideWithControllers;
+		m_cctCallback = std::make_unique<CharacterFilterCallbackT<>>(cctPolicy);
 
 	}
 

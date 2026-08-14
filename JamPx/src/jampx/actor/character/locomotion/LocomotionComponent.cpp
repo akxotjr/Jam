@@ -10,12 +10,12 @@
 namespace jam::px
 {
 
-	LocomotionComponent::LocomotionComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox)
+	LocomotionComponent::LocomotionComponent(const CharacterMoveConfig& cfg, PxCapsuleController* controller, PxRigidActor* hitbox, bool collideWithControllers)
 		: m_cfg(cfg)
 	{
 		m_accelerator = std::make_unique<DefaultQuakeAccelerator>(cfg);
 		m_accumulator = std::make_unique<ExternalMoveAccumulator>();
-		m_motor		  = std::make_unique<CharacterMotor>(controller, hitbox);
+		m_motor		  = std::make_unique<CharacterMotor>(controller, hitbox, collideWithControllers);
 
 		m_state.position = m_motor->GetPosition();
 		m_state.velocity = Vec3::Zero();

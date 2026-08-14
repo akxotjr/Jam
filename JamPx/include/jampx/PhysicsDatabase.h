@@ -133,6 +133,7 @@ namespace jam::px
 	enum class eCCTPolicy
 	{
 		Default,
+		IgnoreControllers,
 	};
 
 	struct CCTBodyData

@@ -25,12 +25,12 @@ namespace jam::px
 		}
 	}
 
-	CharacterBody::CharacterBody(PxCapsuleController* mainCCT, PxCapsuleController* replayCCT, PxRigidActor* hitbox, const CharacterMoveConfig& cfg)
+	CharacterBody::CharacterBody(PxCapsuleController* mainCCT, PxCapsuleController* replayCCT, PxRigidActor* hitbox, const CharacterMoveConfig& cfg, bool collideWithControllers)
 		: m_mainCCT(mainCCT),
 		  m_replayCCT(replayCCT),
 		  m_hitbox(hitbox), 
-		  m_mainMover(std::make_unique<LocomotionComponent>(cfg, mainCCT, hitbox)),
-		  m_replayMover(std::make_unique<LocomotionComponent>(cfg, replayCCT, nullptr))
+		  m_mainMover(std::make_unique<LocomotionComponent>(cfg, mainCCT, hitbox, collideWithControllers)),
+		  m_replayMover(std::make_unique<LocomotionComponent>(cfg, replayCCT, nullptr, collideWithControllers))
 	{
 		if (m_mainMover)
 			m_mainState.pos = m_mainMover->GetMoveState().position;
