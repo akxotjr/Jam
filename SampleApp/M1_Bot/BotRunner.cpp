@@ -175,7 +175,7 @@ bool BotRunner::Init(const BotRunnerConfig& config)
 		}
 		catch (const std::exception& error)
 		{
-			JAMNET_LOG_ERROR("Failed to load bot portal approaches: {}", error.what());
+			JAM_LOG_ERROR("Failed to load bot portal approaches: {}", error.what());
 			return false;
 		}
 	}

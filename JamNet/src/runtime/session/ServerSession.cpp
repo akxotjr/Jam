@@ -99,7 +99,7 @@ namespace jam::net
 
 	void ServerTcpSession::OnLinkEstablished()
 	{
-		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession established. ip: {} | port: {}", 
+		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession established. ip: {} | port: {}", 
 			GetAccountId(), 
 			GetUserId(), 
 			GetRemoteNetAddress().GetIpAddress(), 
@@ -113,7 +113,7 @@ namespace jam::net
 
 	void ServerTcpSession::OnDisconnected()
 	{
-		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession disconnected", GetAccountId(), GetUserId());
+		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession disconnected", GetAccountId(), GetUserId());
 
 		if (m_manager && m_userId != kInvalidUserId)
 			m_manager->ReleaseSession(m_userId, this);
@@ -264,7 +264,7 @@ namespace jam::net
 		auto& sessionState = GetOrCreateSessionShardState(CurrentShardLocalChecked());
 		if (ctx->tcp != kInvalidSessionId && ctx->tcp != GetSessionId() && sessionState.FindSessionRef(ctx->tcp).TryGet())
 		{
-			JAMNET_LOG_WARN("TCP session is already registered.");
+			JAM_LOG_WARN("TCP session is already registered.");
 			Disconnect();
 			return;
 		}
@@ -300,7 +300,7 @@ namespace jam::net
 
 	void ServerUdpSession::OnLinkEstablished()
 	{
-		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ServerUdpSession established. ip: {} | port: {}",
+		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ServerUdpSession established. ip: {} | port: {}",
 			GetAccountId(),
 			GetUserId(),
 			GetRemoteNetAddress().GetIpAddress(),
@@ -314,7 +314,7 @@ namespace jam::net
 
 	void ServerUdpSession::OnDisconnected()
 	{
-		JAMNET_LOG_INFO("[AccountId= {}, UserId = {}] ServerUdpSession disconnected", GetAccountId(), GetUserId());
+		JAM_LOG_INFO("[AccountId= {}, UserId = {}] ServerUdpSession disconnected", GetAccountId(), GetUserId());
 
 		if (m_userId != kInvalidUserId)
 		{
@@ -395,7 +395,7 @@ namespace jam::net
 		if (ctx->udp != kInvalidSessionId && ctx->udp != GetSessionId()
 			&& sessionState.FindSessionRef(ctx->udp).TryGet())
 		{
-			JAMNET_LOG_WARN("UDP session is already registered.");
+			JAM_LOG_WARN("UDP session is already registered.");
 			Disconnect();
 			return;
 		}
@@ -419,8 +419,6 @@ namespace jam::net
 
 	void ServerTcpSession::OnSpawnPlayerRequest(entt::entity e, const fb::fbSpawnPlayerReq& req, uint32 requestId)
 	{
-		JAMNET_LOG_DEBUG("[ServerTcpSession::OnSpawnPlayerRequest] account id= {}, user id= {}", m_accountId, m_userId);
-
 		if (!m_manager || m_userId == kInvalidUserId)
 		{
 			SendSpawnPlayerResponse(e, fb::fbSpawnPlayerFailure_InvalidCorrelation, req.client_request_id(), ActorId::Invalid(), requestId);

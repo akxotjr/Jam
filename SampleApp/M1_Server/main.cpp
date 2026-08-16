@@ -114,7 +114,7 @@ int main()
 
 		if (!manager->Start())
 		{
-			JAMNET_LOG_ERROR("Failed to start ServerNetworkManager");
+			JAM_LOG_ERROR("Failed to start ServerNetworkManager");
 			return -1;
 		}
 
@@ -123,15 +123,13 @@ int main()
 		manager->BootstrapWorldInstances([&bootstrapCompleted](bool succeeded) { bootstrapCompleted.set_value(succeeded); });
 		if (!bootstrapResult.get())
 		{
-			JAMNET_LOG_ERROR("Failed to bootstrap configured world instances");
+			JAM_LOG_ERROR("Failed to bootstrap configured world instances");
 			manager->Stop();
 			return -1;
 		}
 
-		JAMNET_LOG_INFO("Server started successfully");
-		JAMNET_LOG_INFO("   TCP: 127.0.0.1:7777");
-		JAMNET_LOG_INFO("   UDP: 127.0.0.1:8888");
-		JAMNET_LOG_INFO("[q]=quit");
+		JAM_LOG_INFO("Server started successfully");
+		JAM_LOG_INFO("[q]=quit");
 
 		while (true)
 		{
@@ -140,7 +138,7 @@ int main()
 				char ch = static_cast<char>(_getch());
 				if (ch == 'q' || ch == 'Q')
 				{
-					JAMNET_LOG_INFO("Shutting down server...");
+					JAM_LOG_INFO("Shutting down server...");
 					break;
 				}
 			}
@@ -151,7 +149,7 @@ int main()
 		if (manager)
 		{
 			manager->Stop();
-			JAMNET_LOG_INFO("Server stopped gracefully");
+			JAM_LOG_INFO("Server stopped gracefully");
 		}
 
 		manager.reset();
@@ -161,12 +159,12 @@ int main()
 	}
 	catch (const std::bad_weak_ptr& e)
 	{
-		JAMNET_LOG_DEBUG_LOC("bad_weak_ptr exception: {}", e.what());
+		JAM_LOG_DEBUG_LOC("bad_weak_ptr exception: {}", e.what());
 		return -1;
 	}
 	catch (const std::exception& e)
 	{
-		JAMNET_LOG_ERROR_LOC("exception: {}", e.what());
+		JAM_LOG_ERROR_LOC("exception: {}", e.what());
 		return -1;
 	}
 

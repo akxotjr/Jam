@@ -88,12 +88,12 @@ namespace jam::net
 	{
 		if (!GetService())
 		{
-			JAMNET_LOG_ERROR("[TcpSession] Cannot connect without a service");
+			JAM_LOG_ERROR("[TcpSession] Cannot connect without a service");
 			return false;
 		}
 		if (!GetService()->RegisterIocpObject(this))
 		{
-			JAMNET_LOG_ERROR("[TcpSession] Failed to register socket with IOCP");
+			JAM_LOG_ERROR("[TcpSession] Failed to register socket with IOCP");
 			return false;
 		}
 
@@ -184,7 +184,7 @@ namespace jam::net
 		m_connectEvent.Init();
 		if (!TryAddPendingDispatch())
 		{
-			JAMNET_LOG_ERROR("[TcpSession] Failed to reserve ConnectEx dispatch");
+			JAM_LOG_ERROR("[TcpSession] Failed to reserve ConnectEx dispatch");
 			return false;
 		}
 
@@ -406,7 +406,7 @@ namespace jam::net
 
 		if (!m_recvAssembler.Append(ev->buffer.data(), bytes))
 		{
-			JAMNET_LOG_ERROR("TcpRecvAssembler::Append failed");
+			JAM_LOG_ERROR("TcpRecvAssembler::Append failed");
 			ObjectPool<TcpRecvEvent>::Push(ev);
 			Disconnect();
 			return;
@@ -422,7 +422,7 @@ namespace jam::net
 
 			if (result == TcpRecvAssembler::eAssembleResult::ProtocolError)
 			{
-				JAMNET_LOG_ERROR("Tcp recv protocol error");
+				JAM_LOG_ERROR("Tcp recv protocol error");
 				ObjectPool<TcpRecvEvent>::Push(ev);
 				Disconnect();
 				return;
@@ -466,7 +466,7 @@ namespace jam::net
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			Disconnect();
-			JAMNET_LOG_WARN_LOC("[TcpSession] Send 0 byte");
+			JAM_LOG_WARN_LOC("[TcpSession] Send 0 byte");
 			return;
 		}
 
@@ -626,13 +626,13 @@ namespace jam::net
 				{
 					m_clientBind.active = false;
 					m_clientBind.bound  = false;
-					JAMNET_LOG_ERROR("[TcpSession] TCP bind failed or timed out. accountId={}", m_accountId);
+					JAM_LOG_ERROR("[TcpSession] TCP bind failed or timed out. accountId={}", m_accountId);
 					Disconnect();
 					return;
 				}
 				if (res->bootstrapKind != eBootstrapKind::Fresh && res->bootstrapKind != eBootstrapKind::Resync)
 				{
-					JAMNET_LOG_ERROR("[TcpSession] TCP bind response has invalid bootstrap kind. accountId={}, kind={}", m_accountId, static_cast<uint32>(res->bootstrapKind));
+					JAM_LOG_ERROR("[TcpSession] TCP bind response has invalid bootstrap kind. accountId={}, kind={}", m_accountId, static_cast<uint32>(res->bootstrapKind));
 					Disconnect();
 					return;
 				}
@@ -642,7 +642,7 @@ namespace jam::net
 				m_clientBind.bound = true;
 				if (!AdoptAuthoritativeSessionId(res->sessionId))
 				{
-					JAMNET_LOG_ERROR("[TcpSession] Failed to adopt authoritative session id. accountId={}, userId={}, sessionId={}", m_accountId, m_userId, res->sessionId);
+					JAM_LOG_ERROR("[TcpSession] Failed to adopt authoritative session id. accountId={}, userId={}, sessionId={}", m_accountId, m_userId, res->sessionId);
 					m_clientBind.active = false;
 					m_clientBind.bound  = false;
 					Disconnect();
@@ -764,11 +764,11 @@ namespace jam::net
 					return;
 				if (!self->m_clientBind.active || self->m_clientBind.bound || self->m_clientBind.timerToken != token)
 					return;
-				if (self->m_clientBind.retryCount >= HandshakeState::MaxRetry)
+				if (self->m_clientBind.retryCount >= kMaxBindingRetry)
 				{
 					self->m_clientBind.active = false;
 					self->m_clientBind.bound = false;
-					JAMNET_LOG_ERROR("[TcpSession] TCP bind failed or timed out. accountId={}", self->m_accountId);
+					JAM_LOG_ERROR("[TcpSession] TCP bind failed or timed out. accountId={}", self->m_accountId);
 					self->Disconnect();
 					return;
 				}

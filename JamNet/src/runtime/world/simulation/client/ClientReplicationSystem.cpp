@@ -435,7 +435,7 @@ namespace jam::net
 
 		if (!hasResolvedSpawnState)
 		{
-			JAMNET_LOG_WARN("[ProcessEntity] actor id= {}, doesn't have resolved spawn state", actorId.Value());
+			JAM_LOG_WARN("[ProcessEntity] actor id= {}, doesn't have resolved spawn state", actorId.Value());
 			return;
 		}
 
@@ -712,7 +712,7 @@ namespace jam::net
 
 		if (!replica.hasBaseline)
 		{
-			JAMNET_LOG_WARN("[ApplyCharacterDeltaSnapshot] actor id= {}, replica doesn't have baseline", replica.actorId.Value());
+			JAM_LOG_WARN("[ApplyCharacterDeltaSnapshot] actor id= {}, replica doesn't have baseline", replica.actorId.Value());
 			QueueFullRequest(replica.actorId, baselineRev);
 			return;
 		}

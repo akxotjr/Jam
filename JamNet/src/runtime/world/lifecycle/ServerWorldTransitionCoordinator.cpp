@@ -262,7 +262,7 @@ namespace jam::net
 			}, eJobPriority::Control)))
 		{
 			CompleteWorldDestruction(world, false);
-			JAMNET_LOG_WARN("Failed to route world destroy request to world shard. worldId={}", world.worldId);
+			JAM_LOG_WARN("Failed to route world destroy request to world shard. worldId={}", world.worldId);
 		}
 	}
 
@@ -270,7 +270,7 @@ namespace jam::net
 	{
 		if (!SubmitToUserShard(userId, Job(weak_from_this(), &ServerWorldTransitionCoordinator::EnterOnUserShard, eJobPriority::Control, userId, request, nowNs)))
 		{
-			JAMNET_LOG_WARN("Failed to route world enter request to user shard. userId={}", userId);
+			JAM_LOG_WARN("Failed to route world enter request to user shard. userId={}", userId);
 		}
 	}
 
@@ -278,7 +278,7 @@ namespace jam::net
 	{
 		if (!SubmitToUserShard(userId, Job(weak_from_this(), &ServerWorldTransitionCoordinator::LeaveOnUserShard, eJobPriority::Control, userId, request)))
 		{
-			JAMNET_LOG_WARN("Failed to route world leave request to user shard. userId={}", userId);
+			JAM_LOG_WARN("Failed to route world leave request to user shard. userId={}", userId);
 		}
 	}
 
@@ -768,7 +768,7 @@ namespace jam::net
 		UserContext* user = FindUserOnCurrentShard(userId);
 		if (!user)
 		{
-			JAMNET_LOG_WARN("World transition requested for missing user. userId={}", userId);
+			JAM_LOG_WARN("World transition requested for missing user. userId={}", userId);
 			return;
 		}
 
@@ -851,7 +851,7 @@ namespace jam::net
 		UserContext* user = FindUserOnCurrentShard(userId);
 		if (!user)
 		{
-			JAMNET_LOG_WARN("World transition requested for missing user. userId={}", userId);
+			JAM_LOG_WARN("World transition requested for missing user. userId={}", userId);
 			return;
 		}
 
@@ -1133,7 +1133,7 @@ namespace jam::net
 			if (transition.kind == eWorldTransitionKind::Enter)
 			{
 				if (!succeeded)
-					JAMNET_LOG_WARN("Source leave commit failed after target activation. userId={}, token={}", transition.userId, transition.token.value);
+					JAM_LOG_WARN("Source leave commit failed after target activation. userId={}, token={}", transition.userId, transition.token.value);
 				CompleteEnter(*user, user->worldState);
 			}
 			else if (succeeded)
@@ -1226,7 +1226,7 @@ namespace jam::net
 			}), eProtocolType::TCP);
 
 		if (transition.kind == eWorldTransitionKind::Enter)
-			JAMNET_LOG_WARN("[EnterWorld] failed. userId={}, requestId={}, token={}, failure={}", transition.userId, transition.requestId, transition.token.value, static_cast<uint32>(transition.terminalFailure));
+			JAM_LOG_WARN("[EnterWorld] failed. userId={}, requestId={}, token={}, failure={}", transition.userId, transition.requestId, transition.token.value, static_cast<uint32>(transition.terminalFailure));
 
 		if (user.connectionState == eUserConnectionState::Connected
 			&& user.worldResync.phase == eUserWorldResyncPhase::WaitingTransition)
@@ -1440,7 +1440,7 @@ namespace jam::net
 
 	void ServerWorldTransitionCoordinator::FailWorldResync(UserContext& user)
 	{
-		JAMNET_LOG_WARN("[WorldResync] failed or timed out. userId={}, token={}, phase={}", user.userId, user.worldResync.token.value, static_cast<uint32>(user.worldResync.phase));
+		JAM_LOG_WARN("[WorldResync] failed or timed out. userId={}, token={}, phase={}", user.userId, user.worldResync.token.value, static_cast<uint32>(user.worldResync.phase));
 		
 		user.worldResync = {};
 		const ServerSessionBundle sessions = ResolveUserSessionBundle(user);

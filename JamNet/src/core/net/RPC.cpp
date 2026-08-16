@@ -83,8 +83,7 @@ namespace jam::net
 				}
 			}
 
-			JAMNET_LOG_WARN("[RPC] Unhandled response. entity={}, rpcId={}, requestId={}, bodyLen={}",
-				static_cast<uint32>(e), rpcId, requestId, bodyLen);
+			JAM_LOG_WARN("[RPC] Unhandled response. entity={}, rpcId={}, requestId={}, bodyLen={}", static_cast<uint32>(e), rpcId, requestId, bodyLen);
 			return;
 		}
 
@@ -108,13 +107,11 @@ namespace jam::net
 				return;
 			}
 
-			JAMNET_LOG_WARN("[RPC] Unhandled request. entity={}, rpcId={}, requestId={}, bodyLen={}",
-				static_cast<uint32>(e), rpcId, requestId, bodyLen);
+			JAM_LOG_WARN("[RPC] Unhandled request. entity={}, rpcId={}, requestId={}, bodyLen={}", static_cast<uint32>(e), rpcId, requestId, bodyLen);
 			return;
 		}
 
-		JAMNET_LOG_WARN("[RPC] Missing handler registry. entity={}, rpcId={}, requestId={}, flags={}",
-			static_cast<uint32>(e), rpcId, requestId, flags);
+		JAM_LOG_WARN("[RPC] Missing handler registry. entity={}, rpcId={}, requestId={}, flags={}", static_cast<uint32>(e), rpcId, requestId, flags);
 	}
 
 	void RPCUnregisterAll(entt::registry& R, entt::entity e)

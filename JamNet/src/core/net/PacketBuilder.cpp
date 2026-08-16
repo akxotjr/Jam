@@ -10,13 +10,13 @@ namespace jam::net
 		{
 			if (payloadSize != 0 && payload == nullptr)
 			{
-				JAMNET_LOG_ERROR("[PacketBuilder] payload is null. payloadSize={}", payloadSize);
+				JAM_LOG_ERROR("[PacketBuilder] payload is null. payloadSize={}", payloadSize);
 				return false;
 			}
 
 			if (visibleSize > PacketHeader::MAX_PACKET_SIZE)
 			{
-				JAMNET_LOG_ERROR("[PacketBuilder] packet too large. visibleSize={}, max={}", visibleSize, PacketHeader::MAX_PACKET_SIZE);
+				JAM_LOG_ERROR("[PacketBuilder] packet too large. visibleSize={}, max={}", visibleSize, PacketHeader::MAX_PACKET_SIZE);
 				return false;
 			}
 
@@ -75,7 +75,7 @@ namespace jam::net
 	{
 		if (!rpc)
 		{
-			JAMNET_LOG_ERROR("[PacketBuilder] rpc header is null");
+			JAM_LOG_ERROR("[PacketBuilder] rpc header is null");
 			return {};
 		}
 

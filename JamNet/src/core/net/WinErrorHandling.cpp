@@ -101,9 +101,9 @@ namespace jam::net
 		{
 			const std::string message = GetWinErrorMessage(errorCode);
 			if (message.empty())
-				JAMNET_LOG_ERROR("{} failed. ec={}", context, errorCode);
+				JAM_LOG_ERROR("{} failed. ec={}", context, errorCode);
 			else
-				JAMNET_LOG_ERROR("{} failed. ec={}, msg={}", context, errorCode, message);
+				JAM_LOG_ERROR("{} failed. ec={}, msg={}", context, errorCode, message);
 		}
 
 		void LogWsaError(std::string_view context, int32 errorCode)
@@ -116,9 +116,9 @@ namespace jam::net
 			const DWORD errorCode = NativeStatusToWinError(status);
 			const std::string message = GetWinErrorMessage(errorCode);
 			if (message.empty())
-				JAMNET_LOG_ERROR("{} failed. status=0x{:X}, ec={}", context, static_cast<uint32>(status), errorCode);
+				JAM_LOG_ERROR("{} failed. status=0x{:X}, ec={}", context, static_cast<uint32>(status), errorCode);
 			else
-				JAMNET_LOG_ERROR("{} failed. status=0x{:X}, ec={}, msg={}", context, static_cast<uint32>(status), errorCode, message);
+				JAM_LOG_ERROR("{} failed. status=0x{:X}, ec={}, msg={}", context, static_cast<uint32>(status), errorCode, message);
 		}
 
 		void LogLastWinError(std::string_view context)

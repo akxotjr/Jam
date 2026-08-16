@@ -33,7 +33,7 @@ namespace jam::net
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
 			if (object->GetPendingDispatchCount() > 0)
-				JAMNET_LOG_WARN("[Service] IOCP drain delayed for {}. pending={}; waiting for completion", name, object->GetPendingDispatchCount());
+				JAM_LOG_WARN("[Service] IOCP drain delayed for {}. pending={}; waiting for completion", name, object->GetPendingDispatchCount());
 
 			while (object->GetPendingDispatchCount() > 0)
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -358,7 +358,7 @@ namespace jam::net
 		if (m_closePhase != eClosePhase::ClosingUdp || m_closeToken != token)
 			return;
 
-		JAMNET_LOG_WARN("[ClientService] UDP graceful close timed out; forcing session close");
+		JAM_LOG_WARN("[ClientService] UDP graceful close timed out; forcing session close");
 		WaitPendingIocpDrain("ClientUdpSession", m_udpSession.get());
 		DestroyUdpSession(m_udpSession.get());
 		BeginTcpClose();
@@ -370,7 +370,7 @@ namespace jam::net
 		if (m_closePhase != eClosePhase::ClosingTcp || m_closeToken != token)
 			return;
 
-		JAMNET_LOG_WARN("[ClientService] TCP close timed out; forcing socket close");
+		JAM_LOG_WARN("[ClientService] TCP close timed out; forcing socket close");
 		if (m_tcpSession)
 			m_tcpSession->SetSocket(INVALID_SOCKET);
 		WaitPendingIocpDrain("ClientTcpSession", m_tcpSession.get());

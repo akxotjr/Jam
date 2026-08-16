@@ -70,19 +70,19 @@ namespace jam::net
 
 		if (m_config.ticket.empty() && (m_config.loginId.empty() || m_config.password.empty()))
 		{
-			JAMNET_LOG_ERROR_LOC("Login credential is not set");
+			JAM_LOG_ERROR_LOC("Login credential is not set");
 			return false;
 		}
 		if (m_config.loginId.size() > kMaxLoginIdBytes
 			|| m_config.password.size() > kMaxLoginSecretBytes
 			|| m_config.ticket.size() > kMaxLoginSecretBytes)
 		{
-			JAMNET_LOG_ERROR_LOC("Login credential exceeds the binding packet limit");
+			JAM_LOG_ERROR_LOC("Login credential exceeds the binding packet limit");
 			return false;
 		}
 		if (!m_principalShard)
 		{
-			JAMNET_LOG_ERROR_LOC("Client principal affinity shard is unavailable");
+			JAM_LOG_ERROR_LOC("Client principal affinity shard is unavailable");
 			return false;
 		}
 		m_principalShard->Submit(Job(shared_from_this(), &ClientNetworkManager::ConnectOnPrincipalShard, eJobPriority::Control));
@@ -501,7 +501,7 @@ namespace jam::net
 		if (!session->Connect())
 		{
 			const NetAddress& remote = m_service->GetRemoteTcpNetAddress();
-			JAMNET_LOG_ERROR("[ClientNetworkManager] Failed to register TCP connect. remote={}:{}", remote.GetIpAddress(), remote.GetPort());
+			JAM_LOG_ERROR("[ClientNetworkManager] Failed to register TCP connect. remote={}:{}", remote.GetIpAddress(), remote.GetPort());
 			return false;
 		}
 
@@ -567,15 +567,11 @@ namespace jam::net
 		if (userId != m_principal.userId
 			|| (kind != eBootstrapKind::Fresh && kind != eBootstrapKind::Resync))
 		{
-			JAMNET_LOG_WARN("[UserBootstrap] rejected. receivedUserId={}, principalUserId={}, kind={}",
-				userId, m_principal.userId, static_cast<uint32>(kind));
+			JAM_LOG_WARN("[UserBootstrap] rejected. receivedUserId={}, principalUserId={}, kind={}", userId, m_principal.userId, static_cast<uint32>(kind));
 			return;
 		}
 
 		m_bootstrapKind.store(kind, std::memory_order_release);
-		JAMNET_LOG_INFO("[UserBootstrap] accepted. userId={}, kind={}, tcpBound={}, udpBound={}",
-			userId, static_cast<uint32>(kind),
-			m_tcpBound.load(std::memory_order_acquire), m_udpBound.load(std::memory_order_acquire));
 		UpdateSessionReadyState();
 	}
 

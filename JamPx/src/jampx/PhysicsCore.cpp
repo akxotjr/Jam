@@ -16,14 +16,14 @@ namespace jam::px
 	{
 		if (PxIsFoundationValid())
 		{
-			JAMNET_LOG_CRITICAL("[PhysicsCore::Init] PhysX foundation from a previous runtime is still alive");
+			JAM_LOG_CRITICAL("[PhysicsCore::Init] PhysX foundation from a previous runtime is still alive");
 			throw std::runtime_error("PhysicsCore::Init(), previous PhysX foundation is still alive");
 		}
 
         m_foundation = PxCreateFoundation(PX_PHYSICS_VERSION, m_allocator, m_errorCallback);
 		if (!m_foundation)
 		{
-			JAMNET_LOG_CRITICAL("PhysicsCore::Init(), PxCreateFoundation failed");
+			JAM_LOG_CRITICAL("PhysicsCore::Init(), PxCreateFoundation failed");
 			throw std::runtime_error("PhysicsCore::Init(), PxCreateFoundation failed");
 		}
 
@@ -45,7 +45,7 @@ namespace jam::px
         m_physics = PxCreatePhysics(PX_PHYSICS_VERSION, *m_foundation, scale, true, m_pvd);
 		if (!m_physics)
 		{
-			JAMNET_LOG_CRITICAL("PhysicsCore::Init(), PxCreatePhysics failed");
+			JAM_LOG_CRITICAL("PhysicsCore::Init(), PxCreatePhysics failed");
 			throw std::runtime_error("PhysicsCore::Init(), PxCreatePhysics failed");
 		}
 
@@ -53,7 +53,7 @@ namespace jam::px
         m_dispatcher = physx::PxDefaultCpuDispatcherCreate(threads);
 		if (!m_dispatcher)
 		{
-			JAMNET_LOG_CRITICAL("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
+			JAM_LOG_CRITICAL("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
 			throw std::runtime_error("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
 		}
 	}
@@ -78,7 +78,7 @@ namespace jam::px
 		if (m_foundation) { m_foundation->release(); m_foundation = nullptr; }
 
 		if (PxIsFoundationValid())
-			JAMNET_LOG_CRITICAL("[PhysicsCore::Shutdown] PhysX foundation is still alive after release");
+			JAM_LOG_CRITICAL("[PhysicsCore::Shutdown] PhysX foundation is still alive after release");
 	}
 
 	PxScene* PhysicsCore::CreateScene() const

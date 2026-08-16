@@ -58,7 +58,7 @@ namespace jam::net
 	{
 		if (m_closed.load(std::memory_order_acquire))
 		{
-			JAMNET_LOG_WARN("[Session::Post] account id= {} mailbox is already closed", m_accountId);
+			JAM_LOG_WARN("[Session::Post] account id= {} mailbox is already closed", m_accountId);
 			return;
 		}
 		// Pre-bind sessions do not own a mailbox yet. Route these jobs through
@@ -74,7 +74,7 @@ namespace jam::net
 
 		if (!m_mailboxRef.TryPost(std::move(j)))
 		{
-			JAMNET_LOG_WARN("[Session::Post] failed trying post job. accountId={}, userId={}, sessionId={}, mailboxValid={}, closing={}",
+			JAM_LOG_WARN("[Session::Post] failed trying post job. accountId={}, userId={}, sessionId={}, mailboxValid={}, closing={}",
 				m_accountId, m_userId, m_sessionId, m_mailboxRef.IsValid(), IsClosing());
 		}
 	}

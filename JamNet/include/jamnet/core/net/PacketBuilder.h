@@ -241,7 +241,7 @@ namespace jam::net
 
 			if (view.totalSize < view.headerSize || size < view.totalSize)
 			{
-				JAMNET_LOG_WARN(
+				JAM_LOG_WARN(
 					"Invalid packet size. headerSize={}, totalSize={}, available={}, type={}, id={}, flags=0x{:02X}, channel={}, rawHeader={:02X} {:02X} {:02X} {:02X}",
 					view.headerSize,
 					view.totalSize,

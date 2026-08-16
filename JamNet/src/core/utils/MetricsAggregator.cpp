@@ -184,7 +184,7 @@ namespace jam
 
 			auto [it, inserted] = window.histograms.try_emplace(std::move(key), std::move(histogram));
 			if (!inserted && !it->second.MergeFrom(std::move(histogram)))
-				JAMNET_LOG_WARN("Histogram merge failed: scope={}, shard={}, source={}, metric={}", snapshot.scope, snapshot.shardIndex, snapshot.sourceId, it->first.name);
+				JAM_LOG_WARN("Histogram merge failed: scope={}, shard={}, source={}, metric={}", snapshot.scope, snapshot.shardIndex, snapshot.sourceId, it->first.name);
 		}
 	}
 
@@ -355,7 +355,7 @@ namespace jam
 			entry.tag_len = tag.size();
 
 			if (hdr_log_write_entry(&m_histogramLog->writer, m_histogramLog->file, &entry, metric.m_impl->histogram) != 0)
-				JAMNET_LOG_WARN("Histogram log write failed: scope={}, shard={}, source={}, metric={}", key.scope, key.shardIndex, key.sourceId, key.name);
+				JAM_LOG_WARN("Histogram log write failed: scope={}, shard={}, source={}, metric={}", key.scope, key.shardIndex, key.sourceId, key.name);
 		}
 	}
 
@@ -404,7 +404,7 @@ namespace jam
 		const int headerResult = hdr_log_write_header(&m_histogramLog->writer, m_histogramLog->file, "JamNet M1 metrics", &startTimestamp);
 		if (headerResult != 0)
 		{
-			JAMNET_LOG_ERROR("HDR histogram header write failed: result={}, error={}, errno={}, streamError={}",
+			JAM_LOG_ERROR("HDR histogram header write failed: result={}, error={}, errno={}, streamError={}",
 				headerResult, hdr_strerror(headerResult), errno, std::ferror(m_histogramLog->file));
 
 			m_output.close();

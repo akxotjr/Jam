@@ -66,7 +66,7 @@ namespace jam
 		m_metricsAggregator = std::make_unique<MetricsAggregator>();
 		if (!m_metricsAggregator->Initialize(m_config.metrics))
 		{
-			JAMNET_LOG_ERROR("Failed to initialize MetricsAggregator output");
+			JAM_LOG_ERROR("Failed to initialize MetricsAggregator output");
 			m_metricsAggregator.reset();
 		}
 		const uint64 processWindowIndex = m_metricsAggregator && m_metricsAggregator->IsEnabled()
@@ -679,7 +679,7 @@ namespace jam
 
 		m_affinitySlots = BuildRoundRobinCoreSlots(QueryNumaNodesWithPrimaryCoreSlots());
 		if (m_affinitySlots.empty())
-			JAMNET_LOG_WARN("Executor affinity is enabled, but no physical core slots were discovered");
+			JAM_LOG_WARN("Executor affinity is enabled, but no physical core slots were discovered");
 	}
 
 	bool GlobalExecutor::TryGetAffinitySlot(uint32 slotIndex, ThreadAffinitySlot& out) const
@@ -696,13 +696,13 @@ namespace jam
 		ThreadAffinitySlot slot = {};
 		if (!TryGetAffinitySlot(slotIndex, slot))
 		{
-			JAMNET_LOG_WARN("{}#{} affinity requested but no valid core slot exists", roleName, roleIndex);
+			JAM_LOG_WARN("{}#{} affinity requested but no valid core slot exists", roleName, roleIndex);
 			return;
 		}
 
 		if (PinCurrentThreadTo(slot.core))
 		{
-			JAMNET_LOG_DEBUG("{}#{} pinned. numaNode={}, group={}, mask=0x{:X}",
+			JAM_LOG_DEBUG("{}#{} pinned. numaNode={}, group={}, mask=0x{:X}",
 				roleName,
 				roleIndex,
 				slot.numaNode,
@@ -712,7 +712,7 @@ namespace jam
 		}
 
 		const DWORD errorCode = GetLastError();
-		JAMNET_LOG_WARN_LOC("{}#{} pinning failed. numaNode={}, group={}, mask=0x{:X}, error={}",
+		JAM_LOG_WARN_LOC("{}#{} pinning failed. numaNode={}, group={}, mask=0x{:X}, error={}",
 			roleName,
 			roleIndex,
 			slot.numaNode,

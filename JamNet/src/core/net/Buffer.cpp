@@ -609,7 +609,7 @@ namespace jam::net
 		const uint64 recycleWait = m_metrics.recycleLockWait_ns.load(std::memory_order_relaxed);
 		const uint64 recycleLockOps = spillCount + directRecycleCount;
 
-		JAMNET_LOG_INFO(
+		JAM_LOG_INFO(
 			"[BufferPool:{}] globalLocks={} acquire={} recycle={} slowAlloc={} refill={}/{} spill={}/{} directRecycle={} peakTls={} avgAcquireLockWait={}ns avgRecycleLockWait={}ns batch={} low={} high={}",
 			m_config.debugName,
 			globalLockCount,
@@ -652,7 +652,7 @@ namespace jam::net
 
 		if (g_bufWriterOpenDepth > 1)
 		{
-			JAMNET_LOG_WARN(
+			JAM_LOG_WARN(
 				"[BufWriter::Open] nested open detected. pool={}, depth={}, reserveBytes={}, initialHeadroom={}, alignment={}",
 				m_pool.m_config.debugName ? m_pool.m_config.debugName : "BufferPool",
 				g_bufWriterOpenDepth,

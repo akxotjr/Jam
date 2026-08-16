@@ -223,6 +223,14 @@ namespace jam
 	}
 }
 
+#define LOGGER						::jam::Logger::Instance().GetLogger()
+#define LOGGER_INIT(...)			::jam::Logger::Instance().Init(__VA_ARGS__)
+#define LOGGER_SHUTDOWN()			::jam::Logger::Instance().Shutdown()
+
+#define JAM_LOG						LOGGER
+#define JAM_LOG_INIT(...)			::jam::Logger::Instance().Init("Jam", __VA_ARGS__)
+#define JAM_LOG_SHUTDOWN()			::jam::Logger::Instance().Shutdown()
+
 #define JAM_LOG_TRACE(...)			::jam::LogTrace(__VA_ARGS__)
 #define JAM_LOG_DEBUG(...)			::jam::LogDebug(__VA_ARGS__)
 #define JAM_LOG_INFO(...)			::jam::LogInfo(__VA_ARGS__)
@@ -240,26 +248,3 @@ namespace jam
 #define JAM_LOG_FATAL_LOC(...)		::jam::LogLocation(::spdlog::level::critical, __FILE__, __LINE__, __VA_ARGS__)
 
 #define JAM_LOG_IF(condition, level, ...) do { if (condition) { JAM_LOG_##level(__VA_ARGS__); } } while (false)
-
-#define JAM_LOG				::jam::Logger::Instance().GetLogger()
-#define JAM_LOG_INIT(...)	::jam::Logger::Instance().Init(__VA_ARGS__)
-#define JAM_LOG_SHUTDOWN()	::jam::Logger::Instance().Shutdown()
-
-#define JAMNET_LOG_TRACE(...)		JAM_LOG_TRACE(__VA_ARGS__)
-#define JAMNET_LOG_DEBUG(...)		JAM_LOG_DEBUG(__VA_ARGS__)
-#define JAMNET_LOG_INFO(...)		JAM_LOG_INFO(__VA_ARGS__)
-#define JAMNET_LOG_WARN(...)		JAM_LOG_WARN(__VA_ARGS__)
-#define JAMNET_LOG_ERROR(...)		JAM_LOG_ERROR(__VA_ARGS__)
-#define JAMNET_LOG_CRITICAL(...)	JAM_LOG_CRITICAL(__VA_ARGS__)
-
-#define JAMNET_LOG_TRACE_LOC(...)	JAM_LOG_TRACE_LOC(__VA_ARGS__)
-#define JAMNET_LOG_DEBUG_LOC(...)	JAM_LOG_DEBUG_LOC(__VA_ARGS__)
-#define JAMNET_LOG_INFO_LOC(...)	JAM_LOG_INFO_LOC(__VA_ARGS__)
-#define JAMNET_LOG_WARN_LOC(...)	JAM_LOG_WARN_LOC(__VA_ARGS__)
-#define JAMNET_LOG_ERROR_LOC(...)	JAM_LOG_ERROR_LOC(__VA_ARGS__)
-#define JAMNET_LOG_CRITICAL_LOC(...) JAM_LOG_CRITICAL_LOC(__VA_ARGS__)
-
-#define JAMNET_LOG_IF(condition, level, ...) JAM_LOG_IF(condition, level, __VA_ARGS__)
-#define JAMNET_LOG JAM_LOG
-#define LOGGER_INIT() JAM_LOG_INIT("JamNet")
-#define LOGGER_SHUTDOWN() JAM_LOG_SHUTDOWN()

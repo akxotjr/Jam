@@ -25,7 +25,7 @@ namespace jam::net
 
 	void NetRuntime::Init()
 	{
-		JAM_LOG_INIT("JamNet", m_config.logFilePath);
+		JAM_LOG_INIT(m_config.logFilePath);
 		DEFAULT_ALLOCATOR_INIT();
 		SocketUtils::Init();
 		CLOCK.Start(m_config.clockTick);
@@ -40,12 +40,12 @@ namespace jam::net
 			}));
 
 		m_bInitialized = true;
-		JAMNET_LOG_INFO("JamNet Runtime initialized");
+		JAM_LOG_INFO("JamNet Runtime initialized");
 	}
 
 	void NetRuntime::Shutdown()
 	{
-		JAMNET_LOG_INFO("JamNet Runtime shutting down... ");
+		JAM_LOG_INFO("JamNet Runtime shutting down... ");
 
 		GLOBAL_EXEC_SHUTDOWN();
 		MAIN_EXEC_SHUTDOWN();

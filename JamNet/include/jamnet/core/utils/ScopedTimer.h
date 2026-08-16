@@ -43,14 +43,14 @@ namespace jam
 				return;
 
 			if (m_unit == eTimeUnit::Ns)
-				JAMNET_LOG_TRACE("[{}] start= {}ns, elapsed= {}ns", m_name, m_start, elapsed);
+				JAM_LOG_TRACE("[{}] start= {}ns, elapsed= {}ns", m_name, m_start, elapsed);
 			else if (m_unit == eTimeUnit::Us)
-				JAMNET_LOG_TRACE("[{}] start= {}us, elapsed= {}us", m_name, m_start, elapsed);
+				JAM_LOG_TRACE("[{}] start= {}us, elapsed= {}us", m_name, m_start, elapsed);
 			else if (m_unit == eTimeUnit::Ms)
-				JAMNET_LOG_TRACE("[{}] start= {}ms, elapsed= {}ms", m_name, m_start, elapsed);
+				JAM_LOG_TRACE("[{}] start= {}ms, elapsed= {}ms", m_name, m_start, elapsed);
 			else if (m_unit == eTimeUnit::Sec)
-				JAMNET_LOG_TRACE("[{}] start= {}sec, elapsed= {}sec", m_name, m_start, elapsed);
-		}
+				JAM_LOG_TRACE("[{}] start= {}sec, elapsed= {}sec", m_name, m_start, elapsed);
+		 }
 
 	private:
 		std::string		m_name;

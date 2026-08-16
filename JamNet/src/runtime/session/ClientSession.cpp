@@ -51,7 +51,7 @@ namespace jam::net
 	{
 		if (m_manager)
 			m_manager->AssertPrincipalAffinity();
-		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientTcpSession established. ip: {} | port: {}",
+		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ClientTcpSession established. ip: {} | port: {}",
 			GetAccountId(),
 			GetUserId(),
 			GetRemoteNetAddress().GetIpAddress(),
@@ -63,7 +63,7 @@ namespace jam::net
 
 	void ClientTcpSession::OnDisconnected()
 	{
-		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientTcpSession disconnected", GetAccountId(), GetUserId());
+		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ClientTcpSession disconnected", GetAccountId(), GetUserId());
 		if (m_manager)
 			m_manager->NotifyTcpDisconnected(this);
 	}
@@ -82,7 +82,7 @@ namespace jam::net
 			if (!codec::DecodeWorldTransitionResult(view.Payload(), view.PayloadSize(), result))
 				return;
 			if (result.failure != eWorldTransitionFailure::None)
-				JAMNET_LOG_WARN("World transition failed. kind={}, requestId={}, reason={}",
+				JAM_LOG_WARN("World transition failed. kind={}, requestId={}, reason={}",
 					static_cast<uint32>(result.kind), result.requestId, static_cast<uint32>(result.failure));
 			return;
 		}
@@ -92,7 +92,7 @@ namespace jam::net
 			ClientWorldPrepare prepare;
 			if (!codec::DecodeClientWorldPrepare(view.Payload(), view.PayloadSize(), prepare))
 			{
-				JAMNET_LOG_WARN("[ClientWorldPrepare] verification failed. payloadSize={}", view.PayloadSize());
+				JAM_LOG_WARN("[ClientWorldPrepare] verification failed. payloadSize={}", view.PayloadSize());
 				return;
 			}
 
@@ -106,7 +106,7 @@ namespace jam::net
 					auto* self = service ? static_cast<ClientTcpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
 					if (!self)
 					{
-						JAMNET_LOG_WARN("[ClientWorldPrepare] sync response dropped; TCP session lookup failed. token={}, sessionId={}, generation={}", token.value, sessionId, generation);
+						JAM_LOG_WARN("[ClientWorldPrepare] sync response dropped; TCP session lookup failed. token={}, sessionId={}, generation={}", token.value, sessionId, generation);
 						return;
 					}
 					self->Send(codec::MakeClientWorldSyncResultPacket({ .token = token, .succeeded = succeeded, .failure = succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::ClientPrepareFailed }));
@@ -169,7 +169,6 @@ namespace jam::net
 
 	void ClientTcpSession::OnTcpBindBootstrap(eBootstrapKind kind)
 	{
-		JAMNET_LOG_INFO("[TcpBind] bootstrap received. userId={}, kind={}", GetUserId(), static_cast<uint32>(kind));
 		if (m_manager)
 			m_manager->NotifyBootstrap(GetUserId(), kind);
 	}
@@ -182,7 +181,7 @@ namespace jam::net
 	{
 		if (m_manager)
 			m_manager->AssertPrincipalAffinity();
-		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientUdpSession established. ip: {} | port: {}",
+		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ClientUdpSession established. ip: {} | port: {}",
 			GetAccountId(),
 			GetUserId(),
 			GetRemoteNetAddress().GetIpAddress(),
@@ -194,7 +193,7 @@ namespace jam::net
 
 	void ClientUdpSession::OnDisconnected()
 	{
-		JAMNET_LOG_INFO("[AccountId = {}, UserId = {}] ClientUdpSession disconnected", GetAccountId(), GetUserId());
+		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ClientUdpSession disconnected", GetAccountId(), GetUserId());
 		if (m_manager)
 			m_manager->NotifyUdpDisconnected(this);
 	}
@@ -214,7 +213,7 @@ namespace jam::net
 		{
 			if (view.Id() == CustomPacketId::SNAPSHOT || view.Id() == CustomPacketId::LIFECYCLE)
 			{
-				JAMNET_LOG_WARN(
+				JAM_LOG_WARN(
 					"[ClientUdpSession] Invalid scoped world id. account={} user={} packetId={} payloadSize={}",
 					GetAccountId(),
 					GetUserId(),

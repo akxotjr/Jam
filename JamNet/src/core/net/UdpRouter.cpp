@@ -96,7 +96,7 @@ namespace jam::net
 		if (!SocketUtils::SetRecvBufferSize(m_socket, recvBufferSize)
 			|| !SocketUtils::SetSendBufferSize(m_socket, sendBufferSize))
 		{
-			JAMNET_LOG_ERROR(
+			JAM_LOG_ERROR(
 				"[UdpRouter] Failed to configure socket buffers. serviceType={}, recvBytes={}, sendBytes={}",
 				E2U(serviceType),
 				recvBufferSize,
@@ -280,7 +280,7 @@ namespace jam::net
 	{
 		if (numOfBytes == 0)
 		{
-			JAMNET_LOG_WARN_LOC("[ip= {}, port= {}] num of bytes is 0", remoteAddr.GetIpAddress(), remoteAddr.GetPort());
+			JAM_LOG_WARN_LOC("[ip= {}, port= {}] num of bytes is 0", remoteAddr.GetIpAddress(), remoteAddr.GetPort());
 		}
 	}
 
@@ -314,7 +314,7 @@ namespace jam::net
 							}
 							else
 							{
-								JAMNET_LOG_WARN(
+								JAM_LOG_WARN(
 									"[UdpRouter] Bound UDP session lookup failed. endpointId={} sessionId={} targetShard={} localShard={}",
 									endpointId,
 									sessionId,
@@ -325,7 +325,7 @@ namespace jam::net
 				}
 				else
 				{
-					JAMNET_LOG_WARN(
+					JAM_LOG_WARN(
 						"[UdpRouter] Bound UDP shard resolve failed. endpointId={} sessionId={} targetShard={}",
 						endpointId,
 						ingressRoute.sessionId,

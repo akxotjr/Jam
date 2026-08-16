@@ -507,7 +507,7 @@ namespace jam::net
 			return false;
 		}
 
-		JAMNET_LOG_DEBUG("[Fragment] Reassembly complete: id={}, size={}", fragmentId, reassembled->size());
+		JAM_LOG_DEBUG("[Fragment] Reassembly complete: id={}, size={}", fragmentId, reassembled->size());
 
 		if (ctx.view.Channel() == eChannel::RELIABLE_ORDERED)
 			ctx.orderedSpan = std::max<uint16>(1, fragTotal);
@@ -1029,7 +1029,7 @@ namespace jam::net
 					awaitState->onDone(false);
 				}
 
-				JAMNET_LOG_WARN("[RPC] Request {} timed out", requestId);
+				JAM_LOG_WARN("[RPC] Request {} timed out", requestId);
 			}
 		}
 	}
@@ -1252,7 +1252,7 @@ namespace jam::net
 
 				if (pending->retryCount >= ReliabilityState::MaxRetry)
 				{
-					JAMNET_LOG_ERROR("[Retransmit] Packet seq={} exceeded max retry", seq);
+					JAM_LOG_ERROR("[Retransmit] Packet seq={} exceeded reliable delivery timeout", seq);
 					MarkRetransmitGiveup(metrics, *pending);
 					info.state = SessionInfo::DISCONNECTING;
 					L.defers.emplace_back([entity](entt::registry& rr)
@@ -1504,13 +1504,13 @@ namespace jam::net
 		auto& R = L.registry;
 		if (!R.valid(e))
 		{
-			JAMNET_LOG_WARN_LOC("Invalid entity");
+			JAM_LOG_WARN_LOC("Invalid entity");
 			return false;
 		}
 
 		if (!R.all_of<SessionInfo>(e))
 		{
-			JAMNET_LOG_WARN_LOC("Entity doesn't have SessionInfo");
+			JAM_LOG_WARN_LOC("Entity doesn't have SessionInfo");
 			return false;
 		}
 
@@ -1518,7 +1518,7 @@ namespace jam::net
 
 		if (!view.IsValid())
 		{
-			JAMNET_LOG_WARN_LOC("Invalid Packet View");
+			JAM_LOG_WARN_LOC("Invalid Packet View");
 			return false;
 		}
 
@@ -1542,13 +1542,13 @@ namespace jam::net
 
 		if (!R.valid(e))
 		{
-			JAMNET_LOG_WARN_LOC("Invalid Entity");
+			JAM_LOG_WARN_LOC("Invalid Entity");
 			return;
 		}
 
 		if (!R.all_of<SessionInfo>(e))
 		{
-			JAMNET_LOG_WARN_LOC("Entity doesn't have SessionInfo");
+			JAM_LOG_WARN_LOC("Entity doesn't have SessionInfo");
 			return;
 		}
 
@@ -1561,7 +1561,7 @@ namespace jam::net
 			PacketHeaderView view = PacketHeaderView::Parse(packet->Head() + offset, remaining);
 			if (!view.IsValid())
 			{
-				JAMNET_LOG_WARN(
+				JAM_LOG_WARN(
 					"[Session] Invalid packet received in datagram. offset={}, remaining={}, datagramSize={}",
 					offset,
 					remaining,

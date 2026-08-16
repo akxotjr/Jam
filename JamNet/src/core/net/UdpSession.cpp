@@ -143,7 +143,7 @@ namespace jam::net
 		const entt::entity e = GetEntity();
 		if (e == entt::null)
 		{
-			JAMNET_LOG_WARN("[UdpSession::ProcessRecv] session id= {}. entity is null", m_sessionId);
+			JAM_LOG_WARN("[UdpSession::ProcessRecv] session id= {}. entity is null", m_sessionId);
 			return;
 		}
 

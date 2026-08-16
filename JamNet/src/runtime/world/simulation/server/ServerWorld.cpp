@@ -241,7 +241,7 @@ namespace jam::net
 	{
 		if (!packet.IsValid())
 		{
-			JAMNET_LOG_WARN_LOC("send packet is invalid");
+			JAM_LOG_WARN_LOC("send packet is invalid");
 			return;
 		}
 
@@ -257,7 +257,7 @@ namespace jam::net
 		{
 			if (!PostToSession(it->second.sessions, protocol, std::move(packet)))
 			{
-				JAMNET_LOG_WARN("[ServerWorldTx] failed to schedule packet. userId={}, type={}, id={}, channel={}",
+				JAM_LOG_WARN("[ServerWorldTx] failed to schedule packet. userId={}, type={}, id={}, channel={}",
 					userId, static_cast<uint8>(view.Type()), view.Id(), static_cast<uint8>(view.Channel()));
 			}
 		}
@@ -280,7 +280,7 @@ namespace jam::net
 		{
 			if (!PostToSession(p.sessions, protocol, ClonePacket(packet)))
 			{
-				JAMNET_LOG_WARN_LOC("[ServerWorld] failed send packet");
+				JAM_LOG_WARN_LOC("[ServerWorld] failed send packet");
 			}
 		}
 	}
@@ -701,7 +701,7 @@ namespace jam::net
 			const ActorId actorId = ActorId(instance.actorId);
 			if (!actorId.IsValid() || ResolveActor(actorId) != entt::null)
 			{
-				JAMNET_LOG_WARN("[ServerPhysicalWorld::BootstrapLevelActors] invalid or duplicate actorId={}", instance.actorId);
+				JAM_LOG_WARN("[ServerPhysicalWorld::BootstrapLevelActors] invalid or duplicate actorId={}", instance.actorId);
 				continue;
 			}
 

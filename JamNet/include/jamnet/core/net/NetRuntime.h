@@ -8,9 +8,9 @@ namespace jam::net
 {
 	struct RuntimeConfig
 	{
-		uint32					clockTick = 30;
-		GlobalExecutorConfig	geConfig  = {};
-		std::string				logFilePath = "logs/jamnet.log";
+		uint32					clockTick	= 30;
+		GlobalExecutorConfig	geConfig	= {};
+		std::string				logFilePath = "auto";
 	};
 
 	class NetRuntime

@@ -74,7 +74,7 @@ namespace jam
 				{
 					if (PinCurrentThreadTo(m_pinSlot))
 					{
-						JAMNET_LOG_DEBUG("ShardExecutor#{} pinned. group={}, mask=0x{:X}",
+						JAM_LOG_DEBUG("ShardExecutor#{} pinned. group={}, mask=0x{:X}",
 							m_config.index,
 							m_pinSlot.group,
 							static_cast<unsigned long long>(m_pinSlot.mask));
@@ -82,7 +82,7 @@ namespace jam
 					else
 					{
 						const DWORD errorCode = GetLastError();
-						JAMNET_LOG_WARN_LOC("ShardExecutor#{} pinning failed. group={}, mask=0x{:X}, error={}",
+						JAM_LOG_WARN_LOC("ShardExecutor#{} pinning failed. group={}, mask=0x{:X}, error={}",
 							m_config.index,
 							m_pinSlot.group,
 							static_cast<unsigned long long>(m_pinSlot.mask),
@@ -165,18 +165,18 @@ namespace jam
 
 			if (PinCurrentThreadTo(siblingSlot))
 			{
-				JAMNET_LOG_DEBUG("ShardPhysics#{} pinned. group={}, mask=0x{:X}",
+				JAM_LOG_DEBUG("ShardPhysics#{} pinned. group={}, mask=0x{:X}",
 					m_config.index, siblingSlot.group, static_cast<unsigned long long>(siblingSlot.mask));
 			}
 			else
 			{
-				JAMNET_LOG_WARN_LOC("ShardPhysics#{} pinning failed. group={}, mask=0x{:X}, error={}",
+				JAM_LOG_WARN_LOC("ShardPhysics#{} pinning failed. group={}, mask=0x{:X}, error={}",
 					m_config.index, siblingSlot.group, static_cast<unsigned long long>(siblingSlot.mask), GetLastError());
 			}
 		}
 		else if (m_pinEnabled)
 		{
-			JAMNET_LOG_WARN("ShardPhysics#{} has no SMT sibling affinity; worker remains unpinned", m_config.index);
+			JAM_LOG_WARN("ShardPhysics#{} has no SMT sibling affinity; worker remains unpinned", m_config.index);
 		}
 
 		constexpr uint32 kActiveSpinCount = 256;
@@ -982,7 +982,7 @@ namespace jam
 		}
 
 		if (remainingJobBudget < 0)
-			JAMNET_LOG_WARN("remaining job budget < 0");
+			JAM_LOG_WARN("remaining job budget < 0");
 	}
 
 	Mailbox* ShardExecutor::FindMailbox(uint32 id)

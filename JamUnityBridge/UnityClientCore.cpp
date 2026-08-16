@@ -75,6 +75,7 @@ bool UnityClientCore::Initialize(const JAM_ClientConfig& config)
 	net::RuntimeConfig runtimeConfig{};
 	runtimeConfig.geConfig.autoTune  = true;
 	runtimeConfig.geConfig.layoutCfg = { .mode = Balance, .reservedThreads = 1, .profile = CoreProfileClient };
+	runtimeConfig.logFilePath = "logs/native_jam.log";
 
 	m_netRuntime = std::make_unique<net::NetRuntime>(runtimeConfig);
 

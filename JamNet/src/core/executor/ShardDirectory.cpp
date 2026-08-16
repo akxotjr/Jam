@@ -119,7 +119,7 @@ namespace jam
 
 		if (slots.empty())
 		{
-			JAMNET_LOG_WARN("NUMA/core topology query returned no physical core slots; shard pinning disabled");
+			JAM_LOG_WARN("NUMA/core topology query returned no physical core slots; shard pinning disabled");
 			return;
 		}
 
@@ -134,7 +134,7 @@ namespace jam
 				continue;
 
 			shard->PinCoreSlot(slot.core, slot.numaNode);
-			JAMNET_LOG_DEBUG("ShardExecutor#{} affinity assigned. numaNode={}, group={}, mask=0x{:X}, physicsSiblingMask=0x{:X}",
+			JAM_LOG_DEBUG("ShardExecutor#{} affinity assigned. numaNode={}, group={}, mask=0x{:X}, physicsSiblingMask=0x{:X}",
 				i,
 				slot.numaNode,
 				slot.core.group,

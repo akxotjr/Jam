@@ -213,7 +213,7 @@ namespace jam::net
 					const size_t est = estimateActorBytes(c);
 					if (est > kPacketPayloadBudget)
 					{
-						JAMNET_LOG_WARN("[Snapshot] single actor too large. user={}, actorId={}", user, c.actorId.Value());
+						JAM_LOG_WARN("[Snapshot] single actor too large. user={}, actorId={}", user, c.actorId.Value());
 						continue;
 					}
 
@@ -1108,7 +1108,7 @@ namespace jam::net
 			auto pkt = PacketBuilder::CreateCustomPacket(CustomPacketId::LIFECYCLE, PacketFlags::NONE, eChannel::RELIABLE_ORDERED, m_fbb->GetBufferPointer(), m_fbb->GetSize());
 			if (!pkt.IsValid())
 			{
-				JAMNET_LOG_WARN("[LifecycleTx] packet build failed. userId={}, worldId={}, tick={}, actors={}, payloadBytes={}",
+				JAM_LOG_WARN("[LifecycleTx] packet build failed. userId={}, worldId={}, tick={}, actors={}, payloadBytes={}",
 					userId, m_netWorld->GetWorldId(), tick, actorOffs.size(), m_fbb->GetSize());
 				continue;
 			}

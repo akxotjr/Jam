@@ -156,7 +156,7 @@ namespace jam::net
 					worldId = (*world)->GetWorldId();
 				const auto pendingIt = m_pendingInputs.find(control.userId);
 				const std::size_t pendingCount = pendingIt != m_pendingInputs.end() ? pendingIt->second.size() : 0;
-				JAMNET_LOG_WARN(
+				JAM_LOG_WARN(
 					"[MoveToStallDiag] userId={}, worldId={}, tick={}, pos=({:.2f},{:.2f},{:.2f}), target=({:.2f},{:.2f},{:.2f}), remaining={:.2f}, moved1s={:.3f}, speed={:.3f}, flags=0x{:08X}, seq={}, revision={}, pending={}",
 					control.userId, worldId, serverTick,
 					context.selfState->pos.x, context.selfState->pos.y, context.selfState->pos.z,

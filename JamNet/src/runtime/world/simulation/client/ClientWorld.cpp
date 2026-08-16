@@ -282,8 +282,6 @@ namespace jam::net
 
 		const auto payload = codec::EncodeSpawnPlayerRequest(correlation, params);
 
-		JAMNET_LOG_DEBUG("[ClientPhysicalWorld::RequestSpawnPlayer] account id= {}, user id= {}", GetAccountId(), GetUserId());
-
 		RPCCallOptions opt{ .channel = eChannel::TCP_DEFAULT, .timeout_ns = 15_s };
 		RPCCallAsync<fb::fbSpawnPlayerReq, fb::fbSpawnPlayerRes>(
 			m_principal->tcp,
@@ -437,7 +435,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		}
 		else
 		{
-			JAMNET_LOG_WARN("[EnsureReplicatedActor] active slot generation conflict. requestedActorId={}, occupantActorId={}",
+			JAM_LOG_WARN("[EnsureReplicatedActor] active slot generation conflict. requestedActorId={}, occupantActorId={}",
 				actorId.Value(), occupantId.Value());
 			if (outCreated) *outCreated = false;
 			return entt::null;
@@ -510,16 +508,16 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		flatbuffers::Verifier verifier(view.Payload(), view.PayloadSize());
 		if (!fb::VerifyfbLifecycleBatchBuffer(verifier))
 		{
-			JAMNET_LOG_WARN("[LifecycleRx] FlatBuffer verification failed. worldId={}, packetSeq={}, orderedSeq={}, payloadBytes={}",
-				GetWorldId(), view.Sequence(), view.OrderedSequence(), view.PayloadSize());
+			JAM_LOG_WARN("[LifecycleRx] FlatBuffer verification failed. worldId={}, recencySeq={}, orderSeq={}, payloadBytes={}",
+				GetWorldId(), view.RecencySequence(), view.OrderSequence(), view.PayloadSize());
 			return;
 		}
 
 		const auto fbBatch = fb::UnPackfbLifecycleBatch(view.Payload());
 		if (!fbBatch)
 		{
-			JAMNET_LOG_WARN("[LifecycleRx] FlatBuffer unpack failed. worldId={}, packetSeq={}, orderedSeq={}, payloadBytes={}",
-				GetWorldId(), view.Sequence(), view.OrderedSequence(), view.PayloadSize());
+			JAM_LOG_WARN("[LifecycleRx] FlatBuffer unpack failed. worldId={}, recencySeq={}, orderSeq={}, payloadBytes={}",
+				GetWorldId(), view.RecencySequence(), view.OrderSequence(), view.PayloadSize());
 			return;
 		}
 
@@ -528,7 +526,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		if (auto* repl = m_registry.ctx().find<ClientReplicationSystem>())
 			repl->EnqueueLifecycle(std::move(*batch));
 		else
-			JAMNET_LOG_WARN("[LifecycleRx] replication system unavailable. worldId={}, tick={}", GetWorldId(), batch->server_tick);
+			JAM_LOG_WARN("[LifecycleRx] replication system unavailable. worldId={}, tick={}", GetWorldId(), batch->server_tick);
 	}
 
 	void ClientWorld::ProcessSnapshot(const PacketHeaderView& view)
@@ -561,7 +559,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 	{
 		if (!res)
 		{
-			JAMNET_LOG_WARN_LOC("Spawn RPC timeout or connection lost\n");
+			JAM_LOG_WARN_LOC("Spawn RPC timeout or connection lost\n");
 			PublishActorActionResult(requestId, ActorActionResult{ .reason = eActorActionReason::TransportUnavailable, .action = eActorAction::Spawn });
 			return;
 		}
@@ -580,14 +578,14 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 	{
 		if (!res.has_value())
 		{
-			JAMNET_LOG_WARN_LOC("Despawn RPC timeout or connection lost\n");
+			JAM_LOG_WARN_LOC("Despawn RPC timeout or connection lost\n");
 			PublishActorActionResult(requestId, ActorActionResult{ .reason = eActorActionReason::TransportUnavailable, .action = eActorAction::Despawn, .actorId = actorId });
 			return;
 		}
 
 		if (!(*res)->success())
 		{
-			JAMNET_LOG_WARN_LOC("Despawn RPC failed on server\n");
+			JAM_LOG_WARN_LOC("Despawn RPC failed on server\n");
 		}
 
 		PublishActorActionResult(requestId, codec::DecodeDespawnActorResponse(**res, actorId));
@@ -708,7 +706,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 			const ActorId actorId = ActorId(instance.actorId);
 			if (!actorId.IsValid() || ResolveActor(actorId) != entt::null)
 			{
-				JAMNET_LOG_WARN("[ClientPhysicalWorld::BootstrapLevelActors] invalid or duplicate actorId={}", instance.actorId);
+				JAM_LOG_WARN("[ClientPhysicalWorld::BootstrapLevelActors] invalid or duplicate actorId={}", instance.actorId);
 				continue;
 			}
 

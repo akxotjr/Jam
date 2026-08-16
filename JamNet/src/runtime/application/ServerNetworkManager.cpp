@@ -94,7 +94,7 @@ namespace jam::net
 		m_running.store(true, std::memory_order_release);
 		StartWorldTransitionTicks();
 
-		JAMNET_LOG_INFO("ServerNetworkManager started successfully");
+		JAM_LOG_INFO("ServerNetworkManager started successfully");
 		return true;
 	}
 
@@ -119,7 +119,7 @@ namespace jam::net
 		m_socialService.reset();
 		m_contentService.reset();
 
-		JAMNET_LOG_INFO("ServerNetworkManager stopped");
+		JAM_LOG_INFO("ServerNetworkManager stopped");
 	}
 
 

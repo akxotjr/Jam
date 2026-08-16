@@ -67,7 +67,7 @@ namespace
 
 	void PrintStats(const BotRunnerStats& stats)
 	{
-		JAMNET_LOG_INFO(
+		JAM_LOG_INFO(
 			"[M1BotStats] started={}/{}, connectRejected={}, connecting={}, ready={}, inWorld={}, running={}, failed={}, "
 			"chatTx={}, chatRx={}, chatRejected={}, portal={}, portalTimeout={}, unexpectedWorld={}",
 			stats.connectStarted,
@@ -123,14 +123,14 @@ int main(int argc, char* argv[])
 	jam::net::NetRuntime runtime(runtimeConfig);
 	if (!runtime.IsInitialized())
 	{
-		JAMNET_LOG_ERROR("Failed to initialize NetRuntime");
+		JAM_LOG_ERROR("Failed to initialize NetRuntime");
 		return -1;
 	}
 
 	BotRunner runner;
 	if (!runner.Init(botConfig))
 	{
-		JAMNET_LOG_ERROR("Failed to initialize BotRunner");
+		JAM_LOG_ERROR("Failed to initialize BotRunner");
 		return -1;
 	}
 
@@ -149,15 +149,15 @@ int main(int argc, char* argv[])
 	auto phaseStartedAt = runStartedAt;
 	auto phaseDeadline = rampDeadline;
 	
-	JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={} bots={} profile={} rampRate={} seed={} warmupSec={} measurementSec={}",
+	JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={} bots={} profile={} rampRate={} seed={} warmupSec={} measurementSec={}",
 		PhaseName(phase), UnixNowNs(), botConfig.botCount, argv[1], botConfig.connectPerSecond, botConfig.randomSeed,
 		std::chrono::duration_cast<std::chrono::seconds>(warmUpDuration).count(),
 		std::chrono::duration_cast<std::chrono::seconds>(measurementDuration).count());
 
-	JAMNET_LOG_INFO("M1_Bot started: profile={}, bots={}, connectPerSecond={}, seed={}",
+	JAM_LOG_INFO("M1_Bot started: profile={}, bots={}, connectPerSecond={}, seed={}",
 		argv[1], botConfig.botCount, botConfig.connectPerSecond, botConfig.randomSeed);
 
-	JAMNET_LOG_INFO("Press [q] to abort");
+	JAM_LOG_INFO("Press [q] to abort");
 
 	auto nextReport = std::chrono::steady_clock::now();
 	bool allFailed = false;
@@ -194,18 +194,18 @@ int main(int argc, char* argv[])
 			{
 				if (runner.HasStartedAll() && stats.running + stats.failed == stats.total)
 				{
-					JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={} running={} failed={}",
+					JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={} running={} failed={}",
 						PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count(), stats.running, stats.failed);
 
 					phase			= eValidationPhase::WarmUp;
 					phaseStartedAt	= now;
 					phaseDeadline	= now + warmUpDuration;
 					
-					JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+					JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
 				}
 				else if (now >= rampDeadline)
 				{
-					JAMNET_LOG_ERROR("[M1ValidationPhase] phase={} event=timeout unix_ns={} durationMs={} started={}/{} running={} failed={}",
+					JAM_LOG_ERROR("[M1ValidationPhase] phase={} event=timeout unix_ns={} durationMs={} started={}/{} running={} failed={}",
 						PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count(), stats.connectStarted, stats.total, stats.running, stats.failed);
 					phaseFailed = true;
 					break;
@@ -213,24 +213,24 @@ int main(int argc, char* argv[])
 			}
 			else if (phase == eValidationPhase::WarmUp && now >= phaseDeadline)
 			{
-				JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={}", PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count());
+				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={}", PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count());
 				
 				phase		   = eValidationPhase::Measurement;
 				phaseStartedAt = now;
 				phaseDeadline  = now + measurementDuration;
 				runner.BeginMeasurement();
 				
-				JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
 			}
 			else if (phase == eValidationPhase::Measurement && now >= phaseDeadline)
 			{
-				JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={} running={} failed={}",
+				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={} running={} failed={}",
 					PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count(), stats.running, stats.failed);
 
 				phase = eValidationPhase::CoolDown;
 				phaseStartedAt = now;
 				
-				JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
 				break;
 			}
 		}
@@ -241,26 +241,26 @@ int main(int argc, char* argv[])
 	const BotRunnerStats finalStats = runner.GetStats();
 	if (aborted || allFailed || phaseFailed || phase != eValidationPhase::CoolDown)
 	{
-		JAMNET_LOG_WARN("[M1ValidationPhase] phase={} event=aborted unix_ns={} reason={} running={} failed={}",
+		JAM_LOG_WARN("[M1ValidationPhase] phase={} event=aborted unix_ns={} reason={} running={} failed={}",
 			PhaseName(phase), UnixNowNs(), allFailed ? "all-failed" : (aborted ? "user" : "ramp-timeout"), finalStats.running, finalStats.failed);
 		
 		phase = eValidationPhase::CoolDown;
 		phaseStartedAt = std::chrono::steady_clock::now();
 		
-		JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+		JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
 	}
 
-	JAMNET_LOG_INFO("M1_Bot stopped: running={}, failed={}", finalStats.running, finalStats.failed);
+	JAM_LOG_INFO("M1_Bot stopped: running={}, failed={}", finalStats.running, finalStats.failed);
 
 	runner.Shutdown();
 	
 	const auto coolDownEndedAt = std::chrono::steady_clock::now();
 	const bool validationFailed = aborted || allFailed || phaseFailed || finalStats.failed != 0;
 
-	JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={}", PhaseName(eValidationPhase::CoolDown), UnixNowNs(),
+	JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={}", PhaseName(eValidationPhase::CoolDown), UnixNowNs(),
 		std::chrono::duration_cast<std::chrono::milliseconds>(coolDownEndedAt - phaseStartedAt).count());
 
-	JAMNET_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} totalDurationMs={} result={}",
+	JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} totalDurationMs={} result={}",
 		PhaseName(eValidationPhase::Complete), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(coolDownEndedAt - runStartedAt).count(), validationFailed ? "failed" : "completed");
 
 	return validationFailed ? -1 : 0;

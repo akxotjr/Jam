@@ -372,7 +372,7 @@ namespace jam
 
 	void FiberScheduler::OnFiberException(uint32_t id, const char* what)
 	{
-		JAMNET_LOG_CRITICAL_LOC("Fiber Exeception id= {}, what= {}", id, what);
+		JAM_LOG_CRITICAL_LOC("Fiber Exeception id= {}, what= {}", id, what);
 	}
 
 	FiberScheduler::Fiber* FiberScheduler::CurrentFiber()
@@ -380,7 +380,7 @@ namespace jam
 		uint32 id = Current();
 		if (id == 0)
 		{
-			JAMNET_LOG_CRITICAL_LOC("CurrentFiber() called outside fiber! Check call stack!");
+			JAM_LOG_CRITICAL_LOC("CurrentFiber() called outside fiber! Check call stack!");
 			throw std::runtime_error("No current fiber");
 		}
 
@@ -432,11 +432,11 @@ namespace jam
 		const uint64 usagePermille = used * 1000 / total;
 		if (usagePermille >= 900)
 		{
-			JAMNET_LOG_CRITICAL_LOC("Fiber stack usage is critical. id={}, name={}, used={}, total={}", f->id, f->name ? f->name : "", used, total);
+			JAM_LOG_CRITICAL_LOC("Fiber stack usage is critical. id={}, name={}, used={}, total={}", f->id, f->name ? f->name : "", used, total);
 		}
 		else if (usagePermille >= 800)
 		{
-			JAMNET_LOG_WARN_LOC("Fiber stack usage is high. id={}, name={}, used={}, total={}", f->id, f->name ? f->name : "", used, total);
+			JAM_LOG_WARN_LOC("Fiber stack usage is high. id={}, name={}, used={}, total={}", f->id, f->name ? f->name : "", used, total);
 		}
 	}
 
