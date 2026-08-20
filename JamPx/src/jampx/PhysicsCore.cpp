@@ -28,18 +28,18 @@ namespace jam::px
 		}
 
         // PVD (must be created before PxCreatePhysics, and passed into it)
-        m_pvd = PxCreatePvd(*m_foundation);
-        if (m_pvd)
-        {
-            // PVD 앱 기본 포트가 5425
-            m_pvdTransport = physx::PxDefaultPvdSocketTransportCreate("127.0.0.1", 5425, 10);
-            if (m_pvdTransport)
-            {
-                const physx::PxPvdInstrumentationFlags flags = physx::PxPvdInstrumentationFlag::eALL; // debug/visualize용은 ALL이 편함
+        //m_pvd = PxCreatePvd(*m_foundation);
+        //if (m_pvd)
+        //{
+        //    // PVD 앱 기본 포트가 5425
+        //    m_pvdTransport = physx::PxDefaultPvdSocketTransportCreate("127.0.0.1", 5425, 10);
+        //    if (m_pvdTransport)
+        //    {
+        //        const physx::PxPvdInstrumentationFlags flags = physx::PxPvdInstrumentationFlag::eALL; // debug/visualize용은 ALL이 편함
 
-                m_pvd->connect(*m_pvdTransport, flags);
-            }
-        }
+        //        m_pvd->connect(*m_pvdTransport, flags);
+        //    }
+        //}
 
         PxTolerancesScale scale{};
         m_physics = PxCreatePhysics(PX_PHYSICS_VERSION, *m_foundation, scale, true, m_pvd);
@@ -49,8 +49,8 @@ namespace jam::px
 			throw std::runtime_error("PhysicsCore::Init(), PxCreatePhysics failed");
 		}
 
-        const unsigned threads = std::max(1u, std::thread::hardware_concurrency() / 2);
-        m_dispatcher = physx::PxDefaultCpuDispatcherCreate(threads);
+        //const unsigned threads = std::max(1u, std::thread::hardware_concurrency() / 2);
+        m_dispatcher = physx::PxDefaultCpuDispatcherCreate(0);
 		if (!m_dispatcher)
 		{
 			JAM_LOG_CRITICAL("PhysicsCore::Init(), PxDefaultCpuDispatcherCreate failed");
