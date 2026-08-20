@@ -52,7 +52,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.World.Runtime.WorldPresenter
   actorManager: {fileID: 1599536518138692302}
   worldRoot: {fileID: 6196555384168372897}
-  createCubeFallback: 1
 --- !u!114 &1599536518138692302
 MonoBehaviour:
   m_ObjectHideFlags: 0

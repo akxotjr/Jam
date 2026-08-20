@@ -15821,7 +15821,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.Runtime.Client.ClientRoot
   config:
-    ServerIp: 119.198.44.208
+    ServerIp: 127.0.0.1
     TcpPort: 7777
     UdpPort: 8888
     SharedDataManifestPath: C:/Users/akxotjr/GameWorkSpace/Jam-dev/SampleApp/M1_Shared/Data/shared_data_manifest.json

@@ -49,7 +49,6 @@ namespace JamUnity.World.Runtime
         
         [SerializeField] private ActorManager   actorManager;
         [SerializeField] private WorldRoot      worldRoot;
-        [SerializeField] private bool           createCubeFallback = true;
     
         private readonly Dictionary<ActorId, ActorView> actors = new();
         private readonly Dictionary<ulong, Stack<ActorView>> pooledActors = new();
@@ -295,15 +294,8 @@ namespace JamUnity.World.Runtime
             {
                 return go;
             }
-    
-            if (!createCubeFallback)
-                return null;
-    
-            GameObject fallback = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            if (parent != null)
-                fallback.transform.SetParent(parent, false);
-			fallback.name = $"Actor_{actorId}";
-            return fallback;
+
+            return null;
         }
     
         private bool TryReplaceActorObject(ActorView actor, ActorId actorId, ulong actorArchetypeKey)
