@@ -113,9 +113,6 @@ namespace jam::net
 	/// Fragment 타임아웃 정리 시스템
 	void SystemFragmentCleanup(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
 
-	/// 핸드셰이크 타임아웃 시스템
-	void SystemHandshakeTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
-
 	/// 통계 누적 시스템
 	void SystemNetworkStats(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
 

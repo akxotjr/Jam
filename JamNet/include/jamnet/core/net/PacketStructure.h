@@ -21,13 +21,6 @@ namespace jam::net
 
 	enum class eSystemPacketId : uint8
 	{
-		CONNECT_SYN			= 1,
-		CONNECT_SYNACK		= 2,
-		CONNECT_ACK			= 3,
-		DISCONNECT_FIN		= 4,
-		DISCONNECT_FINACK	= 5,
-		DISCONNECT_ACK		= 6,
-
 		PING				= 10,
 		PONG				= 11,
 
@@ -35,6 +28,9 @@ namespace jam::net
 		TCP_BIND_RES		= 23,
 		UDP_BIND_REQ		= 24,
 		UDP_BIND_RES		= 25,
+		UDP_BIND_CONFIRM	= 26,
+		UDP_UNBIND_REQ		= 27,
+		UDP_UNBIND_RES		= 28,
 	};
 
 	enum class eBootstrapKind : uint8
@@ -47,14 +43,13 @@ namespace jam::net
 	enum class eAckPacketId : uint8
 	{
 		ACK					= 1,
-		NACK				= 2
 	};
 
 
 	enum class eChannel : uint8
 	{
 		TCP_DEFAULT				= 0,
-		UNRELIABLE_UNORDERED	= 1,
+		UDP_DEFAULT				= 1,
 		UNRELIABLE_SEQUENCED	= 2,
 		RELIABLE_UNORDERED		= 3,
 		RELIABLE_ORDERED		= 4,
@@ -75,14 +70,17 @@ namespace jam::net
 		return channel == eChannel::RELIABLE_ORDERED;
 	}
 
-	constexpr bool HasSequence(eChannel channel)
+	constexpr bool HasRecencySequence(eChannel channel)
 	{
-		if (channel == eChannel::TCP_DEFAULT || channel == eChannel::UNRELIABLE_UNORDERED)
-			return false;
-		return true;
+		return channel == eChannel::UNRELIABLE_SEQUENCED;
 	}
 
-	constexpr bool HasOrderedSequence(eChannel channel)
+	constexpr bool HasReliabilitySequence(eChannel channel)
+	{
+		return IsReliableChannel(channel);
+	}
+
+	constexpr bool HasOrderSequence(eChannel channel)
 	{
 		return channel == eChannel::RELIABLE_ORDERED;
 	}
@@ -106,8 +104,8 @@ namespace jam::net
 #pragma pack(push, 1)
 	struct ACK_DATA
 	{
-		uint16 latestReliableSeq = 0;
-		uint32 wnd;
+		uint16 ackBaseSeq = 0;
+		uint64 ackWindow = 0;
 	};
 #pragma pack(pop)
 
@@ -143,6 +141,7 @@ namespace jam::net
 	{
 		uint64 accountId = 0;
 		uint64 userId	 = 0;
+		uint64 transactionId = 0;
 	};
 
 	struct UDP_BIND_RES_DATA
@@ -150,18 +149,28 @@ namespace jam::net
 		uint64 accountId = 0;
 		uint64 userId	 = 0;
 		uint64 sessionId = 0;
+		uint64 transactionId = 0;
 		uint8  success	 = 0;
 	};
-#pragma pack(pop)
 
-#pragma pack(push, 1)
-	struct NACK_DATA
+	struct UDP_BIND_CONFIRM_DATA
 	{
-		uint16 missingSeq;
-		uint32 wnd;
+		uint64 sessionId = 0;
+		uint64 transactionId = 0;
+	};
+
+	struct UDP_UNBIND_REQ_DATA
+	{
+		uint64 sessionId = 0;
+		uint64 transactionId = 0;
+	};
+
+	struct UDP_UNBIND_RES_DATA
+	{
+		uint64 sessionId = 0;
+		uint64 transactionId = 0;
 	};
 #pragma pack(pop)
-
 
 
 

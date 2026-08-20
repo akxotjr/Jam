@@ -25,7 +25,7 @@ namespace jam::net
 
 		Packet CreateHeaderOnlyPacket(const PacketHeader& header, uint32 headerSize)
 		{
-			BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Packet));
+			BufWriter writer(GetPacketBufferPool(headerSize));
 			BufferSlice slice = writer.OpenForPayload(headerSize, alignof(PacketHeader));
 
 			WritePayload(slice, &header, headerSize);
@@ -35,9 +35,9 @@ namespace jam::net
 		}
 	}
 
-	Packet PacketBuilder::CreatePacket(ePacketType type, uint8 id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize, uint16 packetSeq, uint16 reliableSeq, uint16 orderedSeq, uint8 fragIndex, uint8 fragTotal)
+	Packet PacketBuilder::CreatePacket(ePacketType type, uint8 id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize, uint16 recencySeq, uint16 reliabilitySeq, uint16 orderSeq, uint8 fragIndex, uint8 fragTotal)
 	{
-		return CreatePacketInternal(E2U(type), id, flags, E2U(channel), payload, payloadSize, packetSeq, reliableSeq, orderedSeq, fragIndex, fragTotal);
+		return CreatePacketInternal(E2U(type), id, flags, E2U(channel), payload, payloadSize, recencySeq, reliabilitySeq, orderSeq, fragIndex, fragTotal);
 	}
 
 	Packet PacketBuilder::CreateSystemPacket(eSystemPacketId id, uint8 flags, eChannel channel, const void* payload, uint32 payloadSize)
@@ -47,29 +47,25 @@ namespace jam::net
 
 	Packet PacketBuilder::CreateHandshakePacket(eSystemPacketId id)
 	{
-		return CreateSystemPacket(id, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, nullptr, 0);
+		return CreateSystemPacket(id, PacketFlags::NONE, eChannel::UDP_DEFAULT, nullptr, 0);
 	}
 
 	Packet PacketBuilder::CreatePingPacket(const PING_DATA& ping)
 	{
-		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &ping, sizeof(PING_DATA));
+		return CreateSystemPacket(eSystemPacketId::PING, PacketFlags::NONE, eChannel::UDP_DEFAULT, &ping, sizeof(PING_DATA));
 	}
 
 	Packet PacketBuilder::CreatePongPacket(const PONG_DATA& pong)
 	{
-		return CreateSystemPacket(eSystemPacketId::PONG, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &pong, sizeof(PONG_DATA));
+		return CreateSystemPacket(eSystemPacketId::PONG, PacketFlags::NONE, eChannel::UDP_DEFAULT, &pong, sizeof(PONG_DATA));
 	}
 
 	
 	Packet PacketBuilder::CreateAckPacket(const ACK_DATA& ack)
 	{
-		return CreatePacketInternal(E2U(ePacketType::ACK), E2U(eAckPacketId::ACK), PacketFlags::NONE, E2U(eChannel::UNRELIABLE_SEQUENCED), &ack, sizeof(ACK_DATA));
+		return CreatePacketInternal(E2U(ePacketType::ACK), E2U(eAckPacketId::ACK), PacketFlags::NONE, E2U(eChannel::UDP_DEFAULT), &ack, sizeof(ACK_DATA));
 	}
 
-	Packet PacketBuilder::CreateNackPacket(const NACK_DATA& nack)
-	{
-		return CreatePacketInternal(E2U(ePacketType::ACK), E2U(eAckPacketId::NACK), PacketFlags::NONE, E2U(eChannel::UNRELIABLE_SEQUENCED), &nack, sizeof(NACK_DATA));
-	}
 
 	Packet PacketBuilder::CreateRpcPacket(const RpcHeader* rpc, const void* payload, uint32 payloadSize, uint8 flags, eChannel ch)
 	{
@@ -85,7 +81,7 @@ namespace jam::net
 		if (!ValidatePacketBuild(visibleSize, payload, payloadSize))
 			return {};
 
-		BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Packet));
+		BufWriter writer(GetPacketBufferPool(visibleSize));
 		BufferSlice slice = writer.OpenForPacket(sizeof(RpcHeader) + payloadSize, headerSize, alignof(PacketHeader));
 
 		PacketHeader header(E2U(ePacketType::RPC), E2U(eRpcPacketId::FLATBUFFER_RPC), static_cast<uint16>(visibleSize), flags, E2U(ch), 0, 0, 0, 0, 0);
@@ -108,7 +104,7 @@ namespace jam::net
 	}
 
 
-	Packet PacketBuilder::CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 packetSeq, uint16 reliableSeq, uint16 orderedSeq, uint8 fragIndex, uint8 fragTotal)
+	Packet PacketBuilder::CreatePacketInternal(uint8 type, uint8 id, uint8 flags, uint8 ch, const void* payload, uint32 payloadSize, uint16 recencySeq, uint16 reliabilitySeq, uint16 orderSeq, uint8 fragIndex, uint8 fragTotal)
 	{
 		const eChannel channel	    = U2E(eChannel, ch);
 		const uint32   headerSize   = PacketHeader::CalcHeaderSize(channel, flags);
@@ -117,11 +113,11 @@ namespace jam::net
 		if (!ValidatePacketBuild(visibleSize, payload, payloadSize))
 			return {};
 
-		PacketHeader header(type, id, static_cast<uint16>(visibleSize), flags, ch, packetSeq, reliableSeq, orderedSeq, fragIndex, fragTotal);
+		PacketHeader header(type, id, static_cast<uint16>(visibleSize), flags, ch, recencySeq, reliabilitySeq, orderSeq, fragIndex, fragTotal);
 		if (payloadSize == 0)
 			return CreateHeaderOnlyPacket(header, headerSize);
 
-		BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::Packet));
+		BufWriter writer(GetPacketBufferPool(visibleSize));
 		BufferSlice slice = writer.OpenForPacket(payloadSize, headerSize, alignof(PacketHeader));
 
 		WriteHeader(slice, header, headerSize);

@@ -19,8 +19,6 @@ namespace jam::net
 	{
 		friend class IocpCore;
 		friend class Service;
-		friend struct UdpPrebindConnectRetry;
-
 		friend void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
 
 	public:
@@ -33,7 +31,7 @@ namespace jam::net
 
 	private:
 		HANDLE							GetHandle() override { return HANDLE(); }
-		void							Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
+		void							Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override { (void)iocpEvent; (void)numOfBytes; }
 		void							OnPendingDispatchDrained() override;
 
 	public:
@@ -43,32 +41,40 @@ namespace jam::net
 		void							ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns);
 		void							SendImmediatePacket(Packet packet);
 
-		void							HandleError(int32 errorCode);
-
 	private:
-		bool							RegisterConnect();
-		bool							RegisterDisconnect();
 		void							ProcessConnect();
 		void							ProcessDisconnect();
 
-		void							HandlePreBindSystemPacket(const PacketHeaderView& view) override;
-		void							SchedulePreBindHandshakeRetry();
-		void							AbortPreBindHandshake();
-
+		void							HandleUdpControlPacket(const PacketHeaderView& view);
 		void							TrySessionBinding();
-		void							StartSessionBindingRequest();
 		void							ScheduleSessionBindingRetry();
+		void							ScheduleServerBindResponseRetry();
+		void							ScheduleSessionUnbindRetry();
+		void							ScheduleUnbindTombstoneExpiry();
+		void							SendBindRequest();
+		void							SendBindResponse();
+		void							SendBindConfirm();
+		void							SendUnbindRequest();
+		void							SendUnbindResponse();
+		void							AbortTransport(const char* reason);
 
 	protected:
 		virtual bool					ValidateServerUdpBindPrincipal(uint64 accountId, RuntimeId userId) { (void)accountId; (void)userId; return false; }
 		void							OnSessionPrincipalUpdated() override { TrySessionBinding(); }
+		bool							CanNotifyLinkEstablished() const override { return m_bindConfirmed; }
 
 	private:
-		UdpConnectEvent					m_connectEvent;
-		UdpDisconnectEvent				m_disconnectEvent;
+		uint64							m_bindTransactionId = 0;
+		uint64							m_bindDeadline_ns = 0;
+		uint32							m_bindTimerToken = 0;
+		bool							m_bindConfirmed = false;
+		bool							m_serverBindResponseActive = false;
 
-		HandshakeState					m_prebindHandshake  = {};
-		uint32							m_prebindTimerToken = 0;
+		uint64							m_unbindTransactionId = 0;
+		uint64							m_unbindDeadline_ns = 0;
+		uint32							m_unbindTimerToken = 0;
+		bool							m_unbindRequestActive = false;
+		bool							m_unbindTombstone = false;
 	};
 
 } // namespace jam::net

@@ -2,6 +2,7 @@
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/IocpCore.h"
 #include "jamnet/core/net/NetAddress.h"
+#include "jamnet/core/net/PacketStructure.h"
 
 namespace jam::net
 {
@@ -16,8 +17,6 @@ namespace jam::net
 		TcpSend,
 		TcpRecv,
 
-		UdpConnect,
-		UdpDisconnect,
 		UdpSend,
 		UdpRecv,
 	};
@@ -90,17 +89,6 @@ namespace jam::net
 
 
 
-	struct UdpConnectEvent final : IocpEvent
-	{
-		UdpConnectEvent() : IocpEvent(eEventType::UdpConnect) {}
-	};
-
-
-	struct UdpDisconnectEvent final : IocpEvent
-	{
-		UdpDisconnectEvent() : IocpEvent(eEventType::UdpDisconnect) {}
-	};
-
 	struct UdpSendEvent final : IocpEvent
 	{
 		std::vector<WSABUF>			wsaBufs;
@@ -115,7 +103,7 @@ namespace jam::net
 	struct UdpRecvEvent final : IocpEvent
 	{
 		WSABUF						wsaBuf			= {};
-		Packet						packet			= {};
+		IoBufferReservation			reservation;
 		NetAddress					remoteAddr		= {};
 		int32						remoteAddrLen	= sizeof(SOCKADDR_IN);
 		DWORD						flags			= 0;

@@ -36,6 +36,7 @@ namespace jam::net
 		uint32			maxUdpSessionCount = 1;
 		int32			udpRecvBufferSize  = 0; // 0 uses the service-type default
 		int32			udpSendBufferSize  = 0; // 0 uses the service-type default
+		uint32			udpIngressPendingPerShardLimit = 16 * 1024; // 0 disables the limit
 	};
 
 
@@ -93,6 +94,7 @@ namespace jam::net
 		const NetAddress&					GetRemoteUdpNetAddress()	const { return m_config.remoteUdpAddress; }
 		int32								GetUdpRecvBufferSize()		const { return m_config.udpRecvBufferSize; }
 		int32								GetUdpSendBufferSize()		const { return m_config.udpSendBufferSize; }
+		uint32								GetUdpIngressPendingPerShardLimit() const { return m_config.udpIngressPendingPerShardLimit; }
 
 		void								SetLocalTcpNetAddress(const NetAddress& addr)  { m_config.localTcpAddress  = addr; }
 		void								SetLocalUdpNetAddress(const NetAddress& addr)  { m_config.localUdpAddress  = addr; }

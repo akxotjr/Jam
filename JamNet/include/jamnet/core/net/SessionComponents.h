@@ -5,8 +5,6 @@
 #include "jamnet/core/net/PacketBuilder.h"
 
 #include <bitset>
-#include <unordered_set>
-
 
 namespace jam::net
 {
@@ -59,62 +57,59 @@ namespace jam::net
 
 
 	// ============================================================
-	//  Session Auth (Principal Claim)
-	// ============================================================
-
-	// ============================================================
 	// Channel State Components
 	// ============================================================
 
 	struct SequenceState
 	{
-		// transport packet sequence (all sequenced UDP packets)
-		uint16 nextPacketSeq			= 0;
-		uint16 latestPacketRecvSeq		= 0;
+		// UNRELIABLE_SEQUENCED 전용 최신성 sequence
+		uint16 nextRecencySeq			= 0;
+		uint16 latestRecvRecencySeq		= 0;
+		bool   hasRecvRecencySeq		= false;
 
-		// reliability sequence (reliable UDP packets only)
-		uint16 nextReliableSeq			= 0;
+		// RELIABLE_* 전용 ACK/RTX sequence
+		uint16 nextReliabilitySeq		= 0;
 
-		// channel-specific
-		uint16 latestSequencedRecvSeq	= 0;	// UNRELIABLE_SEQUENCED 전용
-		uint16 nextOrdredSeq			= 0;    // RELIABLE_ORDERED 전용 송신
-		uint16 expectedOrderedSeq		= 0;	// RELIABLE_ORDERED 전용 수신 expected packet-seq base
+		// RELIABLE_ORDERED 전용 전달 순서 sequence
+		uint16 nextOrderSeq				= 0;
+		uint16 expectedOrderSeq			= 0;
 
-		uint16 AllocPacketSeq(uint16 count = 1)
+		uint16 AllocRecencySeq(uint16 count = 1)
 		{
 			JAM_ASSERT(count < 0x8000);
 				
-			const uint16 base = nextPacketSeq;
-			nextPacketSeq = static_cast<uint16>(nextPacketSeq + count);
+			const uint16 base = nextRecencySeq;
+			nextRecencySeq = static_cast<uint16>(nextRecencySeq + count);
 			return base;
 		}
 
-		uint16 AllocOrderedSeq(uint16 count = 1)
+		uint16 AllocOrderSeq(uint16 count = 1)
 		{
 			JAM_ASSERT(count < 0x8000);
 
-			const uint16 base = nextOrdredSeq;
-			nextOrdredSeq = static_cast<uint16>(nextOrdredSeq + count);
+			const uint16 base = nextOrderSeq;
+			nextOrderSeq = static_cast<uint16>(nextOrderSeq + count);
 			return base;
 		}
 
-		uint16 AllocReliableSeq(uint16 count = 1)
+		uint16 AllocReliabilitySeq(uint16 count = 1)
 		{
 			JAM_ASSERT(count < 0x8000);
 
-			const uint16 base = nextReliableSeq;
-			nextReliableSeq = static_cast<uint16>(nextReliableSeq + count);
+			const uint16 base = nextReliabilitySeq;
+			nextReliabilitySeq = static_cast<uint16>(nextReliabilitySeq + count);
 			return base;
 		}
 
-		bool IsNewerSequenced(uint16 seq) const
+		bool IsNewerRecency(uint16 seq) const
 		{
-			return SeqGreater(seq, latestSequencedRecvSeq);
+			return !hasRecvRecencySeq || SeqGreater(seq, latestRecvRecencySeq);
 		}
 
-		void UpdateSequencedLatest(uint16 seq)
+		void UpdateLatestRecency(uint16 seq)
 		{
-			latestSequencedRecvSeq = seq;
+			latestRecvRecencySeq = seq;
+			hasRecvRecencySeq = true;
 		}
 	};
 
@@ -125,7 +120,7 @@ namespace jam::net
 
 		struct OrderedPacket
 		{
-			uint16							orderedSeq	= 0;
+			uint16							orderSeq	= 0;
 			uint16							span		= 1;
 			uint64							recvTime_ns = 0_ns;
 			Packet							packet;
@@ -134,51 +129,61 @@ namespace jam::net
 		std::map<uint16, OrderedPacket>		pendings;
 
 
-		bool						StoreRecvPacket(uint16 orderedSeq, uint16 span, Packet packet, uint64 now_ns);
+		bool						StoreRecvPacket(uint16 orderSeq, uint16 span, Packet packet, uint64 now_ns);
 		std::vector<OrderedPacket>	PopOrderedPackets(OUT uint16& expectedSeq);
 	};
 
 	/// 신뢰성 상태 - RELIABLE_ORDERED, RELIABLE_UNORDERED 2개만 사용
 	struct ReliabilityState
 	{
-		static constexpr uint32 MaxRetry					= 5;
-		static constexpr uint64 RetransmitTimout_ns			= 200_ms;
-		static constexpr uint32 AckTrackSize				= 1024;
-		static constexpr uint32 AckWindowSize				= 32;
+		static constexpr uint64 InitialRetransmitTimeout_ns	= 250_ms;
+		static constexpr uint64 MinRetransmitTimeout_ns		= 50_ms;
+		static constexpr uint64 MaxRetransmitTimeout_ns		= 1_s;
+		static constexpr uint64 MaxBackoffTimeout_ns		= 2_s;
+		static constexpr uint64 ReliableDeliveryTimeout_ns	= 30_s;
+		static constexpr uint8  MaxBackoffShift				= 4;
+		static constexpr uint32 AckTrackSize				= 2048;
+		static constexpr uint32 AckWindowSize				= 64;
+		static constexpr uint8  FastRetransmitThreshold		= 3;
 		static constexpr uint32 AckElicitingPacketThreshold	= 2;
 		static constexpr uint64 DelayPiggybackAckTimeout_ns = 20_ms;
 
 		struct PendingPacket
 		{
-			uint16							reliableSeq				= 0;
-			eChannel						channel					= eChannel::UNRELIABLE_UNORDERED;
+			uint16							reliabilitySeq			= 0;
+			eChannel						channel					= eChannel::UDP_DEFAULT;
 			uint64							sendTime_ns				= 0;
-			uint64							lastRetransmitTime_ns	= 0;
+			uint64							lastTransmitTime_ns		= 0;
 			uint8							retryCount				= 0;
 			bool							hasInitialSend			= false;
 			bool							retransmitQueued		= false;
 			bool							hasRetransmitted		= false;
+			bool							fastRetransmitRequested = false;
+			bool							fastRetransmitUsed		= false;
 			bool							countedGiveup			= false;
 			Packet							packet;
 		};
 
-		// reliable 송신 추적 (global seq 기준)
+		// reliable 송신 추적 (reliable sequence 기준)
 		std::map<uint16, PendingPacket>     reliablePendings;
 		uint32                              inflightSize			= 0;
+		uint64								smoothedRtt_ns			= 0;
+		uint64								rttVariance_ns			= 0;
 
 		// reliable-only ACK receive state
-		uint16                              latestReliableRecvSeq	= 0;
-		uint16                              lastAckedReliableSeq	= 0;
-		std::bitset<AckTrackSize>			ackTrack;							// latestReliableRecvSeq-relative receive state
+		uint16                              latestReliabilityRecvSeq = 0;
+		uint16                              lastAckedReliabilitySeq = 0;
+		std::bitset<AckTrackSize>			ackTrack;							// latestReliabilityRecvSeq-relative receive state
 
 		bool                                ackDirty				= false;
 		uint16                              pendingAckSeq			= 0;
-		uint32                              pendingAckBitfield		= 0;
+		uint64                              pendingAckWindow		= 0;
 		uint32                              pendingAckPacketCount	= 0;
 		uint64                              firstPendingAckTime_ns	= 0;
 
 		bool							StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns);
 		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns) const;
+		uint64							GetRetransmitTimeout(uint8 retryCount) const;
 		
 		PendingPacket*					TryGetPending(uint16 seq);
 		const PendingPacket*			TryGetPending(uint16 seq) const;
@@ -187,11 +192,11 @@ namespace jam::net
 		void							MarkReceived(uint16 seq, uint64 now_ns);
 		void							MarkAckPending(uint64 now_ns);
 		void							BuildPendingAck();
-		void							ProcessAck(uint16 ackSeq, uint32 ackBitfield);
+		void							ProcessAck(uint16 ackSeq, uint64 ackWindow, uint64 now_ns);
 		bool							ShouldSendAck(uint64 now_ns) const;
 		void							ClearPendingAck();
 
-		uint32							BuildAckWindow() const;
+		uint64							BuildAckWindow() const;
 	};
 
 	// ============================================================
@@ -305,62 +310,6 @@ namespace jam::net
 		bool						ShouldSendPing(uint64 now_ns) const;
 	};
 
-	struct BindingState
-	{
-		static constexpr uint64 Timeout_ns	= 2_s;
-		static constexpr uint64 MaxRetry	= 5;
-
-		enum State : uint8
-		{
-			
-		};
-
-		bool	active		= false;
-		bool	bound		= false;
-		uint8	retryCount	= 0;
-		uint32	timerToken	= 0;
-	};
-
-
-	// ============================================================
-	// Handshake State
-	// ============================================================
-
-	struct HandshakeState
-	{
-		static constexpr uint64		Timeout_ns = 2_s;
-		static constexpr uint64		MSL_ns	   = 12_s;
-		static constexpr uint8		MaxRetry   = 5;
-
-		enum State : uint8
-		{
-			DISCONNECTED				= 0,
-
-			CONNECT_SYN_SENT			= 1,
-			CONNECT_SYN_RECEIVED		= 2,
-			CONNECT_SYNACK_SENT			= 3,
-			CONNECT_SYNACK_RECEIVED		= 4,
-			CONNECTED					= 5,
-
-			DISCONNECT_FIN_SENT			= 6,
-			DISCONNECT_FIN_RECEIVED		= 7,
-			DISCONNECT_FINACK_SENT		= 8,
-			DISCONNECT_FINACK_RECEIVED	= 9,
-			DISCONNECT_ACK_SENT			= 10,
-			DISCONNECT_ACK_RECEIVED		= 11,
-
-			TIME_WAIT					= 12,
-			CLOSING						= 13,
-
-			TIME_OUT					= 14,
-			ERROR_STATE					= 15,
-		};
-
-		State						state				 = DISCONNECTED;
-		uint64						lastTime_ns = 0;
-		uint8						retryCount			 = 0;
-		uint64						timeWaitStart_ns	 = 0_ns;
-	};
 
 	// ============================================================
 	// Congestion Control

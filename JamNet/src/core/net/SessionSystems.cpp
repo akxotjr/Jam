@@ -10,6 +10,7 @@
 
 #include "jamnet/core/net/SessionSystems.h"
 
+#include "jambase/EnumUtils.h"
 #include "jamnet/runtime/protocol/schema/RPCSchemaIds.h"
 
 
@@ -77,50 +78,14 @@ namespace jam::net
 			return chain;
 		}
 
-		void EnqueueHandshakeReply(entt::registry& R, const entt::entity e, const eSystemPacketId id, const TransmissionWaitingQueue::Priority priority)
-		{
-			if (auto* tx = R.try_get<TransmissionWaitingQueue>(e))
-				tx->Enqueue(PacketBuilder::CreateHandshakePacket(id), priority);
-		}
-
-		void NotifyEstablished(entt::registry& R, const entt::entity e, const uint64 now_ns)
-		{
-			if (!R.valid(e)) return;
-
-			auto& info = R.get<SessionInfo>(e);
-			info.state = SessionInfo::CONNECTED;
-			info.connectedTime_ns = now_ns;
-			info.lastRecvTime_ns = now_ns;
-			info.lastSendTime_ns = now_ns;
-
-			if (auto* ts = R.try_get<TimeSyncState>(e))
-			{
-				ts->lastPingSend_ns = now_ns;
-				ts->lastPongRecv_ns = now_ns;
-				ts->lastT2ServerRecv_ns = now_ns;
-				ts->lastT4ClientRecv_ns = now_ns;
-			}
-
-			JAMNET_LOG_DEBUG("NotifyEstablished entity = {}", static_cast<int32>(e));
-		}
-
-		void NotifyTerminated(entt::registry& R, const entt::entity e)
-		{
-			if (!R.valid(e)) return;
-
-			auto& info = R.get<SessionInfo>(e);
-			info.state = SessionInfo::DISCONNECTED;
-			if (info.session)
-				info.session->CompleteProtocolDisconnect();
-
-		}
-
 		void MarkRetransmitSubmitted(NetworkMetrics& metrics, ReliabilityState::PendingPacket& pkt, const uint64 now_ns)
 		{
-			pkt.lastRetransmitTime_ns = now_ns;
-			pkt.retryCount++;
+			pkt.lastTransmitTime_ns = now_ns;
+			if (pkt.retryCount < std::numeric_limits<uint8>::max())
+				pkt.retryCount++;
 			pkt.retransmitQueued = false;
 			pkt.hasRetransmitted = true;
+			pkt.fastRetransmitRequested = false;
 
 			metrics.RecordRetransmitSubmitted(pkt.retryCount);
 		}
@@ -136,7 +101,7 @@ namespace jam::net
 				metrics.RecordRetransmitGiveup();
 		}
 
-		void ProcessAck(ShardLocal& L, const entt::entity e, const uint16 latestReliableSeq, const uint32 wnd)
+		void ProcessAck(ShardLocal& L, const entt::entity e, const uint16 ackBaseSeq, const uint64 ackWindow, const uint64 now_ns)
 		{
 			auto& R = L.registry;
 			auto* reliability = R.try_get<ReliabilityState>(e);
@@ -163,14 +128,14 @@ namespace jam::net
 					};
 				};
 
-			capture(latestReliableSeq);
+			capture(ackBaseSeq);
 			for (uint16 i = 1; i <= ReliabilityState::AckWindowSize; ++i)
 			{
-				if (wnd & (1u << (i - 1)))
-					capture(static_cast<uint16>(latestReliableSeq - i));
+				if (ackWindow & (uint64{ 1 } << (i - 1)))
+					capture(static_cast<uint16>(ackBaseSeq - i));
 			}
 
-			reliability->ProcessAck(latestReliableSeq, wnd);
+			reliability->ProcessAck(ackBaseSeq, ackWindow, now_ns);
 			auto& metrics = L.networkMetrics;
 			metrics.RemoveReliablePending(ackedCount);
 
@@ -222,7 +187,7 @@ namespace jam::net
 
 			while (true)
 			{
-				auto buffered = orderState->PopOrderedPackets(seqState->expectedOrderedSeq);
+				auto buffered = orderState->PopOrderedPackets(seqState->expectedOrderSeq);
 				if (buffered.empty())
 					break;
 				for (auto& pkt : buffered)
@@ -233,7 +198,7 @@ namespace jam::net
 					PacketHeaderView view = PacketHeaderView::Parse(pkt.packet->Head(), pkt.packet->Size());
 					if (!view.IsValid())
 					{
-						JAMNET_LOG_WARN("[Ordering] Buffered packet became invalid");
+						JAM_LOG_WARN("[Ordering] Buffered packet became invalid");
 						continue;
 					}
 
@@ -265,10 +230,12 @@ namespace jam::net
 				return false;
 
 			PacketHeaderView view = PacketHeaderView::Parse(pending.packet->Head(), pending.packet->Size());
-			if (!view.IsValid())
+			if (!view.IsValid() || view.IsFragmented())
+				return false;
+			if (view.TotalSize() + sizeof(ACK_DATA) > JAMNET_MTU)
 				return false;
 
-			pending.wire = BuildPiggybackAckChain(pending.packet, view, ACK_DATA{ reliability->pendingAckSeq, reliability->pendingAckBitfield });
+			pending.wire = BuildPiggybackAckChain(pending.packet, view, ACK_DATA{ reliability->pendingAckSeq, reliability->pendingAckWindow });
 			if (pending.wire.Empty())
 				return false;
 
@@ -278,12 +245,10 @@ namespace jam::net
 		}
 
 
-		bool TryConsumeTailAck(RecvContext& ctx)
+		bool IncomingTailAckProcess(RecvContext& ctx)
 		{
-			auto& R = ctx.L.registry;
-
 			if (!HasFlag(ctx.view.Flags(), PacketFlags::PIGGYBACK_ACK))
-				return false;
+				return true;
 
 			const uint32 payloadSize = ctx.view.PayloadSize();
 			if (payloadSize < sizeof(ACK_DATA))
@@ -292,7 +257,7 @@ namespace jam::net
 			const BYTE* tail = ctx.view.Payload() + (payloadSize - sizeof(ACK_DATA));
 			const auto* ack  = reinterpret_cast<const ACK_DATA*>(tail);
 
-			ProcessAck(ctx.L, ctx.e, ack->latestReliableSeq, ack->wnd);
+			ProcessAck(ctx.L, ctx.e, ack->ackBaseSeq, ack->ackWindow, ctx.now_ns);
 
 			ctx.view.Header()->SetFlags(ClearFlag(ctx.view.Header()->GetFlags(), PacketFlags::PIGGYBACK_ACK));
 			ctx.view.Header()->SetSize(static_cast<uint16>(ctx.view.TotalSize() - sizeof(ACK_DATA)));
@@ -343,7 +308,6 @@ namespace jam::net
 				ts.lastT4ClientRecv_ns  = now_ns;
 			}
 
-			if (!R.all_of<HandshakeState>(e))   R.emplace<HandshakeState>(e, HandshakeState{ .state = HandshakeState::CONNECTED });
 			if (!R.all_of<SequenceState>(e))    R.emplace<SequenceState>(e);
 			if (!R.all_of<OrderState>(e))       R.emplace<OrderState>(e);
 			if (!R.all_of<ReliabilityState>(e)) R.emplace<ReliabilityState>(e);
@@ -367,16 +331,16 @@ namespace jam::net
 		if (!sequence) return true;
 
 		const eChannel ch  = ctx.view.Channel();
-		const uint16       seq = ctx.view.Sequence();
+		const uint16 recencySeq = ctx.view.RecencySequence();
 
 		if (ch == eChannel::UNRELIABLE_SEQUENCED)
 		{
-			if (!sequence->IsNewerSequenced(seq))
+			if (!sequence->IsNewerRecency(recencySeq))
 			{
 				ctx.shouldDrop = true;
 				return false;
 			}
-			sequence->UpdateSequencedLatest(seq);
+			sequence->UpdateLatestRecency(recencySeq);
 		}
 
 		return true;
@@ -395,29 +359,29 @@ namespace jam::net
 		if (!seqState || !orderState)
 			return false;
 
-		const uint16 orderedSeq  = ctx.view.OrderedSequence();
+		const uint16 orderSeq    = ctx.view.OrderSequence();
 		const uint16 orderedSpan = std::max<uint16>(1, ctx.orderedSpan);
-		const uint16 expectedSeq = seqState->expectedOrderedSeq;
+		const uint16 expectedSeq = seqState->expectedOrderSeq;
 
-		if (orderedSeq == expectedSeq)
+		if (orderSeq == expectedSeq)
 		{
-			seqState->expectedOrderedSeq = static_cast<uint16>(expectedSeq + orderedSpan);
+			seqState->expectedOrderSeq = static_cast<uint16>(expectedSeq + orderedSpan);
 			ctx.flushOrderedPending = true;
 			return true;
 		}
 
-		if (SeqGreater(orderedSeq, expectedSeq))
+		if (SeqGreater(orderSeq, expectedSeq))
 		{
 			ctx.L.networkMetrics.RecordOutOfOrder();
 
 			if (orderState->pendings.size() >= OrderState::MaxRecvBufferSize)
 			{
-				JAMNET_LOG_WARN("[Ordering] Recv buffer overflow");
+				JAM_LOG_WARN("[Ordering] Recv buffer overflow");
 				ctx.shouldDrop = true;
 				return false;
 			}
 
-			if (!orderState->StoreRecvPacket(orderedSeq, orderedSpan, ctx.packet, ctx.now_ns))
+			if (!orderState->StoreRecvPacket(orderSeq, orderedSpan, ctx.packet, ctx.now_ns))
 			{
 				ctx.shouldDrop = true;
 				ctx.L.networkMetrics.RecordDuplicate();
@@ -445,16 +409,16 @@ namespace jam::net
 		if (!reliability)
 			return false;
 
-		const uint16 reliableSeq = ctx.view.ReliableSequence();
+		const uint16 reliabilitySeq = ctx.view.ReliabilitySequence();
 
-		if (!SeqGreater(reliableSeq, reliability->latestReliableRecvSeq - ReliabilityState::AckTrackSize))
+		if (!SeqGreater(reliabilitySeq, reliability->latestReliabilityRecvSeq - ReliabilityState::AckTrackSize))
 			return false;
 
-		if (!(reliability->ackTrack.none() && reliability->latestReliableRecvSeq == 0))
+		if (!(reliability->ackTrack.none() && reliability->latestReliabilityRecvSeq == 0))
 		{
-			if (!SeqGreater(reliableSeq, reliability->latestReliableRecvSeq))
+			if (!SeqGreater(reliabilitySeq, reliability->latestReliabilityRecvSeq))
 			{
-				const uint16 dist = SeqDistance(reliability->latestReliableRecvSeq, reliableSeq);
+				const uint16 dist = SeqDistance(reliability->latestReliabilityRecvSeq, reliabilitySeq);
 				if (dist >= ReliabilityState::AckTrackSize)
 				{
 					ctx.shouldDrop = true;
@@ -463,7 +427,14 @@ namespace jam::net
 
 				if (reliability->ackTrack.test(dist))
 				{
-					reliability->MarkAckPending(ctx.now_ns);
+					if (dist <= ReliabilityState::AckWindowSize)
+					{
+						reliability->MarkAckPending(ctx.now_ns);
+					}
+					else if (auto* txQueue = R.try_get<TransmissionWaitingQueue>(ctx.e))
+					{
+						txQueue->Enqueue(PacketBuilder::CreateAckPacket(ACK_DATA{ reliabilitySeq, 0 }), TxPriority::ACK_ONLY);
+					}
 					ctx.shouldDrop = true;
 					ctx.L.networkMetrics.RecordDuplicate();
 					return false;
@@ -471,7 +442,7 @@ namespace jam::net
 			}
 		}
 
-		reliability->MarkReceived(reliableSeq, ctx.now_ns);
+		reliability->MarkReceived(reliabilitySeq, ctx.now_ns);
 		return true;
 	}
 
@@ -486,7 +457,9 @@ namespace jam::net
 
 		const uint8  fragIdx    = ctx.view.FragmentIndex();
 		const uint8  fragTotal  = ctx.view.TotalFragments();
-		const uint16 fragmentId = ctx.view.Sequence() - fragIdx;
+		const uint16 fragmentId = IsReliableChannel(ctx.view.Channel())
+			? static_cast<uint16>(ctx.view.ReliabilitySequence() - fragIdx)
+			: static_cast<uint16>(ctx.view.RecencySequence() - fragIdx);
 
 		if (fragTotal == 0 || fragIdx >= fragTotal)
 			return false;
@@ -513,10 +486,10 @@ namespace jam::net
 			ctx.orderedSpan = std::max<uint16>(1, fragTotal);
 
 		const uint16 orderedBaseSeq = (ctx.view.Channel() == eChannel::RELIABLE_ORDERED)
-			? static_cast<uint16>(ctx.view.OrderedSequence() - fragIdx)
+			? static_cast<uint16>(ctx.view.OrderSequence() - fragIdx)
 			: 0;
 		const uint16 reliableBaseSeq = IsReliableChannel(ctx.view.Channel())
-			? static_cast<uint16>(ctx.view.ReliableSequence() - fragIdx)
+			? static_cast<uint16>(ctx.view.ReliabilitySequence() - fragIdx)
 			: 0;
 
 		auto rebuilt = PacketBuilder::CreatePacket(
@@ -543,7 +516,6 @@ namespace jam::net
 	bool HandlePostBindSystemPacket(RecvContext& ctx)
 	{
 		auto& R         = ctx.L.registry;
-		auto* handshake = R.try_get<HandshakeState>(ctx.e);
 		auto* timesync  = R.try_get<TimeSyncState>(ctx.e);
 		auto* info      = R.try_get<SessionInfo>(ctx.e);
 		if (!info)
@@ -553,81 +525,6 @@ namespace jam::net
 
 		switch (U2E(eSystemPacketId, ctx.view.Id()))
 		{
-
-		case eSystemPacketId::DISCONNECT_FIN:
-		{
-			if (!handshake)
-				return true;
-			// 상대가 종료 시작
-			if (handshake->state == HandshakeState::CONNECTED)
-			{
-				handshake->state = HandshakeState::DISCONNECT_FIN_RECEIVED;
-				EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_FINACK, TransmissionWaitingQueue::CONTROL);
-
-				handshake->state                = HandshakeState::DISCONNECT_FINACK_SENT;
-				handshake->lastTime_ns = now_ns;
-
-				info->state = SessionInfo::DISCONNECTING;
-			}
-			else if (handshake->state == HandshakeState::DISCONNECT_FIN_SENT)
-			{
-				handshake->state = HandshakeState::CLOSING;
-				EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_FINACK, TransmissionWaitingQueue::CONTROL);
-
-				handshake->lastTime_ns = now_ns;
-			}
-			return true;
-		}
-		case eSystemPacketId::DISCONNECT_FINACK:
-		{
-			if (!handshake)
-				return true;
-			if (handshake->state == HandshakeState::TIME_WAIT)
-			{
-				if (auto* udp = dynamic_cast<UdpSession*>(info->session))
-					udp->SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_ACK));
-				else
-					EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_ACK, TransmissionWaitingQueue::CONTROL);
-				return true;
-			}
-			if (handshake->state == HandshakeState::DISCONNECT_FIN_SENT || handshake->state == HandshakeState::CLOSING)
-			{
-				if (auto* udp = dynamic_cast<UdpSession*>(info->session))
-				{
-					udp->SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_ACK));
-					JAMNET_LOG_DEBUG("[Handshake] UDP DISCONNECT_FINACK received; DISCONNECT_ACK submitted. entity={}", static_cast<uint32>(ctx.e));
-					handshake->state            = HandshakeState::TIME_WAIT;
-					handshake->timeWaitStart_ns = now_ns;
-					handshake->lastTime_ns      = now_ns;
-					info->state                 = SessionInfo::DISCONNECTING;
-					return true;
-				}
-
-				EnqueueHandshakeReply(R, ctx.e, eSystemPacketId::DISCONNECT_ACK, TransmissionWaitingQueue::CONTROL);
-
-				handshake->state                = HandshakeState::TIME_WAIT;
-				handshake->timeWaitStart_ns     = now_ns;
-				handshake->lastTime_ns = now_ns;
-
-				info->state = SessionInfo::DISCONNECTING;
-			}
-			return true;
-		}
-		case eSystemPacketId::DISCONNECT_ACK:
-		{
-			if (!handshake)
-				return true;
-			// 수동 종료측(상대 FIN에 FINACK 보낸 후) ACK 받으면 종료 완료
-			if (handshake->state == HandshakeState::DISCONNECT_FINACK_SENT)
-			{
-				JAMNET_LOG_DEBUG("[Handshake] DISCONNECT_ACK received. entity={}", static_cast<uint32>(ctx.e));
-				handshake->state = HandshakeState::DISCONNECTED;
-				info->state      = SessionInfo::DISCONNECTED;
-
-				ctx.L.defers.emplace_back([e = ctx.e](entt::registry& rr) { NotifyTerminated(rr, e); });
-			}
-			return true;
-		}
 
 		case eSystemPacketId::PING:
 		{
@@ -685,19 +582,11 @@ namespace jam::net
 
 			if (hasWireTimes)
 			{
-				timesync->ProcessPingPong(
-					pong->t1Wire_ns,
-					pong->t2Wire_ns,
-					pong->t3Wire_ns,
-					t4_wire);
+				timesync->ProcessPingPong(pong->t1Wire_ns, pong->t2Wire_ns, pong->t3Wire_ns, t4_wire);
 			}
 			else
 			{
-				timesync->ProcessPingPong(
-					pong->t1App_ns,
-					pong->t2App_ns,
-					pong->t3App_ns,
-					t4_app);
+				timesync->ProcessPingPong(pong->t1App_ns, pong->t2App_ns, pong->t3App_ns, t4_app);
 			}
 
 			return true;
@@ -712,27 +601,17 @@ namespace jam::net
 
 	void HandleAckPacket(RecvContext& ctx)
 	{
-		auto& R = ctx.L.registry;
-
 		eChannel ch = ctx.view.Channel();
-		if (ch != eChannel::UNRELIABLE_SEQUENCED)
+		if (ch != eChannel::UDP_DEFAULT)
 			return;
 
-		switch (U2E(eAckPacketId, ctx.view.Id()))
-		{
-		case eAckPacketId::ACK:
+		if (ToEnum<eAckPacketId>(ctx.view.Id()) == eAckPacketId::ACK)
 		{
 			if (ctx.view.PayloadSize() < sizeof(ACK_DATA))
 				return;
 
 			const auto* ack = reinterpret_cast<const ACK_DATA*>(ctx.view.Payload());
-			ProcessAck(ctx.L, ctx.e, ack->latestReliableSeq, ack->wnd);
-			break;
-		}
-		case eAckPacketId::NACK:
-			break;
-		default:
-			break;
+			ProcessAck(ctx.L, ctx.e, ack->ackBaseSeq, ack->ackWindow, ctx.now_ns);
 		}
 	}
 
@@ -759,24 +638,11 @@ namespace jam::net
 		default: break;
 		}
 
-		if (auto* handshake = R.try_get<HandshakeState>(ctx.e))
-		{
-			if (handshake->state != HandshakeState::CONNECTED)
-			{
-				JAMNET_LOG_TRACE("[Handshake] Drop pre-connected app packet. entity={}, state={}, type={}, id={}",
-					static_cast<uint32>(ctx.e),
-					static_cast<uint32>(handshake->state),
-					static_cast<uint32>(ctx.view.Type()),
-					static_cast<uint32>(ctx.view.Id()));
-				return;
-			}
-		}
-
 		if (!IncomingSequencingProcess(ctx))    return;
 		if (!IncomingReliabilityProcess(ctx))   return;
 		if (!IncomingFragmentationProcess(ctx)) return;
 		if (!IncomingNetstatProcess(ctx))       return;
-		if (!TryConsumeTailAck(ctx) && HasFlag(ctx.view.Flags(), PacketFlags::PIGGYBACK_ACK)) return;
+		if (!IncomingTailAckProcess(ctx))		return;
 		if (!IncomingOrderingProcess(ctx))      return;
 
 		DispatchApplicationPacket(ctx);
@@ -795,6 +661,8 @@ namespace jam::net
 
 		if (!ctx.header.IsNeedToFragmentation())
 			return true;
+		if (!HasRecencySequence(ch) && !HasReliabilitySequence(ch))
+			return false;
 
 		auto* seqState = ctx.L.registry.try_get<SequenceState>(ctx.e);
 		if (!seqState) return false;
@@ -805,11 +673,11 @@ namespace jam::net
 			return false;
 
 		const BYTE*  basePayload     = ctx.header.Payload();
-		const uint16 basePacketSeq   = seqState->AllocPacketSeq(fragTotal);
-		const uint16 baseReliableSeq = IsReliableChannel(ch) ? seqState->AllocReliableSeq(fragTotal) : 0;
+		const uint16 baseRecencySeq = ch == eChannel::UNRELIABLE_SEQUENCED ? seqState->AllocRecencySeq(fragTotal) : 0;
+		const uint16 baseReliabilitySeq = IsReliableChannel(ch) ? seqState->AllocReliabilitySeq(fragTotal) : 0;
 
 		bool isOrdered = IsOrderedChannel(ch);
-		const uint16 baseOrderedSeq = isOrdered ? seqState->AllocOrderedSeq(fragTotal) : 0;
+		const uint16 baseOrderSeq = isOrdered ? seqState->AllocOrderSeq(fragTotal) : 0;
 
 		auto& txQueue     = ctx.L.registry.get<TransmissionWaitingQueue>(ctx.e);
 		auto* reliability = ctx.L.registry.try_get<ReliabilityState>(ctx.e);
@@ -828,9 +696,9 @@ namespace jam::net
 				ctx.header.Channel(),
 				basePayload + offset,
 				chunk,
-				static_cast<uint16>(basePacketSeq + i),
-				IsReliableChannel(ch) ? static_cast<uint16>(baseReliableSeq + i) : 0,
-				isOrdered ? static_cast<uint16>(baseOrderedSeq + i) : 0,
+				ch == eChannel::UNRELIABLE_SEQUENCED ? static_cast<uint16>(baseRecencySeq + i) : 0,
+				IsReliableChannel(ch) ? static_cast<uint16>(baseReliabilitySeq + i) : 0,
+				isOrdered ? static_cast<uint16>(baseOrderSeq + i) : 0,
 				static_cast<uint8>(i),
 				static_cast<uint8>(fragTotal)
 			);
@@ -839,7 +707,7 @@ namespace jam::net
 
 			if (IsReliableChannel(ch))
 			{
-				if (!reliability->StoreSendPacket(ch, frag, static_cast<uint16>(baseReliableSeq + i), ctx.now_ns))
+				if (!reliability->StoreSendPacket(ch, frag, static_cast<uint16>(baseReliabilitySeq + i), ctx.now_ns))
 					return false;
 				OnReliablePendingAdded(ctx.L);
 
@@ -860,7 +728,7 @@ namespace jam::net
 		if (!txQueue) return false;
 
 		const auto ch = ctx.header.Channel();
-		if (ch == eChannel::UNRELIABLE_UNORDERED || ch == eChannel::TCP_DEFAULT)
+		if (ch == eChannel::UDP_DEFAULT || ch == eChannel::TCP_DEFAULT)
 		{
 			txQueue->Enqueue(ctx.packet, ctx.priority);
 			return true;
@@ -868,8 +736,8 @@ namespace jam::net
 
 		if (auto* seqState = ctx.L.registry.try_get<SequenceState>(ctx.e))
 		{
-			const uint16 packetSeq = seqState->AllocPacketSeq(1);
-			ctx.header.Header()->SetSequence(packetSeq);
+			if (ch == eChannel::UNRELIABLE_SEQUENCED)
+				ctx.header.Header()->SetRecencySequence(seqState->AllocRecencySeq(1));
 
 			if (IsReliableChannel(ch))
 			{
@@ -877,18 +745,18 @@ namespace jam::net
 				if (!reliability)
 					return false;
 
-				const uint16 reliableSeq = seqState->AllocReliableSeq(1);
-				ctx.header.Header()->SetReliableSequence(reliableSeq);
+				const uint16 reliabilitySeq = seqState->AllocReliabilitySeq(1);
+				ctx.header.Header()->SetReliabilitySequence(reliabilitySeq);
 
 				if (IsOrderedChannel(ch))
 				{
-					const uint16 orderdSeq = seqState->AllocOrderedSeq(1);
-					ctx.header.Header()->SetOrderedSequence(orderdSeq);
+					const uint16 orderSeq = seqState->AllocOrderSeq(1);
+					ctx.header.Header()->SetOrderSequence(orderSeq);
 				}
 
 				ctx.header.WriteHeaderTo(ctx.packet);
 
-				if (!reliability->StoreSendPacket(ch, ctx.packet, reliableSeq, ctx.now_ns))
+				if (!reliability->StoreSendPacket(ch, ctx.packet, reliabilitySeq, ctx.now_ns))
 					return false;
 				OnReliablePendingAdded(ctx.L);
 
@@ -933,26 +801,21 @@ namespace jam::net
 	void SystemSessionTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
 	{
 		auto& R = L.registry;
-		auto view = R.view<SessionInfo, TimeSyncState, HandshakeState>();
+		auto view = R.view<SessionInfo, TimeSyncState>();
 
 		for (auto entity : view)
 		{
 			auto& info      = view.get<SessionInfo>(entity);
 			auto& timesync  = view.get<TimeSyncState>(entity);
-			auto& handshake = view.get<HandshakeState>(entity);
 
-			if (info.state != SessionInfo::CONNECTED)           continue;
-			if (handshake.state != HandshakeState::CONNECTED)   continue;
-			if (!info.session || !info.session->IsReady())      continue;
+			if (info.state != SessionInfo::CONNECTED)      continue;
+			if (!info.session || !info.session->IsReady()) continue;
 
-			// 연결 직후 유예 (최소 2초 권장)
 			if ((now_ns - info.connectedTime_ns) < 3_s)
 				continue;
 
-			const uint64 keepaliveAliveNs =
-				timesync.bIsServerSide ? timesync.lastT2ServerRecv_ns : timesync.lastPongRecv_ns;
+			const uint64 keepaliveAliveNs = timesync.bIsServerSide ? timesync.lastT2ServerRecv_ns : timesync.lastPongRecv_ns;
 
-			// ping/pong 기준 + 실제 수신 기준 중 최신값 사용
 			const uint64 lastAliveNs = std::max(keepaliveAliveNs, info.lastRecvTime_ns);
 
 			if (now_ns <= lastAliveNs)
@@ -975,7 +838,7 @@ namespace jam::net
 	void SystemSessionKeepalive(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
 	{
 		auto& R = L.registry;
-		auto view = R.view<SessionInfo, TransmissionWaitingQueue, TimeSyncState, HandshakeState>();
+		auto view = R.view<SessionInfo, TransmissionWaitingQueue, TimeSyncState>();
 
 		for (auto entity : view)
 		{
@@ -1070,7 +933,7 @@ namespace jam::net
 
 				if (!piggybackOK && reliability.ShouldSendAck(now_ns))
 				{
-					auto pkt = PacketBuilder::CreateAckPacket(ACK_DATA(reliability.pendingAckSeq, reliability.pendingAckBitfield));
+					auto pkt = PacketBuilder::CreateAckPacket(ACK_DATA{ reliability.pendingAckSeq, reliability.pendingAckWindow });
 					txQueue.Enqueue(pkt, TxPriority::ACK_ONLY);
 					reliability.ClearPendingAck();
 				}
@@ -1121,7 +984,7 @@ namespace jam::net
 				ReliabilityState::PendingPacket* pending = nullptr;
 				if (isUdp && reliabilityState && v.IsReliable())
 				{
-					pending = reliabilityState->TryGetPending(v.ReliableSequence());
+					pending = reliabilityState->TryGetPending(v.ReliabilitySequence());
 					if (pkt.priority == TxPriority::RETRANSMIT && !pending)
 						continue;
 				}
@@ -1192,7 +1055,7 @@ namespace jam::net
 					{
 						pending->hasInitialSend      = true;
 						pending->sendTime_ns         = now_ns;
-						pending->lastRetransmitTime_ns = now_ns;
+						pending->lastTransmitTime_ns = now_ns;
 					}
 				}
 
@@ -1250,7 +1113,7 @@ namespace jam::net
 				if (!pending || !pending->packet.IsValid())
 					continue;
 
-				if (pending->retryCount >= ReliabilityState::MaxRetry)
+				if (now_ns - pending->sendTime_ns >= ReliabilityState::ReliableDeliveryTimeout_ns)
 				{
 					JAM_LOG_ERROR("[Retransmit] Packet seq={} exceeded reliable delivery timeout", seq);
 					MarkRetransmitGiveup(metrics, *pending);
@@ -1264,9 +1127,11 @@ namespace jam::net
 					break;
 				}
 
+				const bool fastRetransmit = pending->fastRetransmitRequested;
 				txQueue.Enqueue(pending->packet, TransmissionWaitingQueue::RETRANSMIT);
 				pending->retransmitQueued = true;
-				metrics.RecordRetransmitTimeout();
+				if (!fastRetransmit)
+					metrics.RecordRetransmitTimeout();
 			}
 		}
 	}
@@ -1284,104 +1149,6 @@ namespace jam::net
 		}
 	}
 
-	void SystemHandshakeTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
-	{
-		auto& R = L.registry;
-		auto view = R.view<HandshakeState, SessionInfo, TransmissionWaitingQueue>();
-
-		for (auto entity : view)
-		{
-			auto& handshake = view.get<HandshakeState>(entity);
-			auto& info      = view.get<SessionInfo>(entity);
-			auto& txQueue   = view.get<TransmissionWaitingQueue>(entity);
-
-
-			if (handshake.state == HandshakeState::CONNECTED)
-				continue;
-
-			if (handshake.state == HandshakeState::TIME_WAIT)
-			{
-				if (now_ns - handshake.timeWaitStart_ns >= HandshakeState::MSL_ns * 2)
-				{
-					handshake.state = HandshakeState::DISCONNECTED;
-					info.state      = SessionInfo::DISCONNECTED;
-					handshake.lastTime_ns = 0;
-
-					L.defers.emplace_back([entity](entt::registry& rr)
-						{
-							NotifyTerminated(rr, entity);
-						});
-
-					JAMNET_LOG_INFO("[Handshake] TIME_WAIT finished, session {} closed", static_cast<uint32>(entity));
-				}
-				continue;
-			}
-
-			if (handshake.lastTime_ns == 0)
-				continue;
-
-			if (now_ns - handshake.lastTime_ns < HandshakeState::Timeout_ns)
-				continue;
-
-			handshake.retryCount++;
-
-			if (handshake.retryCount >= HandshakeState::MaxRetry)
-			{
-				handshake.state = HandshakeState::TIME_OUT;
-				info.state      = SessionInfo::DISCONNECTED;
-				handshake.lastTime_ns = 0;
-
-				L.defers.emplace_back([entity](entt::registry& rr)
-					{
-						NotifyTerminated(rr, entity);
-					});
-
-				JAMNET_LOG_ERROR("[Handshake] Timeout, session entity= {} failed", static_cast<uint32>(entity));
-				continue;
-			}
-
-			eSystemPacketId resendId{};
-			bool shouldResend = true;
-
-			switch (handshake.state)
-			{
-			case HandshakeState::CONNECT_SYN_SENT:
-				resendId = eSystemPacketId::CONNECT_SYN;
-				break;
-
-			case HandshakeState::CONNECT_SYNACK_SENT:
-				resendId = eSystemPacketId::CONNECT_SYNACK;
-				break;
-
-			case HandshakeState::DISCONNECT_FIN_SENT:
-				resendId = eSystemPacketId::DISCONNECT_FIN;
-				break;
-
-			case HandshakeState::DISCONNECT_FINACK_SENT:
-			case HandshakeState::CLOSING:
-				resendId = eSystemPacketId::DISCONNECT_FINACK;
-				break;
-
-			default:
-				shouldResend = false;
-				break;
-			}
-			
-			if (!shouldResend)
-			{
-				handshake.lastTime_ns = now_ns;
-				continue;
-			}
-
-			auto pkt = PacketBuilder::CreateHandshakePacket(resendId);
-			if (!pkt.IsValid()) continue;
-
-			txQueue.Enqueue(pkt, TransmissionWaitingQueue::CONTROL);
-			JAMNET_LOG_WARN("[Handshake] Retry {}/{} resend={}", handshake.retryCount, HandshakeState::MaxRetry, E2U(resendId));
-
-			handshake.lastTime_ns = now_ns;
-		}
-	}
 
 	void SystemNetworkStats(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
 	{
@@ -1412,91 +1179,6 @@ namespace jam::net
 	// Helper Functions
 	// ============================================================
 
-	void ConnectHandshake(entt::entity e)
-	{
-		auto& L = CurrentShardLocalChecked();
-		RegisterNetworkDomain(L);
-
-		auto& R = L.registry;
-
-		if (!R.valid(e))
-		{
-			JAMNET_LOG_WARN_LOC("Invalid entity");
-			return;
-		}
-
-		auto* handshake = R.try_get<HandshakeState>(e);
-		auto* info      = R.try_get<SessionInfo>(e);
-		auto* txQueue   = R.try_get<TransmissionWaitingQueue>(e);
-		if (!handshake || !info || !txQueue)
-		{
-			JAMNET_LOG_WARN_LOC("Missing components for hansahke");
-			return;
-		}
-
-		if (handshake->state == HandshakeState::CONNECT_SYN_SENT)
-		{
-			JAMNET_LOG_TRACE("[Handshake] already sent CONNECT_SYN");
-			return;
-		}
-		if (handshake->state != HandshakeState::DISCONNECTED)
-		{
-			JAMNET_LOG_TRACE("[Handshake] Connect ignored. state= {}", E2U(handshake->state));
-			return;
-		}
-
-		auto pkt = PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_SYN);
-		if (!pkt.IsValid()) return;
-
-		txQueue->Enqueue(pkt, TxPriority::CONTROL);
-
-		handshake->state                   = HandshakeState::CONNECT_SYN_SENT;
-		handshake->lastTime_ns    = NOW_NS();
-		handshake->retryCount              = 0;
-
-		info->state = SessionInfo::CONNECTING;
-
-		JAMNET_LOG_DEBUG("[Hanshake] [Thread #{}] CONNECT_SYN sent. entity= {}", CurrentThreadId(), static_cast<uint32>(e));
-	}
-
-	void DisconnectHandshake(entt::entity e)
-	{
-		auto& L = CurrentShardLocalChecked();
-		auto& R = L.registry;
-
-		if (!R.valid(e))
-		{
-			JAMNET_LOG_WARN_LOC("Invalid entity");
-			return;
-		}
-
-		auto* handshake = R.try_get<HandshakeState>(e);
-		auto* info      = R.try_get<SessionInfo>(e);
-		auto* txQueue   = R.try_get<TransmissionWaitingQueue>(e);
-		if (!handshake || !info || !txQueue)
-		{
-			JAMNET_LOG_WARN_LOC("Missing components for hansahke");
-			return;
-		}
-
-		if (handshake->state != HandshakeState::CONNECTED && handshake->state != HandshakeState::DISCONNECT_FIN_SENT)
-		{
-			JAMNET_LOG_TRACE("[Handshake] Disconnect ignored. state= {}", E2U(handshake->state));
-			return;
-		}
-
-		auto pkt = PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_FIN);
-		if (!pkt.IsValid()) return;
-
-		txQueue->Enqueue(pkt, TxPriority::CONTROL);
-
-		handshake->state                = (handshake->state == HandshakeState::CONNECTED) ? HandshakeState::DISCONNECT_FIN_SENT : handshake->state;
-		handshake->lastTime_ns = NOW_NS();
-
-		info->state = SessionInfo::DISCONNECTING;
-
-		JAMNET_LOG_DEBUG("[Handshake] DISCONNECT_FIN sent. entity= {}", static_cast<uint32>(e));
-	}
 
 	bool SendPacketToSession(entt::entity e, Packet packet)
 	{
@@ -1546,14 +1228,43 @@ namespace jam::net
 			return;
 		}
 
-		if (!R.all_of<SessionInfo>(e))
+		auto* sessionInfo = R.try_get<SessionInfo>(e);
+		if (!sessionInfo || !sessionInfo->session)
 		{
-			JAM_LOG_WARN_LOC("Entity doesn't have SessionInfo");
+			JAM_LOG_WARN_LOC("Entity doesn't have valid SessionInfo");
 			return;
 		}
 
 		const uint64 now_ns = NOW_NS();
-		if (ingressRecvTime_ns == 0) ingressRecvTime_ns = now_ns;
+		if (ingressRecvTime_ns == 0)
+			ingressRecvTime_ns = now_ns;
+
+		if (sessionInfo->session->IsTcp())
+		{
+			PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
+
+			if (!view.IsValid() || view.TotalSize() != packet->Size())
+			{
+				JAM_LOG_WARN_LOC("Invalid TCP packet");
+				return;
+			}
+
+			sessionInfo->lastRecvTime_ns = now_ns;
+			L.networkMetrics.RecordReceive(view.TotalSize(), false);
+
+			RecvContext ctx{
+				.L = L,
+				.e = e,
+				.view = view,
+				.packet = std::move(packet),
+				.now_ns = now_ns,
+				.ingressTime_ns = ingressRecvTime_ns
+			};
+
+			DispatchApplicationPacket(ctx);
+			return;
+		}
+
 		uint32 offset = 0;
 		while (offset < packet->Size())
 		{
@@ -1603,7 +1314,6 @@ namespace jam::net
 		group.systems.emplace_back(SystemTransportFlush);
 		group.systems.emplace_back(SystemRetransmit);
 		group.systems.emplace_back(SystemFragmentCleanup);
-		group.systems.emplace_back(SystemHandshakeTimeout);
 		group.systems.emplace_back(SystemNetworkStats);
 
 		const uint64 now_ns = NOW_NS();
@@ -1614,7 +1324,6 @@ namespace jam::net
 		SystemTransportFlush(L, now_ns, 0);
 		SystemRetransmit(L, now_ns, 0);
 		SystemFragmentCleanup(L, now_ns, 0);
-		SystemHandshakeTimeout(L, now_ns, 0);
 		SystemNetworkStats(L, now_ns, 0);
 
 		group.entityFilter = [](const entt::registry& R, entt::entity e) {

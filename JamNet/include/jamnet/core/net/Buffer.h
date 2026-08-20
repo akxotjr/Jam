@@ -5,18 +5,19 @@
 #include <jambase/CacheLine.h>
 
 #include <vector>
-#include <array>
 #include <atomic>
+#include <memory>
 
 namespace jam::net
 {
 	
 	class BufferPool;
+	class IoBufferReservation;
 
 	class BufferBlock
 	{
 	public:
-		explicit BufferBlock(BufferPool* owner);
+		BufferBlock(BufferPool* owner, uint32 capacity, uint32 maxSliceStates);
 		BufferBlock(const BufferBlock&) = delete;
 		BufferBlock& operator=(const BufferBlock&) = delete;
 
@@ -34,11 +35,12 @@ namespace jam::net
 		uint32							PoolIndex()		const { return m_poolIndex; }
 		bool							IsInFreeList()  const { return m_inFreeList; }
 		bool							IsOpen()		const { return m_open; }
+		uint32							Capacity()		const { return m_capacity; }
 		uint32							UsedSize()		const { return m_used; }
-		uint32							FreeSize()		const { return k_blockSize - m_used; };
+		uint32							FreeSize()		const { return m_capacity - m_used; };
 
-		BYTE*							RawData()		{ return m_storage.data(); }
-		const BYTE*						RawData() const { return m_storage.data(); }
+		BYTE*							RawData()		{ return m_storage.get(); }
+		const BYTE*						RawData() const { return m_storage.get(); }
 
 		bool							TryReserve(uint32 bytes, uint32 alignment, OUT uint32& offset, OUT uint32& sliceStateIndex);
 		void							Commit(uint32 endOffset);
@@ -47,6 +49,7 @@ namespace jam::net
 	private:
 		friend class BufferPool;
 		friend class BufWriter;
+		friend class IoBufferReservation;
 		friend struct BufferSlice;
 
 		uint32							CreateSliceState(bool closed);
@@ -56,8 +59,9 @@ namespace jam::net
 		std::atomic<uint32>					m_refCount	 = 1;
 		BufferPool*							m_owner		 = nullptr;
 
-		alignas(std::max_align_t) 
-		std::array<BYTE, k_blockSize>		m_storage	 = {};
+		std::unique_ptr<BYTE[]>				m_storage;
+		uint32								m_capacity	 = 0;
+		uint32								m_maxSliceStates = 0;
 													 
 		uint32								m_used		 = 0;
 		bool								m_open		 = false;
@@ -67,7 +71,9 @@ namespace jam::net
 		bool								m_inFreeList = false;
 
 		std::atomic<uint32>					m_nextSliceStateIndex = 0;
-		std::array<std::atomic<uint8>, k_maxSliceStates> m_sliceClosedStates = {};
+		std::unique_ptr<std::atomic<uint8>[]>	m_sliceClosedStates;
+
+		uint64								m_globalFreeSinceNs = 0;
 	};
 
 
@@ -213,6 +219,11 @@ namespace jam::net
 		void				Reset();
 
 	private:
+		friend class IoBufferReservation;
+		struct AdoptRefTag {};
+
+		OwnedBufferSlice(BufferSlice&& slice, AdoptRefTag) noexcept : m_slice(std::move(slice)) {}
+
 		void				AddRefIfNeeded();
 		void				ReleaseIfNeeded();
 
@@ -221,32 +232,19 @@ namespace jam::net
 	};
 	
 
-	struct BufferPoolMetrics
-	{
-		std::atomic<uint64_t> acquireCalls		 = 0;
-		std::atomic<uint64_t> recycleCalls		 = 0;
-
-		std::atomic<uint64_t> acquireLockWait_ns = 0;
-		std::atomic<uint64_t> recycleLockWait_ns = 0;
-		std::atomic<uint64_t> globalLockCount	 = 0;
-
-		std::atomic<uint64_t> slowAllocCount	 = 0;
-		std::atomic<uint64_t> refillCount		 = 0;
-		std::atomic<uint64_t> refillBlockCount	 = 0;
-		std::atomic<uint64_t> spillCount		 = 0;
-		std::atomic<uint64_t> spillBlockCount	 = 0;
-		std::atomic<uint64_t> directRecycleCount = 0;
-		std::atomic<uint64_t> peakTlsFreeCount	 = 0;
-	};
-
 	struct BufferPoolConfig
 	{
-		uint32 initialBlocks = 64;
-		uint32 tlsLowWatermark = 8;
-		uint32 tlsHighWatermark = 64;
-		uint32 batchSize = 16;
-		uint64 logEveryGlobalLocks = 1024;
-		const char* debugName = "BufferPool";
+		uint32 initialBlocks		= 64;
+		uint32 tlsLowWatermark		= 8;
+		uint32 tlsHighWatermark		= 64;
+		uint32 batchSize			= 16;
+		uint32 blockSize			= BufferBlock::k_blockSize;
+		uint32 maxSliceStates		= BufferBlock::k_maxSliceStates;
+		uint32 retainedBlockLimit	= 0;
+		uint32 trimBatchSize		= 64;
+		uint32 trimScanLimit		= 1024;
+		uint64 trimMinAgeNs			= 30'000'000'000ull;
+		uint64 trimEveryGlobalLocks = 64;
 	};
 
 	class BufferPool
@@ -258,13 +256,14 @@ namespace jam::net
 
 		BufferBlock*	Acquire();
 		void			Recycle(BufferBlock* block);
+		uint32			BlockCapacity() const { return m_config.blockSize; }
 
 		static void     FlushThreadLocalCache();
 
 #if _DEBUG
-		uint32			TotalBlockCount()  const { return static_cast<uint32>(m_blocks.size()); }
+		uint32			TotalBlockCount()  const { return static_cast<uint32>(m_liveBlockCount); }
 		uint32			FreeBlockCount()   const { return static_cast<uint32>(m_freeIndices.size()); }
-		uint32			OutstandingCount() const { return static_cast<uint32>(m_blocks.size() - m_freeIndices.size()); }
+		uint32			OutstandingCount() const { return static_cast<uint32>(m_liveBlockCount - m_freeIndices.size()); }
 #endif
 
 	private:
@@ -286,22 +285,25 @@ namespace jam::net
 		void			RefillLocalCache(TlsFreeList& local);
 		void			SpillLocalCache(TlsFreeList& local, uint32 keepCount);
 		void            RecycleGlobal(BufferBlock* block);
-		void			UpdatePeakTlsFree(size_t count);
-		void			LogMetricsIfNeeded(uint64 globalLockCount);
+		void			MaybeTrimGlobalLocked(uint64 nowNs, uint64 globalLockSequence);
 
 
 	private:
 		mutable std::mutex          m_lock;
 		std::vector<BufferBlock*>	m_blocks;			// ownership
 		std::vector<uint32>			m_freeIndices;		// availability
+		std::vector<uint32>			m_vacantIndices;	// trimmed slots reusable without moving live blocks
+		uint64						m_liveBlockCount = 0;
+		size_t						m_trimScanCursor = 0;
 
-		BufferPoolMetrics			m_metrics;
 		BufferPoolConfig			m_config;
+		uint64						m_globalLockSequence = 0;
 	};
 
 	enum class eNetBufferPoolKind : uint8
 	{
-		Packet,
+		PacketSmall,
+		PacketLarge,
 		TcpIo,
 		UdpClientIo,
 		UdpServerIo,
@@ -309,7 +311,10 @@ namespace jam::net
 		Clone,
 	};
 
+	inline constexpr uint32 kPacketSmallMaxBytes = 512;
+
 	BufferPool&	GetNetBufferPool(eNetBufferPoolKind kind);
+	BufferPool&	GetPacketBufferPool(uint32 packetBytes);
 	
 	void		FlushNetBufferThreadLocalCaches();
 
@@ -336,11 +341,13 @@ namespace jam::net
 		{
 			for (auto& block : tl_currents.entries | std::views::values)
 			{
-				if (block && block->m_refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+				if (block)
 				{
-					JAM_ASSERT(block->m_owner);
-					block->Reset();
-					block->m_owner->RecycleGlobal(block);
+					if (block->m_refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+					{
+						JAM_ASSERT(block->m_owner);
+						block->m_owner->Recycle(block);
+					}
 				}
 				block = nullptr;
 			}
@@ -359,6 +366,31 @@ namespace jam::net
 			~TlsCurrentBlocks();
 		};
 		static thread_local TlsCurrentBlocks tl_currents;
+	};
+
+
+	// Exclusive storage for an overlapped I/O operation. It is detached from
+	// BufWriter's thread-local packing block before the kernel can access it.
+	class IoBufferReservation
+	{
+	public:
+		IoBufferReservation() = default;
+		IoBufferReservation(const IoBufferReservation&) = delete;
+		IoBufferReservation& operator=(const IoBufferReservation&) = delete;
+		IoBufferReservation(IoBufferReservation&&) noexcept = default;
+		IoBufferReservation& operator=(IoBufferReservation&&) noexcept = default;
+		~IoBufferReservation() { Reset(); }
+
+		bool				Open(BufferPool& pool, uint32 capacity, uint32 alignment = alignof(std::max_align_t));
+		OwnedBufferSlice	Finalize(uint32 committedBytes);
+		void				Reset();
+
+		bool	IsValid() const { return m_storage.IsValid(); }
+		BYTE*	Data() { return IsValid() ? m_storage->Data() : nullptr; }
+		uint32	Capacity() const { return IsValid() ? m_storage->Capacity() : 0; }
+
+	private:
+		OwnedBufferSlice m_storage;
 	};
 
 

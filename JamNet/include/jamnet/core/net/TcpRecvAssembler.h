@@ -20,7 +20,12 @@ namespace jam::net
 		static constexpr uint32 kHardMaxCapacity = BufferBlock::k_blockSize;
 
 	public:
-		explicit TcpRecvAssembler(BufferPool& pool) : m_pool(pool) {}
+		TcpRecvAssembler(BufferPool& assemblerPool, BufferPool& packetSmallPool, BufferPool& packetLargePool)
+			: m_assemblerPool(assemblerPool)
+			, m_packetSmallPool(packetSmallPool)
+			, m_packetLargePool(packetLargePool)
+		{
+		}
 
 	public:
 		bool				Init(uint32 initialCapacity = kDefaultCapacity);
@@ -42,7 +47,9 @@ namespace jam::net
 		bool				Grow(uint32 additionalBytes);
 
 	private:
-		BufferPool&			m_pool;
+		BufferPool&			m_assemblerPool;
+		BufferPool&			m_packetSmallPool;
+		BufferPool&			m_packetLargePool;
 		Packet				m_storage     = {};
 		uint32				m_readOffset  = 0;
 		uint32				m_writeOffset = 0;

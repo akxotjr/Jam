@@ -10,7 +10,7 @@ namespace jam::net
 		if (m_storage.IsValid())
 			return true;
 
-		BufWriter writer(m_pool);
+		BufWriter writer(m_assemblerPool);
 		BufferSlice slice = writer.OpenForPayload(initialCapacity);
 		slice.CommitReserved(initialCapacity);
 		m_storage = MakeOwned(slice);
@@ -82,8 +82,13 @@ namespace jam::net
 		if (available < totalSize)
 			return eAssembleResult::NeedMoreData;
 
-		// 5) 여기까지 왔으면 하나의 완성 packet 존재
-		BufferSlice pktSlice = m_storage->SliceVisible(m_readOffset, totalSize);
+		// 5) 완성 packet은 assembler storage에서 분리한다.
+		// 비동기 dispatch가 packet을 오래 소유해도 mutable stream block을 pin하지 않는다.
+		BufferPool& packetPool = totalSize <= kPacketSmallMaxBytes ? m_packetSmallPool : m_packetLargePool;
+		BufWriter writer(packetPool);
+		BufferSlice pktSlice = writer.OpenForPayload(totalSize, alignof(PacketHeader));
+		WritePayload(pktSlice, base, totalSize);
+		pktSlice.Close();
 		out = MakeOwned(pktSlice);
 
 		m_readOffset += totalSize;
@@ -149,7 +154,7 @@ namespace jam::net
 			}
 			else
 			{
-				BufWriter writer(m_pool);
+				BufWriter writer(m_assemblerPool);
 				BufferSlice newSlice = writer.OpenForPayload(s.Capacity());
 				std::memcpy(newSlice.Begin(), s.Begin() + m_readOffset, remain);
 				newSlice.CommitReserved(s.Capacity());
@@ -168,8 +173,7 @@ namespace jam::net
 		// 다 소비했으면 cursor reset
 		if (m_readOffset == m_writeOffset)
 		{
-			// Extracted packets share this block and are processed asynchronously.
-			// Drop the assembler's reference so the next append cannot overwrite them.
+			// 완전히 소비한 stream storage는 다음 recv에서 새 window로 시작한다.
 			Reset();
 			return;
 		}
@@ -197,7 +201,7 @@ namespace jam::net
 		if (newCap < need)
 			return false;
 
-		BufWriter writer(m_pool);
+		BufWriter writer(m_assemblerPool);
 		BufferSlice newSlice = writer.OpenForPayload(newCap);
 
 		if (remain > 0)

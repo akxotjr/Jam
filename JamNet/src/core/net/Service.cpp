@@ -222,13 +222,18 @@ namespace jam::net
 
 				auto closing = std::shared_ptr<Session>(std::move(detached));
 				Mailbox* mailbox = closing->m_mailboxRef.mailbox;
-				auto finalize = [self, endpointId, closing = std::move(closing)]() mutable
+				auto finalize = [self, endpointId, sessionId, endpoint, closing = std::move(closing)]() mutable
 					{
 						self->DestroySessionEntity(*closing);
 						closing->m_mailboxRef = {};
 						closing->FinalizeShardOwnedClose();
 						if (self->m_udpRouter)
-							self->m_udpRouter->ClearIngressRoute(endpointId);
+						{
+							if (sessionId != kInvalidSessionId)
+								self->m_udpRouter->ClearIngressBoundRoute(endpointId, sessionId);
+							else
+								self->m_udpRouter->ClearIngressPrebindRoute(endpointId, endpoint.routeKey, closing->GetServiceGeneration());
+						}
 
 						self->m_udpSessionCount.fetch_sub(1, std::memory_order_relaxed);
 						self->m_sessionCount.fetch_sub(1, std::memory_order_relaxed);

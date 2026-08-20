@@ -12,13 +12,12 @@
 #include "jamnet/core/utils/Clock.h"
 #include "jamnet/core/net/WinErrorHandling.h"
 
-#include <limits>
-
 namespace jam::net
 {
 
 	namespace
 	{
+		inline constexpr uint8  kMaxBindingRetry		= 5;
 		inline constexpr uint64 kClientBindRetryDelayNs = 1000_ms;
 
 		RouteKey MakeBoundSessionRouteKey(uint64 accountId)
@@ -55,7 +54,10 @@ namespace jam::net
 
 
 	TcpSession::TcpSession() 
-		: m_recvAssembler(GetNetBufferPool(eNetBufferPoolKind::TcpIo))
+		: m_recvAssembler(
+			GetNetBufferPool(eNetBufferPoolKind::TcpIo),
+			GetNetBufferPool(eNetBufferPoolKind::PacketSmall),
+			GetNetBufferPool(eNetBufferPoolKind::PacketLarge))
 	{
 		m_protocol = eProtocolType::TCP;
 		m_socket   = SocketUtils::CreateSocket(eProtocolType::TCP);
@@ -352,7 +354,17 @@ namespace jam::net
 		if (!IsClosing())
 			RegisterRecv();
 
-		TrySessionBinding();
+		const EndpointHandle endpointHandle = GetEndpointHandle();
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		Post(Job([service, endpointHandle, generation]()
+			{
+				auto* self = service ? static_cast<TcpSession*>(service->FindOwnedSession(kInvalidSessionId, endpointHandle, generation)) : nullptr;
+				if (!self || self->IsClosing())
+					return;
+
+				self->TrySessionBinding();
+			}, eJobPriority::Control));
 	}
 
 	void TcpSession::ProcessDisconnect()

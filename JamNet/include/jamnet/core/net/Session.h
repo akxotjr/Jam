@@ -119,6 +119,7 @@ namespace jam::net
 
 		virtual void                    OnLinkEstablished() {}
 		virtual void                    OnLinkTerminated()  {}
+		virtual bool                    CanNotifyLinkEstablished() const { return true; }
 
 		virtual bool					IsServerSide()		const { return false; }
 		virtual bool					IsClientSide()		const { return false; }

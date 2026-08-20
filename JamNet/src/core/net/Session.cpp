@@ -160,12 +160,13 @@ namespace jam::net
 						auto& newLocal = CurrentShardLocalChecked();
 						auto& newTable = GetPreboundSessionTable(newLocal);
 						Service* const service = owner ? owner->GetService() : nullptr;
+						const uint32 serviceGeneration = owner ? owner->GetServiceGeneration() : 0;
 						const bool ok = owner && newTable.emplace(newHandle, std::move(owner)).second;
 
 						if (ok && movedIsUdp)
 						{
 							if (service && service->m_udpRouter)
-								service->m_udpRouter->RegisterIngressPrebindRoute(newHandle.endpointId, newRouteKey);
+								service->m_udpRouter->RegisterIngressPrebindRoute(newHandle.endpointId, newRouteKey, serviceGeneration);
 						}
 
 						if (onDone) onDone(ok);
@@ -205,6 +206,8 @@ namespace jam::net
 	void Session::NotifyLinkEstablishedIfReady()
 	{
 		if (m_linkEstablishedNotified)
+			return;
+		if (!CanNotifyLinkEstablished())
 			return;
 		if (m_sessionId == kInvalidSessionId || m_entity == entt::null)
 			return;

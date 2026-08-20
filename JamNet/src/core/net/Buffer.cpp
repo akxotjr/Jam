@@ -1,13 +1,13 @@
 #include "pch.h"
 #include "jamnet/core/net/Buffer.h"
+#include "jamnet/core/net/PacketStructure.h"
 #include "jamnet/core/utils/Clock.h"
 
 
 namespace jam::net
 {
-	thread_local BufferPool::TlsFreeCaches	BufferPool::tl_freeCaches{};
+	thread_local BufferPool::TlsFreeCaches		BufferPool::tl_freeCaches{};
 	thread_local BufWriter::TlsCurrentBlocks	BufWriter::tl_currents{};
-	thread_local uint32						g_bufWriterOpenDepth = 0;
 
 	BufWriter::TlsCurrentBlocks::~TlsCurrentBlocks()
 	{
@@ -20,9 +20,15 @@ namespace jam::net
 	}
 
 
-	BufferBlock::BufferBlock(BufferPool* owner)
+	BufferBlock::BufferBlock(BufferPool* owner, const uint32 capacity, const uint32 maxSliceStates)
 		: m_owner(owner)
+		, m_storage(std::make_unique<BYTE[]>(capacity))
+		, m_capacity(capacity)
+		, m_maxSliceStates(maxSliceStates)
+		, m_sliceClosedStates(std::make_unique<std::atomic<uint8>[]>(maxSliceStates))
 	{
+		JAM_ASSERT(m_capacity > 0);
+		JAM_ASSERT(m_maxSliceStates > 0);
 	}
 
 	void BufferBlock::AddRef()
@@ -44,7 +50,7 @@ namespace jam::net
 		m_used = 0;
 		m_open = false;
 
-		const uint32 usedStates = std::min<uint32>(m_nextSliceStateIndex.exchange(0, std::memory_order_relaxed), k_maxSliceStates);
+		const uint32 usedStates = std::min<uint32>(m_nextSliceStateIndex.exchange(0, std::memory_order_relaxed), m_maxSliceStates);
 		for (uint32 i = 0; i < usedStates; ++i)
 			m_sliceClosedStates[i].store(0, std::memory_order_relaxed);
 	}
@@ -57,7 +63,7 @@ namespace jam::net
 		const uint32 alignedOffset = static_cast<uint32>(AlignUp(static_cast<size_t>(m_used), static_cast<size_t>(alignment)));
 
 		const uint32 newEnd = alignedOffset + bytes;
-		if (newEnd > k_blockSize)
+		if (newEnd > m_capacity)
 			return false;
 
 		m_open = true;
@@ -70,7 +76,7 @@ namespace jam::net
 	{
 		JAM_ASSERT(m_open);
 		JAM_ASSERT(endOffset >= m_used);
-		JAM_ASSERT(endOffset <= k_blockSize);
+		JAM_ASSERT(endOffset <= m_capacity);
 
 		m_used = endOffset;
 		m_open = false;
@@ -85,7 +91,7 @@ namespace jam::net
 	uint32 BufferBlock::CreateSliceState(bool closed)
 	{
 		const uint32 index = m_nextSliceStateIndex.fetch_add(1, std::memory_order_relaxed);
-		JAM_ASSERT(index < k_maxSliceStates);
+		JAM_ASSERT(index < m_maxSliceStates);
 		m_sliceClosedStates[index].store(closed ? 1 : 0, std::memory_order_release);
 		return index;
 	}
@@ -95,7 +101,7 @@ namespace jam::net
 		JAM_ASSERT(sliceStateIndex != k_invalidIndex);
 		const uint32 stateCount = m_nextSliceStateIndex.load(std::memory_order_acquire);
 		JAM_ASSERT(sliceStateIndex < stateCount);
-		JAM_ASSERT(sliceStateIndex < k_maxSliceStates);
+		JAM_ASSERT(sliceStateIndex < m_maxSliceStates);
 		return m_sliceClosedStates[sliceStateIndex].load(std::memory_order_acquire) != 0;
 	}
 
@@ -104,7 +110,7 @@ namespace jam::net
 		JAM_ASSERT(sliceStateIndex != k_invalidIndex);
 		const uint32 stateCount = m_nextSliceStateIndex.load(std::memory_order_acquire);
 		JAM_ASSERT(sliceStateIndex < stateCount);
-		JAM_ASSERT(sliceStateIndex < k_maxSliceStates);
+		JAM_ASSERT(sliceStateIndex < m_maxSliceStates);
 		m_sliceClosedStates[sliceStateIndex].store(closed ? 1 : 0, std::memory_order_release);
 	}
 
@@ -212,7 +218,7 @@ namespace jam::net
 		out.data   = out.begin;
 		out.tail   = out.begin + subSize;
 		out.end    = out.tail;
-		out.closedStateIndex = block->CreateSliceState(true);
+		out.closedStateIndex = IsClosed() ? closedStateIndex : block->CreateSliceState(true);
 		return out;
 	}
 
@@ -228,7 +234,7 @@ namespace jam::net
 		out.data   = out.begin;
 		out.tail   = out.begin + subSize;
 		out.end    = out.tail;
-		out.closedStateIndex = block->CreateSliceState(true);
+		out.closedStateIndex = IsClosed() ? closedStateIndex : block->CreateSliceState(true);
 		return out;
 	}
 
@@ -349,13 +355,16 @@ namespace jam::net
 	BufferPool::BufferPool(BufferPoolConfig config)
 		: m_config(config)
 	{
+		m_config.blockSize = std::max<uint32>(1, m_config.blockSize);
+		m_config.maxSliceStates = std::max<uint32>(1, m_config.maxSliceStates);
 		m_config.batchSize = std::max<uint32>(1, m_config.batchSize);
+		m_config.trimBatchSize = std::max<uint32>(1, m_config.trimBatchSize);
+		m_config.trimScanLimit = std::max(m_config.trimScanLimit, m_config.trimBatchSize);
+		if (m_config.retainedBlockLimit != 0)
+			m_config.retainedBlockLimit = std::max(m_config.retainedBlockLimit, m_config.initialBlocks);
 		if (m_config.tlsHighWatermark == 0)
 			m_config.tlsHighWatermark = m_config.batchSize;
 		m_config.tlsLowWatermark = std::min(m_config.tlsLowWatermark, m_config.tlsHighWatermark);
-		if (m_config.debugName == nullptr)
-			m_config.debugName = "BufferPool";
-
 		std::scoped_lock lock(m_lock);
 		PreallocateLocked(m_config.initialBlocks);
 	}
@@ -364,15 +373,13 @@ namespace jam::net
 	{
 		std::scoped_lock lock(m_lock);
 
-		JAM_ASSERT(m_blocks.size() == m_freeIndices.size());
+		JAM_ASSERT(m_liveBlockCount == m_freeIndices.size());
 		for (BufferBlock* block : m_blocks)
 			delete block;
 	}
 
 	BufferBlock* BufferPool::Acquire()
 	{
-		m_metrics.acquireCalls.fetch_add(1, std::memory_order_relaxed);
-
 		TlsFreeList& local = GetTlsFreeList();
 		if (local.size() <= m_config.tlsLowWatermark)
 			RefillLocalCache(local);
@@ -387,6 +394,7 @@ namespace jam::net
 			JAM_ASSERT(block->m_inFreeList == false);
 
 			block->m_refCount.store(1, std::memory_order_relaxed);
+			block->m_globalFreeSinceNs = 0;
 			return block;
 		}
 
@@ -398,8 +406,6 @@ namespace jam::net
 
 	void BufferPool::Recycle(BufferBlock* block)
 	{
-		m_metrics.recycleCalls.fetch_add(1, std::memory_order_relaxed);
-
 		JAM_ASSERT(block != nullptr);
 		JAM_ASSERT(block->m_owner == this);
 		JAM_ASSERT(block->m_inFreeList == false);
@@ -408,7 +414,6 @@ namespace jam::net
 
 		TlsFreeList& local = GetTlsFreeList();
 		local.push_back(block);
-		UpdatePeakTlsFree(local.size());
 
 		if (local.size() > m_config.tlsHighWatermark)
 			SpillLocalCache(local, m_config.tlsLowWatermark);
@@ -448,6 +453,7 @@ namespace jam::net
 			JAM_ASSERT(block->m_inFreeList == true);
 
 			block->m_inFreeList = false;
+			block->m_globalFreeSinceNs = 0;
 			return block;
 		}
 
@@ -456,12 +462,27 @@ namespace jam::net
 
 	BufferBlock* BufferPool::AllocateBlockLocked(bool freeList)
 	{
-		BufferBlock* block = new BufferBlock(this);
-		block->m_poolIndex  = static_cast<uint32>(m_blocks.size());
+		BufferBlock* block = new BufferBlock(this, m_config.blockSize, m_config.maxSliceStates);
+		uint32 poolIndex = 0;
+		if (!m_vacantIndices.empty())
+		{
+			poolIndex = m_vacantIndices.back();
+			m_vacantIndices.pop_back();
+			JAM_ASSERT(poolIndex < m_blocks.size());
+			JAM_ASSERT(m_blocks[poolIndex] == nullptr);
+			m_blocks[poolIndex] = block;
+		}
+		else
+		{
+			poolIndex = static_cast<uint32>(m_blocks.size());
+			m_blocks.push_back(block);
+		}
+		block->m_poolIndex  = poolIndex;
 		block->m_inFreeList = freeList;
 		block->m_refCount.store(0, std::memory_order_relaxed);
 		block->Reset();
-		m_blocks.push_back(block);
+		block->m_globalFreeSinceNs = freeList ? NOW_NS() : 0;
+		++m_liveBlockCount;
 
 		if (freeList)
 			m_freeIndices.push_back(block->m_poolIndex);
@@ -484,23 +505,15 @@ namespace jam::net
 		if (target == 0)
 			return;
 
-		const uint64 lockStart = NOW_NS();
 		std::unique_lock lock(m_lock);
-		const uint64 waitNs = NOW_NS() - lockStart;
-
-		m_metrics.acquireLockWait_ns.fetch_add(waitNs, std::memory_order_relaxed);
-		const uint64 globalLocks = m_metrics.globalLockCount.fetch_add(1, std::memory_order_relaxed) + 1;
-		m_metrics.refillCount.fetch_add(1, std::memory_order_relaxed);
+		const uint64 globalLockSequence = ++m_globalLockSequence;
 
 		uint32 moved = 0;
 		for (; moved < target; ++moved)
 		{
 			BufferBlock* block = PopGlobalLocked();
 			if (!block)
-			{
 				block = AllocateBlockLocked(false);
-				m_metrics.slowAllocCount.fetch_add(1, std::memory_order_relaxed);
-			}
 
 			JAM_ASSERT(block != nullptr);
 			JAM_ASSERT(block->m_refCount.load(std::memory_order_relaxed) == 0);
@@ -508,11 +521,7 @@ namespace jam::net
 			local.push_back(block);
 		}
 
-		m_metrics.refillBlockCount.fetch_add(moved, std::memory_order_relaxed);
-		UpdatePeakTlsFree(local.size());
-		lock.unlock();
-
-		//LogMetricsIfNeeded(globalLocks);
+		MaybeTrimGlobalLocked(NOW_NS(), globalLockSequence);
 	}
 
 	void BufferPool::SpillLocalCache(TlsFreeList& local, uint32 keepCount)
@@ -525,13 +534,8 @@ namespace jam::net
 		if (target == 0)
 			return;
 
-		const uint64 lockStart = NOW_NS();
 		std::unique_lock lock(m_lock);
-		const uint64 waitNs = NOW_NS() - lockStart;
-
-		m_metrics.recycleLockWait_ns.fetch_add(waitNs, std::memory_order_relaxed);
-		const uint64 globalLocks = m_metrics.globalLockCount.fetch_add(1, std::memory_order_relaxed) + 1;
-		m_metrics.spillCount.fetch_add(1, std::memory_order_relaxed);
+		const uint64 globalLockSequence = ++m_globalLockSequence;
 
 		uint32 moved = 0;
 		for (; moved < target; ++moved)
@@ -548,13 +552,11 @@ namespace jam::net
 			JAM_ASSERT(block->m_refCount.load(std::memory_order_relaxed) == 0);
 
 			block->m_inFreeList = true;
+			block->m_globalFreeSinceNs = NOW_NS();
 			m_freeIndices.push_back(block->m_poolIndex);
 		}
 
-		m_metrics.spillBlockCount.fetch_add(moved, std::memory_order_relaxed);
-		lock.unlock();
-
-		//LogMetricsIfNeeded(globalLocks);
+		MaybeTrimGlobalLocked(NOW_NS(), globalLockSequence);
 	}
 
 	void BufferPool::RecycleGlobal(BufferBlock* block)
@@ -564,102 +566,66 @@ namespace jam::net
 		JAM_ASSERT(block->m_inFreeList == false);
 		JAM_ASSERT(block->m_refCount.load(std::memory_order_relaxed) == 0);
 
-		const uint64 lockStart = NOW_NS();
 		std::unique_lock lock(m_lock);
-		const uint64 waitNs = NOW_NS() - lockStart;
-
-		m_metrics.recycleLockWait_ns.fetch_add(waitNs, std::memory_order_relaxed);
-		const uint64 globalLocks = m_metrics.globalLockCount.fetch_add(1, std::memory_order_relaxed) + 1;
-		m_metrics.directRecycleCount.fetch_add(1, std::memory_order_relaxed);
+		const uint64 globalLockSequence = ++m_globalLockSequence;
 
 		JAM_ASSERT(block->m_poolIndex < m_blocks.size());
 		JAM_ASSERT(m_blocks[block->m_poolIndex] == block);
 
 		block->m_inFreeList = true;
+		block->m_globalFreeSinceNs = NOW_NS();
 		m_freeIndices.push_back(block->m_poolIndex);
-		lock.unlock();
-
-		//LogMetricsIfNeeded(globalLocks);
+		MaybeTrimGlobalLocked(block->m_globalFreeSinceNs, globalLockSequence);
 	}
 
-	void BufferPool::UpdatePeakTlsFree(size_t count)
+	void BufferPool::MaybeTrimGlobalLocked(const uint64 nowNs, const uint64 globalLockSequence)
 	{
-		uint64 current = m_metrics.peakTlsFreeCount.load(std::memory_order_relaxed);
-		while (count > current && !m_metrics.peakTlsFreeCount.compare_exchange_weak(
-			current,
-			static_cast<uint64>(count),
-			std::memory_order_relaxed,
-			std::memory_order_relaxed))
+		if (m_config.retainedBlockLimit == 0
+			|| m_config.trimEveryGlobalLocks == 0
+			|| globalLockSequence % m_config.trimEveryGlobalLocks != 0
+			|| m_liveBlockCount <= m_config.retainedBlockLimit)
 		{
-		}
-	}
-
-	void BufferPool::LogMetricsIfNeeded(uint64 globalLockCount)
-	{
-		const uint64 every = m_config.logEveryGlobalLocks;
-		if (every == 0 || globalLockCount % every != 0)
 			return;
+		}
 
-		const uint64 refillCount = m_metrics.refillCount.load(std::memory_order_relaxed);
-		const uint64 refillBlocks = m_metrics.refillBlockCount.load(std::memory_order_relaxed);
-		const uint64 spillCount = m_metrics.spillCount.load(std::memory_order_relaxed);
-		const uint64 spillBlocks = m_metrics.spillBlockCount.load(std::memory_order_relaxed);
-		const uint64 directRecycleCount = m_metrics.directRecycleCount.load(std::memory_order_relaxed);
-		const uint64 acquireWait = m_metrics.acquireLockWait_ns.load(std::memory_order_relaxed);
-		const uint64 recycleWait = m_metrics.recycleLockWait_ns.load(std::memory_order_relaxed);
-		const uint64 recycleLockOps = spillCount + directRecycleCount;
+		const uint64 excess = m_liveBlockCount - m_config.retainedBlockLimit;
+		const uint32 target = static_cast<uint32>(std::min<uint64>(m_config.trimBatchSize, excess));
+		uint32 trimmed = 0;
+		uint32 scanned = 0;
+		while (!m_freeIndices.empty() && trimmed < target && scanned < m_config.trimScanLimit)
+		{
+			if (m_trimScanCursor >= m_freeIndices.size())
+				m_trimScanCursor = 0;
 
-		JAM_LOG_INFO(
-			"[BufferPool:{}] globalLocks={} acquire={} recycle={} slowAlloc={} refill={}/{} spill={}/{} directRecycle={} peakTls={} avgAcquireLockWait={}ns avgRecycleLockWait={}ns batch={} low={} high={}",
-			m_config.debugName,
-			globalLockCount,
-			m_metrics.acquireCalls.load(std::memory_order_relaxed),
-			m_metrics.recycleCalls.load(std::memory_order_relaxed),
-			m_metrics.slowAllocCount.load(std::memory_order_relaxed),
-			refillCount,
-			refillBlocks,
-			spillCount,
-			spillBlocks,
-			directRecycleCount,
-			m_metrics.peakTlsFreeCount.load(std::memory_order_relaxed),
-			refillCount ? (acquireWait / refillCount) : 0,
-			recycleLockOps ? (recycleWait / recycleLockOps) : 0,
-			m_config.batchSize,
-			m_config.tlsLowWatermark,
-			m_config.tlsHighWatermark);
+			const size_t candidatePos = m_trimScanCursor;
+			const uint32 index = m_freeIndices[candidatePos];
+			BufferBlock* block = index < m_blocks.size() ? m_blocks[index] : nullptr;
+			++scanned;
+			if (!block || block->m_globalFreeSinceNs == 0 || nowNs < block->m_globalFreeSinceNs
+				|| nowNs - block->m_globalFreeSinceNs < m_config.trimMinAgeNs)
+			{
+				++m_trimScanCursor;
+				continue;
+			}
+
+			JAM_ASSERT(block->m_inFreeList);
+			JAM_ASSERT(block->m_refCount.load(std::memory_order_relaxed) == 0);
+			m_freeIndices[candidatePos] = m_freeIndices.back();
+			m_freeIndices.pop_back();
+			m_blocks[index] = nullptr;
+			m_vacantIndices.push_back(index);
+			delete block;
+			--m_liveBlockCount;
+			++trimmed;
+		}
+
 	}
-
 
 	BufferSlice BufWriter::Open(uint32 reserveBytes, uint32 initialHeadroom, uint32 alignment)
 	{
-		JAM_ASSERT(reserveBytes <= BufferBlock::k_blockSize);
+		JAM_ASSERT(reserveBytes <= m_pool.BlockCapacity());
 		JAM_ASSERT(initialHeadroom <= reserveBytes);
 		JAM_ASSERT(IsSupportedBufferAlignment(alignment));
-
-		struct OpenDepthScope
-		{
-			uint32& depthRef;
-			explicit OpenDepthScope(uint32& depth) : depthRef(depth)
-			{
-				++depthRef;
-			}
-			~OpenDepthScope()
-			{
-				JAM_ASSERT(depthRef > 0);
-				--depthRef;
-			}
-		} depthScope(g_bufWriterOpenDepth);
-
-		if (g_bufWriterOpenDepth > 1)
-		{
-			JAM_LOG_WARN(
-				"[BufWriter::Open] nested open detected. pool={}, depth={}, reserveBytes={}, initialHeadroom={}, alignment={}",
-				m_pool.m_config.debugName ? m_pool.m_config.debugName : "BufferPool",
-				g_bufWriterOpenDepth,
-				reserveBytes,
-				initialHeadroom,
-				alignment);
-		}
 
 		BufferBlock*& cur = CurrentTLBlock();
 
@@ -705,6 +671,69 @@ namespace jam::net
 	BufferSlice BufWriter::OpenForPayload(uint32 payloadSize, uint32 alignment)
 	{
 		return Open(payloadSize, 0, alignment);
+	}
+
+	bool IoBufferReservation::Open(BufferPool& pool, const uint32 capacity, const uint32 alignment)
+	{
+		Reset();
+		if (capacity == 0 || capacity > pool.BlockCapacity() || !IsSupportedBufferAlignment(alignment))
+			return false;
+
+		BufferBlock* block = pool.Acquire();
+		if (!block)
+			return false;
+
+		uint32 offset = 0;
+		uint32 sliceStateIndex = BufferBlock::k_invalidIndex;
+		if (!block->TryReserve(capacity, alignment, OUT offset, OUT sliceStateIndex))
+		{
+			block->Release();
+			return false;
+		}
+
+		BufferSlice slice;
+		slice.block = block;
+		slice.begin = offset;
+		slice.head = offset;
+		slice.data = offset;
+		slice.tail = offset;
+		slice.end = offset + capacity;
+		slice.closedStateIndex = sliceStateIndex;
+		slice.Validate();
+
+		// Adopt Acquire()'s existing reference. The reservation is the only owner,
+		// so opening an overlapped receive needs no extra atomic AddRef/Release pair.
+		m_storage = OwnedBufferSlice(std::move(slice), OwnedBufferSlice::AdoptRefTag{});
+		return true;
+	}
+
+	OwnedBufferSlice IoBufferReservation::Finalize(const uint32 committedBytes)
+	{
+		if (!IsValid() || committedBytes > Capacity())
+		{
+			Reset();
+			return {};
+		}
+
+		BufferSlice& slice = m_storage.Get();
+		if (!slice.TryAppendPayload(committedBytes))
+		{
+			Reset();
+			return {};
+		}
+
+		slice.CloseWithCommit(committedBytes);
+		return std::move(m_storage);
+	}
+
+	void IoBufferReservation::Reset()
+	{
+		if (!m_storage.IsValid())
+			return;
+
+		if (!m_storage->IsClosed())
+			m_storage->Abort();
+		m_storage.Reset();
 	}
 
 	uint32 BufferChain::TotalSize() const
@@ -790,12 +819,13 @@ namespace jam::net
 	{
 		struct NetBufferPools
 		{
-			BufferPool packet{ BufferPoolConfig{ .initialBlocks = 128, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16, .logEveryGlobalLocks = 1024, .debugName = "Packet" } };
-			BufferPool tcpIo{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 4, .tlsHighWatermark = 32, .batchSize = 8, .logEveryGlobalLocks = 1024, .debugName = "TcpIo" } };
-			BufferPool udpClientIo{ BufferPoolConfig{ .initialBlocks = 128, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16, .logEveryGlobalLocks = 1024, .debugName = "UdpIo" } };
-			BufferPool udpServerIo{ BufferPoolConfig{ .initialBlocks = 512, .tlsLowWatermark = 32, .tlsHighWatermark = 128, .batchSize = 16, .logEveryGlobalLocks = 1024, .debugName = "UdpServerIo" }};
-			BufferPool piggybackAck{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16, .logEveryGlobalLocks = 1024, .debugName = "PiggybackAck" } };
-			BufferPool clone{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 4, .tlsHighWatermark = 32, .batchSize = 8, .logEveryGlobalLocks = 1024, .debugName = "Clone" } };
+			BufferPool packetSmall{ BufferPoolConfig{ .initialBlocks = 128, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16, .blockSize = 4 * 1024, .maxSliceStates = 1024, .retainedBlockLimit = 8192 } };
+			BufferPool packetLarge{ BufferPoolConfig{ .initialBlocks = 128, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16, .blockSize = 8 * 1024, .maxSliceStates = 2048, .retainedBlockLimit = 4096 } };
+			BufferPool tcpIo{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 4, .tlsHighWatermark = 32, .batchSize = 8 } };
+			BufferPool udpClientIo{ BufferPoolConfig{ .initialBlocks = 128, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16, .blockSize = JAMNET_MTU, .maxSliceStates = 1, .retainedBlockLimit = 4096 } };
+			BufferPool udpServerIo{ BufferPoolConfig{ .initialBlocks = 512, .tlsLowWatermark = 32, .tlsHighWatermark = 128, .batchSize = 16, .blockSize = JAMNET_MTU, .maxSliceStates = 1, .retainedBlockLimit = 8192 }};
+			BufferPool piggybackAck{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16 } };
+			BufferPool clone{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 4, .tlsHighWatermark = 32, .batchSize = 8 } };
 		};
 
 		NetBufferPools& GetNetBufferPools()
@@ -811,7 +841,8 @@ namespace jam::net
 
 		switch (kind)
 		{
-		case eNetBufferPoolKind::Packet:		return pools.packet;
+		case eNetBufferPoolKind::PacketSmall:	return pools.packetSmall;
+		case eNetBufferPoolKind::PacketLarge:	return pools.packetLarge;
 		case eNetBufferPoolKind::TcpIo:			return pools.tcpIo;
 		case eNetBufferPoolKind::UdpClientIo:	return pools.udpClientIo;
 		case eNetBufferPoolKind::UdpServerIo:	return pools.udpServerIo;
@@ -819,8 +850,13 @@ namespace jam::net
 		case eNetBufferPoolKind::Clone:			return pools.clone;
 		default:
 			JAM_ASSERT(false);
-			return pools.packet;
+			return pools.packetSmall;
 		}
+	}
+
+	BufferPool& GetPacketBufferPool(const uint32 packetBytes)
+	{
+		return GetNetBufferPool(packetBytes <= kPacketSmallMaxBytes ? eNetBufferPoolKind::PacketSmall : eNetBufferPoolKind::PacketLarge);
 	}
 
 	void FlushNetBufferThreadLocalCaches()

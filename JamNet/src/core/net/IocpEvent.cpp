@@ -60,7 +60,7 @@ namespace jam::net
 	{
 		IocpEvent::Init();
 
-		packet.Reset();
+		reservation.Reset();
 		wsaBuf			= {};
 		remoteAddr		= {};
 		remoteAddrLen	= sizeof(SOCKADDR_IN);

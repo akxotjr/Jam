@@ -11,41 +11,42 @@
 
 namespace jam::net
 {
-	struct UdpPrebindConnectRetry
-	{
-		static void Submit(EndpointHandle handle, uint32 retriesLeft);
-	};
-
 	namespace
 	{
-		inline constexpr uint64 kClientBindRetryDelayNs = 500_ms;
+		inline constexpr uint64 kControlRetryDelayNs = 500_ms;
+		inline constexpr uint64 kControlRetryJitterNs = 50_ms;
+		inline constexpr uint64 kControlDeadlineNs = 10_s;
+
+		uint64 MakeTransactionId(const UdpSession& session)
+		{
+			uint64 value = NOW_NS() ^ session.GetEndpointId() ^ (session.GetAccountId() * 0x9e3779b97f4a7c15ull);
+			return value != 0 ? value : 1;
+		}
+
+		uint64 RetryDelayNs(uint64 endpointId, uint32 token)
+		{
+			uint64 value = endpointId ^ (static_cast<uint64>(token) * 0x9e3779b97f4a7c15ull);
+			value ^= value >> 30;
+			value *= 0xbf58476d1ce4e5b9ull;
+			value ^= value >> 27;
+			const uint64 window = kControlRetryJitterNs * 2 + 1;
+			return kControlRetryDelayNs - kControlRetryJitterNs + (value % window);
+		}
 
 		RouteKey MakeBoundSessionRouteKey(uint64 accountId)
 		{
 			return GLOBAL_EXEC.MakeAffinityRouteKey(accountId);
 		}
 
-		void SendUdpBindResponse(Session& session, bool success, uint64 accountId, RuntimeId userId)
-		{
-			const SessionId sessionId = success ? session.GetSessionId() : kInvalidSessionId;
-			const UDP_BIND_RES_DATA res
-			{
-				.accountId	= accountId,
-				.userId		= userId,
-				.sessionId	= sessionId,
-				.success	= static_cast<uint8>(success ? 1 : 0),
-			};
-			auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_RES, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &res, sizeof(res));
-			session.Send(pkt);
-		}
-
-		bool IsUdpBindPacket(const PacketHeaderView& view)
+		bool IsUdpControlPacket(const PacketHeaderView& view)
 		{
 			if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
 				return false;
 
 			const auto id = ToEnum<eSystemPacketId>(view.Id());
-			return id == eSystemPacketId::UDP_BIND_REQ || id == eSystemPacketId::UDP_BIND_RES;
+			return id == eSystemPacketId::UDP_BIND_REQ || id == eSystemPacketId::UDP_BIND_RES
+				|| id == eSystemPacketId::UDP_BIND_CONFIRM || id == eSystemPacketId::UDP_UNBIND_REQ
+				|| id == eSystemPacketId::UDP_UNBIND_RES;
 		}
 	}
 
@@ -58,32 +59,24 @@ namespace jam::net
 
 	bool UdpSession::Connect()
 	{
-		auto service = GetServiceRef();
-		if (!service)
+		JAM_ASSERT(IsCurrentShardContext());
+
+		if (!IsPreBindPhase() || IsClosing())
 			return false;
 
-		if (IsPreBindPhase())
-		{
-			ProcessConnect();
-			return true;
-		}
-
-		return false;
+		ProcessConnect();
+		return true;
 	}
 
 	void UdpSession::Disconnect()
 	{
+		JAM_ASSERT(IsCurrentShardContext());
+
 		if (IsClosing())
 			return;
 
-		const bool posted = RegisterDisconnect();
 		MarkClosing();
-		if (!posted)
-		{
-			m_releaseQueued.store(true, std::memory_order_release);
-			if (GetPendingDispatchCount() == 0)
-				OnPendingDispatchDrained();
-		}
+		ProcessDisconnect();
 	}
 
 	void UdpSession::Send(Packet packet)
@@ -95,7 +88,7 @@ namespace jam::net
 
 		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
 		if (view.IsValid() && view.TotalSize() == packet->Size() && view.Type() == ePacketType::SYSTEM
-			&& (IsUdpBindPacket(view) || GetEntity() == entt::null || !CanCreateSessionEntity()))
+			&& (IsUdpControlPacket(view) || GetEntity() == entt::null || !CanCreateSessionEntity()))
 		{
 			SendImmediatePacket(packet);
 			return;
@@ -106,26 +99,6 @@ namespace jam::net
 			return;
 
 		SendPacketToSession(e, std::move(packet));
-	}
-
-	void UdpSession::Dispatch(IocpEvent* iocpEvent, int32 /*bytes*/)
-	{
-		if (!iocpEvent)
-			return;
-
-		switch (iocpEvent->m_eventType)
-		{
-		case eEventType::UdpConnect:
-			ProcessConnect();
-			break;
-
-		case eEventType::UdpDisconnect:
-			ProcessDisconnect();
-			break;
-
-		default:
-			break;
-		}
 	}
 
 
@@ -139,6 +112,8 @@ namespace jam::net
 			ProcessSystemPacket(std::move(packet), directView, ingressRecvTime_ns);
 			return;
 		}
+		if (!m_bindConfirmed || m_unbindTombstone)
+			return;
 
 		const entt::entity e = GetEntity();
 		if (e == entt::null)
@@ -150,171 +125,79 @@ namespace jam::net
 		ProcessReceivedPacket(e, std::move(packet), ingressRecvTime_ns);
 	}
 
-	void UdpSession::HandleError(int32 errorCode)
-	{
-		switch (errorCode)
-		{
-		case WSAECONNRESET:
-		case WSAECONNABORTED:
-			Disconnect();
-			break;
-		default:
-			win_error::LogWsaError("[UdpSession] socket operation", errorCode);
-			break;
-		}
-	}
-
 	void UdpSession::RegisterSend(std::vector<PacketChain>&& chains)
 	{
 		GetService()->m_udpRouter->RegisterSend(std::move(chains), GetRemoteNetAddress());
 	}
 
-	bool UdpSession::RegisterConnect()
-	{
-		auto service = GetServiceRef();
-		if (!service || !service->GetIocpCore())
-			return false;
-
-		m_connectEvent.Init();
-		if (!service->GetIocpCore()->Post(this, &m_connectEvent))
-			return false;
-
-		return true;
-	}
-
-	bool UdpSession::RegisterDisconnect()
-	{
-		auto service = GetServiceRef();
-		if (!service || !service->GetIocpCore())
-			return false;
-
-		m_disconnectEvent.Init();
-		if (!service->GetIocpCore()->Post(this, &m_disconnectEvent))
-			return false;
-
-		return true;
-	}
 
 	void UdpSession::ProcessConnect()
 	{
-		if (const entt::entity e = GetEntity(); e != entt::null)
-		{
-			ConnectHandshake(e);
-			return;
-		}
-
-		if (m_prebindHandshake.state == HandshakeState::CONNECT_SYN_SENT)
-			return;
-		if (m_prebindHandshake.state != HandshakeState::DISCONNECTED)
+		if (!IsPreBindPhase() || IsClosing())
 			return;
 
-		SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_SYN));
-		m_prebindHandshake.state		= HandshakeState::CONNECT_SYN_SENT;
-		m_prebindHandshake.lastTime_ns	= NOW_NS();
-		m_prebindHandshake.retryCount	= 0;
-		SchedulePreBindHandshakeRetry();
+		SetSessionState(eSessionState::Connected);
+		TrySessionBinding();
 	}
 
 	void UdpSession::ProcessDisconnect()
 	{
-		if (GetEntity() != entt::null)
+		if (GetSessionId() == kInvalidSessionId || !m_bindConfirmed)
 		{
-			auto service = GetServiceRef();
-			const SessionId sessionId = GetSessionId();
-			const EndpointHandle endpoint = GetEndpointHandle();
-			const uint32 generation = GetServiceGeneration();
-			Post(Job([service, sessionId, endpoint, generation]
-				{
-					auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
-					if (!self)
-						return;
-
-					const entt::entity entity = self->GetEntity();
-					if (entity != entt::null)
-						DisconnectHandshake(entity);
-				}, eJobPriority::Control));
+			AbortTransport("disconnect before UDP bind confirmation");
 			return;
 		}
-
-		if (m_prebindHandshake.state != HandshakeState::CONNECTED && m_prebindHandshake.state != HandshakeState::DISCONNECT_FIN_SENT)
+		if (m_unbindRequestActive || m_unbindTombstone)
 			return;
 
-		SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::DISCONNECT_FIN));
-		if (m_prebindHandshake.state == HandshakeState::CONNECTED)
-			m_prebindHandshake.state = HandshakeState::DISCONNECT_FIN_SENT;
-		m_prebindHandshake.lastTime_ns = NOW_NS();
-		SchedulePreBindHandshakeRetry();
+		m_unbindTransactionId = MakeTransactionId(*this);
+		m_unbindDeadline_ns   = NOW_NS() + kControlDeadlineNs;
+		m_unbindRequestActive = true;
+		SendUnbindRequest();
+		ScheduleSessionUnbindRetry();
 	}
 
-	void UdpSession::HandlePreBindSystemPacket(const PacketHeaderView& view)
+	void UdpSession::HandleUdpControlPacket(const PacketHeaderView& view)
 	{
-		const uint64 now_ns = NOW_NS();
 		switch (ToEnum<eSystemPacketId>(view.Id()))
 		{
-		case eSystemPacketId::CONNECT_SYN:
-			if (m_prebindHandshake.state != HandshakeState::DISCONNECTED)
-				return;
-
-			SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_SYNACK));
-			m_prebindHandshake.state		= HandshakeState::CONNECT_SYNACK_SENT;
-			m_prebindHandshake.lastTime_ns	= now_ns;
-			m_prebindHandshake.retryCount	= 0;
-			SchedulePreBindHandshakeRetry();
-			return;
-
-		case eSystemPacketId::CONNECT_SYNACK:
-			if (m_prebindHandshake.state != HandshakeState::CONNECT_SYN_SENT)
-				return;
-
-			SendImmediatePacket(PacketBuilder::CreateHandshakePacket(eSystemPacketId::CONNECT_ACK));
-			m_prebindHandshake.state		= HandshakeState::CONNECTED;
-			m_prebindHandshake.lastTime_ns	= now_ns;
-			++m_prebindTimerToken;
-			SetSessionState(eSessionState::Connected);
-			TrySessionBinding();
-			return;
-
-		case eSystemPacketId::CONNECT_ACK:
-			if (m_prebindHandshake.state != HandshakeState::CONNECT_SYNACK_SENT)
-				return;
-			m_prebindHandshake.state		= HandshakeState::CONNECTED;
-			m_prebindHandshake.lastTime_ns	= now_ns;
-			++m_prebindTimerToken;
-			SetSessionState(eSessionState::Connected);
-			TrySessionBinding();
-			return;
-
 		case eSystemPacketId::UDP_BIND_RES:
 			if (!IsClientSide())
 				return;
 			if (view.PayloadSize() < sizeof(UDP_BIND_RES_DATA))
 				return;
-			if (m_clientBind.bound)
-				return;
 			if (const auto* res = reinterpret_cast<const UDP_BIND_RES_DATA*>(view.Payload());
-				res && res->accountId == m_accountId && res->userId == m_userId)
+				res && res->accountId == m_accountId && res->userId == m_userId
+				&& res->transactionId == m_bindTransactionId)
 			{
+				if (m_bindConfirmed && res->success && res->sessionId == GetSessionId())
+				{
+					SendBindConfirm();
+					return;
+				}
+				if (!m_clientBind.active)
+					return;
 				m_clientBind.active = false;
 				++m_clientBind.timerToken;
 				if (!res->success || res->sessionId == kInvalidSessionId)
 				{
-					m_clientBind.active = false;
-					m_clientBind.bound  = false;
-					JAMNET_LOG_ERROR("[UdpSession] UDP bind failed or timed out. accountId={}, userId={}", m_accountId, m_userId);
-					Disconnect();
+					JAM_LOG_ERROR("[UdpSession] UDP bind rejected. accountId={}, userId={}, transactionId={}", m_accountId, m_userId, m_bindTransactionId);
+					AbortTransport("UDP bind rejected");
 					return;
 				}
 
 				m_clientBind.bound = true;
 				if (!AdoptAuthoritativeSessionId(res->sessionId))
 				{
-					JAMNET_LOG_ERROR("[UdpSession] Failed to adopt authoritative session id. accountId={}, userId={}, sessionId={}",
-						m_accountId, m_userId, res->sessionId);
+					JAM_LOG_ERROR("[UdpSession] Failed to adopt authoritative session id. accountId={}, userId={}, sessionId={}", m_accountId, m_userId, res->sessionId);
 					m_clientBind.active = false;
 					m_clientBind.bound  = false;
-					Disconnect();
+					AbortTransport("failed to adopt UDP session id");
 					return;
 				}
+				SendBindConfirm();
+				m_bindConfirmed = true;
+				NotifyLinkEstablishedIfReady();
 			}
 			return;
 
@@ -323,66 +206,109 @@ namespace jam::net
 				return;
 			if (view.PayloadSize() < sizeof(UDP_BIND_REQ_DATA))
 				return;
-			if (const auto* req = reinterpret_cast<const UDP_BIND_REQ_DATA*>(view.Payload()); !req || req->accountId == 0 || req->userId == kInvalidRuntimeId)
+			if (const auto* req = reinterpret_cast<const UDP_BIND_REQ_DATA*>(view.Payload());
+				!req || req->accountId == 0 || req->userId == kInvalidRuntimeId || req->transactionId == 0)
 			{
-				SendUdpBindResponse(*this, false, req ? req->accountId : 0, kInvalidRuntimeId);
 				return;
 			}
 			else
 			{
 				if (GetSessionId() != kInvalidSessionId)
 				{
-					const bool samePrincipal = (m_accountId == req->accountId && m_userId == req->userId);
-					SendUdpBindResponse(*this, samePrincipal, req->accountId, samePrincipal ? m_userId : kInvalidRuntimeId);
+					if (m_accountId == req->accountId && m_userId == req->userId && m_bindTransactionId == req->transactionId)
+						SendBindResponse();
 					return;
 				}
-				if (m_prebindHandshake.state != HandshakeState::CONNECTED)
-					return;
 				if (!TryBeginServerBind())
 					return;
 
 				const RouteKey boundRouteKey = MakeBoundSessionRouteKey(req->accountId);
 				const uint64 endpointId = GetEndpointId();
-				Rehome(boundRouteKey, [this, accountId = req->accountId, userId = req->userId, endpointId, boundRouteKey](bool rehomeOk) mutable
+				Rehome(boundRouteKey, [this, accountId = req->accountId, userId = req->userId, transactionId = req->transactionId, endpointId, boundRouteKey](bool rehomeOk) mutable
 					{
 						if (!rehomeOk || GetEndpointId() != endpointId || GetRouteKey() != boundRouteKey)
 						{
 							EndServerBind();
-							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							AbortTransport("UDP bind rehome failed");
 							return;
 						}
+						m_bindTransactionId = transactionId;
+						SetAccountId(accountId);
+						SetUserId(userId);
 						if (!ValidateServerUdpBindPrincipal(accountId, userId))
 						{
 							EndServerBind();
-							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
-							return;
-						}
-						if (m_prebindHandshake.state != HandshakeState::CONNECTED)
-						{
-							EndServerBind();
-							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							SendBindResponse();
+							AbortTransport("UDP bind principal validation failed");
 							return;
 						}
 
-						SetAccountId(accountId);
-						SetUserId(userId);
+						// UDP_BIND_RES means the server has accepted and promoted the endpoint.
+						// CONFIRM only acknowledges that response so the server can stop retrying it.
+						m_bindConfirmed = true;
 						IssueSessionId();
 						if (GetSessionId() == kInvalidSessionId)
 						{
 							EndServerBind();
-							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							AbortTransport("UDP session id issuance failed");
 							return;
 						}
 						if (IsClosing())
 						{
 							EndServerBind();
-							SendUdpBindResponse(*this, false, accountId, kInvalidRuntimeId);
+							AbortTransport("UDP bind closed during promotion");
 							return;
 						}
 
 						EndServerBind();
-						SendUdpBindResponse(*this, true, accountId, m_userId);
+						m_serverBindResponseActive = true;
+						m_bindDeadline_ns = NOW_NS() + kControlDeadlineNs;
+						SendBindResponse();
+						ScheduleServerBindResponseRetry();
 					});
+			}
+			return;
+
+		case eSystemPacketId::UDP_BIND_CONFIRM:
+			if (!IsServerSide() || view.PayloadSize() < sizeof(UDP_BIND_CONFIRM_DATA))
+				return;
+			if (const auto* confirm = reinterpret_cast<const UDP_BIND_CONFIRM_DATA*>(view.Payload());
+				confirm && confirm->sessionId == GetSessionId() && confirm->transactionId == m_bindTransactionId)
+			{
+				m_serverBindResponseActive = false;
+				++m_bindTimerToken;
+			}
+			return;
+
+		case eSystemPacketId::UDP_UNBIND_REQ:
+			if (view.PayloadSize() < sizeof(UDP_UNBIND_REQ_DATA))
+				return;
+			if (const auto* req = reinterpret_cast<const UDP_UNBIND_REQ_DATA*>(view.Payload());
+				!req || req->sessionId != GetSessionId() || req->transactionId == 0)
+				return;
+			else
+			{
+				m_unbindTransactionId = req->transactionId;
+				SendUnbindResponse();
+				if (!m_unbindTombstone)
+				{
+					m_unbindTombstone = true;
+					m_unbindDeadline_ns = NOW_NS() + kControlDeadlineNs;
+					NotifyLinkTerminatedIfEstablished();
+					ScheduleUnbindTombstoneExpiry();
+				}
+			}
+			return;
+
+		case eSystemPacketId::UDP_UNBIND_RES:
+			if (view.PayloadSize() < sizeof(UDP_UNBIND_RES_DATA))
+				return;
+			if (const auto* res = reinterpret_cast<const UDP_UNBIND_RES_DATA*>(view.Payload());
+				res && m_unbindRequestActive && res->sessionId == GetSessionId() && res->transactionId == m_unbindTransactionId)
+			{
+				m_unbindRequestActive = false;
+				++m_unbindTimerToken;
+				CompleteProtocolDisconnect();
 			}
 			return;
 
@@ -420,15 +346,9 @@ namespace jam::net
 		if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
 			return;
 
-		if (IsPreBindPhase())
+		if (IsUdpControlPacket(view))
 		{
-			HandlePreBindSystemPacket(view);
-			return;
-		}
-
-		if (IsServerSide() && ToEnum<eSystemPacketId>(view.Id()) == eSystemPacketId::UDP_BIND_REQ)
-		{
-			HandlePreBindSystemPacket(view);
+			HandleUdpControlPacket(view);
 			return;
 		}
 
@@ -449,95 +369,21 @@ namespace jam::net
 	}
 
 
-	void UdpSession::SchedulePreBindHandshakeRetry()
-	{
-		const uint32 token = ++m_prebindTimerToken;
-		const EndpointHandle endpointHandle = GetEndpointHandle();
-		const uint32 generation = GetServiceGeneration();
-		auto service = GetServiceRef();
-		SubmitAfter(Job([service, endpointHandle, generation, token]()
-			{
-				auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(kInvalidSessionId, endpointHandle, generation)) : nullptr;
-				if (!self)
-					return;
-				if (!self->IsPreBindPhase())
-					return;
-				if (self->m_prebindTimerToken != token)
-					return;
-
-				auto& hs = self->m_prebindHandshake;
-				const uint64 now_ns = NOW_NS();
-				if (now_ns - hs.lastTime_ns < HandshakeState::Timeout_ns)
-				{
-					self->SchedulePreBindHandshakeRetry();
-					return;
-				}
-
-				eSystemPacketId resendId;
-				switch (hs.state)
-				{
-				case HandshakeState::CONNECT_SYN_SENT:
-					resendId = eSystemPacketId::CONNECT_SYN;
-					break;
-				case HandshakeState::CONNECT_SYNACK_SENT:
-					resendId = eSystemPacketId::CONNECT_SYNACK;
-					break;
-				case HandshakeState::DISCONNECT_FIN_SENT:
-					resendId = eSystemPacketId::DISCONNECT_FIN;
-					break;
-				case HandshakeState::DISCONNECT_FINACK_SENT:
-				case HandshakeState::CLOSING:
-					resendId = eSystemPacketId::DISCONNECT_FINACK;
-					break;
-				default:
-					return;
-				}
-
-				if (hs.retryCount >= HandshakeState::MaxRetry)
-				{
-					self->AbortPreBindHandshake();
-					return;
-				}
-
-				self->SendImmediatePacket(PacketBuilder::CreateHandshakePacket(resendId));
-				hs.retryCount++;
-				hs.lastTime_ns = now_ns;
-				self->SchedulePreBindHandshakeRetry();
-			}, eJobPriority::Control), HandshakeState::Timeout_ns);
-	}
-
-	void UdpSession::AbortPreBindHandshake()
-	{
-		m_prebindHandshake.state = HandshakeState::TIME_OUT;
-		++m_prebindTimerToken;
-		m_clientBind.active = false;
-		++m_clientBind.timerToken;
-		SetSessionState(eSessionState::Disconnected);
-		NotifyLinkTerminatedIfEstablished();
-		NotifyDisconnectedOnce();
-		MarkClosing();
-		m_releaseQueued.store(true, std::memory_order_release);
-		if (GetPendingDispatchCount() == 0)
-			OnPendingDispatchDrained();
-	}
-
 	void UdpSession::TrySessionBinding()
 	{
 		if (!IsClientSide() || !IsConnected())
 			return;
 		if (m_clientBind.active || m_clientBind.bound)
 			return;
-		if (m_accountId == 0)
+		if (m_accountId == 0 || m_userId == kInvalidRuntimeId)
 			return;
 
 		m_clientBind.active		= true;
 		m_clientBind.bound		= false;
-		m_clientBind.retryCount = 0;
+		m_bindTransactionId = MakeTransactionId(*this);
+		m_bindDeadline_ns = NOW_NS() + kControlDeadlineNs;
 		SetSessionState(eSessionState::Binding);
-
-		const UDP_BIND_REQ_DATA req{ .accountId = m_accountId, .userId = m_userId };
-		auto packet = PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_REQ, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &req, sizeof(req));
-		Send(packet);
+		SendBindRequest();
 		ScheduleSessionBindingRetry();
 	}
 
@@ -554,21 +400,129 @@ namespace jam::net
 					return;
 				if (!self->m_clientBind.active || self->m_clientBind.bound || self->m_clientBind.timerToken != token)
 					return;
-				if (self->m_clientBind.retryCount >= HandshakeState::MaxRetry)
+				if (NOW_NS() >= self->m_bindDeadline_ns)
 				{
 					self->m_clientBind.active = false;
 					self->m_clientBind.bound  = false;
-					JAMNET_LOG_ERROR("[UdpSession] UDP bind failed or timed out. accountId={}, userId={}", self->m_accountId, self->m_userId);
-					self->Disconnect();
+					JAM_LOG_ERROR("[UdpSession] UDP bind timed out. accountId={}, userId={}, transactionId={}", self->m_accountId, self->m_userId, self->m_bindTransactionId);
+					self->AbortTransport("UDP bind deadline exceeded");
 					return;
 				}
 
-				self->m_clientBind.retryCount++;
-				const UDP_BIND_REQ_DATA req{ .accountId = self->m_accountId, .userId = self->m_userId };
-				auto pkt = PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_REQ, PacketFlags::NONE, eChannel::UNRELIABLE_UNORDERED, &req, sizeof(req));
-				self->Send(pkt);
+				self->SendBindRequest();
 				self->ScheduleSessionBindingRetry();
-			}, eJobPriority::Control), kClientBindRetryDelayNs);
+			}, eJobPriority::Control), RetryDelayNs(m_endpointId, token));
+	}
+
+	void UdpSession::ScheduleServerBindResponseRetry()
+	{
+		const uint32 token = ++m_bindTimerToken;
+		const SessionId sessionId = GetSessionId();
+		const EndpointHandle endpoint = GetEndpointHandle();
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, sessionId, endpoint, generation, token]()
+			{
+				auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
+				if (!self || !self->m_serverBindResponseActive || self->m_bindTimerToken != token)
+					return;
+				if (NOW_NS() >= self->m_bindDeadline_ns)
+				{
+					JAM_LOG_ERROR("[UdpSession] UDP bind confirm timed out. accountId={}, userId={}, sessionId={}", self->m_accountId, self->m_userId, self->m_sessionId);
+					self->AbortTransport("UDP bind confirm deadline exceeded");
+					return;
+				}
+				self->SendBindResponse();
+				self->ScheduleServerBindResponseRetry();
+			}, eJobPriority::Control), RetryDelayNs(m_endpointId, token));
+	}
+
+	void UdpSession::ScheduleSessionUnbindRetry()
+	{
+		const uint32 token = ++m_unbindTimerToken;
+		const SessionId sessionId = GetSessionId();
+		const EndpointHandle endpoint = GetEndpointHandle();
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, sessionId, endpoint, generation, token]()
+			{
+				auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
+				if (!self || !self->m_unbindRequestActive || self->m_unbindTimerToken != token)
+					return;
+				if (NOW_NS() >= self->m_unbindDeadline_ns)
+				{
+					JAM_LOG_WARN("[UdpSession] UDP unbind timed out. sessionId={}", self->m_sessionId);
+					self->AbortTransport("UDP unbind deadline exceeded");
+					return;
+				}
+				self->SendUnbindRequest();
+				self->ScheduleSessionUnbindRetry();
+			}, eJobPriority::Control), RetryDelayNs(m_endpointId, token));
+	}
+
+	void UdpSession::ScheduleUnbindTombstoneExpiry()
+	{
+		const uint32 token = ++m_unbindTimerToken;
+		const SessionId sessionId = GetSessionId();
+		const EndpointHandle endpoint = GetEndpointHandle();
+		const uint32 generation = GetServiceGeneration();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, sessionId, endpoint, generation, token]()
+			{
+				auto* self = service ? static_cast<UdpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
+				if (!self || !self->m_unbindTombstone || self->m_unbindTimerToken != token)
+					return;
+				if (NOW_NS() < self->m_unbindDeadline_ns)
+				{
+					self->ScheduleUnbindTombstoneExpiry();
+					return;
+				}
+				self->CompleteProtocolDisconnect();
+			}, eJobPriority::Control), RetryDelayNs(m_endpointId, token));
+	}
+
+	void UdpSession::SendBindRequest()
+	{
+		const UDP_BIND_REQ_DATA data{ .accountId = m_accountId, .userId = m_userId, .transactionId = m_bindTransactionId };
+		SendImmediatePacket(PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_REQ, PacketFlags::NONE, eChannel::UDP_DEFAULT, &data, sizeof(data)));
+	}
+
+	void UdpSession::SendBindResponse()
+	{
+		const bool success = GetSessionId() != kInvalidSessionId;
+		const UDP_BIND_RES_DATA data{ .accountId = m_accountId, .userId = m_userId, .sessionId = success ? GetSessionId() : kInvalidSessionId,
+			.transactionId = m_bindTransactionId, .success = static_cast<uint8>(success) };
+		SendImmediatePacket(PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_RES, PacketFlags::NONE, eChannel::UDP_DEFAULT, &data, sizeof(data)));
+	}
+
+	void UdpSession::SendBindConfirm()
+	{
+		const UDP_BIND_CONFIRM_DATA data{ .sessionId = GetSessionId(), .transactionId = m_bindTransactionId };
+		SendImmediatePacket(PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_BIND_CONFIRM, PacketFlags::NONE, eChannel::UDP_DEFAULT, &data, sizeof(data)));
+	}
+
+	void UdpSession::SendUnbindRequest()
+	{
+		const UDP_UNBIND_REQ_DATA data{ .sessionId = GetSessionId(), .transactionId = m_unbindTransactionId };
+		SendImmediatePacket(PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_UNBIND_REQ, PacketFlags::NONE, eChannel::UDP_DEFAULT, &data, sizeof(data)));
+	}
+
+	void UdpSession::SendUnbindResponse()
+	{
+		const UDP_UNBIND_RES_DATA data{ .sessionId = GetSessionId(), .transactionId = m_unbindTransactionId };
+		SendImmediatePacket(PacketBuilder::CreateSystemPacket(eSystemPacketId::UDP_UNBIND_RES, PacketFlags::NONE, eChannel::UDP_DEFAULT, &data, sizeof(data)));
+	}
+
+	void UdpSession::AbortTransport(const char* reason)
+	{
+		JAM_LOG_DEBUG("[UdpSession] transport aborted. reason={}, accountId={}, userId={}, sessionId={}", reason, m_accountId, m_userId, m_sessionId);
+		m_clientBind.active = false;
+		m_serverBindResponseActive = false;
+		m_unbindRequestActive = false;
+		++m_clientBind.timerToken;
+		++m_bindTimerToken;
+		++m_unbindTimerToken;
+		CompleteProtocolDisconnect();
 	}
 
 

@@ -43,6 +43,7 @@ namespace jam::net
 	{
 		if (!m_manager || !request.IsValid())
 			return false;
+
 		Send(codec::MakeContentRequestPacket(request));
 		return true;
 	}
