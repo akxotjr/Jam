@@ -62,7 +62,6 @@ namespace jam
 			m_offloadMetricSlots = std::make_unique<MetricsSlot<OffloadWorkerMetrics>[]>(m_offloadMetricSlotCount);
 
 		m_fiberMetricSlot.value = {};
-		m_metricBaseline.Write(GlobalExecutorMetrics{});
 		m_metricsAggregator = std::make_unique<MetricsAggregator>();
 		if (!m_metricsAggregator->Initialize(m_config.metrics))
 		{
@@ -73,6 +72,8 @@ namespace jam
 			? m_metricsAggregator->WindowIndex(NOW_NS())
 			: UINT64_MAX;
 		m_processMetrics.Initialize(std::max<DWORD>(1, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS)), processWindowIndex);
+		m_executorMetricsWindowIndex = processWindowIndex;
+		m_executorMetricsBaseline = CaptureExecutorMetrics();
 
 		m_backend   = WinFiberBackend();
 		m_scheduler = std::make_unique<FiberScheduler>(m_backend);
@@ -134,7 +135,10 @@ namespace jam
 			m_processMetricsPeriodic = ScheduleFixedRate(Job([this]
 				{
 					if (m_metricsAggregator)
+					{
 						m_processMetrics.SubmitCompletedWindow(NOW_NS(), *m_metricsAggregator);
+						SubmitExecutorMetricsWindow(NOW_NS());
+					}
 				}), PeriodicOptions{ .period_ns = periodNs, .initialDelay_ns = periodNs, .name = "GE.ProcessMetrics" });
 		}
 
@@ -687,7 +691,8 @@ namespace jam
 		if (m_affinitySlots.empty())
 			return false;
 
-		out = m_affinitySlots[static_cast<size_t>(slotIndex) % m_affinitySlots.size()];
+		const uint32 remappedSlotIndex = RemapExecutorAffinitySlot(slotIndex);
+		out = m_affinitySlots[static_cast<size_t>(remappedSlotIndex) % m_affinitySlots.size()];
 		return out.core.mask != 0;
 	}
 
@@ -769,87 +774,69 @@ namespace jam
 		}
 	}
 
-	GlobalExecutorMetrics GlobalExecutor::GetMetricsSnapshotRaw() const
+	GlobalExecutorMetrics GlobalExecutor::CaptureExecutorMetrics() const
 	{
-		GlobalExecutorMetrics s{};
+		GlobalExecutorMetrics result{};
 		for (size_t i = 0; i < m_offloadMetricSlotCount; ++i)
 		{
 			const auto worker = GetOffloadMetricsSnapshot(m_offloadMetricSlots[i]);
-			s.workerLoopCount += worker.loopCount;
-			s.workerJobExecCount += worker.jobExecCount;
-			s.workerIdleLoopCount += worker.idleLoopCount;
-			s.workerWaitCost_ns += worker.waitCost_ns;
-			s.workerJobExecCost_ns += worker.jobExecCost_ns;
+			result.workerLoopCount += worker.loopCount;
+			result.workerJobExecCount += worker.jobExecCount;
+			result.workerIdleLoopCount += worker.idleLoopCount;
+			result.workerWaitCost_ns += worker.waitCost_ns;
+			result.workerJobExecCost_ns += worker.jobExecCost_ns;
 		}
 
 		const auto fiber = GetFiberMetricsSnapshot(m_fiberMetricSlot);
-		s.fiberLoopCount = fiber.loopCount;
-		s.fiberPollCount = fiber.pollCount;
-		s.fiberEmptyPollCount = fiber.emptyPollCount;
-		s.fiberPollCost_ns = fiber.pollCost_ns;
-		s.fiberSleepCost_ns = fiber.sleepCost_ns;
-		s.fiberReadyRunCount = fiber.readyRunCount;
-		return s;
-	}
-
-	GlobalExecutorMetrics GlobalExecutor::SubtractMetrics(const GlobalExecutorMetrics& value, const GlobalExecutorMetrics& baseline)
-	{
-		auto sub = [](uint64 lhs, uint64 rhs) -> uint64
-			{
-				return (lhs >= rhs) ? (lhs - rhs) : 0;
-			};
-
-		GlobalExecutorMetrics result{};
-		result.workerLoopCount = sub(value.workerLoopCount, baseline.workerLoopCount);
-		result.workerJobExecCount = sub(value.workerJobExecCount, baseline.workerJobExecCount);
-		result.workerIdleLoopCount = sub(value.workerIdleLoopCount, baseline.workerIdleLoopCount);
-		result.workerWaitCost_ns = sub(value.workerWaitCost_ns, baseline.workerWaitCost_ns);
-		result.workerJobExecCost_ns = sub(value.workerJobExecCost_ns, baseline.workerJobExecCost_ns);
-		result.fiberLoopCount = sub(value.fiberLoopCount, baseline.fiberLoopCount);
-		result.fiberPollCount = sub(value.fiberPollCount, baseline.fiberPollCount);
-		result.fiberEmptyPollCount = sub(value.fiberEmptyPollCount, baseline.fiberEmptyPollCount);
-		result.fiberPollCost_ns = sub(value.fiberPollCost_ns, baseline.fiberPollCost_ns);
-		result.fiberSleepCost_ns = sub(value.fiberSleepCost_ns, baseline.fiberSleepCost_ns);
-		result.fiberReadyRunCount = sub(value.fiberReadyRunCount, baseline.fiberReadyRunCount);
+		result.fiberLoopCount = fiber.loopCount;
+		result.fiberPollCount = fiber.pollCount;
+		result.fiberEmptyPollCount = fiber.emptyPollCount;
+		result.fiberPollCost_ns = fiber.pollCost_ns;
+		result.fiberSleepCost_ns = fiber.sleepCost_ns;
+		result.fiberReadyRunCount = fiber.readyRunCount;
 		return result;
 	}
 
-	GlobalExecutorMetrics GlobalExecutor::GetMetricsSnapshot() const
+	void GlobalExecutor::SubmitExecutorMetricsWindow(const uint64 now_ns)
 	{
-		GlobalExecutorMetrics baseline{};
-		m_metricBaseline.ReadSpin(baseline);
-		return SubtractMetrics(GetMetricsSnapshotRaw(), baseline);
-	}
+		if (!m_metricsAggregator || !m_metricsAggregator->IsEnabled())
+			return;
 
-	std::vector<ShardExecutorMetrics> GlobalExecutor::GetShardMetricsSnapshots() const
-	{
-		std::vector<ShardExecutorMetrics> snapshots;
-		if (!m_directory)
-			return snapshots;
-
-		auto& shards = m_directory->Shards();
-		snapshots.reserve(shards.size());
-		for (auto& shard : shards)
+		const uint64 currentWindowIndex = m_metricsAggregator->WindowIndex(now_ns);
+		if (m_executorMetricsWindowIndex == UINT64_MAX)
 		{
-			if (!shard)
-				continue;
-			snapshots.push_back(shard->Profile());
+			m_executorMetricsWindowIndex = currentWindowIndex;
+			m_executorMetricsBaseline = CaptureExecutorMetrics();
+			return;
 		}
+		if (currentWindowIndex == m_executorMetricsWindowIndex)
+			return;
 
-		return snapshots;
-	}
-
-	void GlobalExecutor::ResetMetrics()
-	{
-		m_metricBaseline.Write(GetMetricsSnapshotRaw());
-
-		if (m_directory)
-		{
-			for (auto& shard : m_directory->Shards())
-			{
-				if (shard)
-					shard->ResetMetrics();
+		const auto current = CaptureExecutorMetrics();
+		auto delta = [](const uint64 value, const uint64 baseline) { return value >= baseline ? value - baseline : 0; };
+		const uint64 period_ns = m_metricsAggregator->WindowPeriodNs();
+		MetricSnapshot snapshot{
+			.windowIndex = m_executorMetricsWindowIndex,
+			.windowStartNs = m_executorMetricsWindowIndex * period_ns,
+			.windowEndNs = (m_executorMetricsWindowIndex + 1) * period_ns,
+			.scope = "executor_global",
+			.values = {
+				{ "worker_loop_count", delta(current.workerLoopCount, m_executorMetricsBaseline.workerLoopCount) },
+				{ "worker_jobs_executed", delta(current.workerJobExecCount, m_executorMetricsBaseline.workerJobExecCount) },
+				{ "worker_idle_loop_count", delta(current.workerIdleLoopCount, m_executorMetricsBaseline.workerIdleLoopCount) },
+				{ "worker_wait_ns", delta(current.workerWaitCost_ns, m_executorMetricsBaseline.workerWaitCost_ns) },
+				{ "worker_job_execution_ns", delta(current.workerJobExecCost_ns, m_executorMetricsBaseline.workerJobExecCost_ns) },
+				{ "fiber_loop_count", delta(current.fiberLoopCount, m_executorMetricsBaseline.fiberLoopCount) },
+				{ "fiber_poll_count", delta(current.fiberPollCount, m_executorMetricsBaseline.fiberPollCount) },
+				{ "fiber_empty_poll_count", delta(current.fiberEmptyPollCount, m_executorMetricsBaseline.fiberEmptyPollCount) },
+				{ "fiber_poll_ns", delta(current.fiberPollCost_ns, m_executorMetricsBaseline.fiberPollCost_ns) },
+				{ "fiber_sleep_ns", delta(current.fiberSleepCost_ns, m_executorMetricsBaseline.fiberSleepCost_ns) },
+				{ "fiber_ready_runs", delta(current.fiberReadyRunCount, m_executorMetricsBaseline.fiberReadyRunCount) },
 			}
-		}
+		};
+		SubmitMetrics(std::move(snapshot));
+		m_executorMetricsBaseline = current;
+		m_executorMetricsWindowIndex = currentWindowIndex;
 	}
+
 }

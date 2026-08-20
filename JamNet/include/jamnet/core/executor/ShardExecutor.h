@@ -87,11 +87,17 @@ namespace jam
 
 	struct ShardExecutorConfig
 	{
-		int32       index			= 0;
-		int32       batchBudget		= 32;
-		int32       idleSleepMs		= 1;
-		uint16      numaNode		= 0xFFFF;
-		int32		maxTickCatchUp  = 4;
+		int32  index                              = 0;
+		int32  ingressMoveBudgetPerLoop           = 64;
+		int32  localExecuteBudgetPerPreTickPass   = 64;
+		int32  localRecoveryBudgetAfterTick       = 128;
+		int32  mailboxServiceBudgetPerLoop        = 128;
+		int32  mailboxMoveBudgetPerLoop           = 4096;
+		int32  mailboxMoveBudgetPerMailbox        = 64;
+		int32  schedulerPollBudgetPerLoop         = 64;
+		int32  idleSleepMs                        = 1;
+		uint16 numaNode                           = 0xFFFF;
+		int32  maxTickCatchUp                     = 4;
 	};
 
 
@@ -138,13 +144,10 @@ namespace jam
 
 		void							PinCoreSlot(const CoreSlot& slot, uint16 numaNode = 0xFFFF);
 		uint16							GetNumaNode() const { return m_config.numaNode; }
-		ShardExecutorMetrics			Profile() const;
-		void							ResetMetrics();
-
 	private:
-		void							ResetMetricsUnsafe();
-		bool							IsShardThread() const;
-		void							WaitUntilLoopExited() const;
+		void							UpdateMetricsWindow(uint64 now_ns, uint64 loopDuration_ns, uint64 ingressMoved, uint64 mailboxMoved, uint64 jobsExecuted);
+		void							SubmitMetricsWindow(uint64 windowEnd_ns);
+		void							ResetMetricsWindow();
 
 		void							Loop();
 		void							WorkerLoop();
@@ -160,7 +163,7 @@ namespace jam
 		bool							TryPopLocal(OUT Job& j);
 		bool							DrainIngressOnce(int32 budget);
 
-		bool							ProcessJobsOnce();
+		bool							ProcessJobsOnce(int32 executeBudget, bool drainIngress = true);
 		uint64							ProcessMailbox(Mailbox* mb, int32 budget);
 		void							DrainReadyMailboxes(int32 maxMailboxes, int32 totalJobBudget, int32 budgetPerMailbox);
 		Mailbox*						CreateMailbox();
@@ -174,6 +177,7 @@ namespace jam
 		std::atomic<bool>										m_workerRunning = false;
 		std::thread												m_workerThread;
 		ConcurrentQueue<Job>									m_workerIngress;
+		std::atomic<uint64>										m_workerJobSubmitCount = 0;
 		std::atomic<uint64>										m_workerWakeEpoch = 0;
 		std::atomic<uint64>										m_workerPreWakeDeadlineNs = 0;
 
@@ -184,7 +188,7 @@ namespace jam
 		ShardSlot*												m_shardSlot	= nullptr;
 
 		ConcurrentQueue<Job>									m_jobIngress;
-		
+		std::atomic<uint64>										m_ingressJobSubmitCount = 0;
 		std::deque<Job>											m_jobLocalCritical = {};
 		std::deque<Job>											m_jobLocalControl  = {};
 		std::deque<Job>											m_jobLocalBackground = {};
@@ -194,7 +198,12 @@ namespace jam
 		USE_LOCK
 		std::unordered_map<uint32, std::unique_ptr<Mailbox>>    m_mailboxes;
 		std::atomic<uint32>										m_nextMailboxId	 = 1;
-		ConcurrentQueue<uint32>									m_readyMailboxes;
+		struct ReadyMailboxEntry
+		{
+			uint32 mailboxId = 0;
+			uint64 enqueuedAt_ns = 0;
+		};
+		ConcurrentQueue<ReadyMailboxEntry>						m_readyMailboxes;
 		std::mutex												m_wakeMutex;
 		std::condition_variable									m_wakeCv;
 		std::atomic<uint64>										m_wakeEpoch		 = 0;
@@ -221,10 +230,9 @@ namespace jam
 		std::atomic<uint32>											m_periodicId		= 1;
 		std::unordered_map<uint32, std::weak_ptr<PeriodicState>>	m_periodics;
 
-		mutable std::mutex											m_metricSyncMutex;
-		mutable std::condition_variable								m_metricSyncCv;
-		mutable bool												m_loopExited		= true;
 		ShardExecutorMetrics										m_metrics			= {};
+		uint64														m_metricsWindowIndex = UINT64_MAX;
+		uint64														m_metricsWindowStart_ns = 0_ns;
 	};
 
 

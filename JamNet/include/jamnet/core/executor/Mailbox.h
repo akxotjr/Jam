@@ -57,13 +57,11 @@ namespace jam
 		void								OnJobExecuted();
 		uint64								DiscardPending();
 		bool								TryFinalizeClose();
-		bool								ConsumeRepostRequested();
-		bool								RequestRepost();
 
 		bool								IsEmpty()			 const { return GetSizeApprox() == 0; }
 		uint64								GetSizeApprox()		 const { return m_size.load(std::memory_order_relaxed); }
 		uint32								GetId()				 const { return m_id; }
-		bool								IsProcessing()		 const { return m_processing.load(std::memory_order_relaxed); }
+		bool								IsProcessing()		 const { return m_processing.load(std::memory_order_acquire); }
 		bool								IsAcceptingPosts()   const { return m_state.load(std::memory_order_acquire) == eMailboxState::Open; }
 		bool								IsClosing()			 const;
 		bool								IsClosed()			 const { return m_state.load(std::memory_order_acquire) == eMailboxState::Closed; }
@@ -83,7 +81,6 @@ namespace jam
 		std::atomic<uint64>					m_size			= 0;
 		std::atomic<uint64>					m_inFlight		= 0;
 		std::atomic<bool>					m_processing	= false;
-		std::atomic<bool>					m_repostRequested = false;
 		std::atomic<eMailboxState>			m_state			= eMailboxState::Open;
 
 		std::mutex							m_closeMutex;

@@ -94,10 +94,6 @@ namespace jam
 		bool											CancelPeriodic(PeriodicHandle h);
 		bool											CancelPerioidc(PeriodicHandle h) { return CancelPeriodic(h); }
 
-		GlobalExecutorMetrics							GetMetricsSnapshot() const;
-		std::vector<ShardExecutorMetrics>				GetShardMetricsSnapshots() const;
-		void											ResetMetrics();
-
 	private:
 		struct OffloadWorkerMetrics
 		{
@@ -146,8 +142,8 @@ namespace jam
 
 		OffloadWorkerMetrics					GetOffloadMetricsSnapshot(const MetricsSlot<OffloadWorkerMetrics>& slot) const;
 		FiberWorkerMetrics						GetFiberMetricsSnapshot(const MetricsSlot<FiberWorkerMetrics>& slot) const;
-		GlobalExecutorMetrics					GetMetricsSnapshotRaw() const;
-		static GlobalExecutorMetrics			SubtractMetrics(const GlobalExecutorMetrics& value, const GlobalExecutorMetrics& baseline);
+		GlobalExecutorMetrics					CaptureExecutorMetrics() const;
+		void									SubmitExecutorMetricsWindow(uint64 now_ns);
 
 	private:
 
@@ -180,7 +176,8 @@ namespace jam
 		std::unique_ptr<MetricsSlot<OffloadWorkerMetrics>[]>	m_offloadMetricSlots;
 		size_t													m_offloadMetricSlotCount	= 0;
 		MetricsSlot<FiberWorkerMetrics>							m_fiberMetricSlot			= {};
-		SeqLockBox<GlobalExecutorMetrics>						m_metricBaseline			= {};
+		GlobalExecutorMetrics									m_executorMetricsBaseline	= {};
+		uint64													m_executorMetricsWindowIndex = UINT64_MAX;
 		std::vector<ThreadAffinitySlot>							m_affinitySlots;
 		std::unique_ptr<MetricsAggregator>						m_metricsAggregator;
 		ProcessMetrics											m_processMetrics;

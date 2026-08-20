@@ -17,19 +17,8 @@ namespace jam
 		bool expected = m_queue.enqueue(std::move(j));
 		if (expected)
 		{
-			const uint64 prev = m_size.fetch_add(1, std::memory_order_relaxed);
-			if (prev == 0)
-				NotifyReadyIfFirst();
-			else if (IsProcessing())
-			{
-				if (RequestRepost())
-				{
-					if (auto owner = m_owner.lock())
-						owner->NotifyReady(m_id);
-				}
-			}
-			else
-				NotifyReadyIfFirst();
+			m_size.fetch_add(1, std::memory_order_relaxed);
+			NotifyReadyIfFirst();
 		}
 		return expected;
 	}
@@ -42,19 +31,8 @@ namespace jam
 		bool expected = m_queue.enqueue(token, std::move(j));
 		if (expected)
 		{
-			const uint64 prev = m_size.fetch_add(1, std::memory_order_relaxed);
-			if (prev == 0)
-				NotifyReadyIfFirst();
-			else if (IsProcessing())
-			{
-				if (RequestRepost())
-				{
-					if (auto owner = m_owner.lock())
-						owner->NotifyReady(m_id);
-				}
-			}
-			else
-				NotifyReadyIfFirst();
+			m_size.fetch_add(1, std::memory_order_relaxed);
+			NotifyReadyIfFirst();
 		}
 		return expected;
 	}
@@ -67,19 +45,8 @@ namespace jam
 		const bool enqueued = m_queue.try_enqueue_bulk(token, j, count);
 		if (enqueued)
 		{
-			const uint64 prev = m_size.fetch_add(count, std::memory_order_relaxed);
-			if (prev == 0)
-				NotifyReadyIfFirst();
-			else if (IsProcessing())
-			{
-				if (RequestRepost())
-				{
-					if (auto owner = m_owner.lock())
-						owner->NotifyReady(m_id);
-				}
-			}
-			else
-				NotifyReadyIfFirst();
+			m_size.fetch_add(count, std::memory_order_relaxed);
+			NotifyReadyIfFirst();
 		}
 		return enqueued ? count : 0;
 	}
@@ -159,13 +126,15 @@ namespace jam
 
 	bool Mailbox::TryBeginConsume()
 	{
-		bool expected = false;
-		return m_processing.compare_exchange_strong(expected, true, std::memory_order_relaxed);
+		// A failed claim still performs a release RMW. The current consumer's
+		// EndConsume() acquires it, so posts made while owned cannot lose a wakeup.
+		return !m_processing.exchange(true, std::memory_order_acq_rel);
 	}
 
 	void Mailbox::EndConsume()
 	{
-		m_processing.store(false, std::memory_order_relaxed);
+		// Acquire producer RMWs before releasing ownership and checking m_size.
+		m_processing.exchange(false, std::memory_order_acq_rel);
 	}
 
 	void Mailbox::OnDequeuedForExecution(uint64 count)
@@ -195,10 +164,7 @@ namespace jam
 		if (auto owner = m_owner.lock())
 		{
 			if (!owner->NotifyReady(m_id))
-			{
-				RequestRepost();
 				EndConsume();
-			}
 		}
 		else
 			EndConsume();
@@ -211,16 +177,6 @@ namespace jam
 		while (TryDequeue(ignored))
 			++discarded;
 		return discarded;
-	}
-
-	bool Mailbox::ConsumeRepostRequested()
-	{
-		return m_repostRequested.exchange(false, std::memory_order_acq_rel);
-	}
-
-	bool Mailbox::RequestRepost()
-	{
-		return !m_repostRequested.exchange(true, std::memory_order_acq_rel);
 	}
 
 	bool Mailbox::TryFinalizeClose()
@@ -255,17 +211,13 @@ namespace jam
 	bool Mailbox::NotifyReadyIfFirst()
 	{
 		if (!TryBeginConsume())
-		{
-			RequestRepost();
 			return false;
-		}
 
 		if (auto owner = m_owner.lock())
 		{
 			if (owner->NotifyReady(m_id))
 				return true;
 
-			RequestRepost();
 			EndConsume();
 			return false;
 		}

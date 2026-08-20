@@ -135,7 +135,6 @@ namespace jam
 
 		eJobPriority    Priority() const noexcept { return m_priority; }
 		void            SetPriority(eJobPriority p) noexcept { m_priority = p; }
-
 		void            Execute() noexcept { if (m_callback) (*m_callback)(); }
 
 	private:

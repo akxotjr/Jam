@@ -13,20 +13,6 @@ namespace jam
 		inline constexpr uint32 k_maxConsecutiveControlLocalPops = 10;
 	}
 
-	namespace
-	{
-		struct ShardMetricsSnapshotRequest
-		{
-			ShardExecutorMetrics snapshot{};
-			bool done = false;
-		};
-
-		struct ShardMetricsResetRequest
-		{
-			bool done = false;
-		};
-	}
-
 	ShardExecutor::ShardExecutor(const ShardExecutorConfig& config)
 			: m_config(config)
 	{
@@ -49,24 +35,10 @@ namespace jam
 		m_workerRunning.store(true, std::memory_order_release);
 		m_workerThread = std::thread([this]() { WorkerLoop(); });
 
-		{
-			std::scoped_lock guard(m_metricSyncMutex);
-			m_loopExited = false;
-		}
-
 		m_local.scheduler = m_scheduler.get();
 
 		m_thread = std::thread([this]()
 			{
-				auto markLoopExited = [this]()
-					{
-						{
-							std::scoped_lock guard(m_metricSyncMutex);
-							m_loopExited = true;
-						}
-						m_metricSyncCv.notify_all();
-					};
-
 				std::string threadName = std::format("ShardExecutor#{}", m_config.index);
 				InitThreadContext(threadName, this);
 
@@ -97,7 +69,6 @@ namespace jam
 				catch (const std::exception& ex) 
 				{
 					std::cerr << "[ShardExecutor] Bind failed: " << ex.what() << "\n";
-					markLoopExited();
 					return;
 				}
 
@@ -107,7 +78,6 @@ namespace jam
 				m_local.scheduler = nullptr;
 
 				UnbindShardContext();
-				markLoopExited();
 			});
 	}
 
@@ -140,12 +110,14 @@ namespace jam
 
 	void ShardExecutor::Submit(Job j)
 	{
+		m_ingressJobSubmitCount.fetch_add(1, std::memory_order_relaxed);
 		m_jobIngress.enqueue(std::move(j));
 		NotifyWorkAvailable();
 	}
 
 	void ShardExecutor::SubmitWorkerJob(Job j)
 	{
+		m_workerJobSubmitCount.fetch_add(1, std::memory_order_relaxed);
 		m_workerIngress.enqueue(std::move(j));
 		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
 		m_workerWakeEpoch.notify_one();
@@ -323,7 +295,7 @@ namespace jam
 		if (mailboxId == 0)
 			return false;
 
-		if (!m_readyMailboxes.enqueue(mailboxId))
+		if (!m_readyMailboxes.enqueue(ReadyMailboxEntry{ .mailboxId = mailboxId, .enqueuedAt_ns = NOW_NS() }))
 			return false;
 		NotifyWorkAvailable();
 		return true;
@@ -679,18 +651,26 @@ namespace jam
 	{
 		while (m_running.load())
 		{
+			const uint64 loopStart_ns = NOW_NS();
+			UpdateMetricsWindow(loopStart_ns, 0_ns, 0, 0, 0);
+			const uint64 ingressMovedBefore = m_metrics.ingressJobCount;
+			const uint64 mailboxMovedBefore = m_metrics.mailboxJobMoveCount;
+			const uint64 jobsExecutedBefore = m_metrics.processJobsExecCount;
 			++m_metrics.loopCount;
 			bool didWork = false;
 			const uint64 observedWakeEpoch = m_wakeEpoch.load(std::memory_order_acquire);
 			PublishDueWorkerPreWakes(NOW_NS());
 
-			didWork |= ProcessJobsOnce();
-			DrainReadyMailboxes(64, 64 * m_config.batchBudget, m_config.batchBudget);
-			didWork |= ProcessJobsOnce();
+			didWork |= ProcessJobsOnce(m_config.localExecuteBudgetPerPreTickPass);
+			DrainReadyMailboxes(
+				m_config.mailboxServiceBudgetPerLoop,
+				m_config.mailboxMoveBudgetPerLoop,
+				m_config.mailboxMoveBudgetPerMailbox);
+			didWork |= ProcessJobsOnce(m_config.localExecuteBudgetPerPreTickPass);
 
 			const uint64 pollStart_ns = NOW_NS();
 			
-			m_scheduler->Poll(m_config.batchBudget, pollStart_ns);
+			m_scheduler->Poll(m_config.schedulerPollBudgetPerLoop, pollStart_ns);
 
 			const uint64 pollCost_ns = NOW_NS() - pollStart_ns;
 			++m_metrics.schedulerPollCount;
@@ -713,7 +693,7 @@ namespace jam
 			// fiber from another thread. Drain those resumes before sleeping or
 			// starting the next executor loop.
 			const uint64 secondPollStart_ns = NOW_NS();
-			m_scheduler->Poll(m_config.batchBudget, secondPollStart_ns);
+			m_scheduler->Poll(m_config.schedulerPollBudgetPerLoop, secondPollStart_ns);
 			const uint64 secondPollCost_ns = NOW_NS() - secondPollStart_ns;
 			++m_metrics.schedulerPollCount;
 			m_metrics.schedulerPollCost_ns += secondPollCost_ns;
@@ -723,6 +703,10 @@ namespace jam
 			m_metrics.schedulerReadyRunCount = secondFiberMetrics.readyRunCount;
 			if (secondFiberMetrics.lastPollReadyRunCount > 0)
 				didWork = true;
+
+			// Preserve the pre-tick work bound while retaining additional local
+			// recovery capacity after domain deadlines and fiber resumes are serviced.
+			didWork |= ProcessJobsOnce(m_config.localRecoveryBudgetAfterTick, false);
 
 			if (!didWork)
 			{
@@ -750,6 +734,14 @@ namespace jam
 			{
 				++m_metrics.didWorkLoopCount;
 			}
+
+			const uint64 loopEnd_ns = NOW_NS();
+			UpdateMetricsWindow(
+				loopEnd_ns,
+				loopEnd_ns - loopStart_ns,
+				m_metrics.ingressJobCount - ingressMovedBefore,
+				m_metrics.mailboxJobMoveCount - mailboxMovedBefore,
+				m_metrics.processJobsExecCount - jobsExecutedBefore);
 		}
 	}
 
@@ -868,29 +860,39 @@ namespace jam
 		return true;
 	}
 
-	bool ShardExecutor::ProcessJobsOnce()
+	bool ShardExecutor::ProcessJobsOnce(int32 executeBudget, bool drainIngress)
 	{
 		++m_metrics.processJobsCallCount;
 		bool didWork = false;
 		uint64 execCount = 0;
 
-		// 1) 외부 Submit()가 넣은 ingress를 먼저 로컬로 땡김
-		didWork |= DrainIngressOnce(m_config.batchBudget);
+		if (drainIngress)
+		{
+			// 1) 외부 Submit()가 넣은 ingress를 먼저 로컬로 땡김
+			didWork |= DrainIngressOnce(m_config.ingressMoveBudgetPerLoop);
 
-		// 2) 로컬 큐가 비면 한 번 더 기회(타이밍 경합 완화)
-		if (m_jobLocalTotal.load(std::memory_order_relaxed) == 0)
-			didWork |= DrainIngressOnce(m_config.batchBudget);
+			// 2) 로컬 큐가 비면 한 번 더 기회(타이밍 경합 완화)
+			if (m_jobLocalTotal.load(std::memory_order_relaxed) == 0)
+				didWork |= DrainIngressOnce(m_config.ingressMoveBudgetPerLoop);
+		}
 
 		// 3) 실행
-		for (int32 i = 0; i < m_config.batchBudget; ++i)
+		for (int32 i = 0; i < executeBudget; ++i)
 		{
 			Job j;
 			if (!TryPopLocal(j))
 				break;
 
+			const eJobPriority priority = j.Priority();
 			j.Execute();
 			didWork = true;
 			++execCount;
+			if (priority == eJobPriority::Critical)
+				++m_metrics.jobsExecutedCritical;
+			else if (priority == eJobPriority::Control)
+				++m_metrics.jobsExecutedControl;
+			else
+				++m_metrics.jobsExecutedBackground;
 		}
 
 		m_metrics.processJobsExecCount += execCount;
@@ -932,6 +934,8 @@ namespace jam
 						}, priority));
 				}
 				movedCount = n;
+				if (n == static_cast<uint64>(budget) && !mb->IsEmpty())
+					++m_metrics.mailboxPerMailboxBudgetHitCount;
 			}
 		}
 
@@ -943,13 +947,10 @@ namespace jam
 			return movedCount;
 		}
 
-		if ((mb->ConsumeRepostRequested() || !mb->IsEmpty()) && mb->TryBeginConsume())
+		if (!mb->IsEmpty() && mb->TryBeginConsume())
 		{
 			if (!NotifyReady(mb->GetId()))
-			{
-				mb->RequestRepost();
 				mb->EndConsume();
-			}
 		}
 
 		return movedCount;
@@ -961,13 +962,15 @@ namespace jam
 		if (maxMailboxes <= 0 || totalJobBudget <= 0 || budgetPerMailbox <= 0)
 			return;
 
-		uint32 mailboxId = 0;
+		ReadyMailboxEntry readyEntry = {};
 		int32 remainingJobBudget = totalJobBudget;
+		int32 servicedMailboxes = 0;
 
-		for (int32 i = 0; i < maxMailboxes && remainingJobBudget > 0; ++i)
+		for (; servicedMailboxes < maxMailboxes && remainingJobBudget > 0; ++servicedMailboxes)
 		{
-			if (!m_readyMailboxes.try_dequeue(mailboxId))
+			if (!m_readyMailboxes.try_dequeue(readyEntry))
 				break;
+			const uint32 mailboxId = readyEntry.mailboxId;
 			if (mailboxId == 0)
 				continue;
 
@@ -975,14 +978,26 @@ namespace jam
 			if (!mailbox)
 				continue;
 
+			const uint64 now_ns = NOW_NS();
+			const uint64 readyWait_ns = readyEntry.enqueuedAt_ns != 0 && now_ns >= readyEntry.enqueuedAt_ns
+				? now_ns - readyEntry.enqueuedAt_ns
+				: 0;
+			++m_metrics.mailboxReadyWaitSampleCount;
+			m_metrics.mailboxReadyWaitTotal_ns += readyWait_ns;
+			m_metrics.mailboxReadyWaitMax_ns = std::max(m_metrics.mailboxReadyWaitMax_ns, readyWait_ns);
+
 			++m_metrics.mailboxProcessCount;
 			const int32 mailboxBudget = std::min(budgetPerMailbox, remainingJobBudget);
 			const uint64 moved = ProcessMailbox(mailbox, mailboxBudget);
 			remainingJobBudget -= static_cast<int32>(std::min<uint64>(moved, static_cast<uint64>(remainingJobBudget)));
 		}
 
-		if (remainingJobBudget < 0)
-			JAM_LOG_WARN("remaining job budget < 0");
+		const bool hasReadyBacklog = m_readyMailboxes.size_approx() != 0;
+		const bool totalJobBudgetHit = remainingJobBudget == 0 && hasReadyBacklog;
+		const bool mailboxCountBudgetHit = servicedMailboxes == maxMailboxes && hasReadyBacklog;
+		m_metrics.mailboxTotalJobBudgetHitCount += totalJobBudgetHit ? 1 : 0;
+		m_metrics.mailboxCountBudgetHitCount += mailboxCountBudgetHit ? 1 : 0;
+		m_metrics.mailboxServiceBudgetExhaustedLoopCount += totalJobBudgetHit || mailboxCountBudgetHit ? 1 : 0;
 	}
 
 	Mailbox* ShardExecutor::FindMailbox(uint32 id)
@@ -995,96 +1010,124 @@ namespace jam
 		return (it != m_mailboxes.end()) ? it->second.get() : nullptr;
 	}
 
-	bool ShardExecutor::IsShardThread() const
-	{
-		return m_thread.joinable() && m_thread.get_id() == std::this_thread::get_id();
-	}
-
-	void ShardExecutor::WaitUntilLoopExited() const
-	{
-		std::unique_lock<std::mutex> lock(m_metricSyncMutex);
-		m_metricSyncCv.wait(lock, [this]() { return m_loopExited; });
-	}
-
-	void ShardExecutor::ResetMetricsUnsafe()
+	void ShardExecutor::ResetMetricsWindow()
 	{
 		m_metrics = {};
 		m_metrics.shardIndex = m_config.index;
-
 		if (m_scheduler)
 			m_scheduler->ResetProfile();
 	}
 
-	ShardExecutorMetrics ShardExecutor::Profile() const
+	void ShardExecutor::SubmitMetricsWindow(const uint64 windowEnd_ns)
 	{
-		if (IsShardThread())
-			return m_metrics;
-
-		if (!m_running.load(std::memory_order_acquire))
-		{
-			if (m_thread.joinable())
-				WaitUntilLoopExited();
-			return m_metrics;
-		}
-
-		auto request = std::make_shared<ShardMetricsSnapshotRequest>();
-		const_cast<ShardExecutor*>(this)->Submit(Job([this, request]()
-			{
-				const auto snapshot = m_metrics;
-				{
-					std::scoped_lock guard(m_metricSyncMutex);
-					request->snapshot = snapshot;
-					request->done = true;
-				}
-				m_metricSyncCv.notify_all();
-			}, eJobPriority::Control));
-
-		std::unique_lock<std::mutex> lock(m_metricSyncMutex);
-		m_metricSyncCv.wait(lock, [this, &request]()
-			{
-				return request->done || m_loopExited;
-			});
-
-		if (request->done)
-			return request->snapshot;
-
-		return m_metrics;
+		m_metrics.ingressJobSubmitCount = m_ingressJobSubmitCount.exchange(0, std::memory_order_relaxed);
+		m_metrics.workerJobSubmitCount = m_workerJobSubmitCount.exchange(0, std::memory_order_relaxed);
+		MetricSnapshot snapshot{
+			.windowIndex = m_metricsWindowIndex,
+			.windowStartNs = m_metricsWindowStart_ns,
+			.windowEndNs = windowEnd_ns,
+			.scope = "executor_shard",
+			.shardIndex = static_cast<uint32>(m_config.index),
+			.values = {
+				{ "loop_count", m_metrics.loopCount },
+				{ "work_loop_count", m_metrics.didWorkLoopCount },
+				{ "idle_loop_count", m_metrics.idleLoopCount },
+				{ "idle_wait_ns", m_metrics.idleSleepCost_ns },
+				{ "loop_duration_ns", m_metrics.loopDurationTotal_ns },
+				{ "loop_duration_max_ns", m_metrics.loopDurationMax_ns, eMetricAggregation::Maximum },
+				{ "ingress_batch_count", m_metrics.ingressBatchCount },
+				{ "ingress_jobs_submitted", m_metrics.ingressJobSubmitCount },
+				{ "ingress_jobs_moved", m_metrics.ingressJobCount },
+				{ "worker_jobs_submitted", m_metrics.workerJobSubmitCount },
+				{ "mailbox_service_count", m_metrics.mailboxProcessCount },
+				{ "mailbox_jobs_moved", m_metrics.mailboxJobMoveCount },
+				{ "mailbox_service_budget_exhausted_loop_count", m_metrics.mailboxServiceBudgetExhaustedLoopCount },
+				{ "mailbox_total_job_budget_hit_count", m_metrics.mailboxTotalJobBudgetHitCount },
+				{ "mailbox_count_budget_hit_count", m_metrics.mailboxCountBudgetHitCount },
+				{ "mailbox_per_mailbox_budget_hit_count", m_metrics.mailboxPerMailboxBudgetHitCount },
+				{ "mailbox_ready_wait_sample_count", m_metrics.mailboxReadyWaitSampleCount },
+				{ "mailbox_ready_wait_ns", m_metrics.mailboxReadyWaitTotal_ns },
+				{ "mailbox_ready_wait_max_ns", m_metrics.mailboxReadyWaitMax_ns, eMetricAggregation::Maximum },
+				{ "jobs_executed", m_metrics.processJobsExecCount },
+				{ "process_jobs_call_count", m_metrics.processJobsCallCount },
+				{ "jobs_executed_critical", m_metrics.jobsExecutedCritical },
+				{ "jobs_executed_control", m_metrics.jobsExecutedControl },
+				{ "jobs_executed_background", m_metrics.jobsExecutedBackground },
+				{ "scheduler_poll_count", m_metrics.schedulerPollCount },
+				{ "scheduler_empty_poll_count", m_metrics.schedulerEmptyPollCount },
+				{ "scheduler_poll_ns", m_metrics.schedulerPollCost_ns },
+				{ "scheduler_ready_runs", m_metrics.schedulerReadyRunCount },
+				{ "tick_count", m_metrics.tickCount },
+				{ "tick_catch_up_count", m_metrics.tickCatchUpCount },
+				{ "ingress_queue_current", m_metrics.ingressQueueCurrent, eMetricAggregation::Latest },
+				{ "ingress_queue_peak", m_metrics.ingressQueuePeak, eMetricAggregation::Maximum },
+				{ "worker_queue_current", m_metrics.workerQueueCurrent, eMetricAggregation::Latest },
+				{ "worker_queue_peak", m_metrics.workerQueuePeak, eMetricAggregation::Maximum },
+				{ "ready_mailbox_current", m_metrics.readyMailboxCurrent, eMetricAggregation::Latest },
+				{ "ready_mailbox_peak", m_metrics.readyMailboxPeak, eMetricAggregation::Maximum },
+				{ "ready_mailbox_sample_count", m_metrics.readyMailboxSampleCount },
+				{ "ready_mailbox_sample_sum", m_metrics.readyMailboxSampleSum },
+				{ "local_critical_current", m_metrics.localCriticalCurrent, eMetricAggregation::Latest },
+				{ "local_critical_peak", m_metrics.localCriticalPeak, eMetricAggregation::Maximum },
+				{ "local_control_current", m_metrics.localControlCurrent, eMetricAggregation::Latest },
+				{ "local_control_peak", m_metrics.localControlPeak, eMetricAggregation::Maximum },
+				{ "local_background_current", m_metrics.localBackgroundCurrent, eMetricAggregation::Latest },
+				{ "local_background_peak", m_metrics.localBackgroundPeak, eMetricAggregation::Maximum },
+				{ "local_total_current", m_metrics.localTotalCurrent, eMetricAggregation::Latest },
+				{ "local_total_peak", m_metrics.localTotalPeak, eMetricAggregation::Maximum },
+				{ "ingress_moved_per_loop_max", m_metrics.ingressMovedPerLoopMax, eMetricAggregation::Maximum },
+				{ "mailbox_moved_per_loop_max", m_metrics.mailboxMovedPerLoopMax, eMetricAggregation::Maximum },
+				{ "jobs_executed_per_loop_max", m_metrics.jobsExecutedPerLoopMax, eMetricAggregation::Maximum },
+			}
+		};
+		GLOBAL_EXEC.SubmitMetrics(std::move(snapshot));
 	}
 
-	void ShardExecutor::ResetMetrics()
+	void ShardExecutor::UpdateMetricsWindow(
+		const uint64 now_ns,
+		const uint64 loopDuration_ns,
+		const uint64 ingressMoved,
+		const uint64 mailboxMoved,
+		const uint64 jobsExecuted)
 	{
-		if (IsShardThread())
-		{
-			ResetMetricsUnsafe();
+		auto* aggregator = GLOBAL_EXEC.GetMetricsAggregator();
+		if (!aggregator || !aggregator->IsEnabled())
 			return;
+
+		const uint64 windowIndex = aggregator->WindowIndex(now_ns);
+		if (m_metricsWindowIndex == UINT64_MAX)
+		{
+			m_metricsWindowIndex = windowIndex;
+			m_metricsWindowStart_ns = windowIndex * aggregator->WindowPeriodNs();
+		}
+		else if (windowIndex != m_metricsWindowIndex)
+		{
+			SubmitMetricsWindow(m_metricsWindowStart_ns + aggregator->WindowPeriodNs());
+			ResetMetricsWindow();
+			m_metricsWindowIndex = windowIndex;
+			m_metricsWindowStart_ns = windowIndex * aggregator->WindowPeriodNs();
 		}
 
-		if (!m_running.load(std::memory_order_acquire))
-		{
-			if (m_thread.joinable())
-				WaitUntilLoopExited();
-			ResetMetricsUnsafe();
-			return;
-		}
+		m_metrics.loopDurationTotal_ns += loopDuration_ns;
+		m_metrics.loopDurationMax_ns = std::max(m_metrics.loopDurationMax_ns, loopDuration_ns);
+		m_metrics.ingressMovedPerLoopMax = std::max(m_metrics.ingressMovedPerLoopMax, ingressMoved);
+		m_metrics.mailboxMovedPerLoopMax = std::max(m_metrics.mailboxMovedPerLoopMax, mailboxMoved);
+		m_metrics.jobsExecutedPerLoopMax = std::max(m_metrics.jobsExecutedPerLoopMax, jobsExecuted);
 
-		auto request = std::make_shared<ShardMetricsResetRequest>();
-		Submit(Job([this, request]()
+		auto updateGauge = [](uint64 current, uint64& gauge, uint64& peak)
 			{
-				ResetMetricsUnsafe();
-				{
-					std::scoped_lock guard(m_metricSyncMutex);
-					request->done = true;
-				}
-				m_metricSyncCv.notify_all();
-			}, eJobPriority::Control));
-
-		std::unique_lock<std::mutex> lock(m_metricSyncMutex);
-		m_metricSyncCv.wait(lock, [this, &request]()
-			{
-				return request->done || m_loopExited;
-			});
-
-		if (!request->done)
-			ResetMetricsUnsafe();
+				gauge = current;
+				peak = std::max(peak, current);
+			};
+		updateGauge(m_jobIngress.size_approx(), m_metrics.ingressQueueCurrent, m_metrics.ingressQueuePeak);
+		updateGauge(m_workerIngress.size_approx(), m_metrics.workerQueueCurrent, m_metrics.workerQueuePeak);
+		const uint64 readyMailboxCount = m_readyMailboxes.size_approx();
+		updateGauge(readyMailboxCount, m_metrics.readyMailboxCurrent, m_metrics.readyMailboxPeak);
+		++m_metrics.readyMailboxSampleCount;
+		m_metrics.readyMailboxSampleSum += readyMailboxCount;
+		updateGauge(m_jobLocalCritical.size(), m_metrics.localCriticalCurrent, m_metrics.localCriticalPeak);
+		updateGauge(m_jobLocalControl.size(), m_metrics.localControlCurrent, m_metrics.localControlPeak);
+		updateGauge(m_jobLocalBackground.size(), m_metrics.localBackgroundCurrent, m_metrics.localBackgroundPeak);
+		updateGauge(m_jobLocalTotal.load(std::memory_order_relaxed), m_metrics.localTotalCurrent, m_metrics.localTotalPeak);
 	}
 }

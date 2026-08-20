@@ -129,8 +129,10 @@ namespace jam
 			if (!shard)
 				continue;
 
+			const uint32 affinitySlotIndex = RemapExecutorAffinitySlot(i);
+
 			ThreadAffinitySlot slot = {};
-			if (!PickShardAffinitySlot(slots, i, m_config.shardCfg.numaNode, m_config.affinitySlotOffset, slot))
+			if (!PickShardAffinitySlot(slots, affinitySlotIndex, m_config.shardCfg.numaNode, m_config.affinitySlotOffset, slot))
 				continue;
 
 			shard->PinCoreSlot(slot.core, slot.numaNode);

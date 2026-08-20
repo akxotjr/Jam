@@ -22,6 +22,12 @@ namespace jam
 		CoreSlot				core	 = {};
 	};
 
+	inline uint32 RemapExecutorAffinitySlot(uint32 slotIndex)
+	{
+		constexpr uint32 kExcludedSlotIndex = 3; // Physical core containing LP 6/7.
+		return slotIndex >= kExcludedSlotIndex ? slotIndex + 1 : slotIndex;
+	}
+
 	std::vector<NodeInfo>			QueryNumaNodesWithPrimaryCoreSlots();
 	std::vector<ThreadAffinitySlot> BuildRoundRobinCoreSlots(const std::vector<NodeInfo>& nodes);
 
