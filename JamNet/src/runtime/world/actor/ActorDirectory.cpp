@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "jamnet/runtime/world/actor/ActorDirectory.h"
 
+#include <algorithm>
 #include <unordered_set>
 
 namespace jam::net
@@ -21,6 +22,10 @@ namespace jam::net
 		if (slot.entity != entt::null)
 			return slot.generation == generation && slot.entity == entity;
 
+		// GrowForBind() may have put this index in the free queue while
+		// extending the directory for a higher canonical actor ID. Once the
+		// slot is externally bound, it is no longer available for allocation.
+		m_freeSlots.erase(std::remove(m_freeSlots.begin(), m_freeSlots.end(), index), m_freeSlots.end());
 		slot.generation = generation;
 		slot.entity = entity;
 		slot.reserved = true;

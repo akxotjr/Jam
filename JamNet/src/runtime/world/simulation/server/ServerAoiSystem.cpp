@@ -315,8 +315,6 @@ namespace jam::net
 	
 	void ServerAoiSystem::ResolvePendingVisibility()
 	{
-		std::unordered_set<uint64> evaluatedUsers;
-		evaluatedUsers.reserve(m_pendingVisibility.size());
 		for (const AoiPendingVisibility& pending : m_pendingVisibility)
 		{
 			if (pending.userId == 0 || pending.actor == entt::null || !m_states.contains(pending.userId))
@@ -329,13 +327,12 @@ namespace jam::net
 				continue;
 			}
 			EvaluateVisibility(pending.userId, pending.actor);
-			evaluatedUsers.insert(pending.userId);
 		}
 
 		if (m_metrics)
 		{
-			for (const uint64 userId : evaluatedUsers)
-				m_metrics->RecordAoiNeighbors(m_states[userId].visible.size());
+			for (const UserAoiState& state : m_states | std::views::values)
+				m_metrics->RecordAoiNeighbors(state.visible.size());
 		}
 
 		m_pendingVisibility.clear();

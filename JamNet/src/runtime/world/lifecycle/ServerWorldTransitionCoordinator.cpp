@@ -1039,6 +1039,28 @@ namespace jam::net
 		if (!user) return;
 
 		auto& transition = *user->worldTransition.active;
+		switch (continuation.expectedPhase)
+		{
+		case eWorldTransitionPhase::RollingBackTarget:
+			if (transition.sourceDetached && transition.source)
+			{
+				if (!AdvanceTransition(*user, eWorldTransitionPhase::RestoringSource))
+					FinishFailure(*user);
+			}
+			else
+			{
+				FinishFailure(*user);
+			}
+			return;
+
+		case eWorldTransitionPhase::RestoringSource:
+			FinishFailure(*user);
+			return;
+
+		default:
+			break;
+		}
+
 		if (transition.terminalFailure != eWorldTransitionFailure::None)
 		{
 			if ((continuation.expectedPhase == eWorldTransitionPhase::ActivatingTarget
@@ -1144,22 +1166,6 @@ namespace jam::net
 			{
 				FailTransition(*user, eWorldTransitionFailure::InternalError);
 			}
-			return;
-
-		case eWorldTransitionPhase::RollingBackTarget:
-			if (transition.sourceDetached && transition.source)
-			{
-				if (!AdvanceTransition(*user, eWorldTransitionPhase::RestoringSource))
-					FinishFailure(*user);
-			}
-			else
-			{
-				FinishFailure(*user);
-			}
-			return;
-
-		case eWorldTransitionPhase::RestoringSource:
-			FinishFailure(*user);
 			return;
 
 		default:

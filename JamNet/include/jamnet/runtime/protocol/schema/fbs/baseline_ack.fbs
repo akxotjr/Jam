@@ -1,6 +1,6 @@
 namespace jam.net.fb;
 
-table fbBaselineAck
+struct fbBaselineAck
 {
 	actor_id       : uint;
 	baseline_rev : uint;

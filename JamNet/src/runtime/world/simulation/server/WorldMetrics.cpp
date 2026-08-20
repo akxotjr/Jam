@@ -22,6 +22,7 @@ namespace jam::net
 			eTickOverrunCount,
 			eParticipantsCurrent,
 			eParticipantsPeak,
+			eUsersCurrent,
 		};
 
 		enum eSimulationHistogram : size_t
@@ -82,6 +83,7 @@ namespace jam::net
 
 		m_simulationSnapshot.values[eParticipantsCurrent].value = participantCount;
 		m_simulationSnapshot.values[eParticipantsPeak].value = std::max(m_simulationSnapshot.values[eParticipantsPeak].value, participantCount);
+		m_simulationSnapshot.values[eUsersCurrent].value = participantCount;
 	}
 
 	void WorldMetrics::RecordAoiNeighbors(uint64 visibleActorCount)
@@ -190,6 +192,7 @@ namespace jam::net
 			{ .name = "tick_overrun_count" },
 			{ .name = "participants_current", .aggregation = eMetricAggregation::Latest },
 			{ .name = "participants_peak", .aggregation = eMetricAggregation::Maximum },
+			{ .name = "users_current", .aggregation = eMetricAggregation::Latest },
 		};
 		m_simulationSnapshot.histograms.reserve(6);
 		m_simulationSnapshot.histograms.emplace_back("tick_duration", kDurationShortConfig);

@@ -143,7 +143,7 @@ namespace jam::net
 	void ServerPhysicsSystem::Simulate()
 	{
 		if (!m_physics) return;
-
+		
 		auto& shard = CurrentShardLocalChecked();
 		auto* sched = shard.scheduler;
 

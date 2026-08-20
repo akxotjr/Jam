@@ -80,7 +80,7 @@ namespace jam::net
 					return;
 
 				job(*world);
-			}, priority));
+		}, priority));
 	}
 
 

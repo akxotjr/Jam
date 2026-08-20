@@ -18,97 +18,54 @@ namespace net {
 namespace fb {
 
 struct fbBaselineAck;
-struct fbBaselineAckBuilder;
-struct fbBaselineAckT;
 
 struct fbBaselineAckBatch;
 struct fbBaselineAckBatchBuilder;
 struct fbBaselineAckBatchT;
 
-struct fbBaselineAckT : public ::flatbuffers::NativeTable {
-  typedef fbBaselineAck TableType;
-  uint32_t actor_id = 0;
-  uint32_t baseline_rev = 0;
-  bool request_full = false;
-};
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) fbBaselineAck FLATBUFFERS_FINAL_CLASS {
+ private:
+  uint32_t actor_id_;
+  uint32_t baseline_rev_;
+  uint8_t request_full_;
+  int8_t padding0__;  int16_t padding1__;
 
-struct fbBaselineAck FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbBaselineAckT NativeTableType;
-  typedef fbBaselineAckBuilder Builder;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_ACTOR_ID = 4,
-    VT_BASELINE_REV = 6,
-    VT_REQUEST_FULL = 8
-  };
+ public:
+  fbBaselineAck()
+      : actor_id_(0),
+        baseline_rev_(0),
+        request_full_(0),
+        padding0__(0),
+        padding1__(0) {
+    (void)padding0__;
+    (void)padding1__;
+  }
+  fbBaselineAck(uint32_t _actor_id, uint32_t _baseline_rev, bool _request_full)
+      : actor_id_(::flatbuffers::EndianScalar(_actor_id)),
+        baseline_rev_(::flatbuffers::EndianScalar(_baseline_rev)),
+        request_full_(::flatbuffers::EndianScalar(static_cast<uint8_t>(_request_full))),
+        padding0__(0),
+        padding1__(0) {
+    (void)padding0__;
+    (void)padding1__;
+  }
   uint32_t actor_id() const {
-    return GetField<uint32_t>(VT_ACTOR_ID, 0);
+    return ::flatbuffers::EndianScalar(actor_id_);
   }
   uint32_t baseline_rev() const {
-    return GetField<uint32_t>(VT_BASELINE_REV, 0);
+    return ::flatbuffers::EndianScalar(baseline_rev_);
   }
   bool request_full() const {
-    return GetField<uint8_t>(VT_REQUEST_FULL, 0) != 0;
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_ACTOR_ID, 4) &&
-           VerifyField<uint32_t>(verifier, VT_BASELINE_REV, 4) &&
-           VerifyField<uint8_t>(verifier, VT_REQUEST_FULL, 1) &&
-           verifier.EndTable();
-  }
-  fbBaselineAckT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbBaselineAckT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbBaselineAck> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbBaselineAckT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct fbBaselineAckBuilder {
-  typedef fbBaselineAck Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_actor_id(uint32_t actor_id) {
-    fbb_.AddElement<uint32_t>(fbBaselineAck::VT_ACTOR_ID, actor_id, 0);
-  }
-  void add_baseline_rev(uint32_t baseline_rev) {
-    fbb_.AddElement<uint32_t>(fbBaselineAck::VT_BASELINE_REV, baseline_rev, 0);
-  }
-  void add_request_full(bool request_full) {
-    fbb_.AddElement<uint8_t>(fbBaselineAck::VT_REQUEST_FULL, static_cast<uint8_t>(request_full), 0);
-  }
-  explicit fbBaselineAckBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<fbBaselineAck> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbBaselineAck>(end);
-    return o;
+    return ::flatbuffers::EndianScalar(request_full_) != 0;
   }
 };
-
-inline ::flatbuffers::Offset<fbBaselineAck> CreatefbBaselineAck(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t actor_id = 0,
-    uint32_t baseline_rev = 0,
-    bool request_full = false) {
-  fbBaselineAckBuilder builder_(_fbb);
-  builder_.add_baseline_rev(baseline_rev);
-  builder_.add_actor_id(actor_id);
-  builder_.add_request_full(request_full);
-  return builder_.Finish();
-}
-
-::flatbuffers::Offset<fbBaselineAck> CreatefbBaselineAck(::flatbuffers::FlatBufferBuilder &_fbb, const fbBaselineAckT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+FLATBUFFERS_STRUCT_END(fbBaselineAck, 12);
 
 struct fbBaselineAckBatchT : public ::flatbuffers::NativeTable {
   typedef fbBaselineAckBatch TableType;
   uint64_t world_id = 0;
   uint64_t world_instance_id = 0;
-  std::vector<std::unique_ptr<jam::net::fb::fbBaselineAckT>> entries{};
-  fbBaselineAckBatchT() = default;
-  fbBaselineAckBatchT(const fbBaselineAckBatchT &o);
-  fbBaselineAckBatchT(fbBaselineAckBatchT&&) FLATBUFFERS_NOEXCEPT = default;
-  fbBaselineAckBatchT &operator=(fbBaselineAckBatchT o) FLATBUFFERS_NOEXCEPT;
+  std::vector<jam::net::fb::fbBaselineAck> entries{};
 };
 
 struct fbBaselineAckBatch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -125,8 +82,8 @@ struct fbBaselineAckBatch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   uint64_t world_instance_id() const {
     return GetField<uint64_t>(VT_WORLD_INSTANCE_ID, 0);
   }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbBaselineAck>> *entries() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbBaselineAck>> *>(VT_ENTRIES);
+  const ::flatbuffers::Vector<const jam::net::fb::fbBaselineAck *> *entries() const {
+    return GetPointer<const ::flatbuffers::Vector<const jam::net::fb::fbBaselineAck *> *>(VT_ENTRIES);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -135,7 +92,6 @@ struct fbBaselineAckBatch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyField<uint64_t>(verifier, VT_WORLD_INSTANCE_ID, 8) &&
            VerifyOffset(verifier, VT_ENTRIES) &&
            verifier.VerifyVector(entries()) &&
-           verifier.VerifyVectorOfTables(entries()) &&
            verifier.EndTable();
   }
   fbBaselineAckBatchT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -153,7 +109,7 @@ struct fbBaselineAckBatchBuilder {
   void add_world_instance_id(uint64_t world_instance_id) {
     fbb_.AddElement<uint64_t>(fbBaselineAckBatch::VT_WORLD_INSTANCE_ID, world_instance_id, 0);
   }
-  void add_entries(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbBaselineAck>>> entries) {
+  void add_entries(::flatbuffers::Offset<::flatbuffers::Vector<const jam::net::fb::fbBaselineAck *>> entries) {
     fbb_.AddOffset(fbBaselineAckBatch::VT_ENTRIES, entries);
   }
   explicit fbBaselineAckBatchBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
@@ -171,7 +127,7 @@ inline ::flatbuffers::Offset<fbBaselineAckBatch> CreatefbBaselineAckBatch(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint64_t world_id = 0,
     uint64_t world_instance_id = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<jam::net::fb::fbBaselineAck>>> entries = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<const jam::net::fb::fbBaselineAck *>> entries = 0) {
   fbBaselineAckBatchBuilder builder_(_fbb);
   builder_.add_world_instance_id(world_instance_id);
   builder_.add_world_id(world_id);
@@ -183,8 +139,8 @@ inline ::flatbuffers::Offset<fbBaselineAckBatch> CreatefbBaselineAckBatchDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint64_t world_id = 0,
     uint64_t world_instance_id = 0,
-    const std::vector<::flatbuffers::Offset<jam::net::fb::fbBaselineAck>> *entries = nullptr) {
-  auto entries__ = entries ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbBaselineAck>>(*entries) : 0;
+    const std::vector<jam::net::fb::fbBaselineAck> *entries = nullptr) {
+  auto entries__ = entries ? _fbb.CreateVectorOfStructs<jam::net::fb::fbBaselineAck>(*entries) : 0;
   return jam::net::fb::CreatefbBaselineAckBatch(
       _fbb,
       world_id,
@@ -193,52 +149,6 @@ inline ::flatbuffers::Offset<fbBaselineAckBatch> CreatefbBaselineAckBatchDirect(
 }
 
 ::flatbuffers::Offset<fbBaselineAckBatch> CreatefbBaselineAckBatch(::flatbuffers::FlatBufferBuilder &_fbb, const fbBaselineAckBatchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
-inline fbBaselineAckT *fbBaselineAck::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbBaselineAckT>(new fbBaselineAckT());
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void fbBaselineAck::UnPackTo(fbBaselineAckT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = actor_id(); _o->actor_id = _e; }
-  { auto _e = baseline_rev(); _o->baseline_rev = _e; }
-  { auto _e = request_full(); _o->request_full = _e; }
-}
-
-inline ::flatbuffers::Offset<fbBaselineAck> CreatefbBaselineAck(::flatbuffers::FlatBufferBuilder &_fbb, const fbBaselineAckT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbBaselineAck::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<fbBaselineAck> fbBaselineAck::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbBaselineAckT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbBaselineAckT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _actor_id = _o->actor_id;
-  auto _baseline_rev = _o->baseline_rev;
-  auto _request_full = _o->request_full;
-  return jam::net::fb::CreatefbBaselineAck(
-      _fbb,
-      _actor_id,
-      _baseline_rev,
-      _request_full);
-}
-
-inline fbBaselineAckBatchT::fbBaselineAckBatchT(const fbBaselineAckBatchT &o)
-      : world_id(o.world_id),
-        world_instance_id(o.world_instance_id) {
-  entries.reserve(o.entries.size());
-  for (const auto &entries_ : o.entries) { entries.emplace_back((entries_) ? new jam::net::fb::fbBaselineAckT(*entries_) : nullptr); }
-}
-
-inline fbBaselineAckBatchT &fbBaselineAckBatchT::operator=(fbBaselineAckBatchT o) FLATBUFFERS_NOEXCEPT {
-  std::swap(world_id, o.world_id);
-  std::swap(world_instance_id, o.world_instance_id);
-  std::swap(entries, o.entries);
-  return *this;
-}
 
 inline fbBaselineAckBatchT *fbBaselineAckBatch::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::unique_ptr<fbBaselineAckBatchT>(new fbBaselineAckBatchT());
@@ -251,7 +161,7 @@ inline void fbBaselineAckBatch::UnPackTo(fbBaselineAckBatchT *_o, const ::flatbu
   (void)_resolver;
   { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = world_instance_id(); _o->world_instance_id = _e; }
-  { auto _e = entries(); if (_e) { _o->entries.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->entries[_i]) { _e->Get(_i)->UnPackTo(_o->entries[_i].get(), _resolver); } else { _o->entries[_i] = std::unique_ptr<jam::net::fb::fbBaselineAckT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->entries.resize(0); } }
+  { auto _e = entries(); if (_e) { _o->entries.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->entries[_i] = *_e->Get(_i); } } else { _o->entries.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<fbBaselineAckBatch> CreatefbBaselineAckBatch(::flatbuffers::FlatBufferBuilder &_fbb, const fbBaselineAckBatchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -264,7 +174,7 @@ inline ::flatbuffers::Offset<fbBaselineAckBatch> fbBaselineAckBatch::Pack(::flat
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbBaselineAckBatchT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _world_id = _o->world_id;
   auto _world_instance_id = _o->world_instance_id;
-  auto _entries = _o->entries.size() ? _fbb.CreateVector<::flatbuffers::Offset<jam::net::fb::fbBaselineAck>> (_o->entries.size(), [](size_t i, _VectorArgs *__va) { return CreatefbBaselineAck(*__va->__fbb, __va->__o->entries[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _entries = _o->entries.size() ? _fbb.CreateVectorOfStructs(_o->entries) : 0;
   return jam::net::fb::CreatefbBaselineAckBatch(
       _fbb,
       _world_id,

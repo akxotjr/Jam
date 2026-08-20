@@ -782,31 +782,55 @@ namespace jam::net
 		if (!world.IsValid())
 			return;
 
-		flatbuffers::FlatBufferBuilder fbb;
-		std::vector<flatbuffers::Offset<fb::fbBaselineAck>> entries;
-		std::vector<ActorId> sentActorIds;
 		constexpr size_t kBaselineFeedbackBatchSize = 96;
-		entries.reserve(std::min(m_pendingBaselineFeedback.size(), kBaselineFeedbackBatchSize));
-		sentActorIds.reserve(entries.capacity());
+
+		std::vector<std::pair<ActorId, PendingBaselineFeedback>> pending;
+		pending.reserve(m_pendingBaselineFeedback.size());
 		for (const auto& [actorId, feedback] : m_pendingBaselineFeedback)
+			pending.emplace_back(actorId, feedback);
+
+		auto buildPayload = [&](size_t offset, size_t count, flatbuffers::FlatBufferBuilder& fbb)
+			{
+				std::vector<fb::fbBaselineAck> entries;
+				entries.reserve(count);
+				for (size_t i = 0; i < count; ++i)
+				{
+					const auto& [actorId, feedback] = pending[offset + i];
+					entries.emplace_back(actorId.Value(), feedback.baselineRev, feedback.requestFull);
+				}
+
+				const auto entryVector = fbb.CreateVectorOfStructs(entries);
+				const auto batch = fb::CreatefbBaselineAckBatch(fbb, world.worldId, world.instance.instanceId.value, entryVector);
+				fbb.Finish(batch, fb::fbBaselineAckBatchIdentifier());
+			};
+
+		for (size_t offset = 0; offset < pending.size();)
 		{
-			entries.push_back(fb::CreatefbBaselineAck(fbb, actorId.Value(), feedback.baselineRev, feedback.requestFull));
-			sentActorIds.push_back(actorId);
-			if (entries.size() >= kBaselineFeedbackBatchSize)
-				break;
+			const size_t batchCount = std::min(kBaselineFeedbackBatchSize, pending.size() - offset);
+
+			flatbuffers::FlatBufferBuilder fbb;
+			buildPayload(offset, batchCount, fbb);
+			if (fbb.GetSize() > MAX_PAYLOAD_SIZE)
+			{
+				JAM_LOG_WARN("[BaselineFeedback] ACK batch exceeds MTU payload budget. entries={}, payloadSize={}, maxPayloadSize={}",
+					batchCount, fbb.GetSize(), MAX_PAYLOAD_SIZE);
+				return;
+			}
+
+			auto packet = PacketBuilder::CreateCustomPacket(
+				CustomPacketId::BASELINE_ACK,
+				PacketFlags::NONE,
+				eChannel::RELIABLE_ORDERED,
+				fbb.GetBufferPointer(),
+				fbb.GetSize());
+			if (!packet.IsValid())
+				return;
+
+			m_netWorld->Send(std::move(packet));
+			for (size_t i = 0; i < batchCount; ++i)
+				m_pendingBaselineFeedback.erase(pending[offset + i].first);
+			offset += batchCount;
 		}
-
-		const auto entryVector = fbb.CreateVector(entries);
-		const auto batch = fb::CreatefbBaselineAckBatch(fbb, world.worldId, world.instance.instanceId.value, entryVector);
-		fbb.Finish(batch, fb::fbBaselineAckBatchIdentifier());
-
-		auto packet = PacketBuilder::CreateCustomPacket(CustomPacketId::BASELINE_ACK, PacketFlags::NONE, eChannel::RELIABLE_ORDERED, fbb.GetBufferPointer(), fbb.GetSize());
-		if (!packet.IsValid())
-			return;
-
-		m_netWorld->Send(std::move(packet));
-		for (const ActorId actorId : sentActorIds)
-			m_pendingBaselineFeedback.erase(actorId);
 	}
 
 	Replica& ClientReplicationSystem::GetOrCreateReplica(ActorId actorId, bool* created)
