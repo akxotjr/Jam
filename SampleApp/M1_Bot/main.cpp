@@ -22,7 +22,9 @@ namespace
 	{
 		std::cout << "Usage: M1_Bot.exe baseline\n";
 		std::cout << "Usage: M1_Bot.exe <target|peak|stress|aoi-hotspot|portal-burst> <botCount>\n";
+		std::cout << "Usage: M1_Bot.exe target <botCount> --fast\n";
 		std::cout << "  baseline: 300 bots, 3-minute measurement\n";
+		std::cout << "  --fast: 1-minute warm-up, 3-minute measurement\n";
 		std::cout << "  botCount: 1-4000\n";
 	}
 
@@ -92,10 +94,11 @@ int main(int argc, char* argv[])
 {
 	BotRunnerConfig botConfig{};
 	const bool baseline = argc == 2 && std::string_view(argv[1]) == "baseline";
-	const auto profile = (baseline || argc == 3) ? ParseProfile(argv[1]) : std::nullopt;
+	const bool fast = argc == 4 && std::string_view(argv[1]) == "target" && std::string_view(argv[3]) == "--fast";
+	const auto profile = (baseline || argc == 3 || fast) ? ParseProfile(argv[1]) : std::nullopt;
 	if (baseline)
 		botConfig.botCount = 300;
-	else if (argc == 3 && !ParseUInt32(argv[2], botConfig.botCount))
+	else if ((argc == 3 || fast) && !ParseUInt32(argv[2], botConfig.botCount))
 	{
 		PrintUsage();
 		return -1;
@@ -109,6 +112,8 @@ int main(int argc, char* argv[])
 	botConfig.profile = *profile;
 	botConfig.connectPerSecond = 100;
 	botConfig.randomSeed = 1;
+
+	//botConfig.serverIp = "119.198.44.208";
 
 	jam::net::RuntimeConfig runtimeConfig{
 		.geConfig = {
@@ -138,8 +143,8 @@ int main(int argc, char* argv[])
 
 	constexpr auto kRampSettleTimeout = std::chrono::minutes(5);
 
-	const auto warmUpDuration		 = baseline ? std::chrono::minutes(1) : std::chrono::minutes(5);
-	const auto measurementDuration	 = baseline ? std::chrono::minutes(3) : std::chrono::minutes(30);
+	const auto warmUpDuration		 = (baseline || fast) ? std::chrono::minutes(1) : std::chrono::minutes(5);
+	const auto measurementDuration	 = (baseline || fast) ? std::chrono::minutes(3) : std::chrono::minutes(30);
 	const auto runStartedAt			 = std::chrono::steady_clock::now();
 	const auto scheduledRampDuration = std::chrono::seconds((botConfig.botCount + botConfig.connectPerSecond - 1) / botConfig.connectPerSecond);
 	const auto rampDeadline			 = runStartedAt + scheduledRampDuration + kRampSettleTimeout;

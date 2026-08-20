@@ -25,8 +25,12 @@ namespace m1::shared
 		const uint64_t ordinal = accountId >= kBotAccountBegin ? accountId - kBotAccountBegin : accountId;
 		const uint64_t hash = ordinal * 2654435761ull;
 		const float phase = 0.25f + static_cast<float>(hash % 10'000) * 0.5f / 10'000.0f;
+		// Rotate each lane-sized account block so world and lane modulo assignments do not correlate.
+		const uint32_t laneIndex = laneCount != 0
+			? static_cast<uint32_t>((ordinal + ordinal / laneCount) % laneCount)
+			: 0;
 		return {
-			.laneIndex = laneCount != 0 ? static_cast<uint32_t>(ordinal % laneCount) : 0,
+			.laneIndex = laneIndex,
 			.phase = phase,
 			.reverse = ((hash / 50'000) & 1ull) != 0,
 			.startDelayMs = static_cast<uint32_t>((hash / 10'000) % 5'000),

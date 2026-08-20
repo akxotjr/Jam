@@ -432,6 +432,13 @@ void BotScenario::BeginPortalApproach(BotClient& client)
 		});
 
 	const BotPortalApproach& portal = portalIt != portals.end() ? *portalIt : portals.front();
+
+	//JAM_LOG_INFO(
+	//	"Bot portal: account={}, current={}, previous={}, target={}",
+	//	client.GetAccountId(),
+	//	m_currentWorld.instanceId.value,
+	//	m_previousWorld.instanceId.value,
+	//	portal.destinationWorld.instanceId.value);
 	
 	m_expectedWorld = portal.destinationWorld;
 	m_portalTarget = portal.position;

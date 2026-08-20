@@ -21,7 +21,6 @@ namespace
 		switch (profile)
 		{
 		case eBotProfile::Baseline:
-		case eBotProfile::Target:
 			config.chat.intervalMs		 = 10'000;
 			config.chat.textLength		 = 64;
 			config.movement.moveDuration = { .fixedMs = 1'000 };
@@ -29,6 +28,18 @@ namespace
 			config.movement.worldStayDuration = { 20'000, 30'000 };
 			
 			globalEnd = (botCount * 3 + 9) / 10;
+			worldEnd  = (botCount * 8 + 9) / 10;
+			break;
+
+		case eBotProfile::Target:
+			config.chat.intervalMs		 = 10'000;
+			config.chat.textLength		 = 64;
+			config.movement.moveDuration = { .fixedMs = 1'000 };
+			config.movement.idleDuration = { 1'000, 1'000 };
+			config.movement.worldStayDuration = { 20'000, 30'000 };
+
+			//globalEnd = (botCount * 3 + 9) / 10;
+			globalEnd = 0;
 			worldEnd  = (botCount * 8 + 9) / 10;
 			break;
 

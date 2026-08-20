@@ -100,7 +100,7 @@
       "portal_destinations": {
         "left": {
           "world_archetype": "Field",
-          "destination_name": "field-03"
+          "destination_name": "field-10"
         },
         "right": {
           "world_archetype": "Field",
@@ -127,6 +127,97 @@
         "left": {
           "world_archetype": "Field",
           "destination_name": "field-02"
+        },
+        "right": {
+          "world_archetype": "Field",
+          "destination_name": "field-04"
+        }
+      }
+    },
+    "field-04": {
+      "world_archetype": "Field",
+      "portal_destinations": {
+        "left": {
+          "world_archetype": "Field",
+          "destination_name": "field-03"
+        },
+        "right": {
+          "world_archetype": "Field",
+          "destination_name": "field-05"
+        }
+      }
+    },
+    "field-05": {
+      "world_archetype": "Field",
+      "portal_destinations": {
+        "left": {
+          "world_archetype": "Field",
+          "destination_name": "field-04"
+        },
+        "right": {
+          "world_archetype": "Field",
+          "destination_name": "field-06"
+        }
+      }
+    },
+    "field-06": {
+      "world_archetype": "Field",
+      "portal_destinations": {
+        "left": {
+          "world_archetype": "Field",
+          "destination_name": "field-05"
+        },
+        "right": {
+          "world_archetype": "Field",
+          "destination_name": "field-07"
+        }
+      }
+    },
+    "field-07": {
+      "world_archetype": "Field",
+      "portal_destinations": {
+        "left": {
+          "world_archetype": "Field",
+          "destination_name": "field-06"
+        },
+        "right": {
+          "world_archetype": "Field",
+          "destination_name": "field-08"
+        }
+      }
+    },
+    "field-08": {
+      "world_archetype": "Field",
+      "portal_destinations": {
+        "left": {
+          "world_archetype": "Field",
+          "destination_name": "field-07"
+        },
+        "right": {
+          "world_archetype": "Field",
+          "destination_name": "field-09"
+        }
+      }
+    },
+    "field-09": {
+      "world_archetype": "Field",
+      "portal_destinations": {
+        "left": {
+          "world_archetype": "Field",
+          "destination_name": "field-08"
+        },
+        "right": {
+          "world_archetype": "Field",
+          "destination_name": "field-10"
+        }
+      }
+    },
+    "field-10": {
+      "world_archetype": "Field",
+      "portal_destinations": {
+        "left": {
+          "world_archetype": "Field",
+          "destination_name": "field-09"
         },
         "right": {
           "world_archetype": "Field",

@@ -7,7 +7,7 @@
       "persistent": true,
       "destroy_when_empty": false,
       "is_private": false,
-      "capacity": 200
+      "capacity": 400
     }
   }
 }

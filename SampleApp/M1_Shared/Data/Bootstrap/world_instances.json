@@ -16,6 +16,41 @@
       "archetype": "Field",
       "startup": "bootstrap",
       "lifecycle": "persistent"
+    },
+    "field-04": {
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
+    },
+    "field-05": {
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
+    },
+    "field-06": {
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
+    },
+    "field-07": {
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
+    },
+    "field-08": {
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
+    },
+    "field-09": {
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
+    },
+    "field-10": {
+      "archetype": "Field",
+      "startup": "bootstrap",
+      "lifecycle": "persistent"
     }
   }
 }
