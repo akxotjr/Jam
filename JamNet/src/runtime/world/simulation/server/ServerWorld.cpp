@@ -633,11 +633,6 @@ namespace jam::net
 			if (completion) completion(actorId, failure);
 	}
 
-	void ServerWorld::OnUserEntered(UserId userId)
-	{
-		EnsureUserAoiRegistration(userId);
-	}
-
 	void ServerWorld::OnUserLeft(UserId userId)
 	{
 		if (auto* input = m_registry.ctx().find<ServerInputSystem>())

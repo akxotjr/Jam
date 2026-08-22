@@ -123,7 +123,6 @@ namespace jam::net
 			B0_MustSendFull,
 			B1_HighDelta,
 			B2_NormalDelta,
-			B3_LowPriority,
 			Count
 		};
 
@@ -145,7 +144,7 @@ namespace jam::net
 		flatbuffers::Offset<fb::fbActorMeta>            BuildActorMeta(entt::entity e, uint64 userId);
 		flatbuffers::Offset<fb::fbLifecycleActor>       BuildLifecycleActor(const PendingLifecycleEvent& event, entt::entity e, ActorId actorId, uint64 userId);
 		flatbuffers::Offset<fb::fbActorEntity>          BuildFullActorEntity(entt::entity e, uint64 userId);
-		flatbuffers::Offset<fb::fbActorEntity>          BuildDeltaActorEntity(entt::entity e, uint64 userId);
+		flatbuffers::Offset<fb::fbActorEntity>          BuildDeltaActorEntity(entt::entity e, uint64 userId, OUT bool& builtFull);
 
 		const ReplicationUserState*                     FindUserState(uint64 userId) const;
 		ReplicationUserState*                           FindUserState(uint64 userId);
@@ -183,7 +182,7 @@ namespace jam::net
 	private:
 		entt::registry&                                                             m_world;
 		std::unique_ptr<flatbuffers::FlatBufferBuilder>                             m_fbb;
-		ServerWorld*                                                        m_netWorld      = nullptr;
+		ServerWorld*																m_netWorld      = nullptr;
 		ServerInputSystem*                                                          m_inputSys      = nullptr;
 		ServerAoiSystem*                                                            m_aoiSys        = nullptr;
 		ServerPhysicsSystem*                                                        m_physSys       = nullptr;
@@ -197,12 +196,12 @@ namespace jam::net
         std::unordered_map<entt::entity, ActorId>                                     m_actorFrameActorIds;           // Reverse lookup for frame cache cleanup.
 
 		std::vector<uint64>                                                         m_knownUsersScratch;          // Reused alive known-user list for actor fan-out.
-        std::unordered_set<ActorId>                                                   m_sentThisTickScratch;        // Dedup of actors already emitted for one user this tick.
+        std::unordered_set<ActorId>                                                 m_sentThisTickScratch;        // Dedup of actors already emitted for one user this tick.
         std::unordered_set<uint32>                                                  m_enteredScratch;             // AOI entered set for quick full-send checks.
         std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)>     m_candidateBucketsScratch;    // Reused candidate buckets by priority.
         std::vector<Candidate>                                                      m_orderedCandidatesScratch;   // Reused flattened candidate list.
         std::vector<flatbuffers::Offset<fb::fbActorEntity>>                         m_actorOffsScratch;           // Reused FlatBuffer actor offsets for one packet.
-		std::vector<ActorId>															m_fullActorIdsScratch;
+		std::vector<ActorId>														m_fullActorIdsScratch;
         std::vector<entt::entity>                                                   m_dirtyActorFrameScratch;     // Dirty actor list for incremental frame-cache updates.
         std::unordered_set<entt::entity>                                            m_dirtyActorFrameDedup;       // Dedup set backing dirty actor list.
         std::unordered_set<entt::entity>                                            m_prevActiveActors;           // Active actors from previous physics tick.

@@ -66,7 +66,6 @@ namespace jam::net
 		void								Tick() override;
 		void								DispatchPhysicsEvents(std::span<const px::PhysicsEvent> events);
 
-		void								OnUserEntered(UserId userId) override;
 		void								OnUserLeft(UserId userId) override;
 		void								BootstrapLevelActors();
 

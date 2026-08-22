@@ -242,6 +242,7 @@ namespace jam::px
 		void                            CompactCellSubscribersIfNeeded(uint64 cellKey);
 		void                            CompactVisibleUsersIfNeeded(entt::entity actor);
 		void                            CompactVisibleActorsIfNeeded(uint64 userId);
+		void                            FlushPendingCompactions();
 		AoiVisibilityKey                MakeVisibilityKey(uint64 userId, entt::entity actor) const;
 
 	private:
@@ -277,5 +278,9 @@ namespace jam::px
 		std::unordered_set<uint64>											m_dirtyUserDedup;
 		std::unordered_set<entt::entity>									m_dirtyActorDedup;
 		std::unordered_set<AoiVisibilityKey, AoiVisibilityKeyHash>			m_pendingVisibilityDedup;
+		std::unordered_set<uint64>											m_pendingCellActorCompactions;
+		std::unordered_set<uint64>											m_pendingCellSubscriberCompactions;
+		std::unordered_set<entt::entity>									m_pendingVisibleUserCompactions;
+		std::unordered_set<uint64>											m_pendingVisibleActorCompactions;
 	};
 }

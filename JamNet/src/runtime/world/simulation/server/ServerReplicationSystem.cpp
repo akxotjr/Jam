@@ -84,7 +84,7 @@ namespace jam::net
 
 	void ServerReplicationSystem::CaptureSnapshot()
 	{
-		if (!m_netWorld || !m_aoiSys) return;
+		if (!m_netWorld || !m_inputSys || !m_aoiSys) return;
 
 		RefreshActorFrameCache();
 
@@ -92,35 +92,34 @@ namespace jam::net
 
 		if (m_userStates.empty()) return;
 
-		auto* inputSys = m_inputSys;
-
-		for (auto& [user, userState] : m_userStates)
+		for (auto& [userId, userState] : m_userStates)
 		{
-			if (userState.phase == eReplicationPhase::AwaitingPlayer
-				|| userState.phase == eReplicationPhase::Suspended)
+			if (userState.phase == eReplicationPhase::AwaitingPlayer || userState.phase == eReplicationPhase::Suspended)
 				continue;
+
 			if (userState.phase == eReplicationPhase::NeedsResync)
 			{
 				userState.baselineDelivery.clear();
 				userState.phase = eReplicationPhase::InitialSync;
 			}
-			const uint32 ack		= inputSys ? inputSys->LastAppliedSeq(user) : 0;
-			const uint32 inputEpoch = inputSys ? inputSys->LastAppliedControlRevision(user) : 0;
+
+			const uint32 ack		= m_inputSys->LastAppliedSeq(userId);
+			const uint32 inputEpoch = m_inputSys->LastAppliedControlRevision(userId);
 
 			m_sentThisTickScratch.clear();
 			m_sentThisTickScratch.reserve(256);
 
 			m_enteredScratch.clear();
 
-			if (const UserAoiState* st = m_aoiSys->GetState(user))
+			if (const UserAoiState* st = m_aoiSys->GetState(userId))
 			{
 				m_enteredScratch.reserve(st->entered.size());
 				for (const ActorId id : st->entered)
 					m_enteredScratch.insert(id.Value());
 			}
 
-			QueueLifecycleForVisibleActors(user);
-			EmitPendingLifecyclePackets(user, tick);
+			QueueLifecycleForVisibleActors(userId);
+			EmitPendingLifecyclePackets(userId, tick);
 
 			for (auto& bucket : m_candidateBucketsScratch)
 				bucket.clear();
@@ -132,7 +131,7 @@ namespace jam::net
 					return;
 
 				const uint32 actorEpoch		 = GetActorFullEpoch(actorFrame->e, actorId);
-				const bool baselineInvalid = !CanSendDelta(user, actorId, actorEpoch);
+				const bool baselineInvalid = !CanSendDelta(userId, actorId, actorEpoch);
 
 				const bool enteredNow = m_enteredScratch.contains(actorId.Value());
 
@@ -140,7 +139,7 @@ namespace jam::net
 
 				if (baselineInvalid || enteredNow)
 				{
-					if (!ShouldSendFull(user, actorId, actorEpoch))
+					if (!ShouldSendFull(userId, actorId, actorEpoch))
 						return;
 					c.useFull = true;
 					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B0_MustSendFull)].push_back(c);
@@ -148,10 +147,7 @@ namespace jam::net
 				}
 
 				if (!actorFrame->isActive)
-				{
-					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B3_LowPriority)].push_back(c);
 					return;
-				}
 
 				if (actorFrame->bodyType == px::eBodyType::Character)
 					m_candidateBucketsScratch[static_cast<size_t>(eBucket::B1_HighDelta)].push_back(c);
@@ -160,7 +156,7 @@ namespace jam::net
 			};
 
 
-			if (const auto* visibleActors = m_aoiSys->GetVisibleActors(user))
+			if (const auto* visibleActors = m_aoiSys->GetVisibleActors(userId))
 			{
 				for (const AoiVisibleActorSlot& slot : *visibleActors)
 				{
@@ -171,7 +167,7 @@ namespace jam::net
 			}
 
 			m_orderedCandidatesScratch.clear();
-			m_orderedCandidatesScratch.reserve(m_candidateBucketsScratch[0].size() + m_candidateBucketsScratch[1].size() + m_candidateBucketsScratch[2].size() + m_candidateBucketsScratch[3].size());
+			m_orderedCandidatesScratch.reserve(m_candidateBucketsScratch[0].size() + m_candidateBucketsScratch[1].size() + m_candidateBucketsScratch[2].size());
 
 			auto appendAll = [&](eBucket bucket)
 			{
@@ -182,7 +178,6 @@ namespace jam::net
 			appendAll(eBucket::B0_MustSendFull);
 			appendAll(eBucket::B1_HighDelta);
 			appendAll(eBucket::B2_NormalDelta);
-			appendAll(eBucket::B3_LowPriority);
 
 			if (m_orderedCandidatesScratch.empty())
 				continue;
@@ -213,7 +208,7 @@ namespace jam::net
 					const size_t est = estimateActorBytes(c);
 					if (est > kPacketPayloadBudget)
 					{
-						JAM_LOG_WARN("[Snapshot] single actor too large. user={}, actorId={}", user, c.actorId.Value());
+						JAM_LOG_WARN("[Snapshot] single actor too large. user={}, actorId={}", userId, c.actorId.Value());
 						continue;
 					}
 
@@ -258,16 +253,17 @@ namespace jam::net
 				for (const PlannedSnapshotCandidate& c : plannedChunks[chunkIndex].candidates)
 				{
 					flatbuffers::Offset<fb::fbActorEntity> off = 0;
+					bool builtFull = c.useFull;
 					if (c.useFull)
-						off = BuildFullActorEntity(c.e, user);
+						off = BuildFullActorEntity(c.e, userId);
 					else
-						off = BuildDeltaActorEntity(c.e, user);
+						off = BuildDeltaActorEntity(c.e, userId, builtFull);
 
 					if (off.IsNull())
 						continue;
 
 					m_actorOffsScratch.push_back(off);
-					if (c.useFull)
+					if (builtFull)
 						m_fullActorIdsScratch.push_back(c.actorId);
 				}
 
@@ -283,13 +279,13 @@ namespace jam::net
 				if (!pkt.IsValid())
 					continue;
 
-				m_netWorld->SendTo(pkt, user);
+				m_netWorld->SendTo(pkt, userId);
 				m_metrics->RecordSnapshotPacket(pkt->Size(), m_actorOffsScratch.size(), m_fullActorIdsScratch.size());
 				for (const ActorId actorId : m_fullActorIdsScratch)
-					MarkFullStateSent(user, actorId);
+					MarkFullStateSent(userId, actorId);
 			}
 
-			TryCompleteInitialSync(user);
+			TryCompleteInitialSync(userId);
 		}
 
 		uint64 pendingLifecycleTotal = 0;
@@ -807,27 +803,33 @@ namespace jam::net
 		return 0;
 	}
 
-	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildDeltaActorEntity(entt::entity e, uint64 userId)
+	flatbuffers::Offset<fb::fbActorEntity> ServerReplicationSystem::BuildDeltaActorEntity(entt::entity e, uint64 userId, OUT bool& builtFull)
 	{
+		builtFull = false;
+		const auto buildFull = [&]()
+		{
+			builtFull = true;
+			return BuildFullActorEntity(e, userId);
+		};
+
 		const ActorId actorId = m_world.get<ActorId>(e);
 		auto* userStatePtr = FindUserState(userId);
 		if (!userStatePtr || userStatePtr->phase != eReplicationPhase::Streaming)
-			return BuildFullActorEntity(e, userId);
-		auto& userState = *userStatePtr;
+			return buildFull();
 
 		if (const auto* cs = m_world.try_get<CharAuthorityState>(e))
 		{
 			const auto& state = cs->state;
 			auto& sharedState = m_sharedCharacterStates[actorId];
 			if (!CanSendDelta(userId, actorId, sharedState.fullEpoch) || !sharedState.hasBaseline)
-				return BuildFullActorEntity(e, userId);
+				return buildFull();
 
 			if (!sharedState.hasPackedDelta || sharedState.lastDeltaSourceState != state)
 			{
 				if (!PackCharacterDelta128(sharedState.baseline.pos, sharedState.baseline.bodyYaw, sharedState.baseline.viewYaw, sharedState.baseline.pitch, state, sharedState.packedDelta))
 				{
 					sharedState.hasBaseline = false;
-					return BuildFullActorEntity(e, userId);
+					return buildFull();
 				}
 				sharedState.lastDeltaSourceState = state;
 				sharedState.hasPackedDelta = true;
@@ -842,7 +844,7 @@ namespace jam::net
 			auto& state = rs->state;
 			auto& sharedState = m_sharedRigidStates[actorId];
 			if (!CanSendDelta(userId, actorId, sharedState.fullEpoch))
-				return BuildFullActorEntity(e, userId);
+				return buildFull();
 
 			if (px::IsLocalDrivenKine(state.kineType))
 			{
@@ -862,14 +864,14 @@ namespace jam::net
 			}
 
 			if (!sharedState.hasBaseline)
-				return BuildFullActorEntity(e, userId);
+				return buildFull();
 
 			if (!sharedState.hasPackedDelta || sharedState.lastDeltaSourceState != state)
 			{
 				if (!PackRigidDelta128(sharedState.baseline.pos, sharedState.baseline.rot, state, sharedState.packedDelta))
 				{
 					sharedState.hasBaseline = false;
-					return BuildFullActorEntity(e, userId);
+					return buildFull();
 				}
 				sharedState.lastDeltaSourceState = state;
 				sharedState.hasPackedDelta = true;
@@ -1000,8 +1002,11 @@ namespace jam::net
 		const UserAoiState* state = m_aoiSys->GetState(userId);
 		if (!state) return;
 
+		const bool reconcileVisibleActors = userState && userState->phase == eReplicationPhase::InitialSync;
+
 		std::unordered_set<uint32> enteredSet;
-		enteredSet.reserve(state->entered.size());
+		if (reconcileVisibleActors)
+			enteredSet.reserve(state->entered.size());
 
 		for (const ActorId id : state->left)
 			QueueRemovalForUser(userId, id, fb::fbRemovalReason_AoiLeft);
@@ -1011,7 +1016,8 @@ namespace jam::net
 			if (!id.IsValid())
 				continue;
 
-			enteredSet.insert(id.Value());
+			if (reconcileVisibleActors)
+				enteredSet.insert(id.Value());
 			CancelRemovalForUser(userId, id);
 
 			if (isKnownActor(id))
@@ -1020,6 +1026,11 @@ namespace jam::net
 				QueueLifecycleCreateForUser(userId, id);
 		}
 
+		if (!reconcileVisibleActors)
+			return;
+
+		// Initial sync and resync reconcile the complete AOI state. Streaming users
+		// advance lifecycle state exclusively through the entered/left event stream.
 		for (const ActorId id : state->visible)
 		{
 			if (!id.IsValid() || enteredSet.contains(id.Value()))
@@ -1225,12 +1236,22 @@ namespace jam::net
 		if (!actorId.IsValid())
 			return;
 
-		for (auto& userState : m_userStates | std::views::values)
+		auto knownUsersIt = m_knownUsersByActor.find(actorId);
+		if (knownUsersIt == m_knownUsersByActor.end())
+			return;
+
+		for (const KnownUserSlot& slot : knownUsersIt->second)
 		{
-			userState.knownActors.erase(actorId);
-			userState.baselineDelivery.erase(actorId);
+			if (!slot.alive)
+				continue;
+
+			if (auto* userState = FindUserState(slot.userId))
+			{
+				userState->knownActors.erase(actorId);
+				userState->baselineDelivery.erase(actorId);
+			}
 		}
-		m_knownUsersByActor.erase(actorId);
+		m_knownUsersByActor.erase(knownUsersIt);
 	}
 
 	bool ServerReplicationSystem::CanSendDelta(uint64 userId, ActorId actorId, uint32 fullEpoch) const

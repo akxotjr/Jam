@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "jamnet/runtime/world/simulation/server/ServerInputSystem.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
-#include "jamnet/runtime/world/simulation/common/WorldContext.h"
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
 
 #include <cmath>
@@ -19,9 +18,10 @@ namespace jam::net
 		{
 			if (!std::isfinite(intent.moveReferenceYaw) || !std::isfinite(intent.viewYaw) || !std::isfinite(intent.viewPitch))
 				return false;
-			if (intent.viewPolicy != eCharacterViewPolicy::FollowMovement
-				&& intent.viewPolicy != eCharacterViewPolicy::Explicit)
+
+			if (intent.viewPolicy != eCharacterViewPolicy::FollowMovement && intent.viewPolicy != eCharacterViewPolicy::Explicit)
 				return false;
+
 			return std::visit([](const auto& locomotion)
 				{
 					using T = std::decay_t<decltype(locomotion)>;
@@ -75,14 +75,14 @@ namespace jam::net
 		m_currentInputs.clear();
 		m_appliedInputs.clear();
 		m_latestControlRevisions.clear();
-		m_moveToDiagnostics.clear();
+		//m_moveToDiagnostics.clear();
 	}
 
 	void ServerInputSystem::Tick()
 	{
-		const uint32 serverTick = m_world.ctx().contains<TickCounter>()
-			? m_world.ctx().get<TickCounter>().tick
-			: 0;
+		//const uint32 serverTick = m_world.ctx().contains<TickCounter>()
+		//	? m_world.ctx().get<TickCounter>().tick
+		//	: 0;
 		std::unordered_map<uint64, CharacterControlCommand> selectedInputs;
 
 		auto view = m_world.view<ControlTag, px::CharacterMotorInput>();
@@ -105,66 +105,67 @@ namespace jam::net
 			CharacterControlResolveContext context{};
 			if (const auto* auth = m_world.try_get<CharAuthorityState>(e))
 				context.selfState = &auth->state;
+
 			if (const auto* follow = std::get_if<FollowActorIntent>(&cmd.intent.locomotion))
 				context.hasFollowTargetPosition = TryResolveTargetPos(m_world, follow->target.Value(), context.followTargetPosition);
+
 			input = CharacterControlResolver::Resolve(cmd.intent, context, m_controlResolveConfig);
 			m_currentInputs[control.userId] = cmd;
 
-			const auto* moveTo = std::get_if<MoveToPositionIntent>(&cmd.intent.locomotion);
-			if (!moveTo || !context.selfState)
-			{
-				m_moveToDiagnostics.erase(control.userId);
-				continue;
-			}
+			//const auto* moveTo = std::get_if<MoveToPositionIntent>(&cmd.intent.locomotion);
+			//if (!moveTo || !context.selfState)
+			//{
+			//	//m_moveToDiagnostics.erase(control.userId);
+			//	continue;
+			//}
 
-			auto& diagnostic = m_moveToDiagnostics[control.userId];
-			const px::Vec3 targetDelta = moveTo->target - diagnostic.target;
-			if (!diagnostic.initialized || targetDelta.MagnitudeSquared() > 0.01f)
-			{
-				diagnostic.target = moveTo->target;
-				diagnostic.lastPosition = context.selfState->pos;
-				diagnostic.lastSampleTick = serverTick;
-				diagnostic.stationarySamples = 0;
-				diagnostic.initialized = true;
-				diagnostic.reported = false;
-				continue;
-			}
+			//auto& diagnostic = m_moveToDiagnostics[control.userId];
+			//const px::Vec3 targetDelta = moveTo->target - diagnostic.target;
+			//if (!diagnostic.initialized || targetDelta.MagnitudeSquared() > 0.01f)
+			//{
+			//	diagnostic.target = moveTo->target;
+			//	diagnostic.lastPosition = context.selfState->pos;
+			//	diagnostic.lastSampleTick = serverTick;
+			//	diagnostic.stationarySamples = 0;
+			//	diagnostic.initialized = true;
+			//	diagnostic.reported = false;
+			//	continue;
+			//}
 
-			constexpr uint32 kDiagnosticSampleTicks = 30;
-			if (serverTick - diagnostic.lastSampleTick < kDiagnosticSampleTicks)
-				continue;
+			//constexpr uint32 kDiagnosticSampleTicks = 30;
+			//if (serverTick - diagnostic.lastSampleTick < kDiagnosticSampleTicks)
+			//	continue;
 
-			px::Vec3 moved = context.selfState->pos - diagnostic.lastPosition;
-			moved.y = 0.0f;
-			px::Vec3 remaining = moveTo->target - context.selfState->pos;
-			remaining.y = 0.0f;
-			const float movedDistanceSq = moved.MagnitudeSquared();
-			const float remainingDistanceSq = remaining.MagnitudeSquared();
-			const bool expectsMovement = remainingDistanceSq > (m_controlResolveConfig.stopRadius * m_controlResolveConfig.stopRadius)
-				&& (input.inputFlags & px::INPUT_FORWARD) != 0;
-			if (expectsMovement && movedDistanceSq < 0.01f)
-				diagnostic.stationarySamples = static_cast<uint8>(std::min<uint32>(diagnostic.stationarySamples + 1, 255));
-			else
-				diagnostic.stationarySamples = 0;
+			//px::Vec3 moved = context.selfState->pos - diagnostic.lastPosition;
+			//moved.y = 0.0f;
+			//px::Vec3 remaining = moveTo->target - context.selfState->pos;
+			//remaining.y = 0.0f;
+			//const float movedDistanceSq = moved.MagnitudeSquared();
+			//const float remainingDistanceSq = remaining.MagnitudeSquared();
+			//const bool expectsMovement = remainingDistanceSq > (m_controlResolveConfig.stopRadius * m_controlResolveConfig.stopRadius) && (input.inputFlags & px::INPUT_FORWARD) != 0;
+			//if (expectsMovement && movedDistanceSq < 0.01f)
+			//	diagnostic.stationarySamples = static_cast<uint8>(std::min<uint32>(diagnostic.stationarySamples + 1, 255));
+			//else
+			//	diagnostic.stationarySamples = 0;
 
-			diagnostic.lastPosition = context.selfState->pos;
-			diagnostic.lastSampleTick = serverTick;
-			if (!diagnostic.reported && diagnostic.stationarySamples >= 3)
-			{
-				uint64 worldId = 0;
-				if (auto* world = m_world.ctx().find<ServerWorld*>(); world && *world)
-					worldId = (*world)->GetWorldId();
-				const auto pendingIt = m_pendingInputs.find(control.userId);
-				const std::size_t pendingCount = pendingIt != m_pendingInputs.end() ? pendingIt->second.size() : 0;
-				JAM_LOG_WARN(
-					"[MoveToStallDiag] userId={}, worldId={}, tick={}, pos=({:.2f},{:.2f},{:.2f}), target=({:.2f},{:.2f},{:.2f}), remaining={:.2f}, moved1s={:.3f}, speed={:.3f}, flags=0x{:08X}, seq={}, revision={}, pending={}",
-					control.userId, worldId, serverTick,
-					context.selfState->pos.x, context.selfState->pos.y, context.selfState->pos.z,
-					moveTo->target.x, moveTo->target.y, moveTo->target.z,
-					std::sqrt(remainingDistanceSq), std::sqrt(movedDistanceSq), context.selfState->horizontalSpeed,
-					input.inputFlags, cmd.sequence, cmd.intent.controlRevision, pendingCount);
-				diagnostic.reported = true;
-			}
+			//diagnostic.lastPosition = context.selfState->pos;
+			//diagnostic.lastSampleTick = serverTick;
+			//if (!diagnostic.reported && diagnostic.stationarySamples >= 3)
+			//{
+			//	uint64 worldId = 0;
+			//	if (auto* world = m_world.ctx().find<ServerWorld*>(); world && *world)
+			//		worldId = (*world)->GetWorldId();
+				//const auto pendingIt = m_pendingInputs.find(control.userId);
+				//const std::size_t pendingCount = pendingIt != m_pendingInputs.end() ? pendingIt->second.size() : 0;
+				//JAM_LOG_WARN(
+				//	"[MoveToStallDiag] userId={}, worldId={}, tick={}, pos=({:.2f},{:.2f},{:.2f}), target=({:.2f},{:.2f},{:.2f}), remaining={:.2f}, moved1s={:.3f}, speed={:.3f}, flags=0x{:08X}, seq={}, revision={}, pending={}",
+				//	control.userId, worldId, serverTick,
+				//	context.selfState->pos.x, context.selfState->pos.y, context.selfState->pos.z,
+				//	moveTo->target.x, moveTo->target.y, moveTo->target.z,
+				//	std::sqrt(remainingDistanceSq), std::sqrt(movedDistanceSq), context.selfState->horizontalSpeed,
+				//	input.inputFlags, cmd.sequence, cmd.intent.controlRevision, pendingCount);
+			//	diagnostic.reported = true;
+			//}
 		}
 	}
 
@@ -182,7 +183,7 @@ namespace jam::net
 		m_currentInputs.erase(userId);
 		m_appliedInputs.erase(userId);
 		m_latestControlRevisions.erase(userId);
-		m_moveToDiagnostics.erase(userId);
+		//m_moveToDiagnostics.erase(userId);
 	}
 
 	void ServerInputSystem::MarkInputApplied(uint64 userId)
