@@ -34,7 +34,6 @@ namespace
 		WarmUp,
 		Measurement,
 		CoolDown,
-		Complete,
 	};
 
 	std::string_view PhaseName(eValidationPhase phase)
@@ -45,7 +44,6 @@ namespace
 		case eValidationPhase::WarmUp:     return "warm-up";
 		case eValidationPhase::Measurement:return "measurement";
 		case eValidationPhase::CoolDown:   return "cool-down";
-		case eValidationPhase::Complete:   return "complete";
 		default:                           return "unknown";
 		}
 	}
@@ -54,6 +52,11 @@ namespace
 	{
 		return static_cast<uint64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
 			std::chrono::system_clock::now().time_since_epoch()).count());
+	}
+
+	void LogPhase(const eValidationPhase phase, const std::string_view event)
+	{
+		JAM_LOG_INFO("[Phase] {} {} unix_ns={}", PhaseName(phase), event, UnixNowNs());
 	}
 
 	std::optional<eBotProfile> ParseProfile(std::string_view name)
@@ -154,10 +157,7 @@ int main(int argc, char* argv[])
 	auto phaseStartedAt = runStartedAt;
 	auto phaseDeadline = rampDeadline;
 	
-	JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={} bots={} profile={} rampRate={} seed={} warmupSec={} measurementSec={}",
-		PhaseName(phase), UnixNowNs(), botConfig.botCount, argv[1], botConfig.connectPerSecond, botConfig.randomSeed,
-		std::chrono::duration_cast<std::chrono::seconds>(warmUpDuration).count(),
-		std::chrono::duration_cast<std::chrono::seconds>(measurementDuration).count());
+	LogPhase(phase, "start");
 
 	JAM_LOG_INFO("M1_Bot started: profile={}, bots={}, connectPerSecond={}, seed={}",
 		argv[1], botConfig.botCount, botConfig.connectPerSecond, botConfig.randomSeed);
@@ -199,43 +199,41 @@ int main(int argc, char* argv[])
 			{
 				if (runner.HasStartedAll() && stats.running + stats.failed == stats.total)
 				{
-					JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={} running={} failed={}",
-						PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count(), stats.running, stats.failed);
+					LogPhase(phase, "end");
 
 					phase			= eValidationPhase::WarmUp;
 					phaseStartedAt	= now;
 					phaseDeadline	= now + warmUpDuration;
 					
-					JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+					LogPhase(phase, "start");
 				}
 				else if (now >= rampDeadline)
 				{
-					JAM_LOG_ERROR("[M1ValidationPhase] phase={} event=timeout unix_ns={} durationMs={} started={}/{} running={} failed={}",
-						PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count(), stats.connectStarted, stats.total, stats.running, stats.failed);
+					JAM_LOG_ERROR("Ramp-up timed out: started={}/{} running={} failed={}",
+						stats.connectStarted, stats.total, stats.running, stats.failed);
 					phaseFailed = true;
 					break;
 				}
 			}
 			else if (phase == eValidationPhase::WarmUp && now >= phaseDeadline)
 			{
-				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={}", PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count());
+				LogPhase(phase, "end");
 				
 				phase		   = eValidationPhase::Measurement;
 				phaseStartedAt = now;
 				phaseDeadline  = now + measurementDuration;
 				runner.BeginMeasurement();
 				
-				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+				LogPhase(phase, "start");
 			}
 			else if (phase == eValidationPhase::Measurement && now >= phaseDeadline)
 			{
-				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={} running={} failed={}",
-					PhaseName(phase), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(now - phaseStartedAt).count(), stats.running, stats.failed);
+				LogPhase(phase, "end");
 
 				phase = eValidationPhase::CoolDown;
 				phaseStartedAt = now;
 				
-				JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+				LogPhase(phase, "start");
 				break;
 			}
 		}
@@ -246,13 +244,14 @@ int main(int argc, char* argv[])
 	const BotRunnerStats finalStats = runner.GetStats();
 	if (aborted || allFailed || phaseFailed || phase != eValidationPhase::CoolDown)
 	{
-		JAM_LOG_WARN("[M1ValidationPhase] phase={} event=aborted unix_ns={} reason={} running={} failed={}",
-			PhaseName(phase), UnixNowNs(), allFailed ? "all-failed" : (aborted ? "user" : "ramp-timeout"), finalStats.running, finalStats.failed);
+		JAM_LOG_WARN("M1_Bot phase aborted: phase={} reason={} running={} failed={}",
+			PhaseName(phase), allFailed ? "all-failed" : (aborted ? "user" : "ramp-timeout"), finalStats.running, finalStats.failed);
+		LogPhase(phase, "end");
 		
 		phase = eValidationPhase::CoolDown;
 		phaseStartedAt = std::chrono::steady_clock::now();
 		
-		JAM_LOG_INFO("[M1ValidationPhase] phase={} event=begin unix_ns={}", PhaseName(phase), UnixNowNs());
+		LogPhase(phase, "start");
 	}
 
 	JAM_LOG_INFO("M1_Bot stopped: running={}, failed={}", finalStats.running, finalStats.failed);
@@ -262,11 +261,10 @@ int main(int argc, char* argv[])
 	const auto coolDownEndedAt = std::chrono::steady_clock::now();
 	const bool validationFailed = aborted || allFailed || phaseFailed || finalStats.failed != 0;
 
-	JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} durationMs={}", PhaseName(eValidationPhase::CoolDown), UnixNowNs(),
-		std::chrono::duration_cast<std::chrono::milliseconds>(coolDownEndedAt - phaseStartedAt).count());
+	LogPhase(eValidationPhase::CoolDown, "end");
 
-	JAM_LOG_INFO("[M1ValidationPhase] phase={} event=end unix_ns={} totalDurationMs={} result={}",
-		PhaseName(eValidationPhase::Complete), UnixNowNs(), std::chrono::duration_cast<std::chrono::milliseconds>(coolDownEndedAt - runStartedAt).count(), validationFailed ? "failed" : "completed");
+	JAM_LOG_INFO("M1_Bot validation finished: totalDurationMs={} result={}",
+		std::chrono::duration_cast<std::chrono::milliseconds>(coolDownEndedAt - runStartedAt).count(), validationFailed ? "failed" : "completed");
 
 	return validationFailed ? -1 : 0;
 }
