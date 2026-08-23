@@ -17,7 +17,10 @@ namespace jam::net
 
 	namespace
 	{
-		inline constexpr uint8  kMaxBindingRetry		= 5;
+		// Binding traverses the client principal shard, the server endpoint shard,
+		// and the account-affinity shard. A five-second budget is too short when a
+		// multi-client load run is ramping up and those control queues are saturated.
+		inline constexpr uint8  kMaxBindingRetry		= 15;
 		inline constexpr uint64 kClientBindRetryDelayNs = 1000_ms;
 
 		RouteKey MakeBoundSessionRouteKey(uint64 accountId)
@@ -409,6 +412,15 @@ namespace jam::net
 	{
 		if (!ev) return;
 
+		const ULONG_PTR nativeStatus = win_error::GetOverlappedNativeStatus(*ev);
+		if (!win_error::IsNativeStatusSuccess(nativeStatus))
+		{
+			const int32 errorCode = static_cast<int32>(win_error::NativeStatusToWinError(nativeStatus));
+			ObjectPool<TcpRecvEvent>::Push(ev);
+			HandleError(errorCode);
+			return;
+		}
+
 		if (bytes == 0)
 		{
 			ObjectPool<TcpRecvEvent>::Push(ev);
@@ -471,6 +483,17 @@ namespace jam::net
 	void TcpSession::ProcessSend(TcpSendEvent* ev,  int32 bytes)
 	{
 		if (!ev) return;
+
+		const ULONG_PTR nativeStatus = win_error::GetOverlappedNativeStatus(*ev);
+		if (!win_error::IsNativeStatusSuccess(nativeStatus))
+		{
+			const int32 errorCode = static_cast<int32>(win_error::NativeStatusToWinError(nativeStatus));
+			ev->chains.clear();
+			ev->wsaBufs.clear();
+			ObjectPool<TcpSendEvent>::Push(ev);
+			HandleError(errorCode);
+			return;
+		}
 
 		if (bytes <= 0)
 		{
@@ -575,9 +598,17 @@ namespace jam::net
 	{
 		switch (errorCode)
 		{
+		case WSAENOTCONN:
+		case WSAESHUTDOWN:
 		case WSAECONNRESET:
 		case WSAECONNABORTED:
+		case ERROR_NETNAME_DELETED:
+		case ERROR_CONNECTION_ABORTED:
 			Disconnect();
+			break;
+		case ERROR_OPERATION_ABORTED:
+			if (!IsClosing())
+				Disconnect();
 			break;
 		default:
 			win_error::LogWsaError("[TcpSession] socket operation", errorCode);
