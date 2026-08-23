@@ -5,10 +5,17 @@
     "concurrentqueue",
     "entt",
     "flatbuffers",
-    "glm",
     "mimalloc",
     "nlohmann-json",
     "spdlog",
-    "xxhash"
+    "xxhash",
+    "physx",
+    "tinygltf",
+    {
+      "name": "hdr-histogram",
+      "features": [
+        "log"
+      ]
+    }
   ]
 }
