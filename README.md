@@ -1,89 +1,103 @@
-# JamNet
+# Jam
 
-JamNet은 C++ 기반의 **authoritative multiplayer server framework**입니다.
+Jam은 C++ 기반의 **authoritative multiplayer server framework**입니다.
 
-IOCP 네트워크 처리, shard 기반 실행 모델, Reliable UDP transport, 서버 authoritative replication, prediction/replay 기반 client sync를 하나의 런타임으로 연결하는 것을 목표로 만든 개인 프로젝트입니다.
+Windows IOCP 기반 TCP/UDP 네트워크 처리, shard 기반 실행 모델, Reliable UDP, AOI replication, client prediction/reconciliation을 하나의 런타임으로 구성하고, Unity client와 shared data/code generation pipeline까지 연결한 개인 프로젝트입니다.
 
-이 저장소는 단순한 socket wrapper보다 한 단계 위의 문제를 다룹니다.
-
-- 네트워크 이벤트를 어떤 실행 경계로 넘길 것인가
-- session, user, world, actor 상태를 어느 shard가 소유할 것인가
-- snapshot, lifecycle, input, RPC를 같은 전송 정책으로 묶지 않으려면 어떻게 나눌 것인가
-- 서버 권위를 유지하면서 클라이언트 조작감을 어떻게 보존할 것인가
-- AOI와 baseline/delta snapshot을 어떻게 연결할 것인가
+> **설계 과정, 구현 상세 및 성능 검증은 [Technical Documents](https://akxotjr.github.io)에서 확인할 수 있습니다.**
 
 ## 구현 범위
 
-- Windows IOCP 기반 TCP/UDP 네트워크 처리
-- Reliable UDP: ACK/NACK, retransmit, fragmentation, batching
-- Job/Fiber 기반 shard execution 및 owner mailbox
-- Session/User/World 기반 서버 런타임 구조
-- PhysicalWorld/VirtualWorld 기반 world assignment pipeline
-- AOI, lifecycle, full/delta snapshot replication
-- prediction/reconcile/replay 기반 client correction pipeline
-- packet buffer 및 hot object 재사용 메모리 관리
-- ECS actor state 및 PhysX 연동 구조
+* Windows IOCP 기반 TCP / UDP 네트워크 처리
+* Reliable UDP
+
+  * ACK / retransmission
+  * fragmentation
+  * batching
+  * ordered / unordered delivery
+* ownership 기반 shard execution
+* Job / Fiber 기반 비동기 실행
+* owner mailbox를 통한 cross-owner dispatch
+* Session / User / World lifecycle
+* ECS 기반 actor state
+* AOI 및 entity lifecycle replication
+* full / delta snapshot 및 baseline 관리
+* client prediction / reconciliation / replay
+* PhysX 기반 server-side physics integration
+* FlatBuffers 기반 RPC 및 schema
+* JSON 기반 shared game data
+* C++ / C# shared data code generation
+* Native Unity bridge
+* bot 기반 workload 및 runtime metrics
 
 ## 핵심 설계
 
-| 문제                | 선택                           |
-| ----------------- | ---------------------------- |
-| 공유 상태 lock 경합     | ownership execution boundary |
-| payload별 전달 의미 차이 | channel policy 분리            |
-| 서버 권위와 입력 반응성 충돌  | prediction/reconcile/replay  |
-| AOI 비용 증가         | spatial pub/sub              |
-| world 입장/이동 로직 중복 | WorldAction pipeline         |
-
-## 구현/검증 상태 표
-
-| 항목                | 구현  | 기본 검증 | Stress 검증 |
-| ----------------- | --- | ----- | --------- |
-| IOCP TCP/UDP      | O   | O     | △         |
-| RUDP retransmit   | O   | O     | △         |
-| fragmentation     | O   | △     | X         |
-| shard execution   | O   | O     | △         |
-| mailbox routing   | O   | O     | △         |
-| AOI replication   | O   | O     | X         |
-| replay correction | O   | △     | X         |
-| world transfer    | △   | X     | X         |
-```
-O : 구현 및 정상 동작 확인  
-△ : 제한적 검증 또는 일부 구현  
-X : 미구현 또는 미검증
-```
-
+| 문제                         | 접근                                   |
+| -------------------------- | ------------------------------------ |
+| 공유 mutable state에 대한 동시 접근 | owner shard 기반 execution boundary    |
+| 서로 다른 packet 전달 요구사항       | channel별 delivery policy 분리          |
+| TCP stream packet boundary | receive accumulator 기반 framing       |
+| 서버 권위와 입력 반응성              | prediction / reconciliation / replay |
+| AOI 후보 탐색 비용               | spatial partitioning 기반 pruning      |
+| cross-owner 상태 변경          | mailbox dispatch                     |
+| physics 실행과 world tick     | shard 단위 scheduling                  |
+| 서버와 Unity 간 데이터 정의 중복      | shared schema + code generation      |
 
 ## 저장소 구성
 
-| 경로 | 설명 |
-| --- | --- |
-| `JamNet/` | 네트워크 런타임, executor, session, world, replication |
-| `JamPx/` | PhysX 기반 physics integration |
-| `TestApp/` | 테스트 서버/클라이언트와 샘플 컨텐츠 |
+| 경로                     | 설명                                                              |
+| ---------------------- | --------------------------------------------------------------- |
+| `JamBase/`             | 공통 타입과 기반 유틸리티                                                  |
+| `JamNet/`              | 네트워크, execution, session, world, replication 등 서버 핵심 런타임        |
+| `JamPx/`               | PhysX integration 및 physics runtime                             |
+| `JamTools/`            | schema dump, validation, code generation 및 asset processing CLI |
+| `JamTools.SharedData/` | shared data tooling에서 사용하는 schema / codegen library             |
+| `SharedData/`          | 서버와 클라이언트가 공유하는 game data 및 schema                              |
+| `JamUnity/`            | Unity client integration                                        |
+| `JamUnityBridge/`      | C++ runtime과 Unity를 연결하는 native bridge                          |
+| `SampleApp/`           | JamNet을 사용하는 M1 sample server / bot / shared code               |
 
+### SampleApp
 
-## 문서
+```text
+SampleApp/
+├─ M1_Server/    # sample game server
+├─ M1_Bot/       # automated workload / load-test client
+└─ M1_Shared/    # server와 bot이 공유하는 protocol / game definitions
+```
 
-- [Portfolio](./docs/portfolio/JamNet_Portfolio.md)
-- [Execution Model](./docs/architecture/JamNet_ExecutionModel.md)
-- [Network Model](./docs/architecture/JamNet_NetworkModel.md)
-- [Replication](./docs/architecture/JamNet_Replication.md)
+## Technical Documents
+
+저장소에서는 구현 코드를 제공하고, 구현 의도와 설계 과정 및 검증 결과는 별도의 문서에서 정리합니다.
+
+**[→ Technical Documents](https://akxotjr.github.io)**
+
+포트폴리오에서는 다음 내용을 다룹니다.
+
+* Execution Model
+* Networking
+* Reliable UDP
+* Packet Framing & Fragmentation
+* Replication & Client Synchronization
+* PhysX Integration & Scheduling
+* Shared Game Data & Code Generation
+* Unity Integration
+* Performance Validation
+* Engineering Decisions
 
 ## 의존성 설치
 
-vcpkg 의존성은 저장소 bootstrap script로 설치합니다.
+vcpkg 의존성은 저장소의 bootstrap script로 설치합니다.
 
 ```powershell
 .\bootstrap.ps1
 ```
 
-기본 triplet은 다음과 같습니다.
+기본 triplet:
 
 ```text
 x64-windows-static-md
 ```
-
-PhysX는 `bootstrap.ps1`로 설치되지 않습니다. `JamPx`와 `TestApp`을 사용하려면 별도로 준비해야 합니다.
 
 ## English
 

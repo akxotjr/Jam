@@ -1,89 +1,103 @@
-# JamNet
+# Jam
 
-JamNet is a C++ **authoritative multiplayer server framework**.
+Jam is a C++ **authoritative multiplayer server framework**.
 
-The project connects IOCP-based networking, shard-based execution, Reliable UDP transport, server-authoritative replication, and prediction/replay-based client synchronization into one runtime.
+It integrates Windows IOCP-based TCP/UDP networking, a shard-based execution model, Reliable UDP, AOI replication, and client prediction/reconciliation into a unified runtime, along with Unity client integration and a shared data/code generation pipeline.
 
-This repository focuses on problems above a simple socket wrapper:
+> **For design decisions, implementation details, and performance validation, see the [Technical Documents](https://akxotjr.github.io).**
 
-- how network events cross into execution boundaries
-- which shard owns session, user, world, and actor state
-- how snapshot, lifecycle, input, and RPC traffic can avoid sharing one delivery policy
-- how to preserve client responsiveness while keeping server authority
-- how AOI and baseline/delta snapshots connect in replication
+## Features
 
-## Implemented Scope
+* Windows IOCP-based TCP / UDP networking
+* Reliable UDP
 
-- TCP/UDP network processing based on Windows IOCP
-- Reliable UDP: ACK/NACK, retransmission, fragmentation, batching
-- Job/Fiber-based shard execution and owner mailbox
-- Server runtime model for Session/User/World
-- PhysicalWorld/VirtualWorld based world assignment pipeline
-- AOI, lifecycle, and full/delta snapshot replication
-- prediction/reconcile/replay based client correction pipeline
-- Packet buffer and hot object reuse for network hot paths
-- ECS actor state and PhysX integration
+  * ACK / retransmission
+  * fragmentation
+  * batching
+  * ordered / unordered delivery
+* ownership-based shard execution
+* Job / Fiber-based asynchronous execution
+* cross-owner dispatch through owner mailboxes
+* Session / User / World lifecycle management
+* ECS-based actor state
+* AOI and entity lifecycle replication
+* full / delta snapshots with baseline management
+* client prediction / reconciliation / replay
+* PhysX-based server-side physics integration
+* FlatBuffers-based RPC and schemas
+* JSON-based shared game data
+* C++ / C# shared data code generation
+* native Unity bridge
+* bot-based workloads and runtime metrics
 
 ## Core Design
 
-| Problem | Choice |
-| --- | --- |
-| Shared-state lock contention | ownership execution boundary |
-| Different delivery semantics per payload | separated channel policy |
-| Server authority vs input responsiveness | prediction/reconcile/replay |
-| Growing AOI cost | spatial pub/sub |
-| Duplicated world enter/transfer logic | WorldAction pipeline |
+| Problem                                              | Approach                             |
+| ---------------------------------------------------- | ------------------------------------ |
+| Concurrent access to shared mutable state            | owner-shard execution boundaries     |
+| Different packet delivery requirements               | per-channel delivery policies        |
+| TCP stream packet boundaries                         | receive accumulator-based framing    |
+| Server authority vs. input responsiveness            | prediction / reconciliation / replay |
+| AOI candidate search cost                            | spatial partitioning-based pruning   |
+| Cross-owner state mutation                           | mailbox dispatch                     |
+| Physics execution and world tick                     | shard-level scheduling               |
+| Duplicated data definitions between server and Unity | shared schema + code generation      |
 
-## Implementation / Validation Status
+## Repository Structure
 
-| Item | Implemented | Basic Validation | Stress Validation |
-| --- | --- | --- | --- |
-| IOCP TCP/UDP | O | O | △ |
-| RUDP retransmit | O | O | △ |
-| fragmentation | O | △ | X |
-| shard execution | O | O | △ |
-| mailbox routing | O | O | △ |
-| AOI replication | O | O | X |
-| replay correction | O | △ | X |
-| world transfer | △ | X | X |
+| Path                   | Description                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `JamBase/`             | Common types and foundational utilities                                                |
+| `JamNet/`              | Core server runtime including networking, execution, sessions, worlds, and replication |
+| `JamPx/`               | PhysX integration and physics runtime                                                  |
+| `JamTools/`            | CLI for schema dump, validation, code generation, and asset processing                 |
+| `JamTools.SharedData/` | Schema and code generation library used by shared-data tooling                         |
+| `SharedData/`          | Game data and schemas shared between the server and client                             |
+| `JamUnity/`            | Unity client integration                                                               |
+| `JamUnityBridge/`      | Native bridge between the C++ runtime and Unity                                        |
+| `SampleApp/`           | M1 sample server, bot, and shared code built on JamNet                                 |
+
+### SampleApp
 
 ```text
-O : implemented and verified in normal operation
-△ : partially implemented or validated in a limited scope
-X : not implemented or not validated
+SampleApp/
+├─ M1_Server/    # Sample game server
+├─ M1_Bot/       # Automated workload / load-test client
+└─ M1_Shared/    # Protocol and game definitions shared by the server and bot
 ```
 
-## Repository Layout
+## Technical Documents
 
-| Path | Description |
-| --- | --- |
-| `JamNet/` | Network runtime, executor, session, world, replication |
-| `JamPx/` | PhysX integration |
-| `TestApp/` | Test server/client and sample content |
+The repository contains the implementation, while the design rationale, implementation details, and validation results are documented separately.
 
-## Documentation
+**[→ Technical Documents](https://akxotjr.github.io)**
 
-- [Portfolio](./docs/portfolio/JamNet_Portfolio.md)
-- [Execution Model](./docs/architecture/JamNet_ExecutionModel.md)
-- [Network Model](./docs/architecture/JamNet_NetworkModel.md)
-- [Replication](./docs/architecture/JamNet_Replication.md)
+The documentation covers:
 
+* Execution Model
+* Networking
+* Reliable UDP
+* Packet Framing & Fragmentation
+* Replication & Client Synchronization
+* PhysX Integration & Scheduling
+* Shared Game Data & Code Generation
+* Unity Integration
+* Performance Validation
+* Engineering Decisions
 
 ## Dependencies
 
-Install vcpkg dependencies with the repository bootstrap script.
+Install the vcpkg dependencies using the repository bootstrap script:
 
 ```powershell
 .\bootstrap.ps1
 ```
 
-The default triplet is:
+Default triplet:
 
 ```text
 x64-windows-static-md
 ```
-
-PhysX is not installed by `bootstrap.ps1`. It must be prepared separately for `JamPx` and `TestApp`.
 
 ## Korean
 
