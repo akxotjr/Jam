@@ -26,7 +26,7 @@ struct BotRunnerConfig
 	std::string					serverIp			   = "127.0.0.1";
 	uint16						tcpPort				   = 7777;
 	uint16						udpPort				   = 8888;
-	std::string					sharedDataManifestPath = "C://Users//akxotjr//GameWorkSpace//Jam-dev//SampleApp//M1_Shared//Data//shared_data_manifest.json";
+	std::string					sharedDataManifestPath = "../M1_Shared/Data/shared_data_manifest.json";
 	jam::net::ClientPumpOptions pumpOptions			   = {};
 	BotScenarioConfig			scenarioConfig		   = {};
 	eBotProfile					profile				   = eBotProfile::Custom;

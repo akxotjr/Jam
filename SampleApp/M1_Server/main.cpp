@@ -35,7 +35,7 @@ int main()
 
 	try
 	{
-		const std::filesystem::path sharedDataRoot = "C://Users//akxotjr//GameWorkSpace//Jam-dev//SampleApp//M1_Shared//Data";
+		const std::filesystem::path sharedDataRoot = "../M1_Shared/Data";
 		auto worldContents		= std::make_shared<m1::WorldContentsDatabase>(m1::WorldContentsLoader::Load((sharedDataRoot / "World" / "world_contents.json").string()));
 		auto characters			= std::make_shared<m1::CharacterStore>();
 		auto characterSessions	= std::make_shared<m1::CharacterSessionStore>(characters);
