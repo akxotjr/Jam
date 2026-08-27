@@ -12,7 +12,7 @@ class UnityClientCore
 {
 public:
 	bool			Initialize(const JAM_ClientConfig& config);
-	void			Shutdown();
+	void			Close();
 	bool			Connect();
 	void			Disconnect();
 	JAM_eResult		Pump(const JAM_ClientPumpOptions* options, JAM_ClientPumpResult& outResult);

@@ -20,7 +20,7 @@ namespace jam::net
 	NetRuntime::~NetRuntime()
 	{
 		if (m_bInitialized)
-			Shutdown();
+			Close();
 	}
 
 	void NetRuntime::Init()
@@ -43,7 +43,7 @@ namespace jam::net
 		JAM_LOG_INFO("JamNet Runtime initialized");
 	}
 
-	void NetRuntime::Shutdown()
+	void NetRuntime::Close()
 	{
 		JAM_LOG_INFO("JamNet Runtime shutting down... ");
 

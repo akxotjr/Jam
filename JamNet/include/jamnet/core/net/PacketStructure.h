@@ -110,22 +110,16 @@ namespace jam::net
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-	enum class eLoginCredentialKind : uint8
-	{
-		Password = 0,
-		Ticket,
-	};
-
-	inline constexpr size_t kMaxLoginIdBytes = 64;
-	inline constexpr size_t kMaxLoginSecretBytes = 256;
+	inline constexpr size_t kMaxAuthFieldBytes = 256;
 
 	struct TCP_BIND_REQ_DATA
 	{
-		eLoginCredentialKind kind = eLoginCredentialKind::Password;
-		uint16 loginIdSize = 0;
-		uint16 secretSize = 0;
-		uint8 loginId[kMaxLoginIdBytes] = {};
-		uint8 secret[kMaxLoginSecretBytes] = {};
+		uint32 scheme = 0;
+
+		uint16 field0Size = 0;
+		uint16 field1Size = 0;
+		uint8  field0[kMaxAuthFieldBytes] = {};
+		uint8  field1[kMaxAuthFieldBytes] = {};
 	};
 
 	struct TCP_BIND_RES_DATA
@@ -139,35 +133,35 @@ namespace jam::net
 
 	struct UDP_BIND_REQ_DATA
 	{
-		uint64 accountId = 0;
-		uint64 userId	 = 0;
+		uint64 accountId	 = 0;
+		uint64 userId		 = 0;
 		uint64 transactionId = 0;
 	};
 
 	struct UDP_BIND_RES_DATA
 	{
-		uint64 accountId = 0;
-		uint64 userId	 = 0;
-		uint64 sessionId = 0;
+		uint64 accountId	 = 0;
+		uint64 userId		 = 0;
+		uint64 sessionId	 = 0;
 		uint64 transactionId = 0;
-		uint8  success	 = 0;
+		uint8  success		 = 0;
 	};
 
 	struct UDP_BIND_CONFIRM_DATA
 	{
-		uint64 sessionId = 0;
+		uint64 sessionId	 = 0;
 		uint64 transactionId = 0;
 	};
 
 	struct UDP_UNBIND_REQ_DATA
 	{
-		uint64 sessionId = 0;
+		uint64 sessionId	 = 0;
 		uint64 transactionId = 0;
 	};
 
 	struct UDP_UNBIND_RES_DATA
 	{
-		uint64 sessionId = 0;
+		uint64 sessionId	 = 0;
 		uint64 transactionId = 0;
 	};
 #pragma pack(pop)

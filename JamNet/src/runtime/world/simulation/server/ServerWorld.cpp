@@ -155,7 +155,7 @@ namespace jam::net
 		{
 			if (!m_content->Initialize(*this))
 			{
-				m_content->Shutdown(*this);
+				m_content->Close(*this);
 				return false;
 			}
 			m_contentInitialized = true;
@@ -164,11 +164,11 @@ namespace jam::net
 		return true;
 	}
 
-	void ServerWorld::OnShutdown()
+	void ServerWorld::OnCloseStarted()
 	{
 		if (m_content && m_contentInitialized)
 		{
-			m_content->Shutdown(*this);
+			m_content->Close(*this);
 			m_contentInitialized = false;
 		}
 

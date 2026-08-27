@@ -33,9 +33,9 @@ namespace jam::net
 	struct ClientConfig
 	{
 		AccountId			accountId			= kInvalidAccountId;
-		std::string			loginId;
-		std::string			password;
-		std::vector<uint8>	ticket;
+		uint32				authScheme			= 0;
+		std::vector<uint8>	authField0;
+		std::vector<uint8>	authField1;
 		NetAddress			serverTcpAddress    = { "127.0.0.1", 7777 };
 		NetAddress			serverUdpAddress    = { "127.0.0.1", 8888 };
 
@@ -56,7 +56,7 @@ namespace jam::net
 		// Frontend admission only. Work is serialized on the principal shard.
 		bool                                    Connect();
 		void                                    Disconnect();
-		void                                    Shutdown();
+		void                                    Close();
 
 		// Return values report command admission, not execution success.
 		bool									RequestWorldAction(const WorldActionCommand& command);
@@ -98,7 +98,7 @@ namespace jam::net
 		void									ClearPendingCharacterControl();
 
 		void									PublishActorActionFailure(ClientRequestId requestId, eActorAction action, eActorActionReason reason) const;
-		void									ShutdownPrincipalAndWait();
+		void									ClosePrincipalAndWait();
 		void									CompletePreparedMainWorld(ClientWorldPrepare prepare, ClientWorldBinding binding, std::function<void(bool)> completed);
 
 		bool									DispatchWorldPacket(UserId userId, WorldId worldId, Packet packet);

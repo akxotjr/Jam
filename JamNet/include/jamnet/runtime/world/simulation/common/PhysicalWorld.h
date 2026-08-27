@@ -80,7 +80,7 @@ namespace jam::net
 		void								ShutdownPhysicsWhenPipelineStops();
 		bool								IsPipelineTickInProgress() const { return m_pipelineActive && m_pipelineTickInProgress; }
 		bool								DeferUntilPipelineSafePoint(std::function<void()> mutation);
-		void								OnShutdownBarrier(std::function<void()> completion) override;
+		void								BeginCloseBarrier(std::function<void()> completion) override;
 
 		virtual void						Tick() = 0;
 

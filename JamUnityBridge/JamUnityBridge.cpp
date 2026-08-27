@@ -28,7 +28,7 @@ void JU_Shutdown()
 	if (!g_core)
 		return;
 
-	g_core->Shutdown();
+	g_core->Close();
 	g_core.reset();
 }
 

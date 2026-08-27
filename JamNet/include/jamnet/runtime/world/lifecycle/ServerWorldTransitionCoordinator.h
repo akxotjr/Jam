@@ -32,7 +32,7 @@ namespace jam::net
 	public:
 
 		bool					Initialize(ServerNetworkManager* owner);
-		void					Shutdown();
+		void					Close();
 		void					BootstrapConfiguredWorlds(std::function<void(bool)> completed);
 		void					DestroyWorld(const WorldRef& world);
 		

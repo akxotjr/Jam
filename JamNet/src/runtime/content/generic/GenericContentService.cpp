@@ -32,7 +32,7 @@ namespace jam::net
 		return true;
 	}
 
-	void GenericContentService::Shutdown()
+	void GenericContentService::Stop()
 	{
 		m_running.store(false, std::memory_order_release);
 	}

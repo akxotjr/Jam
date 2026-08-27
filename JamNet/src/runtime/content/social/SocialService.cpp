@@ -66,7 +66,7 @@ namespace jam::net
 		return true;
 	}
 
-	void SocialService::Shutdown()
+	void SocialService::Stop()
 	{
 		m_running.store(false, std::memory_order_release);
 	}

@@ -179,7 +179,7 @@
     <ClCompile Include="CharacterContent.cpp" />
     <ClCompile Include="CharacterSessionStore.cpp" />
     <ClCompile Include="CharacterStore.cpp" />
-    <ClCompile Include="AuthenticationContent.cpp" />
+	<ClCompile Include="Authenticator.cpp" />
     <ClCompile Include="AccountStore.cpp" />
     <ClCompile Include="SocialContent.cpp" />
     <ClCompile Include="pch.cpp">
@@ -198,7 +198,7 @@
     <ClInclude Include="CharacterContent.h" />
     <ClInclude Include="CharacterSessionStore.h" />
     <ClInclude Include="CharacterStore.h" />
-    <ClInclude Include="AuthenticationContent.h" />
+	<ClInclude Include="Authenticator.h" />
     <ClInclude Include="AccountStore.h" />
     <ClInclude Include="SocialContent.h" />
     <ClInclude Include="pch.h" />

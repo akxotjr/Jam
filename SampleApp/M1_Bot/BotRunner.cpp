@@ -157,10 +157,10 @@ namespace
 
 BotRunner::~BotRunner()
 {
-	Shutdown();
+	Close();
 }
 
-bool BotRunner::Init(const BotRunnerConfig& config)
+bool BotRunner::Initialize(const BotRunnerConfig& config)
 {
 	if (m_initialized || config.botCount == 0 || config.botCount > kBotAccountEnd - kBotAccountBegin + 1)
 	{
@@ -221,7 +221,7 @@ bool BotRunner::Init(const BotRunnerConfig& config)
 			const uint32 directCount = config.botCount - directBegin;
 			if (directCount < 2)
 			{
-				Shutdown();
+				Close();
 				return false;
 			}
 
@@ -233,7 +233,7 @@ bool BotRunner::Init(const BotRunnerConfig& config)
 
 		if (!slot->scenario.Configure(scenarioConfig))
 		{
-			Shutdown();
+			Close();
 			return false;
 		}
 
@@ -245,9 +245,9 @@ bool BotRunner::Init(const BotRunnerConfig& config)
 		clientConfig.serverUdpAddress		= jam::net::NetAddress(config.serverIp, config.udpPort);
 		clientConfig.sharedDataManifestPath = config.sharedDataManifestPath;
 
-		if (!slot->client->Init(std::move(clientConfig)))
+		if (!slot->client->Initialize(std::move(clientConfig)))
 		{
-			Shutdown();
+			Close();
 			return false;
 		}
 
@@ -323,10 +323,10 @@ void BotRunner::BeginMeasurement()
 	m_synchronizedPortalStarted = true;
 }
 
-void BotRunner::Shutdown()
+void BotRunner::Close()
 {
 	// Start every graceful disconnect before waiting for any individual client.
-	// ClientRuntime::Shutdown() is synchronous, so issuing it directly per slot
+	// ClientRuntime::Close() is synchronous, so issuing it directly per slot
 	// serializes the UDP close timeout across the entire bot population.
 	for (auto& slot : m_slots)
 	{
@@ -337,7 +337,7 @@ void BotRunner::Shutdown()
 	for (auto& slot : m_slots)
 	{
 		if (slot && slot->client)
-			slot->client->Shutdown();
+			slot->client->Close();
 	}
 
 	m_slots.clear();

@@ -19,7 +19,7 @@ namespace jam::net
 	{
 	public:
 		bool Initialize(ServerNetworkManager* owner, std::shared_ptr<IGenericContent> content);
-		void Shutdown();
+		void Stop();
 
 		bool Submit(GenericContentPrincipal principal, GenericContentRequest request);
 

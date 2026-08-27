@@ -11,7 +11,7 @@ enum class eBotState
 	Connecting,
 	Ready,
 	Degraded,
-	Shutdown,
+	Closed,
 };
 
 
@@ -21,8 +21,8 @@ public:
 	BotClient() = default;
 	~BotClient();
 
-	bool								Init(jam::net::ClientConfig config);
-	void								Shutdown();
+	bool								Initialize(jam::net::ClientConfig config);
+	void								Close();
 	bool								Connect();
 	void								Disconnect();
 

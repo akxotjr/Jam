@@ -58,11 +58,11 @@ public:
 	BotRunner() = default;
 	~BotRunner();
 
-	bool			Init(const BotRunnerConfig& config);
+	bool			Initialize(const BotRunnerConfig& config);
 	void			Start();
 	void			Update();
 	void			BeginMeasurement();
-	void			Shutdown();
+	void			Close();
 
 	bool			IsInitialized() const { return m_initialized; }
 	bool			IsRunning()     const { return m_running; }

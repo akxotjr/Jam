@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/net/AdmissionContext.h"
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/RPC.h"
 #include "jamnet/core/net/Service.h"
@@ -48,17 +49,16 @@ namespace jam::net
 
 	Service::~Service()
 	{
-		Service::CloseService();
+		Service::BeginClose();
 	}
 
-	void Service::Init()
-	{
-	}
-
-	void Service::CloseService()
+	void Service::BeginClose(std::function<void()> completed)
 	{
 		if (m_transportClosed.exchange(true, std::memory_order_acq_rel))
+		{
+			if (completed) completed();
 			return;
+		}
 
 		m_running.store(false, std::memory_order_relaxed);
 
@@ -68,10 +68,12 @@ namespace jam::net
 		WaitPendingIocpDrain("UdpRouter", m_udpRouter.get());
 		m_listener.reset();
 		m_udpRouter.reset();
+		m_admissionContext.reset();
 		m_iocpCore.reset();
 
 		GlobalExecutor::Instance().ConveyAll(Job([] { FlushNetBufferThreadLocalCaches(); }));
 		FlushNetBufferThreadLocalCaches();
+		if (completed) completed();
 	}
 
 
@@ -131,6 +133,12 @@ namespace jam::net
 		m_sessionCount.fetch_add(1, std::memory_order_relaxed);
 	}
 
+	void Service::NotifyTcpSessionDetached()
+	{
+		m_tcpSessionCount.fetch_sub(1, std::memory_order_relaxed);
+		m_sessionCount.fetch_sub(1, std::memory_order_relaxed);
+	}
+
 	void Service::ReleaseTcpSession(TcpSession* session)
 	{
 		if (!session)
@@ -138,29 +146,16 @@ namespace jam::net
 
 		TcpSession* const sessionPtr = session;
 		const SessionId sessionId = session->GetSessionId();
-		const EndpointHandle endpoint = session->GetEndpointHandle();
 		auto self = shared_from_this();
-		session->Post(Job([self = std::move(self), sessionPtr, sessionId, endpoint]
+		session->Post(Job([self = std::move(self), sessionPtr, sessionId]
 			{
 				auto& L = CurrentShardLocalChecked();
-				std::unique_ptr<Session> detached = {};
-
 				if (sessionId == kInvalidSessionId)
-				{
-					auto& table = GetPreboundSessionTable(L);
-					auto it = table.find(endpoint);
-					if (it == table.end() || it->second.get() != sessionPtr)
-						return;
-					detached = std::move(it->second);
-					table.erase(it);
-				}
-				else
-				{
-					detached = L.sessionState->ReleaseBoundSession(sessionId, sessionPtr);
-					if (!detached)
-						return;
-					L.sessionState->FreeSessionId(sessionId);
-				}
+					return;
+				std::unique_ptr<Session> detached = GetOrCreateSessionShardState(L).ReleaseSession(sessionId, sessionPtr);
+				if (!detached)
+					return;
+				detached->OnSessionReleased();
 
 				auto closing = std::shared_ptr<Session>(std::move(detached));
 				Mailbox* mailbox = closing->m_mailboxRef.mailbox;
@@ -168,7 +163,7 @@ namespace jam::net
 					{
 						self->DestroySessionEntity(*closing);
 						closing->m_mailboxRef = {};
-						closing->FinalizeShardOwnedClose();
+						closing->CompleteClose();
 						self->m_tcpSessionCount.fetch_sub(1, std::memory_order_relaxed);
 						self->m_sessionCount.fetch_sub(1, std::memory_order_relaxed);
 					};
@@ -180,11 +175,8 @@ namespace jam::net
 			}, eJobPriority::Control));
 	}
 
-	void Service::NotifyUdpSessionAttached(uint64 endpointId, RouteKey routeKey, uint32 generation)
+	void Service::NotifyUdpSessionAttached()
 	{
-		if (m_udpRouter)
-			m_udpRouter->RegisterIngressPrebindRoute(endpointId, routeKey, generation);
-
 		m_udpSessionCount.fetch_add(1, std::memory_order_relaxed);
 		m_sessionCount.fetch_add(1, std::memory_order_relaxed);
 	}
@@ -193,46 +185,30 @@ namespace jam::net
 	{
 		if (!session) return;
 
-		const uint64 endpointId = session->GetEndpointId();
+		const EndpointId endpointId = session->GetEndpointId();
 		UdpSession* const sessionPtr = session;
 		const SessionId sessionId = session->GetSessionId();
-		const EndpointHandle endpoint = session->GetEndpointHandle();
 		auto self = shared_from_this();
-		session->Post(Job([self = std::move(self), endpointId, sessionPtr, sessionId, endpoint]
+		session->Post(Job([self = std::move(self), endpointId, sessionPtr, sessionId]
 			{
 				auto& L = CurrentShardLocalChecked();
-				std::unique_ptr<Session> detached = {};
-
 				if (sessionId == kInvalidSessionId)
-				{
-					auto& table = GetPreboundSessionTable(L);
-					auto it = table.find(endpoint);
-					if (it == table.end() || it->second.get() != sessionPtr)
-						return;
-					detached = std::move(it->second);
-					table.erase(it);
-				}
-				else
-				{
-					detached = L.sessionState->ReleaseBoundSession(sessionId, sessionPtr);
-					if (!detached)
-						return;
-					L.sessionState->FreeSessionId(sessionId);
-				}
+					return;
+				std::unique_ptr<Session> detached = GetOrCreateSessionShardState(L).ReleaseSession(sessionId, sessionPtr);
+				if (!detached)
+					return;
+				detached->OnSessionReleased();
 
 				auto closing = std::shared_ptr<Session>(std::move(detached));
 				Mailbox* mailbox = closing->m_mailboxRef.mailbox;
-				auto finalize = [self, endpointId, sessionId, endpoint, closing = std::move(closing)]() mutable
+				auto finalize = [self, endpointId, sessionId, closing = std::move(closing)]() mutable
 					{
 						self->DestroySessionEntity(*closing);
 						closing->m_mailboxRef = {};
-						closing->FinalizeShardOwnedClose();
+						closing->CompleteClose();
 						if (self->m_udpRouter)
 						{
-							if (sessionId != kInvalidSessionId)
-								self->m_udpRouter->ClearIngressBoundRoute(endpointId, sessionId);
-							else
-								self->m_udpRouter->ClearIngressPrebindRoute(endpointId, endpoint.routeKey, closing->GetServiceGeneration());
+							self->m_udpRouter->ClearIngressBoundRoute(endpointId, sessionId);
 						}
 
 						self->m_udpSessionCount.fetch_sub(1, std::memory_order_relaxed);
@@ -244,12 +220,6 @@ namespace jam::net
 				else
 					finalize();
 			}, eJobPriority::Control));
-	}
-
-	Session* Service::FindOwnedSession(SessionId sessionId, const EndpointHandle& endpoint, uint32 generation)
-	{
-		(void)generation;
-		return GetOrCreateSessionShardState(CurrentShardLocalChecked()).FindSessionAny(sessionId, endpoint);
 	}
 
 	bool Service::RegisterIocpObject(IocpObject* object)
@@ -273,25 +243,21 @@ namespace jam::net
 		if (!HasUdpFactory())
 			return false;
 
-		m_iocpCore = GlobalExecutor::Instance().AcquireIocpCore();
-		if (!m_iocpCore)
+		const IocpBinding iocp = GlobalExecutor::Instance().AcquireIocpBinding();
+		if (!iocp)
 			return false;
+		m_iocpCore = iocp.core;
+		m_admissionContext = iocp.admission;
 		m_running.store(true, std::memory_order_relaxed);
 
 		m_udpRouter = std::make_shared<UdpRouter>();
 		if (m_udpRouter->Start(this) == false)
 		{
-			CloseService();
+			BeginClose();
 			return false;
 		}
 
 		return true;
-	}
-
-	void ClientService::CloseService()
-	{
-		JAM_ASSERT(IsOnPrincipalShard());
-		BeginClose();
 	}
 
 	void ClientService::BeginClose(std::function<void()> completed)
@@ -344,7 +310,7 @@ namespace jam::net
 
 		if (!m_tcpSession)
 		{
-			FinalizeClose();
+			CompleteClose();
 			return;
 		}
 
@@ -380,17 +346,17 @@ namespace jam::net
 			m_tcpSession->SetSocket(INVALID_SOCKET);
 		WaitPendingIocpDrain("ClientTcpSession", m_tcpSession.get());
 		DestroyTcpSession(m_tcpSession.get());
-		FinalizeClose();
+		CompleteClose();
 	}
 
-	void ClientService::FinalizeClose()
+	void ClientService::CompleteClose()
 	{
 		JAM_ASSERT(IsOnPrincipalShard());
 		if (m_closePhase == eClosePhase::ClosingTransport || m_closePhase == eClosePhase::Closed)
 			return;
 
 		m_closePhase = eClosePhase::ClosingTransport;
-		Service::CloseService();
+		Service::BeginClose();
 		m_closePhase = eClosePhase::Closed;
 		++m_closeToken;
 
@@ -407,7 +373,6 @@ namespace jam::net
 			return false;
 
 		session->m_shard = m_principalShard;
-		session->m_serviceGeneration = m_tcpGeneration;
 		m_tcpSession = std::move(session);
 		NotifyTcpSessionAttached();
 		return true;
@@ -419,13 +384,9 @@ namespace jam::net
 		if (!session || m_udpSession)
 			return false;
 
-		auto* raw = session.get();
-		const uint64 endpointId = raw->GetEndpointId();
-		const RouteKey routeKey = raw->GetRouteKey();
 		session->m_shard = m_principalShard;
-		session->m_serviceGeneration = m_udpGeneration;
 		m_udpSession = std::move(session);
-		NotifyUdpSessionAttached(endpointId, routeKey, m_udpGeneration);
+		NotifyUdpSessionAttached();
 		return true;
 	}
 
@@ -449,7 +410,7 @@ namespace jam::net
 
 		DestroyTcpSession(session);
 		if (m_closePhase == eClosePhase::ClosingTcp)
-			FinalizeClose();
+			CompleteClose();
 	}
 
 	void ClientService::ReleaseUdpSession(UdpSession* session)
@@ -475,15 +436,15 @@ namespace jam::net
 			return;
 
 		auto owner = std::move(m_tcpSession);
+		owner->OnSessionReleased();
 		DestroySessionEntity(*owner);
 
 		if (owner->m_mailboxRef.mailbox)
 			m_principalShard->CloseMailbox(owner->m_mailboxRef.mailbox->GetId(), eMailboxCloseMode::Abort);
 
 		owner->m_mailboxRef = {};
-		owner->FinalizeShardOwnedClose();
+		owner->CompleteClose();
 
-		++m_tcpGeneration;
 		m_tcpSessionCount.fetch_sub(1, std::memory_order_relaxed);
 		m_sessionCount.fetch_sub(1, std::memory_order_relaxed);
 	}
@@ -494,6 +455,7 @@ namespace jam::net
 			return;
 
 		auto owner = std::move(m_udpSession);
+		owner->OnSessionReleased();
 		if (m_udpRouter)
 			m_udpRouter->ClearIngressRoute(owner->GetEndpointId());
 
@@ -502,9 +464,8 @@ namespace jam::net
 			m_principalShard->CloseMailbox(owner->m_mailboxRef.mailbox->GetId(), eMailboxCloseMode::Abort);
 
 		owner->m_mailboxRef = {};
-		owner->FinalizeShardOwnedClose();
+		owner->CompleteClose();
 
-		++m_udpGeneration;
 		m_udpSessionCount.fetch_sub(1, std::memory_order_relaxed);
 		m_sessionCount.fetch_sub(1, std::memory_order_relaxed);
 	}
@@ -535,27 +496,6 @@ namespace jam::net
 		session.m_entity = entt::null;
 	}
 
-	Session* ClientService::FindOwnedSession(SessionId sessionId, const EndpointHandle& endpoint, uint32 generation)
-	{
-		JAM_ASSERT(IsOnPrincipalShard());
-		auto matches = [sessionId, &endpoint](const Session* session)
-			{
-				if (!session)
-					return false;
-				if (sessionId != kInvalidSessionId)
-					return session->GetSessionId() == sessionId && session->MatchesEndpointHandle(endpoint);
-				return session->MatchesEndpointHandle(endpoint);
-			};
-
-		if ((generation == 0 || generation == m_tcpGeneration) && matches(m_tcpSession.get()))
-			return m_tcpSession.get();
-		if ((generation == 0 || generation == m_udpGeneration) && matches(m_udpSession.get()))
-			return m_udpSession.get();
-		return nullptr;
-	}
-
-
-
 	ServerService::ServerService(const ServiceConfig& config) : Service(config)
 	{
 		m_type = eServiceType::SERVER;
@@ -566,9 +506,14 @@ namespace jam::net
 		if (!CanStart())
 			return false;
 
-		m_iocpCore = GlobalExecutor::Instance().AcquireIocpCore();
-		if (!m_iocpCore)
+		const IocpBinding iocp = GlobalExecutor::Instance().AcquireIocpBinding();
+		if (!iocp) return false;
+		if (HasTcpFactory() && (!m_authenticator || !iocp.admission->SetAuthenticator(m_authenticator)))
 			return false;
+
+		m_iocpCore		   = iocp.core;
+		m_admissionContext = iocp.admission;
+
 		m_running.store(true, std::memory_order_relaxed);
 
 		bool startedAny = false;
@@ -578,7 +523,7 @@ namespace jam::net
 			m_listener = std::make_shared<TcpListener>();
 			if (m_listener->StartAccept(this) == false)
 			{
-				CloseService();
+				BeginClose();
 				return false;
 			}
 			startedAny = true;
@@ -589,7 +534,7 @@ namespace jam::net
 			m_udpRouter = std::make_shared<UdpRouter>();
 			if (m_udpRouter->Start(this) == false)
 			{
-				CloseService();
+				BeginClose();
 				return false;
 			}
 			startedAny = true;
@@ -597,18 +542,18 @@ namespace jam::net
 
 		if (!startedAny)
 		{
-			CloseService();
+			BeginClose();
 			return false;
 		}
 
 		return true;
 	}
 
-	void ServerService::CloseService()
+	void ServerService::BeginClose(std::function<void()> completed)
 	{
 		if (m_sessionsClosed.exchange(true, std::memory_order_acq_rel))
 		{
-			Service::CloseService();
+			Service::BeginClose(std::move(completed));
 			return;
 		}
 
@@ -636,19 +581,6 @@ namespace jam::net
 				std::vector<std::unique_ptr<Session>> closing;
 				if (L.sessionState)
 				{
-					auto& prebound = GetPreboundSessionTable(L);
-					for (auto it = prebound.begin(); it != prebound.end();)
-					{
-						Session* session = it->second.get();
-						if (session && session->GetService() == self.get())
-						{
-							closing.push_back(std::move(it->second));
-							it = prebound.erase(it);
-							continue;
-						}
-						++it;
-					}
-
 					for (auto& entry : L.sessionState->sessionsById.entries)
 					{
 						if (!entry.object || entry.object->GetService() != self.get())
@@ -662,10 +594,11 @@ namespace jam::net
 
 				for (auto& session : closing)
 				{
+					session->OnSessionReleased();
 					session->SetService(nullptr);
 					session->Disconnect();
 					WaitPendingIocpDrain("ServerSession", session.get());
-					session->FinalizeShardOwnedClose();
+					session->CompleteClose();
 				}
 
 				std::scoped_lock lock(barrier->mutex);
@@ -689,6 +622,6 @@ namespace jam::net
 			barrier->completed.wait(lock, [&barrier] { return barrier->remaining == 0; });
 		}
 
-		Service::CloseService();
+		Service::BeginClose(std::move(completed));
 	}
 }

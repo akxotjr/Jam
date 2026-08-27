@@ -62,7 +62,7 @@ namespace jam::net
 		friend class ServerPhysicsSystem;
 
 		bool								OnInitialize() override;
-		void								OnShutdown() override;
+		void								OnCloseStarted() override;
 		void								Tick() override;
 		void								DispatchPhysicsEvents(std::span<const px::PhysicsEvent> events);
 

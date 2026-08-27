@@ -17,22 +17,12 @@ namespace jam::net
 		if (!session)
 			return false;
 
-		const SessionId sessionId = session->GetSessionId();
-		if (sessionId == kInvalidSessionId)
+		if (session->GetSessionId() == kInvalidSessionId)
 			return false;
-		auto service = session->GetServiceRef();
-		if (!service)
-			return false;
-		const EndpointHandle endpoint = session->GetEndpointHandle();
-		const uint32 generation = session->GetServiceGeneration();
 
 		auto fnsp = std::make_shared<FnT>(std::forward<Fn>(fn));
-		session->Submit(Job([service, sessionId, endpoint, generation, fnsp]() mutable
+		session->Post(Job([session, fnsp]() mutable
 			{
-				Session* session = service->FindOwnedSession(sessionId, endpoint, generation);
-				if (!session)
-					return;
-
 				const auto e = session->GetEntity();
 				if (e == entt::null)
 					return;
@@ -212,33 +202,18 @@ namespace jam::net
 			return;
 		}
 
-		const SessionId sessionId = session->GetSessionId();
-		if (sessionId == kInvalidSessionId)
+		if (session->GetSessionId() == kInvalidSessionId)
 		{
 			onNull();
 			return;
 		}
-		auto service = session->GetServiceRef();
-		if (!service)
-		{
-			onNull();
-			return;
-		}
-		const EndpointHandle endpoint = session->GetEndpointHandle();
-		const uint32 generation = session->GetServiceGeneration();
+		const SessionRef<Session> sessionRef(session);
 
 		auto fnsp		= std::make_shared<FnT>(std::forward<Fn>(fn));
 		auto onNullsp	= std::make_shared<OnNullT>(std::forward<OnNull>(onNull));
-		session->Submit(Job([service, sessionId, endpoint, generation, fnsp, onNullsp]() mutable
+		session->Post(Job([session, sessionRef, fnsp, onNullsp]() mutable
 			{
 				auto& L = CurrentShardLocalChecked();
-				Session* session = service->FindOwnedSession(sessionId, endpoint, generation);
-				if (!session)
-				{
-					(*onNullsp)();
-					return;
-				}
-
 				auto* scheduler = L.scheduler;
 				if (!scheduler)
 				{
@@ -255,9 +230,9 @@ namespace jam::net
 
 				FiberDesc desc{};
 				desc.name = "RPCAPI.RunOnSessionFiber";
-				scheduler->PostSpawn([service, sessionId, endpoint, generation, fnsp, onNullsp]() mutable
+				scheduler->PostSpawn([sessionRef, fnsp, onNullsp]() mutable
 					{
-						Session* current = service->FindOwnedSession(sessionId, endpoint, generation);
+						Session* current = sessionRef.TryGet();
 						if (!current || current->GetEntity() == entt::null)
 						{
 							(*onNullsp)();

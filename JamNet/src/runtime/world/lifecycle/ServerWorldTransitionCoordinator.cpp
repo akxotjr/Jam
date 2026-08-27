@@ -54,7 +54,7 @@ namespace jam::net
 				world->SetActorLevelDatabase(ActorLevelsLoader::Load(resolved.actorLevelPath));
 
 			state.RegisterWorld(resolved);
-			if (!world->Init())
+			if (!world->Initialize())
 			{
 				state.FreeWorldId(worldId);
 				return std::nullopt;
@@ -104,16 +104,16 @@ namespace jam::net
 		return true;
 	}
 
-	void ServerWorldTransitionCoordinator::Shutdown()
+	void ServerWorldTransitionCoordinator::Close()
 	{
-		struct ShutdownBarrier
+		struct CloseBarrier
 		{
 			std::mutex mutex;
 			std::condition_variable cv;
 			size_t remainingShards = 0;
 		};
 
-		auto barrier = std::make_shared<ShutdownBarrier>();
+		auto barrier = std::make_shared<CloseBarrier>();
 		for (const auto& shard : GLOBAL_EXEC.GetShards())
 			if (shard)
 				++barrier->remainingShards;
@@ -745,10 +745,15 @@ namespace jam::net
 		const WorldTransitionContinuation& continuation, std::function<bool(WorldShardState&)> command)
 	{
 		if (!world.IsValid() || !command)
+		{
+			JAM_LOG_WARN("[WorldTransition] SubmitWorldCommand rejected invalid input. userId={}, token={}, phase={}, worldId={}, worldValid={}, commandValid={}",
+				continuation.userId, continuation.token.value, static_cast<uint32>(continuation.expectedPhase), world.worldId,
+				world.IsValid(), static_cast<bool>(command));
 			return false;
+		}
 
 		const std::weak_ptr<ServerWorldTransitionCoordinator> weak = weak_from_this();
-		return SubmitToWorldShard(world.worldId, Job([worldId = world.worldId, continuation, command = std::move(command), weak]() mutable
+		const bool submitted = SubmitToWorldShard(world.worldId, Job([worldId = world.worldId, continuation, command = std::move(command), weak]() mutable
 			{
 				auto& state = GetOrCreateWorldShardState(CurrentShardLocalChecked());
 				const bool succeeded = state.FindAuthoritativeWorldEntry(worldId) && command(state);
@@ -761,6 +766,12 @@ namespace jam::net
 							coordinator->OnWorldCommandCompleted(continuation, succeeded);
 					}, eJobPriority::Control));
 			}, eJobPriority::Control));
+		if (!submitted)
+		{
+			JAM_LOG_WARN("[WorldTransition] SubmitWorldCommand failed to route. userId={}, token={}, phase={}, worldId={}",
+				continuation.userId, continuation.token.value, static_cast<uint32>(continuation.expectedPhase), world.worldId);
+		}
+		return submitted;
 	}
 
 	void ServerWorldTransitionCoordinator::EnterOnUserShard(UserId userId, const EnterWorldRequest& request, uint64 nowNs)

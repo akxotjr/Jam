@@ -85,7 +85,7 @@ namespace jam::net
 		StopTickPipeline();
 	}
 
-	void ClientWorld::OnShutdown()
+	void ClientWorld::OnCloseStarted()
 	{
 		Stop();
 		ShutdownPhysicsWhenPipelineStops();

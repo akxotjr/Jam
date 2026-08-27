@@ -2,6 +2,7 @@
 
 #include "jamnet/core/executor/ExecutorPeriodic.h"
 #include "jamnet/core/net/Buffer.h"
+#include "jamnet/core/net/IAuthenticator.h"
 #include "jamnet/core/net/NetAddress.h"
 #include "jamnet/core/net/Session.h"
 #include "jamnet/runtime/world/lifecycle/WorldTransitionTypes.h"
@@ -11,7 +12,6 @@
 #include "jamnet/runtime/session/ServerSession.h"
 #include "jamnet/runtime/session/UserContext.h"
 #include "jamnet/runtime/content/social/SocialTypes.h"
-#include "jamnet/runtime/content/authentication/IAuthenticationContent.h"
 #include "jamnet/runtime/content/generic/GenericContentTypes.h"
 
 
@@ -29,7 +29,6 @@ namespace jam
 namespace jam::net
 {
 	class ISocialContent;
-	class IAuthenticationContent;
 	class SocialService;
 	class IGenericContent;
 	class GenericContentService;
@@ -53,7 +52,7 @@ namespace jam::net
 		WorldContentFactory		worldContentFactory;
 		EnterWorldDestinationResolver enterWorldDestinationResolver;
 		std::shared_ptr<ISocialContent>			socialContent = nullptr;
-		std::shared_ptr<IAuthenticationContent>	authenticationContent = nullptr;
+		std::shared_ptr<IAuthenticator>			authenticator = nullptr;
 		std::shared_ptr<IGenericContent>					content = nullptr;
 	};
 
@@ -74,8 +73,6 @@ namespace jam::net
 		void									LeaveWorld(UserId userId, const LeaveWorldRequest& request);
 		bool									DispatchSocialCommand(UserId userId, SocialCommand command);
 		bool									DispatchContentRequest(UserId userId, GenericContentRequest request);
-		void									Authenticate(LoginCredential credential, AuthenticationCompleted completed) const;
-
 		std::shared_ptr<ServerService>			GetService() const { return m_service; }
 		const SharedDataManifest*				GetSharedDataManifest() const { return &m_manifest; }
 		uint64									GetReconnectTimeoutNs() const { return m_config.reconnectTimeoutNs; }

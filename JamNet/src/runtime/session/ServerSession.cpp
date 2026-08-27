@@ -97,7 +97,7 @@ namespace jam::net
 
 
 
-	void ServerTcpSession::OnLinkEstablished()
+	void ServerTcpSession::OnSessionEstablished()
 	{
 		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession established. ip: {} | port: {}", 
 			GetAccountId(), 
@@ -105,13 +105,13 @@ namespace jam::net
 			GetRemoteNetAddress().GetIpAddress(), 
 			GetRemoteNetAddress().GetPort());
 
-		FinalizeEstablishedSession();
+		AttachToUserContext();
 		if (IsClosing())
 			return;
 		BootstrapRPC();
 	}
 
-	void ServerTcpSession::OnDisconnected()
+	void ServerTcpSession::OnSessionReleased()
 	{
 		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ServerTcpSession disconnected", GetAccountId(), GetUserId());
 
@@ -209,42 +209,7 @@ namespace jam::net
 			});
 	}
 
-	RuntimeId ServerTcpSession::ResolveServerTcpBindUserId(uint64 accountId)
-	{
-		if (accountId == kInvalidAccountId || !m_manager || !GetService())
-			return kInvalidRuntimeId;
-
-		auto& L = CurrentShardLocalChecked();
-		auto& state = GetOrCreateUserShardState(L);
-		UserContext* ctx = state.FindUserContextByAccount(accountId);
-		if (!ctx)
-			ctx = state.AllocUserContext(accountId);
-		return ctx ? ctx->userId : kInvalidRuntimeId;
-	}
-
-	void ServerTcpSession::AuthenticateServerTcpBind(const TCP_BIND_REQ_DATA& request, std::function<void(uint64)> completed)
-	{
-		if (!m_manager || !completed)
-		{
-			if (completed) completed(kInvalidAccountId);
-			return;
-		}
-
-		if (request.kind == eLoginCredentialKind::Password)
-		{
-			m_manager->Authenticate(PasswordCredential{
-				.loginId = std::string(reinterpret_cast<const char*>(request.loginId), request.loginIdSize),
-				.password = std::string(reinterpret_cast<const char*>(request.secret), request.secretSize),
-			}, std::move(completed));
-			return;
-		}
-
-		m_manager->Authenticate(TicketCredential{
-			.ticket = std::vector<uint8>(request.secret, request.secret + request.secretSize),
-		}, std::move(completed));
-	}
-
-	void ServerTcpSession::FinalizeEstablishedSession()
+	void ServerTcpSession::AttachToUserContext()
 	{
 		if (!m_manager || m_accountId == kInvalidAccountId || m_userId == kInvalidUserId || GetSessionId() == kInvalidSessionId)
 		{
@@ -275,16 +240,6 @@ namespace jam::net
 			transitions->OnReconnected(m_userId);
 	}
 
-	eBootstrapKind ServerTcpSession::ResolveServerBootstrapKind(RuntimeId userId)
-	{
-		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
-		const UserContext* ctx = state.FindUserContext(userId);
-		if (!ctx)
-			return eBootstrapKind::Pending;
-
-		return ctx->worldState.main ? eBootstrapKind::Resync : eBootstrapKind::Fresh;
-	}
-
 	void ServerTcpSession::BootstrapRPC()
 	{
 		auto& R = CurrentShardLocalChecked().registry;
@@ -298,7 +253,7 @@ namespace jam::net
 
 
 
-	void ServerUdpSession::OnLinkEstablished()
+	void ServerUdpSession::OnSessionEstablished()
 	{
 		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ServerUdpSession established. ip: {} | port: {}",
 			GetAccountId(),
@@ -306,13 +261,13 @@ namespace jam::net
 			GetRemoteNetAddress().GetIpAddress(),
 			GetRemoteNetAddress().GetPort());
 
-		FinalizeEstablishedSession();
+		AttachToUserContext();
 		if (IsClosing())
 			return;
 		BootstrapRPC();
 	}
 
-	void ServerUdpSession::OnDisconnected()
+	void ServerUdpSession::OnSessionReleased()
 	{
 		JAM_LOG_INFO("[AccountId= {}, UserId = {}] ServerUdpSession disconnected", GetAccountId(), GetUserId());
 
@@ -364,17 +319,7 @@ namespace jam::net
 			});
 	}
 
-	bool ServerUdpSession::ValidateServerUdpBindPrincipal(uint64 accountId, RuntimeId userId)
-	{
-		if (accountId == kInvalidAccountId || userId == kInvalidUserId || !m_manager || !GetService())
-			return false;
-
-		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
-		UserContext* ctx = state.FindUserContext(userId);
-		return ctx && ctx->accountId == accountId && ctx->tcp != kInvalidSessionId;
-	}
-
-	void ServerUdpSession::FinalizeEstablishedSession()
+	void ServerUdpSession::AttachToUserContext()
 	{
 		if (!m_manager || m_accountId == kInvalidAccountId || m_userId == kInvalidUserId || GetSessionId() == kInvalidSessionId)
 		{
@@ -384,16 +329,14 @@ namespace jam::net
 
 		auto& state = GetOrCreateUserShardState(CurrentShardLocalChecked());
 		UserContext* ctx = state.FindUserContext(m_userId);
-		if (!ctx || ctx->accountId != m_accountId || ctx->connectionState == eUserConnectionState::Released
-			|| ctx->tcp == kInvalidSessionId)
+		if (!ctx || ctx->accountId != m_accountId || ctx->connectionState == eUserConnectionState::Released || ctx->tcp == kInvalidSessionId)
 		{
 			Disconnect();
 			return;
 		}
 
 		auto& sessionState = GetOrCreateSessionShardState(CurrentShardLocalChecked());
-		if (ctx->udp != kInvalidSessionId && ctx->udp != GetSessionId()
-			&& sessionState.FindSessionRef(ctx->udp).TryGet())
+		if (ctx->udp != kInvalidSessionId && ctx->udp != GetSessionId() && sessionState.FindSessionRef(ctx->udp).TryGet())
 		{
 			JAM_LOG_WARN("UDP session is already registered.");
 			Disconnect();

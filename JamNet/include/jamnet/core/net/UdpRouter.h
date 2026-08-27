@@ -16,16 +16,15 @@ namespace jam::net
 	enum class UdpIngressRouteKind : uint8
 	{
 		None			= 0,
-		PrebindRoute	= 1,
+		Admission		= 1,
 		BoundSession	= 2,
 	};
 
 	struct UdpIngressRoute
 	{
-		UdpIngressRouteKind  kind		= UdpIngressRouteKind::None;
-		RouteKey			 routeKey	= {};
-		SessionId			 sessionId	= kInvalidSessionId;
-		uint32				 generation	= 0;
+		UdpIngressRouteKind  kind		 = UdpIngressRouteKind::None;
+		uint64				 admissionId = 0;
+		SessionId			 sessionId	 = kInvalidSessionId;
 	};
 
 	class UdpRouter final : public IocpObject
@@ -38,7 +37,6 @@ namespace jam::net
 			std::atomic<uint64> key			= 0;
 			std::atomic<uint32> sequence	= 0;
 			std::atomic<uint64> value		= 0;
-			std::atomic<uint32> generation	= 0;
 			std::atomic<uint8>  kind		= static_cast<uint8>(UdpIngressRouteKind::None);
 		};
 
@@ -98,18 +96,18 @@ namespace jam::net
 
 		void					HandleError(int32 errorCode);
 
-		void					RegisterIngressPrebindRoute(uint64 endpointId, RouteKey ownerRouteKey, uint32 generation = 0);
-		void					PromoteIngressToBound(uint64 endpointId, SessionId sessionId);
-		void					ClearIngressRoute(uint64 endpointId);
-		bool					ClearIngressPrebindRoute(uint64 endpointId, RouteKey ownerRouteKey, uint32 generation = 0);
-		bool					ClearIngressBoundRoute(uint64 endpointId, SessionId sessionId);
-		bool					TryGetIngressRoute(uint64 endpointId, UdpIngressRoute& out) const;
+		void					RegisterIngressAdmission(EndpointId endpointId, uint64 admissionId);
+		bool					PromoteIngressToBound(EndpointId endpointId, uint64 expectedAdmissionId, SessionId sessionId);
+		void					ClearIngressRoute(EndpointId endpointId);
+		bool					ClearIngressAdmission(EndpointId endpointId, uint64 admissionId);
+		bool					ClearIngressBoundRoute(EndpointId endpointId, SessionId sessionId);
+		bool					TryGetIngressRoute(EndpointId endpointId, UdpIngressRoute& out) const;
 
 	private:
-		static size_t					StartIngressIndex(uint64 endpointId);
-		void							UpsertIngressRoute(uint64 endpointId, UdpIngressRouteKind kind, uint64 value, uint32 generation = 0);
-		bool							ClearIngressRouteIfMatches(uint64 endpointId, UdpIngressRouteKind kind, uint64 value, uint32 generation);
-		std::shared_ptr<IngressBudget> TryAcquireIngressBudget(uint32 shardIndex);
+		static size_t					StartIngressIndex(EndpointId endpointId);
+		void							UpsertIngressRoute(EndpointId endpointId, UdpIngressRouteKind kind, uint64 value);
+		bool							ClearIngressRouteIfMatches(EndpointId endpointId, UdpIngressRouteKind kind, uint64 value);
+		std::shared_ptr<IngressBudget>  TryAcquireIngressBudget(uint32 shardIndex);
 		static void						ScheduleBoundIngressDrain(uint16 shardIndex, const std::shared_ptr<BoundIngressState>& ingress);
 		static void						DrainBoundIngress(uint16 shardIndex, const std::shared_ptr<BoundIngressState>& ingress);
 

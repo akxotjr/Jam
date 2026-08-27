@@ -25,7 +25,7 @@ namespace jam::net
 	{
 	}
 
-	bool WorldBase::Init()
+	bool WorldBase::Initialize()
 	{
 		if (!m_config.HasWorld())
 			return false;
@@ -59,17 +59,17 @@ namespace jam::net
 		return true;
 	}
 
-	void WorldBase::Shutdown(eMailboxCloseMode mode, std::function<void()> onClosed)
+	bool WorldBase::BeginClose(eMailboxCloseMode mode, std::function<void()> onClosed)
 	{
 		if (!m_alive.exchange(false, std::memory_order_acq_rel))
 		{
 			if (onClosed)
 				onClosed();
-			return;
+			return true;
 		}
 
 		JAM_ASSERT(IsCurrentShardContext());
-		OnShutdown();
+		OnCloseStarted();
 
 		// Client worlds are shared-owned by ClientMainWorldState. Keep an optional
 		// lease until the asynchronous mailbox close callback has completed.
@@ -79,7 +79,7 @@ namespace jam::net
 			{
 				m_mailboxRef = {};
 				m_shard.reset();
-				OnShutdownComplete();
+				OnCloseCompleted();
 				lifetime.reset();
 
 				if (onClosed)
@@ -88,17 +88,18 @@ namespace jam::net
 
 		auto close = [this, finalize = std::move(finalize)]() mutable
 			{
-				OnShutdownBarrier(std::move(finalize));
+				BeginCloseBarrier(std::move(finalize));
 			};
 
 		auto shard = m_shard.lock();
 		if (!shard || !m_mailboxRef.IsValid()) 
 		{
 			close();
-			return;
+			return true;
 		}
 
 		shard->CloseMailbox(m_mailboxRef.mailbox->GetId(), mode, [close = std::move(close)]() mutable { close(); });
+		return true;
 	}
 
 	RuntimeId WorldBase::GetShardOwnedRuntimeId() const
@@ -109,12 +110,6 @@ namespace jam::net
 	MailboxRef WorldBase::GetShardOwnedMailboxRef() const
 	{
 		return GetMailboxRef();
-	}
-
-	bool WorldBase::BeginClose(eMailboxCloseMode mode, std::function<void()> onClosed)
-	{
-		Shutdown(mode, std::move(onClosed));
-		return true;
 	}
 
 	void WorldBase::Submit(Job j) const

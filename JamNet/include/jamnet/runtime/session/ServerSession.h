@@ -26,15 +26,11 @@ namespace jam::net
 		void					OnDespawnPlayerRequest(entt::entity e, const fb::fbDespawnPlayerReq& req, uint32 requestId);
 
 	protected:
-		void					OnLinkEstablished() override;
-		void					OnDisconnected() override;
+		void					OnSessionEstablished() override;
+		void					OnSessionReleased() override;
 		void					HandleCustomPacket(Packet packet) override;
-		RuntimeId				ResolveServerTcpBindUserId(uint64 accountId) override;
-		void					AuthenticateServerTcpBind(const TCP_BIND_REQ_DATA& request, std::function<void(uint64)> completed) override;
-		eBootstrapKind			ResolveServerBootstrapKind(RuntimeId userId) override;
-
 	private:
-		void					FinalizeEstablishedSession();
+		void					AttachToUserContext();
 		void					BootstrapRPC();
 
 	private:
@@ -51,13 +47,12 @@ namespace jam::net
 		void					OnSpawnActorRequest(entt::entity e, const fb::fbSpawnActorReq& req, uint32 requestId);
 
 	protected:
-		void					OnLinkEstablished() override;
-		void					OnDisconnected() override;
+		void					OnSessionEstablished() override;
+		void					OnSessionReleased() override;
 		void					HandleCustomPacket(Packet packet) override;
-		bool					ValidateServerUdpBindPrincipal(uint64 accountId, RuntimeId userId) override;
 
 	private:
-		void					FinalizeEstablishedSession();
+		void					AttachToUserContext();
 		void					BootstrapRPC();
 
 	private:

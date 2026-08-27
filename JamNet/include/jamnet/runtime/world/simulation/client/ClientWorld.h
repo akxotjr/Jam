@@ -64,7 +64,7 @@ namespace jam::net
 
 	private:
 		bool								OnInitialize() override;
-		void								OnShutdown() override;
+		void								OnCloseStarted() override;
 
 		void								Tick() override;
 		

@@ -43,7 +43,6 @@
 
 #include "jamnet/runtime/application/ClientRuntime.h"
 #include "jamnet/runtime/application/ServerNetworkManager.h"
-#include "jamnet/runtime/content/authentication/IAuthenticationContent.h"
 #include "jamnet/runtime/content/generic/GenericContentTypes.h"
 #include "jamnet/runtime/content/generic/IGenericContent.h"
 #include "jamnet/runtime/content/social/SocialTypes.h"

@@ -43,14 +43,8 @@ namespace jam::net
 	{
 		m_clientInstanceId = g_nextClientInstanceId.fetch_add(1, std::memory_order_relaxed);
 
-		if (m_config.loginId.empty() && m_config.accountId != kInvalidAccountId)
-			m_config.loginId = std::to_string(m_config.accountId);
-		if (m_config.password.empty() && m_config.accountId != kInvalidAccountId)
-			m_config.password = std::to_string(m_config.accountId);
-
 		m_principal.accountId = config.accountId;
-		const uint64 principalSeed = config.accountId != kInvalidAccountId
-			? config.accountId : static_cast<uint64>(std::hash<std::string>{}(config.loginId));
+		const uint64 principalSeed = config.accountId != kInvalidAccountId ? config.accountId : m_clientInstanceId;
 		m_principalShard = GLOBAL_EXEC.GetAffinityShard(principalSeed);
 
 		m_manifest			  = SharedDataManifestLoader::Load(config.sharedDataManifestPath);
@@ -62,22 +56,15 @@ namespace jam::net
 
 	ClientNetworkManager::~ClientNetworkManager()
 	{
-		ShutdownPrincipalAndWait();
+		ClosePrincipalAndWait();
 	}
 
 	bool ClientNetworkManager::Connect()
 	{
 
-		if (m_config.ticket.empty() && (m_config.loginId.empty() || m_config.password.empty()))
+		if (m_config.authField0.size() > kMaxAuthFieldBytes || m_config.authField1.size() > kMaxAuthFieldBytes)
 		{
-			JAM_LOG_ERROR_LOC("Login credential is not set");
-			return false;
-		}
-		if (m_config.loginId.size() > kMaxLoginIdBytes
-			|| m_config.password.size() > kMaxLoginSecretBytes
-			|| m_config.ticket.size() > kMaxLoginSecretBytes)
-		{
-			JAM_LOG_ERROR_LOC("Login credential exceeds the binding packet limit");
+			JAM_LOG_ERROR_LOC("Authentication field exceeds the binding packet limit");
 			return false;
 		}
 		if (!m_principalShard)
@@ -103,9 +90,9 @@ namespace jam::net
 			}, eJobPriority::Control));
 	}
 
-	void ClientNetworkManager::Shutdown()
+	void ClientNetworkManager::Close()
 	{
-		ShutdownPrincipalAndWait();
+		ClosePrincipalAndWait();
 	}
 
 	bool ClientNetworkManager::ConnectOnPrincipalShard()
@@ -180,10 +167,10 @@ namespace jam::net
 			};
 
 		for (const auto& world : worlds)
-			world->Shutdown(eMailboxCloseMode::Abort, finalize);
+			world->BeginClose(eMailboxCloseMode::Abort, finalize);
 	}
 
-	void ClientNetworkManager::ShutdownPrincipalAndWait()
+	void ClientNetworkManager::ClosePrincipalAndWait()
 	{
 		if (!m_principalShard)
 			return;
@@ -440,18 +427,13 @@ namespace jam::net
 				if (auto* tcp = dynamic_cast<ClientTcpSession*>(session))
 				{
 					tcp->SetNetworkManager(this);
-					if (!m_config.ticket.empty())
-						tcp->SetTicketCredential(m_config.ticket);
-					else
-						tcp->SetPasswordCredential(m_config.loginId, m_config.password);
+					tcp->SetAuthCredential(m_config.authScheme, m_config.authField0, m_config.authField1);
 				}
 				else if (auto* udp = dynamic_cast<ClientUdpSession*>(session))
 					udp->SetNetworkManager(this);
 
 				session->SetAccountId(GetAccountId());
 			});
-
-		m_service->Init();
 
 		if (!m_service->Start())
 			return false;
@@ -622,7 +604,7 @@ namespace jam::net
 		{
 			const auto& current = mainWorld.Current();
 			if ((!current || current->mailbox.ownerId != pending->mailbox.ownerId) && pending->worldObject)
-				pending->worldObject->Shutdown(eMailboxCloseMode::Abort);
+				pending->worldObject->BeginClose(eMailboxCloseMode::Abort, nullptr);
 
 			mainWorld.Cancel(pending->syncToken);
 		}
@@ -646,7 +628,7 @@ namespace jam::net
 		if (world && !config.actorLevelPath.empty())
 			world->SetActorLevelDatabase(ActorLevelsLoader::Load(config.actorLevelPath));
 
-		if (world && world->Init())
+		if (world && world->Initialize())
 			binding = { .world = config.GetWorldRef(), .mailbox = world->GetMailboxRef(), .worldObject = std::move(world) };
 
 		CompletePreparedMainWorld(prepare, std::move(binding), std::move(completed));
@@ -658,7 +640,7 @@ namespace jam::net
 		const bool succeeded = binding.mailbox.IsValid() && binding.worldObject && m_principal.mainWorld.Prepare(prepare, binding.mailbox, binding.worldObject);
 
 		if (!succeeded && binding.worldObject && binding.mailbox.IsValid())
-			binding.worldObject->Shutdown(eMailboxCloseMode::Abort);
+			binding.worldObject->BeginClose(eMailboxCloseMode::Abort, nullptr);
 
 		if (completed)
 			completed(succeeded);
@@ -695,7 +677,7 @@ namespace jam::net
 		if (previous && current && previous->mailbox.ownerId != current->mailbox.ownerId && previous->worldObject)
 		{
 			previous->worldObject->RemoveMember(GetUserId());
-			previous->worldObject->Shutdown(eMailboxCloseMode::Abort);
+			previous->worldObject->BeginClose(eMailboxCloseMode::Abort, nullptr);
 		}
 
 		return true;
@@ -719,7 +701,7 @@ namespace jam::net
 			{
 				if (!binding || !binding->worldObject) return;
 				binding->worldObject->RemoveMember(userId);
-				binding->worldObject->Shutdown(eMailboxCloseMode::Abort);
+				binding->worldObject->BeginClose(eMailboxCloseMode::Abort, nullptr);
 			};
 
 		destroy(current);

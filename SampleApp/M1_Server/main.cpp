@@ -5,7 +5,7 @@
 #include "WorldContent.h"
 #include "WorldContentsLoader.h"
 #include "SocialContent.h"
-#include "AuthenticationContent.h"
+#include "Authenticator.h"
 #include "AccountStore.h"
 #include "CharacterContent.h"
 #include "CharacterStore.h"
@@ -89,7 +89,7 @@ int main()
 		config.maxConnections				 = 4000;
 		config.sharedDataManifestPath		 = (sharedDataRoot / "shared_data_manifest.json").string();
 		config.socialContent				 = std::make_shared<m1::SocialContent>(characters, characterSessions);
-		config.authenticationContent		 = std::make_shared<m1::AuthenticationContent>(accounts);
+		config.authenticator				 = std::make_shared<m1::Authenticator>(accounts);
 		config.content						 = std::make_shared<m1::CharacterContent>(characters, characterSessions);
 		config.enterWorldDestinationResolver = [characterSessions](jam::net::AccountId accountId, jam::net::UserId userId)
 			-> std::optional<jam::net::WorldArchetypeKey>

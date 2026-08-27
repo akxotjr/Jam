@@ -20,10 +20,11 @@ namespace
 
 	void PrintUsage()
 	{
-		std::cout << "Usage: M1_Bot.exe baseline\n";
+		std::cout << "Usage: M1_Bot.exe baseline [--long]\n";
 		std::cout << "Usage: M1_Bot.exe <target|peak|stress|aoi-hotspot|portal-burst> <botCount>\n";
 		std::cout << "Usage: M1_Bot.exe target <botCount> --fast\n";
 		std::cout << "  baseline: 300 bots, 3-minute measurement\n";
+		std::cout << "  baseline --long: 300 bots, 10-minute measurement\n";
 		std::cout << "  --fast: 1-minute warm-up, 3-minute measurement\n";
 		std::cout << "  botCount: 1-4000\n";
 	}
@@ -96,9 +97,11 @@ namespace
 int main(int argc, char* argv[])
 {
 	BotRunnerConfig botConfig{};
-	const bool baseline = argc == 2 && std::string_view(argv[1]) == "baseline";
+	const bool standardBaseline = argc == 2 && std::string_view(argv[1]) == "baseline";
+	const bool longBaseline = argc == 3 && std::string_view(argv[1]) == "baseline" && std::string_view(argv[2]) == "--long";
+	const bool baseline = standardBaseline || longBaseline;
 	const bool fast = argc == 4 && std::string_view(argv[1]) == "target" && std::string_view(argv[3]) == "--fast";
-	const auto profile = (baseline || argc == 3 || fast) ? ParseProfile(argv[1]) : std::nullopt;
+	const auto profile = (standardBaseline || longBaseline || argc == 3 || fast) ? ParseProfile(argv[1]) : std::nullopt;
 	if (baseline)
 		botConfig.botCount = 300;
 	else if ((argc == 3 || fast) && !ParseUInt32(argv[2], botConfig.botCount))
@@ -113,10 +116,10 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 	botConfig.profile = *profile;
-	botConfig.connectPerSecond = 100;
+	botConfig.connectPerSecond = 30;
 	botConfig.randomSeed = 1;
 
-	//botConfig.serverIp = "119.198.44.208";
+	//botConfig.serverIp = "112.185.51.192";
 
 	jam::net::RuntimeConfig runtimeConfig{
 		.geConfig = {
@@ -136,7 +139,7 @@ int main(int argc, char* argv[])
 	}
 
 	BotRunner runner;
-	if (!runner.Init(botConfig))
+	if (!runner.Initialize(botConfig))
 	{
 		JAM_LOG_ERROR("Failed to initialize BotRunner");
 		return -1;
@@ -147,7 +150,9 @@ int main(int argc, char* argv[])
 	constexpr auto kRampSettleTimeout = std::chrono::minutes(5);
 
 	const auto warmUpDuration		 = (baseline || fast) ? std::chrono::minutes(1) : std::chrono::minutes(5);
-	const auto measurementDuration	 = (baseline || fast) ? std::chrono::minutes(3) : std::chrono::minutes(30);
+	const auto measurementDuration	 = longBaseline ? std::chrono::minutes(10)
+		: (baseline || fast) ? std::chrono::minutes(3)
+		: std::chrono::minutes(30);
 	const auto runStartedAt			 = std::chrono::steady_clock::now();
 	const auto scheduledRampDuration = std::chrono::seconds((botConfig.botCount + botConfig.connectPerSecond - 1) / botConfig.connectPerSecond);
 	const auto rampDeadline			 = runStartedAt + scheduledRampDuration + kRampSettleTimeout;
@@ -256,7 +261,7 @@ int main(int argc, char* argv[])
 
 	JAM_LOG_INFO("M1_Bot stopped: running={}, failed={}", finalStats.running, finalStats.failed);
 
-	runner.Shutdown();
+	runner.Close();
 	
 	const auto coolDownEndedAt = std::chrono::steady_clock::now();
 	const bool validationFailed = aborted || allFailed || phaseFailed || finalStats.failed != 0;

@@ -120,7 +120,7 @@ namespace jam::net
 		return true;
 	}
 
-	void PhysicalWorld::OnShutdownBarrier(std::function<void()> completion)
+	void PhysicalWorld::BeginCloseBarrier(std::function<void()> completion)
 	{
 		if (!completion)
 			return;

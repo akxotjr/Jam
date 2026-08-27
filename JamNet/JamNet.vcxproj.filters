@@ -79,11 +79,11 @@
     <Filter Include="runtime\content\social">
       <UniqueIdentifier>{d6c1cd4d-fa26-452e-9bf8-bd7a57f7c667}</UniqueIdentifier>
     </Filter>
-    <Filter Include="runtime\content\auth">
-      <UniqueIdentifier>{782962d9-565c-4161-b974-b11037117405}</UniqueIdentifier>
-    </Filter>
     <Filter Include="runtime\content\world">
       <UniqueIdentifier>{5dcab120-4b6a-4af9-b209-d39ba4a5d6d5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="core\net\admission">
+      <UniqueIdentifier>{15f54e4e-8a12-4d3e-9ad3-d42da182b9d3}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -190,6 +190,9 @@
       <Filter>core\net</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\net\RPCAPI.h">
+      <Filter>core\net</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\RetryDelay.h">
       <Filter>core\net</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\core\net\Service.h">
@@ -522,11 +525,14 @@
     <ClInclude Include="include\jamnet\runtime\content\generic\GenericContentService.h">
       <Filter>runtime\content\generic</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\content\authentication\IAuthenticationContent.h">
-      <Filter>runtime\content\auth</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\content\world\IWorldContent.h">
       <Filter>runtime\content\world</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\IAuthenticator.h">
+      <Filter>core\net\admission</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\core\net\AdmissionContext.h">
+      <Filter>core\net\admission</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -814,6 +820,9 @@
     </ClCompile>
     <ClCompile Include="src\runtime\content\generic\GenericContentService.cpp">
       <Filter>runtime\content\generic</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\net\AdmissionContext.cpp">
+      <Filter>core\net\admission</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

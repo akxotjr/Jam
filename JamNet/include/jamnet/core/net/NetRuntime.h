@@ -26,7 +26,7 @@ namespace jam::net
 
 	private:
 		void			Init();
-		void			Shutdown();
+		void			Close();
 
 	private:
 		RuntimeConfig	m_config;

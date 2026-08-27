@@ -11,7 +11,7 @@
     <ClCompile Include="WorldContentsLoader.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="pch.cpp" />
-    <ClCompile Include="AuthenticationContent.cpp" />
+	<ClCompile Include="Authenticator.cpp" />
     <ClCompile Include="AccountStore.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -25,7 +25,7 @@
     <ClInclude Include="WorldContentsDatabase.h" />
     <ClInclude Include="WorldContentsLoader.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="AuthenticationContent.h" />
+	<ClInclude Include="Authenticator.h" />
     <ClInclude Include="AccountStore.h" />
   </ItemGroup>
 </Project>

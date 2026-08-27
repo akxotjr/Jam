@@ -15,6 +15,8 @@
 
 namespace jam::net
 {
+	class AdmissionContext;
+	class IAuthenticator;
 	class TcpSession;
 	class UdpSession;
 
@@ -53,20 +55,20 @@ namespace jam::net
 		friend class Session;
 		friend class TcpListener;
 		friend class UdpRouter;
+		friend class AdmissionContext;
 
 	public:
 		Service(const ServiceConfig& config);
 		virtual ~Service();
 
 
-		void								Init();
 		virtual bool						Start() = 0;
 
 		bool								HasTcpFactory() const { return static_cast<bool>(m_tcpFactory); }
 		bool								HasUdpFactory() const { return static_cast<bool>(m_udpFactory); }
 		bool								CanStart()		const { return m_tcpFactory != nullptr || m_udpFactory; }
 
-		virtual void						CloseService();
+		virtual void						BeginClose(std::function<void()> completed = {});
 
 		template<typename TCP, typename UDP>
 		bool								SetSessionFactory();
@@ -77,11 +79,11 @@ namespace jam::net
 		std::unique_ptr<TcpSession>			CreateTcpSession();		// using internal remote tcp address
 		std::unique_ptr<UdpSession>			CreateUdpSession();		// using internal remote udp address
 		void								NotifyTcpSessionAttached();
-		void								NotifyUdpSessionAttached(uint64 endpointId, RouteKey routeKey, uint32 generation = 0);
+		void								NotifyTcpSessionDetached();
+		void								NotifyUdpSessionAttached();
 
 		virtual void						ReleaseTcpSession(TcpSession* session);
 		virtual void						ReleaseUdpSession(UdpSession* session);
-		virtual Session*					FindOwnedSession(SessionId sessionId, const EndpointHandle& endpoint, uint32 generation = 0);
 
 		int32								GetCurrentTcpSessionCount() const { return m_tcpSessionCount.load(std::memory_order_relaxed); }
 		int32								GetMaxTcpSessionCount()		const { return m_config.maxTcpSessionCount; }
@@ -122,6 +124,7 @@ namespace jam::net
 		ServiceConfig										m_config;
 		eServiceType										m_type					= eServiceType::NONE;
 		std::shared_ptr<IocpCore>							m_iocpCore;
+		std::weak_ptr<AdmissionContext>						m_admissionContext;
 
 		std::atomic<int32>									m_sessionCount			= 0;
 		std::atomic<int32>									m_tcpSessionCount		= 0;
@@ -180,8 +183,7 @@ namespace jam::net
 		virtual ~ClientService() override = default;
 
 		bool							Start() override;
-		void							CloseService() override;
-		void							BeginClose(std::function<void()> completed = {});
+		void							BeginClose(std::function<void()> completed = {}) override;
 
 		bool							AttachTcpSession(std::unique_ptr<TcpSession> session);
 		bool							AttachUdpSession(std::unique_ptr<UdpSession> session);
@@ -201,18 +203,14 @@ namespace jam::net
 		void							DestroyUdpSession(const UdpSession* expected);
 		void							BeginUdpClose();
 		void							BeginTcpClose();
-		void							FinalizeClose();
+		void							CompleteClose();
 		void							OnUdpCloseTimeout(uint64 token);
 		void							OnTcpCloseTimeout(uint64 token);
-		Session*						FindOwnedSession(SessionId sessionId, const EndpointHandle& endpoint, uint32 generation = 0) override;
-
 	private:
 		uint64							m_accountId			= 0;
 		std::shared_ptr<ShardExecutor>	m_principalShard	= nullptr;
 		std::unique_ptr<TcpSession>		m_tcpSession		= nullptr;
 		std::unique_ptr<UdpSession>		m_udpSession		= nullptr;
-		uint32							m_tcpGeneration		= 1;
-		uint32							m_udpGeneration		= 1;
 		eClosePhase						m_closePhase		= eClosePhase::Running;
 		uint64							m_closeToken		= 0;
 		std::vector<std::function<void()>> m_closeCompleted;
@@ -229,9 +227,11 @@ namespace jam::net
 		virtual ~ServerService() override = default;
 
 		bool Start() override;
-		void CloseService() override;
+		void BeginClose(std::function<void()> completed = {}) override;
+		void SetAuthenticator(std::shared_ptr<IAuthenticator> authenticator) { m_authenticator = std::move(authenticator); }
 
 	private:
+		std::shared_ptr<IAuthenticator> m_authenticator;
 		std::atomic<bool> m_sessionsClosed = false;
 	};
 

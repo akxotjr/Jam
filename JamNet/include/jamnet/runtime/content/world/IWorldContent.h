@@ -36,7 +36,7 @@ namespace jam::net
 			return true;
 		}
 
-		virtual void Shutdown(ServerWorld& world)
+		virtual void Close(ServerWorld& world)
 		{
 			(void)world;
 		}

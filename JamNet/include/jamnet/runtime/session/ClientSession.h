@@ -26,8 +26,8 @@ namespace jam::net
 		bool					SendGenericContentRequest(const GenericContentRequest& request);
 
 	protected:
-		void                    OnLinkEstablished() override;
-		void                    OnDisconnected() override;
+		void                    OnSessionEstablished() override;
+		void                    OnSessionReleased() override;
 		void                    HandleCustomPacket(Packet packet) override;
 		void                    OnTcpBindBootstrap(eBootstrapKind kind) override;
 	
@@ -44,8 +44,8 @@ namespace jam::net
 		void                    SetNetworkManager(ClientNetworkManager* manager) { m_manager = manager; }
 
 	protected:
-		void                    OnLinkEstablished() override;
-		void                    OnDisconnected() override;
+		void                    OnSessionEstablished() override;
+		void                    OnSessionReleased() override;
 		void                    HandleCustomPacket(Packet packet) override;
 
 	private:

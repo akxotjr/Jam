@@ -23,9 +23,20 @@
 
 #include <concurrentqueue/moodycamel/blockingconcurrentqueue.h>
 
+namespace jam::net
+{
+	class AdmissionContext;
+}
 
 namespace jam
 {
+	struct IocpBinding
+	{
+		std::shared_ptr<net::IocpCore>			core;
+		std::shared_ptr<net::AdmissionContext>	admission;
+
+		explicit operator bool() const { return core && admission; }
+	};
 
 	struct GlobalExecutorConfig
 	{
@@ -71,6 +82,7 @@ namespace jam
 		size_t											GetQueueSize() const { return m_offload.size_approx(); }
 
 		std::shared_ptr<ShardDirectory>					GetDirectory() const { return m_directory; }
+		IocpBinding										AcquireIocpBinding();
 		std::shared_ptr<net::IocpCore>					AcquireIocpCore();
 
 		RouteKey										MakeRouteKey(RouteDomain domain, uint64 id) const { return m_directory ? m_directory->MakeRouteKey(domain, id) : RouteKey{}; }

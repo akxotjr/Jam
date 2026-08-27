@@ -319,7 +319,15 @@ namespace jam::net
 
 		// System 
 		static Packet		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UDP_DEFAULT, const void* payload = nullptr, uint32 payloadSize = 0);
-		static Packet		CreateHandshakePacket(eSystemPacketId id);
+		
+		static Packet		CreateTcpBindReqPacket(const TCP_BIND_REQ_DATA& req);
+		static Packet		CreateTcpBindResPacket(const TCP_BIND_RES_DATA& res);
+		static Packet		CreateUdpBindReqPacket(const UDP_BIND_REQ_DATA& req);
+		static Packet		CreateUdpBindResPacket(const UDP_BIND_RES_DATA& res);
+		static Packet		CreateUdpBindConfirmPacket(const UDP_BIND_CONFIRM_DATA& confirm);	
+		static Packet		CreateUdpUnbindReqPacket(const UDP_UNBIND_REQ_DATA& req);
+		static Packet		CreateUdpUnbindResPacket(const UDP_UNBIND_RES_DATA& res);
+
 		static Packet		CreatePingPacket(const PING_DATA& ping);
 		static Packet		CreatePongPacket(const PONG_DATA& pong);
 

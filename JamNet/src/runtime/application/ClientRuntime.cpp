@@ -263,7 +263,7 @@ namespace jam::net
 
 	ClientRuntime::~ClientRuntime()
 	{
-		Shutdown();
+		Close();
 	}
 
 	bool ClientRuntime::Connect()
@@ -309,14 +309,14 @@ namespace jam::net
 		});
 	}
 
-	void ClientRuntime::Shutdown()
+	void ClientRuntime::Close()
 	{
 		if (m_ingress)
 			m_ingress->Close();
 
 		if (m_networkManager)
 		{
-			m_networkManager->Shutdown();
+			m_networkManager->Close();
 			m_networkManager.reset();
 		}
 

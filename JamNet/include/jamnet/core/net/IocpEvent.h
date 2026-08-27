@@ -19,6 +19,11 @@ namespace jam::net
 
 		UdpSend,
 		UdpRecv,
+
+		AdmissionAuthCompleted,
+		AdmissionAuthRetry,
+		AdmissionAuthTimeout,
+		AdmissionTcpRelease,
 	};
 
 
@@ -112,4 +117,5 @@ namespace jam::net
 
 		void Init() override;
 	};
+
 }

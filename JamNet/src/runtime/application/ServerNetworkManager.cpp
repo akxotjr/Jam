@@ -60,7 +60,7 @@ namespace jam::net
 			if (!m_socialService->Initialize(this, m_config.socialContent))
 			{
 				m_socialService.reset();
-				m_worldTransitions->Shutdown();
+				m_worldTransitions->Close();
 				return false;
 			}
 		}
@@ -72,9 +72,9 @@ namespace jam::net
 			{
 				m_contentService.reset();
 				if (m_socialService)
-					m_socialService->Shutdown();
+					m_socialService->Stop();
 				m_socialService.reset();
-				m_worldTransitions->Shutdown();
+				m_worldTransitions->Close();
 				return false;
 			}
 		}
@@ -82,12 +82,12 @@ namespace jam::net
 		if (!StartServerService())
 		{
 			if (m_contentService)
-				m_contentService->Shutdown();
+				m_contentService->Stop();
 			m_contentService.reset();
 			if (m_socialService)
-				m_socialService->Shutdown();
+				m_socialService->Stop();
 			m_socialService.reset();
-			m_worldTransitions->Shutdown();
+			m_worldTransitions->Close();
 			return false;
 		}
 
@@ -106,14 +106,14 @@ namespace jam::net
 		StopWorldTransitionTicks();
 
 		if (m_worldTransitions)
-			m_worldTransitions->Shutdown();
+			m_worldTransitions->Close();
 
 		StopServerService();
 
 		if (m_socialService)
-			m_socialService->Shutdown();
+			m_socialService->Stop();
 		if (m_contentService)
-			m_contentService->Shutdown();
+			m_contentService->Stop();
 
 		m_worldTransitions.reset();
 		m_socialService.reset();
@@ -197,18 +197,6 @@ namespace jam::net
 		}, std::move(request));
 	}
 
-	void ServerNetworkManager::Authenticate(LoginCredential credential, AuthenticationCompleted completed) const
-	{
-		if (!completed)
-			return;
-		if (!m_config.authenticationContent)
-		{
-			completed(kInvalidAccountId);
-			return;
-		}
-		m_config.authenticationContent->Authenticate(std::move(credential), std::move(completed));
-	}
-
 	void ServerNetworkManager::BootstrapWorldInstances(std::function<void(bool)> completed)
 	{
 		if (!m_worldTransitions)
@@ -282,6 +270,7 @@ namespace jam::net
 			return false;
 
 		m_service->SetSessionFactory<ServerTcpSession, ServerUdpSession>();
+		m_service->SetAuthenticator(m_config.authenticator);
 		m_service->SetSessionInitCallback([this](Session* session)
 			{
 				if (auto tcp = dynamic_cast<ServerTcpSession*>(session))
@@ -294,8 +283,6 @@ namespace jam::net
 				}
 			});
 
-		m_service->Init();
-
 		if (!m_service->Start())
 			return false;
 
@@ -306,7 +293,7 @@ namespace jam::net
 	{
 		if (m_service)
 		{
-			m_service->CloseService();
+			m_service->BeginClose();
 			m_service.reset();
 		}
 	}

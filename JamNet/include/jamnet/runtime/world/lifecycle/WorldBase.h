@@ -39,8 +39,7 @@ namespace jam::net
 		WorldBase(const WorldConfig& config);
 		virtual ~WorldBase() override = default;
 
-		bool							Init();
-		void							Shutdown(eMailboxCloseMode mode, std::function<void()> onClosed = nullptr);
+		bool							Initialize();
 
 		RuntimeId						GetShardOwnedRuntimeId() const override;
 		MailboxRef						GetShardOwnedMailboxRef() const override;
@@ -56,9 +55,9 @@ namespace jam::net
 
 	protected:
 		virtual bool					OnInitialize() { return true; }
-		virtual void					OnShutdown() {}
-		virtual void					OnShutdownBarrier(std::function<void()> completion) { completion(); }
-		virtual void					OnShutdownComplete() {}
+		virtual void					OnCloseStarted() {}
+		virtual void					BeginCloseBarrier(std::function<void()> completion) { completion(); }
+		virtual void					OnCloseCompleted() {}
 
 	protected:
 		WorldConfig						m_config		= {};

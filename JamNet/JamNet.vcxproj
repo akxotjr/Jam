@@ -221,9 +221,11 @@
     <ClInclude Include="include\jamnet\core\executor\WinFiberBackend.h" />
     <ClInclude Include="include\jamnet\core\memory\DefaultAllocator.h" />
     <ClInclude Include="include\jamnet\core\memory\ObjectPool.h" />
+    <ClInclude Include="include\jamnet\core\net\AdmissionContext.h" />
     <ClInclude Include="include\jamnet\core\net\Buffer.h" />
     <ClInclude Include="include\jamnet\core\net\BufferReader.h" />
     <ClInclude Include="include\jamnet\core\net\BufferWriter.h" />
+    <ClInclude Include="include\jamnet\core\net\IAuthenticator.h" />
     <ClInclude Include="include\jamnet\core\net\IocpCore.h" />
     <ClInclude Include="include\jamnet\core\net\IocpEvent.h" />
     <ClInclude Include="include\jamnet\core\net\NetRuntime.h" />
@@ -234,6 +236,7 @@
     <ClInclude Include="include\jamnet\core\net\PacketWireTime.h" />
     <ClInclude Include="include\jamnet\core\net\RPC.h" />
     <ClInclude Include="include\jamnet\core\net\RPCAPI.h" />
+    <ClInclude Include="include\jamnet\core\net\RetryDelay.h" />
     <ClInclude Include="include\jamnet\core\net\Service.h" />
     <ClInclude Include="include\jamnet\core\net\Session.h" />
     <ClInclude Include="include\jamnet\core\net\SessionComponents.h" />
@@ -256,7 +259,6 @@
     <ClInclude Include="include\jamnet\runtime\application\ClientNetworkManager.h" />
     <ClInclude Include="include\jamnet\runtime\application\ClientRuntime.h" />
     <ClInclude Include="include\jamnet\runtime\application\ServerNetworkManager.h" />
-    <ClInclude Include="include\jamnet\runtime\content\authentication\IAuthenticationContent.h" />
     <ClInclude Include="include\jamnet\runtime\content\generic\GenericContentService.h" />
     <ClInclude Include="include\jamnet\runtime\content\generic\GenericContentTypes.h" />
     <ClInclude Include="include\jamnet\runtime\content\generic\IGenericContent.h" />
@@ -363,6 +365,7 @@
     <ClCompile Include="src\core\executor\WinFiberBackend.cpp" />
     <ClCompile Include="src\core\executor\ProcessMetrics.cpp" />
     <ClCompile Include="src\core\memory\DefaultAllocator.cpp" />
+    <ClCompile Include="src\core\net\AdmissionContext.cpp" />
     <ClCompile Include="src\core\utils\MetricsAggregator.cpp" />
     <ClCompile Include="src\runtime\world\simulation\server\WorldMetrics.cpp" />
     <ClCompile Include="src\core\net\Buffer.cpp" />

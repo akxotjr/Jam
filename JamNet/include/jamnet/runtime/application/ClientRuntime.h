@@ -116,7 +116,7 @@ namespace jam::net
 
 		bool									Connect();
 		void									Disconnect();
-		void									Shutdown();
+		void									Close();
 		ClientPumpResult						Pump(const ClientPumpOptions& options = {});
 		
 		// Events are emitted after their corresponding frontend state has been applied.

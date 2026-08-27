@@ -48,7 +48,7 @@ namespace jam::net
 		return true;
 	}
 
-	void ClientTcpSession::OnLinkEstablished()
+	void ClientTcpSession::OnSessionEstablished()
 	{
 		if (m_manager)
 			m_manager->AssertPrincipalAffinity();
@@ -62,7 +62,7 @@ namespace jam::net
 			m_manager->NotifyTcpBound(GetAccountId(), GetUserId());
 	}
 
-	void ClientTcpSession::OnDisconnected()
+	void ClientTcpSession::OnSessionReleased()
 	{
 		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ClientTcpSession disconnected", GetAccountId(), GetUserId());
 		if (m_manager)
@@ -97,17 +97,15 @@ namespace jam::net
 				return;
 			}
 
-			const SessionId		 sessionId  = GetSessionId();
-			const EndpointHandle endpoint   = GetEndpointHandle();
-			const uint32		 generation = GetServiceGeneration();
-			auto service = GetServiceRef();
+			const SessionId sessionId = GetSessionId();
+			const SessionRef<ClientTcpSession> selfRef(this);
 
-			m_manager->PrepareMainWorld(prepare, [service, sessionId, endpoint, generation, token = prepare.token](bool succeeded)
+			m_manager->PrepareMainWorld(prepare, [selfRef, sessionId, token = prepare.token](bool succeeded)
 				{
-					auto* self = service ? static_cast<ClientTcpSession*>(service->FindOwnedSession(sessionId, endpoint, generation)) : nullptr;
+					auto* self = selfRef.TryGet();
 					if (!self)
 					{
-						JAM_LOG_WARN("[ClientWorldPrepare] sync response dropped; TCP session lookup failed. token={}, sessionId={}, generation={}", token.value, sessionId, generation);
+						JAM_LOG_WARN("[ClientWorldPrepare] sync response dropped; TCP session lookup failed. token={}, sessionId={}", token.value, sessionId);
 						return;
 					}
 					self->Send(codec::MakeClientWorldSyncResultPacket({ .token = token, .succeeded = succeeded, .failure = succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::ClientPrepareFailed }));
@@ -178,7 +176,7 @@ namespace jam::net
 
 
 
-	void ClientUdpSession::OnLinkEstablished()
+	void ClientUdpSession::OnSessionEstablished()
 	{
 		if (m_manager)
 			m_manager->AssertPrincipalAffinity();
@@ -192,7 +190,7 @@ namespace jam::net
 			m_manager->NotifyUdpBound(GetUserId());
 	}
 
-	void ClientUdpSession::OnDisconnected()
+	void ClientUdpSession::OnSessionReleased()
 	{
 		JAM_LOG_INFO("[AccountId = {}, UserId = {}] ClientUdpSession disconnected", GetAccountId(), GetUserId());
 		if (m_manager)

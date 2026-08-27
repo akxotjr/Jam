@@ -81,10 +81,21 @@ bool UnityClientCore::Initialize(const JAM_ClientConfig& config)
 
 	net::ClientConfig clientConfig{};
 	clientConfig.accountId		  = config.accountId;
-	clientConfig.loginId		  = config.loginId ? config.loginId : "";
-	clientConfig.password		  = config.password ? config.password : "";
+	constexpr uint32 kPasswordAuthScheme = 0;
+	constexpr uint32 kTicketAuthScheme = 1;
 	if (config.ticket && config.ticketSize > 0)
-		clientConfig.ticket.assign(config.ticket, config.ticket + config.ticketSize);
+	{
+		clientConfig.authScheme = kTicketAuthScheme;
+		clientConfig.authField0.assign(config.ticket, config.ticket + config.ticketSize);
+	}
+	else
+	{
+		clientConfig.authScheme = kPasswordAuthScheme;
+		const std::string_view loginId = config.loginId ? config.loginId : "";
+		const std::string_view password = config.password ? config.password : "";
+		clientConfig.authField0.assign(loginId.begin(), loginId.end());
+		clientConfig.authField1.assign(password.begin(), password.end());
+	}
 	clientConfig.serverTcpAddress = net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.tcpPort);
 	clientConfig.serverUdpAddress = net::NetAddress(config.serverIp ? config.serverIp : "127.0.0.1", config.udpPort);
 
@@ -98,10 +109,10 @@ bool UnityClientCore::Initialize(const JAM_ClientConfig& config)
 	return true;
 }
 
-void UnityClientCore::Shutdown()
+void UnityClientCore::Close()
 {
 	if (m_runtime)
-		m_runtime->Shutdown();
+		m_runtime->Close();
 	m_runtime.reset();
 	m_eventPayload.clear();
 	m_netRuntime.reset();

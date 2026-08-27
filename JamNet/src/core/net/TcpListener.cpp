@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "jamnet/core/net/TcpListener.h"
 
-#include "jamnet/core/executor/ThreadContext.h"
+#include "jamnet/core/net/AdmissionContext.h"
 #include "jamnet/core/net/IocpEvent.h"
 #include "jamnet/core/memory/ObjectPool.h"
 #include "jamnet/core/net/SocketUtils.h"
@@ -175,21 +175,29 @@ namespace jam::net
 		SOCKET acceptedSocket = event->acceptSocket;
 		event->acceptSocket = INVALID_SOCKET;
 
-		auto* session = sessionOwner.get();
-		session->Submit(Job([service = m_service, acceptedSocket, session = std::move(sessionOwner)]() mutable
-			{
-				auto* raw = session.get();
-				auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
-				if (!state.AttachPreboundSession(std::unique_ptr<Session>(std::move(session))))
-				{
-					SocketUtils::Close(acceptedSocket);
-					return;
-				}
+		auto admission = m_service->m_admissionContext.lock();
+		if (!admission)
+		{
+			SocketUtils::Close(acceptedSocket);
+			ReleaseAcceptEvent(event);
+			RegisterAccept();
+			return;
+		}
 
-				service->NotifyTcpSessionAttached();
-				raw->SetSocket(acceptedSocket);
-				raw->ProcessInboundConnect();
-			}, eJobPriority::Critical));
+		auto* session = sessionOwner.get();
+		const AdmissionKey admissionKey = admission->AddEntry(std::move(sessionOwner));
+		if (admissionKey.admissionId == 0)
+		{
+			SocketUtils::Close(acceptedSocket);
+			ReleaseAcceptEvent(event);
+			RegisterAccept();
+			return;
+		}
+
+		session->SetAdmissionContext(admission, admissionKey.admissionId);
+		m_service->NotifyTcpSessionAttached();
+		session->SetSocket(acceptedSocket);
+		session->ProcessInboundConnect();
 
 		ReleaseAcceptEvent(event);
 		RegisterAccept();

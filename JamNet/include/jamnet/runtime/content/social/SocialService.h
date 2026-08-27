@@ -19,7 +19,7 @@ namespace jam::net
 	{
 	public:
 		bool	Initialize(ServerNetworkManager* owner, std::shared_ptr<ISocialContent> content);
-		void	Shutdown();
+		void	Stop();
 
 		bool	Submit(const SocialPrincipal& sender, SocialCommand command);
 		void	NotifyConnected(SocialPrincipal principal);

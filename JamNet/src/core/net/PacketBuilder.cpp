@@ -45,9 +45,39 @@ namespace jam::net
 		return CreatePacketInternal(E2U(ePacketType::SYSTEM), E2U(id), flags, E2U(channel), payload, payloadSize);
 	}
 
-	Packet PacketBuilder::CreateHandshakePacket(eSystemPacketId id)
+	Packet PacketBuilder::CreateTcpBindReqPacket(const TCP_BIND_REQ_DATA& req)
 	{
-		return CreateSystemPacket(id, PacketFlags::NONE, eChannel::UDP_DEFAULT, nullptr, 0);
+		return CreateSystemPacket(eSystemPacketId::TCP_BIND_REQ, PacketFlags::NONE, eChannel::TCP_DEFAULT, &req, sizeof(TCP_BIND_REQ_DATA));
+	}
+
+	Packet PacketBuilder::CreateTcpBindResPacket(const TCP_BIND_RES_DATA& res)
+	{
+		return CreateSystemPacket(eSystemPacketId::TCP_BIND_RES, PacketFlags::NONE, eChannel::TCP_DEFAULT, &res, sizeof(TCP_BIND_RES_DATA));
+	}
+
+	Packet PacketBuilder::CreateUdpBindReqPacket(const UDP_BIND_REQ_DATA& req)
+	{
+		return CreateSystemPacket(eSystemPacketId::UDP_BIND_REQ, PacketFlags::NONE, eChannel::UDP_DEFAULT, &req, sizeof(UDP_BIND_REQ_DATA));
+	}
+
+	Packet PacketBuilder::CreateUdpBindResPacket(const UDP_BIND_RES_DATA& res)
+	{
+		return CreateSystemPacket(eSystemPacketId::UDP_BIND_RES, PacketFlags::NONE, eChannel::UDP_DEFAULT, &res, sizeof(UDP_BIND_RES_DATA));
+	}
+
+	Packet PacketBuilder::CreateUdpBindConfirmPacket(const UDP_BIND_CONFIRM_DATA& confirm)
+	{
+		return CreateSystemPacket(eSystemPacketId::UDP_BIND_CONFIRM, PacketFlags::NONE, eChannel::UDP_DEFAULT, &confirm, sizeof(UDP_BIND_CONFIRM_DATA));
+	}
+
+	Packet PacketBuilder::CreateUdpUnbindReqPacket(const UDP_UNBIND_REQ_DATA& req)
+	{
+		return CreateSystemPacket(eSystemPacketId::UDP_UNBIND_REQ, PacketFlags::NONE, eChannel::UDP_DEFAULT, &req, sizeof(UDP_UNBIND_REQ_DATA));
+	}
+
+	Packet PacketBuilder::CreateUdpUnbindResPacket(const UDP_UNBIND_RES_DATA& res)
+	{
+		return CreateSystemPacket(eSystemPacketId::UDP_UNBIND_RES, PacketFlags::NONE, eChannel::UDP_DEFAULT, &res, sizeof(UDP_UNBIND_RES_DATA));
 	}
 
 	Packet PacketBuilder::CreatePingPacket(const PING_DATA& ping)

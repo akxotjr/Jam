@@ -3,6 +3,7 @@
 #include "jamnet/core/executor/GlobalExecutor.h"
 #include "jamnet/core/executor/ShardDirectory.h"
 #include "jamnet/core/executor/ShardExecutor.h"
+#include "jamnet/core/net/AdmissionContext.h"
 
 namespace jam
 {
@@ -13,10 +14,11 @@ namespace jam
 
 	struct GlobalExecutor::IocpDomain
 	{
-		uint32								id = 0;
-		std::shared_ptr<net::IocpCore>		core;
-		std::atomic<bool>					active{ true };
-		std::thread							worker;
+		uint32									id = 0;
+		std::shared_ptr<net::IocpCore>			core;
+		std::shared_ptr<net::AdmissionContext>	admission;
+		std::atomic<bool>						active{ true };
+		std::thread								worker;
 	};
 
 	void GlobalExecutor::Init(const GlobalExecutorConfig& config)
@@ -49,6 +51,7 @@ namespace jam
 			auto domain = std::make_shared<IocpDomain>();
 			domain->id   = static_cast<uint32>(i);
 			domain->core = std::make_shared<net::IocpCore>();
+			domain->admission = std::make_shared<net::AdmissionContext>(domain->core.get());
 
 			m_iocpDomains.push_back(domain);
 		}
@@ -212,19 +215,30 @@ namespace jam
 		m_scheduler.reset();
 	}
 
-	std::shared_ptr<net::IocpCore> GlobalExecutor::AcquireIocpCore()
+	IocpBinding GlobalExecutor::AcquireIocpBinding()
 	{
 		std::shared_ptr<IocpDomain> domain;
 		{
 			READ_LOCK
 			if (m_iocpDomains.empty())
-				return nullptr;
+				return {};
 
 			const uint32 index = m_nextIocpDomain.fetch_add(1, std::memory_order_relaxed) % static_cast<uint32>(m_iocpDomains.size());
 			domain = m_iocpDomains[index];
 		}
 
-		return domain ? domain->core : nullptr;
+		if (!domain)
+			return {};
+
+		return IocpBinding{
+			.core		= domain->core,
+			.admission	= domain->admission,
+		};
+	}
+
+	std::shared_ptr<net::IocpCore> GlobalExecutor::AcquireIocpCore()
+	{
+		return AcquireIocpBinding().core;
 	}
 
 	RouteKey GlobalExecutor::MakeAffinityRouteKey(uint64 seed) const

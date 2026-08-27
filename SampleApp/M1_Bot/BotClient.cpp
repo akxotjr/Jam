@@ -6,23 +6,24 @@ namespace
 {
 	constexpr jam::net::AccountId kBotAccountBegin = 6000;
 	constexpr jam::net::AccountId kBotAccountEnd = 9999;
+	constexpr uint32 kPasswordAuthScheme = 0;
 }
 
 
 BotClient::~BotClient()
 {
-	Shutdown();
+	Close();
 }
 
-bool BotClient::Init(jam::net::ClientConfig config)
+bool BotClient::Initialize(jam::net::ClientConfig config)
 {
 	if (m_runtime || config.accountId < kBotAccountBegin || config.accountId > kBotAccountEnd)
 		return false;
 
 	const std::string credential = std::to_string(config.accountId);
-	config.loginId = credential;
-	config.password = credential;
-	config.ticket.clear();
+	config.authScheme = kPasswordAuthScheme;
+	config.authField0.assign(credential.begin(), credential.end());
+	config.authField1.assign(credential.begin(), credential.end());
 	config.headlessMode = true;
 
 	m_accountId = config.accountId;
@@ -32,16 +33,16 @@ bool BotClient::Init(jam::net::ClientConfig config)
 	return true;
 }
 
-void BotClient::Shutdown()
+void BotClient::Close()
 {
 	if (m_runtime)
-		m_runtime->Shutdown();
+		m_runtime->Close();
 
 	m_runtime.reset();
 	m_userId = jam::net::kInvalidUserId;
 	m_networkState = {};
 	m_mainWorld = {};
-	m_state = eBotState::Shutdown;
+	m_state = eBotState::Closed;
 }
 
 bool BotClient::Connect()
