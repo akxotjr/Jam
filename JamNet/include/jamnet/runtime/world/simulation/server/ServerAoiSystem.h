@@ -1,6 +1,8 @@
 #pragma once
 
 #include <jampx/PhysicsTypes.h>
+#include <entt/container/dense_set.hpp>
+#include <entt/entity/sparse_set.hpp>
 
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
 
@@ -14,6 +16,7 @@ namespace jam::px
 	class ServerWorld;
 	class ServerPhysicsSystem;
 	class WorldMetrics;
+	struct TickCounter;
 
 	enum class eAoiCondition : uint8
 	{
@@ -88,13 +91,11 @@ namespace jam::px
 	struct AoiVisibleUserSlot
 	{
 		uint64                      userId  = 0;
-		bool                        alive   = false;
 	};
 
 	struct AoiVisibleActorSlot
 	{
 		entt::entity                actor   = entt::null;
-		bool                        alive   = false;
 	};
 
 	struct AoiPendingVisibility
@@ -146,7 +147,7 @@ namespace jam::px
 
 	struct UserAoiState
 	{
-		std::unordered_set<ActorId>	visible;		// currently visible actors
+		entt::basic_sparse_set<entt::entity>	visible{ entt::type_id<void>() };	// currently visible actors
 		std::vector<ActorId>		entered;		// actors entered this tick
 		std::vector<ActorId>		left;			// actors left this tick
 	};
@@ -176,7 +177,7 @@ namespace jam::px
 	class ServerAoiSystem
 	{
 	public:
-		explicit ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics, WorldMetrics& metrics);
+		explicit ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics, WorldMetrics& metrics, ServerWorld& serverWorld, ServerPhysicsSystem& serverPhysics, TickCounter& tickCounter);
 
 		void									Init(const AoiConfig& cfg = {});
 		void									Tick();
@@ -195,7 +196,6 @@ namespace jam::px
 		const std::vector<AoiVisibleActorSlot>* GetVisibleActors(uint64 userId) const;
 
 	private:
-		void                            RefreshContext();
 		void                            ClearTransientEvents();
 
 		void                            CollectDirtyActorsFromPhysics();
@@ -237,20 +237,20 @@ namespace jam::px
 		void                            RemoveLosForActor(entt::entity actor);
 		void                            MarkUserDirty(uint64 userId);
 		void                            MarkActorDirty(entt::entity actor);
+		bool                            RemoveVisibleMembership(uint64 userId, entt::entity actor);
 
 		void                            CompactCellActorsIfNeeded(uint64 cellKey);
 		void                            CompactCellSubscribersIfNeeded(uint64 cellKey);
-		void                            CompactVisibleUsersIfNeeded(entt::entity actor);
-		void                            CompactVisibleActorsIfNeeded(uint64 userId);
 		void                            FlushPendingCompactions();
 		AoiVisibilityKey                MakeVisibilityKey(uint64 userId, entt::entity actor) const;
 
 	private:
 		entt::registry&														m_registry;
 		px::PhysicsFacade*													m_physics          = nullptr;
-		ServerWorld*														m_world            = nullptr;
-		ServerPhysicsSystem*												m_serverPhysics    = nullptr;
-		WorldMetrics*														m_metrics          = nullptr;
+		ServerWorld&														m_world;
+		ServerPhysicsSystem&												m_serverPhysics;
+		TickCounter&														m_tickCounter;
+		WorldMetrics&														m_metrics;
 		AoiConfig															m_cfg              = {};
 
 		std::unordered_map<uint64, UserAoiState>							m_states;
@@ -263,7 +263,6 @@ namespace jam::px
 		std::unordered_map<uint64, std::vector<AoiVisibleActorSlot>>		m_userVisibleActors;
 
 		std::unordered_map<entt::entity, px::Vec3>							m_entityPositions;
-		std::unordered_map<uint64, px::Vec3>								m_userPositions;
 
 		std::vector<uint64>													m_dirtyUsers;
 		std::vector<entt::entity>											m_dirtyActors;
@@ -275,12 +274,10 @@ namespace jam::px
 		std::unordered_map<entt::entity, std::unordered_set<uint64>>		m_losUsersByActor;
 		std::unordered_map<uint64, uint32>									m_userGenerations;
 
-		std::unordered_set<uint64>											m_dirtyUserDedup;
-		std::unordered_set<entt::entity>									m_dirtyActorDedup;
+		entt::dense_set<uint64>												m_dirtyUserDedup;
+		entt::dense_set<entt::entity>										m_dirtyActorDedup;
 		std::unordered_set<AoiVisibilityKey, AoiVisibilityKeyHash>			m_pendingVisibilityDedup;
 		std::unordered_set<uint64>											m_pendingCellActorCompactions;
 		std::unordered_set<uint64>											m_pendingCellSubscriberCompactions;
-		std::unordered_set<entt::entity>									m_pendingVisibleUserCompactions;
-		std::unordered_set<uint64>											m_pendingVisibleActorCompactions;
 	};
 }

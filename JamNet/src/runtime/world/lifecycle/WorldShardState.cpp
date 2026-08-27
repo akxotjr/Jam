@@ -119,7 +119,7 @@ namespace jam::net
 
 	bool WorldShardState::ReserveEnter(WorldTransitionToken token, uint64 userId, const WorldRef& target)
 	{
-		if (!token.IsValid() || userId == 0 || !target.IsValid() || transitionMembers.contains(token))
+		if (!token.IsValid() || userId == 0 || !target.IsValid() || enterTransitionMembers.contains(token))
 			return false;
 		WorldRecord* entry = FindAuthoritativeWorldEntry(target.worldId);
 		if (!entry || !entry->HasCapacity() || entry->state == eWorldRuntimeState::Draining || entry->state == eWorldRuntimeState::Destroying)
@@ -128,7 +128,7 @@ namespace jam::net
 		++entry->memberCount;
 		++entry->pendingAttachCount;
 		++entry->lifecyclePinCount;
-		transitionMembers.emplace(token, WorldTransitionMember
+		enterTransitionMembers.emplace(token, WorldTransitionMember
 			{
 				.token = token,
 				.userId = userId,
@@ -139,8 +139,8 @@ namespace jam::net
 
 	bool WorldShardState::PrepareEnter(WorldTransitionToken token)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::Reserved)
+		auto it = enterTransitionMembers.find(token);
+		if (it == enterTransitionMembers.end() || it->second.state != eWorldTransitionMemberState::Reserved)
 			return false;
 		it->second.state = eWorldTransitionMemberState::Prepared;
 		return true;
@@ -148,8 +148,8 @@ namespace jam::net
 
 	bool WorldShardState::AttachPrepared(WorldTransitionToken token, const WorldUserContext& user)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::Prepared)
+		auto it = enterTransitionMembers.find(token);
+		if (it == enterTransitionMembers.end() || it->second.state != eWorldTransitionMemberState::Prepared)
 			return false;
 
 		auto* host = dynamic_cast<WorldMembershipHost*>(FindWorld(it->second.worldId));
@@ -163,8 +163,8 @@ namespace jam::net
 
 	bool WorldShardState::ActivateAttached(WorldTransitionToken token)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::AttachedPendingCommit)
+		auto it = enterTransitionMembers.find(token);
+		if (it == enterTransitionMembers.end() || it->second.state != eWorldTransitionMemberState::AttachedPendingCommit)
 			return false;
 		WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId);
 		if (!entry)
@@ -172,14 +172,14 @@ namespace jam::net
 		entry->pendingAttachCount = entry->pendingAttachCount > 0 ? entry->pendingAttachCount - 1 : 0;
 		entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
 		it->second.state = eWorldTransitionMemberState::Active;
-		transitionMembers.erase(it);
+		enterTransitionMembers.erase(it);
 		return true;
 	}
 
 	bool WorldShardState::RollbackEnter(WorldTransitionToken token)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end())
+		auto it = enterTransitionMembers.find(token);
+		if (it == enterTransitionMembers.end())
 			return false;
 		WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId);
 		if (it->second.hostMemberAttached)
@@ -195,19 +195,41 @@ namespace jam::net
 			entry->pendingAttachCount = entry->pendingAttachCount > 0 ? entry->pendingAttachCount - 1 : 0;
 			entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
 		}
-		transitionMembers.erase(it);
+		enterTransitionMembers.erase(it);
 		return true;
 	}
 
 	bool WorldShardState::PrepareLeave(WorldTransitionToken token, uint64 userId, const WorldRef& source)
 	{
-		if (!token.IsValid() || userId == 0 || !source.IsValid() || transitionMembers.contains(token))
+		if (!token.IsValid() || userId == 0 || !source.IsValid())
+		{
+			JAM_LOG_WARN("[WorldTransition] PrepareLeave rejected invalid input. userId={}, token={}, worldId={}, tokenValid={}, sourceValid={}",
+				userId, token.value, source.worldId, token.IsValid(), source.IsValid());
 			return false;
+		}
+		if (const auto transition = leaveTransitionMembers.find(token); transition != leaveTransitionMembers.end())
+		{
+			JAM_LOG_WARN("[WorldTransition] PrepareLeave rejected duplicate token. userId={}, token={}, worldId={}, existingUserId={}, existingWorldId={}, existingState={}",
+				userId, token.value, source.worldId, transition->second.userId, transition->second.worldId,
+				static_cast<uint32>(transition->second.state));
+			return false;
+		}
 		WorldRecord* entry = FindAuthoritativeWorldEntry(source.worldId);
-		if (!entry || entry->state == eWorldRuntimeState::Draining || entry->state == eWorldRuntimeState::Destroying)
+		if (!entry)
+		{
+			JAM_LOG_WARN("[WorldTransition] PrepareLeave rejected missing world record. userId={}, token={}, worldId={}",
+				userId, token.value, source.worldId);
 			return false;
+		}
+		if (entry->state == eWorldRuntimeState::Draining || entry->state == eWorldRuntimeState::Destroying)
+		{
+			JAM_LOG_WARN("[WorldTransition] PrepareLeave rejected world lifecycle state. userId={}, token={}, worldId={}, state={}, memberCount={}, pendingAttachCount={}, lifecyclePinCount={}",
+				userId, token.value, source.worldId, static_cast<uint32>(entry->state), entry->memberCount,
+				entry->pendingAttachCount, entry->lifecyclePinCount);
+			return false;
+		}
 		++entry->lifecyclePinCount;
-		transitionMembers.emplace(token, WorldTransitionMember
+		leaveTransitionMembers.emplace(token, WorldTransitionMember
 			{
 				.token		= token,
 				.userId		= userId,
@@ -220,13 +242,32 @@ namespace jam::net
 
 	bool WorldShardState::DetachMain(WorldTransitionToken token)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::Active)
+		auto it = leaveTransitionMembers.find(token);
+		if (it == leaveTransitionMembers.end())
+		{
+			JAM_LOG_WARN("[WorldTransition] DetachMain rejected missing transition member. token={}", token.value);
 			return false;
+		}
+		if (it->second.state != eWorldTransitionMemberState::Active)
+		{
+			JAM_LOG_WARN("[WorldTransition] DetachMain rejected transition state. userId={}, token={}, worldId={}, state={}",
+				it->second.userId, token.value, it->second.worldId, static_cast<uint32>(it->second.state));
+			return false;
+		}
 		
 		auto* host = dynamic_cast<WorldMembershipHost*>(FindWorld(it->second.worldId));
-		if (!host || !host->RemoveMember(it->second.userId))
+		if (!host)
+		{
+			JAM_LOG_WARN("[WorldTransition] DetachMain rejected missing membership host. userId={}, token={}, worldId={}",
+				it->second.userId, token.value, it->second.worldId);
 			return false;
+		}
+		if (!host->RemoveMember(it->second.userId))
+		{
+			JAM_LOG_WARN("[WorldTransition] DetachMain failed to remove source member. userId={}, token={}, worldId={}",
+				it->second.userId, token.value, it->second.worldId);
+			return false;
+		}
 
 		if (WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId))
 		{
@@ -240,8 +281,8 @@ namespace jam::net
 
 	bool WorldShardState::CommitLeave(WorldTransitionToken token)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::DetachedPendingCommit)
+		auto it = leaveTransitionMembers.find(token);
+		if (it == leaveTransitionMembers.end() || it->second.state != eWorldTransitionMemberState::DetachedPendingCommit)
 			return false;
 		if (auto* serverWorld = dynamic_cast<ServerWorld*>(FindWorld(it->second.worldId));
 			serverWorld && !serverWorld->CommitMemberLeave(it->second.userId, token))
@@ -250,25 +291,25 @@ namespace jam::net
 		}
 		if (WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId))
 			entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
-		transitionMembers.erase(it);
+		leaveTransitionMembers.erase(it);
 		return true;
 	}
 
 	bool WorldShardState::CancelPreparedLeave(WorldTransitionToken token)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::Active)
+		auto it = leaveTransitionMembers.find(token);
+		if (it == leaveTransitionMembers.end() || it->second.state != eWorldTransitionMemberState::Active)
 			return false;
 		if (WorldRecord* entry = FindAuthoritativeWorldEntry(it->second.worldId))
 			entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
-		transitionMembers.erase(it);
+		leaveTransitionMembers.erase(it);
 		return true;
 	}
 
 	bool WorldShardState::RestoreDetachedMain(WorldTransitionToken token, const WorldUserContext& user)
 	{
-		auto it = transitionMembers.find(token);
-		if (it == transitionMembers.end() || it->second.state != eWorldTransitionMemberState::DetachedPendingCommit)
+		auto it = leaveTransitionMembers.find(token);
+		if (it == leaveTransitionMembers.end() || it->second.state != eWorldTransitionMemberState::DetachedPendingCommit)
 			return false;
 		auto* host = dynamic_cast<WorldMembershipHost*>(FindWorld(it->second.worldId));
 		if (!host || !host->AddMember(user))
@@ -284,7 +325,7 @@ namespace jam::net
 			++entry->memberCount;
 			entry->lifecyclePinCount = entry->lifecyclePinCount > 0 ? entry->lifecyclePinCount - 1 : 0;
 		}
-		transitionMembers.erase(it);
+		leaveTransitionMembers.erase(it);
 		return true;
 	}
 

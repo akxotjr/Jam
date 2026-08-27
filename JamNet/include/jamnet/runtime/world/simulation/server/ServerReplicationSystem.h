@@ -1,4 +1,6 @@
 #pragma once
+#include <entt/entity/sparse_set.hpp>
+
 #include "jamnet/runtime/protocol/codec/ReplicationCodec.h"
 #include "jamnet/runtime/world/actor/ActorId.h"
 
@@ -13,6 +15,7 @@ namespace jam::net
 	class ServerInputSystem;
 	class ServerPhysicsSystem;
 	class WorldMetrics;
+	struct TickCounter;
 
 	struct RigidBaselineState
 	{
@@ -93,7 +96,14 @@ namespace jam::net
 	class ServerReplicationSystem
 	{
 	public:
-		ServerReplicationSystem(entt::registry& world, WorldMetrics& metrics);
+		ServerReplicationSystem(
+			entt::registry& world, 
+			WorldMetrics& metrics, 
+			ServerWorld& serverWorld,
+			ServerInputSystem& inputSystem, 
+			ServerAoiSystem& aoiSystem,
+			ServerPhysicsSystem& physicsSystem, 
+			TickCounter& tickCounter);
 
 		void                                        Init();
 		void                                        Tick();
@@ -182,11 +192,12 @@ namespace jam::net
 	private:
 		entt::registry&                                                             m_world;
 		std::unique_ptr<flatbuffers::FlatBufferBuilder>                             m_fbb;
-		ServerWorld*																m_netWorld      = nullptr;
-		ServerInputSystem*                                                          m_inputSys      = nullptr;
-		ServerAoiSystem*                                                            m_aoiSys        = nullptr;
-		ServerPhysicsSystem*                                                        m_physSys       = nullptr;
-		WorldMetrics*																m_metrics       = nullptr;
+		ServerWorld&																m_serverWorld;
+		ServerInputSystem&                                                          m_inputSys;
+		ServerAoiSystem&                                                            m_aoiSys;
+		ServerPhysicsSystem&                                                        m_physSys;
+		TickCounter&                                                                m_worldTick;
+		WorldMetrics&																m_metrics;
 
         std::unordered_map<uint64, ReplicationUserState>                            m_userStates;                 // Per-user replication session state.
         std::unordered_map<ActorId, std::vector<KnownUserSlot>>                       m_knownUsersByActor;          // Reverse index from actor to users that know it.
@@ -197,7 +208,7 @@ namespace jam::net
 
 		std::vector<uint64>                                                         m_knownUsersScratch;          // Reused alive known-user list for actor fan-out.
         std::unordered_set<ActorId>                                                 m_sentThisTickScratch;        // Dedup of actors already emitted for one user this tick.
-        std::unordered_set<uint32>                                                  m_enteredScratch;             // AOI entered set for quick full-send checks.
+		entt::basic_sparse_set<entt::entity>                                         m_enteredScratch{ entt::type_id<void>() }; // AOI entered actors for direct entity-indexed checks.
         std::array<std::vector<Candidate>, static_cast<size_t>(eBucket::Count)>     m_candidateBucketsScratch;    // Reused candidate buckets by priority.
         std::vector<Candidate>                                                      m_orderedCandidatesScratch;   // Reused flattened candidate list.
         std::vector<flatbuffers::Offset<fb::fbActorEntity>>                         m_actorOffsScratch;           // Reused FlatBuffer actor offsets for one packet.

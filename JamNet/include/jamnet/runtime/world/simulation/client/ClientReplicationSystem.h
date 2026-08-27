@@ -192,21 +192,6 @@ namespace jam::net
 		};
 		std::unordered_map<ActorId, PendingBaselineFeedback> m_pendingBaselineFeedback;
 
-		struct HeadlessSnapshotBatch
-		{
-			uint64 serverTick = 0;
-			uint16 expectedChunkCount = 0;
-			std::vector<uint8> receivedChunks;
-			std::unordered_map<ActorId, uint32> baselines;
-
-			bool IsComplete() const
-			{
-				return expectedChunkCount != 0
-					&& receivedChunks.size() >= expectedChunkCount
-					&& std::ranges::all_of(receivedChunks, [](uint8 received) { return received != 0; });
-			}
-		};
-		std::optional<HeadlessSnapshotBatch> m_headlessSnapshotBatch;
 		std::unordered_map<ActorId, uint32> m_headlessBaselines;
 	};
 }

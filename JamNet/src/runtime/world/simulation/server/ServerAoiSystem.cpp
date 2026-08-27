@@ -10,8 +10,19 @@
 
 namespace jam::net
 {
-	ServerAoiSystem::ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics, WorldMetrics& metrics)
-		: m_registry(world), m_physics(physics), m_metrics(&metrics)
+	ServerAoiSystem::ServerAoiSystem(
+		entt::registry& world, 
+		px::PhysicsFacade* physics, 
+		WorldMetrics& metrics,
+		ServerWorld& serverWorld, 
+		ServerPhysicsSystem& serverPhysics, 
+		TickCounter& tickCounter)
+		: m_registry(world), 
+		m_physics(physics), 
+		m_world(serverWorld), 
+		m_serverPhysics(serverPhysics),
+		m_tickCounter(tickCounter), 
+		m_metrics(metrics)
 	{
 	}
 
@@ -27,7 +38,6 @@ namespace jam::net
 		m_actorVisibleUsers.clear();
 		m_userVisibleActors.clear();
 		m_entityPositions.clear();
-		m_userPositions.clear();
 		m_dirtyUsers.clear();
 		m_dirtyActors.clear();
 		m_pendingVisibility.clear();
@@ -41,15 +51,11 @@ namespace jam::net
 		m_pendingVisibilityDedup.clear();
 		m_pendingCellActorCompactions.clear();
 		m_pendingCellSubscriberCompactions.clear();
-		m_pendingVisibleUserCompactions.clear();
-		m_pendingVisibleActorCompactions.clear();
 
-		RefreshContext();
 	}
 
 	void ServerAoiSystem::Tick()
 	{
-		//RefreshContext();
 		ClearTransientEvents();
 
 		CollectDirtyActorsFromPhysics();
@@ -79,7 +85,6 @@ namespace jam::net
 		state.left.clear();
 
 		m_userStates.erase(userId);
-		m_userPositions.erase(userId);
 		MarkUserDirty(userId);
 	}
 
@@ -96,38 +101,21 @@ namespace jam::net
 			m_userStates.erase(it);
 		}
 
-		m_userPositions.erase(userId);
 		m_states.erase(userId);
 		m_dirtyUserDedup.erase(userId);
-		if (auto it = m_userVisibleActors.find(userId); it != m_userVisibleActors.end())
+		while (true)
 		{
-			for (const AoiVisibleActorSlot& slot : it->second)
+			auto it = m_userVisibleActors.find(userId);
+			if (it == m_userVisibleActors.end())
+				break;
+			JAM_ASSERT(!it->second.empty());
+			if (it->second.empty())
 			{
-				if (!slot.alive)
-					continue;
-
-				const AoiVisibilityKey key = MakeVisibilityKey(userId, slot.actor);
-				auto membershipIt = m_visibleMembership.find(key);
-				if (membershipIt == m_visibleMembership.end())
-					continue;
-
-				auto actorIt = m_actorVisibleUsers.find(slot.actor);
-				if (actorIt != m_actorVisibleUsers.end()
-					&& membershipIt->second.actorUserIndex < actorIt->second.size())
-				{
-					AoiVisibleUserSlot& actorSlot = actorIt->second[membershipIt->second.actorUserIndex];
-					if (actorSlot.alive && actorSlot.userId == userId)
-					{
-						actorSlot.alive = false;
-					}
-				}
-
-				m_visibleMembership.erase(membershipIt);
-				m_pendingVisibleUserCompactions.insert(slot.actor);
+				m_userVisibleActors.erase(it);
+				break;
 			}
-
-			m_userVisibleActors.erase(it);
-			m_pendingVisibleActorCompactions.erase(userId);
+			if (!RemoveVisibleMembership(userId, it->second.back().actor))
+				break;
 		}
 		RemoveLosForUser(userId);
 	}
@@ -167,32 +155,24 @@ namespace jam::net
 			RemoveActorFromCell(stIt->second.anchorCell, actor);
 
 		std::vector<uint64> visibleUsers;
-		if (auto it = m_actorVisibleUsers.find(actor); it != m_actorVisibleUsers.end())
+		while (true)
 		{
-			visibleUsers.reserve(it->second.size());
-			for (const AoiVisibleUserSlot& slot : it->second)
+			auto it = m_actorVisibleUsers.find(actor);
+			if (it == m_actorVisibleUsers.end())
+				break;
+			if (visibleUsers.empty())
+				visibleUsers.reserve(it->second.size());
+			JAM_ASSERT(!it->second.empty());
+			if (it->second.empty())
 			{
-				if (!slot.alive)
-					continue;
-
-				visibleUsers.push_back(slot.userId);
-				const AoiVisibilityKey key = MakeVisibilityKey(slot.userId, actor);
-				auto membershipIt = m_visibleMembership.find(key);
-				if (membershipIt == m_visibleMembership.end())
-					continue;
-
-				if (auto userIt = m_userVisibleActors.find(slot.userId); userIt != m_userVisibleActors.end()
-					&& membershipIt->second.userActorIndex < userIt->second.size())
-				{
-					AoiVisibleActorSlot& actorSlot = userIt->second[membershipIt->second.userActorIndex];
-					if (actorSlot.alive && actorSlot.actor == actor)
-						actorSlot.alive = false;
-				}
-
-				m_visibleMembership.erase(membershipIt);
+				m_actorVisibleUsers.erase(it);
+				break;
 			}
-			m_actorVisibleUsers.erase(it);
-			m_pendingVisibleUserCompactions.erase(actor);
+
+			const uint64 userId = it->second.back().userId;
+			visibleUsers.push_back(userId);
+			if (!RemoveVisibleMembership(userId, actor))
+				break;
 		}
 
 		m_actorStates.erase(actor);
@@ -208,22 +188,22 @@ namespace jam::net
 		{
 			if (auto stateIt = m_states.find(userId); stateIt != m_states.end())
 			{
-				if (stateIt->second.visible.erase(actorId) > 0)
+				if (stateIt->second.visible.contains(actor))
 				{
+					stateIt->second.visible.erase(actor);
 					stateIt->second.left.push_back(actorId);
-					if (m_metrics)
-						m_metrics->RecordAoiLeftActor();
+					m_metrics.RecordAoiLeftActor();
 				}
 			}
-
-			m_pendingVisibleActorCompactions.insert(userId);
 		}
 	}
 
 	bool ServerAoiSystem::IsVisible(uint64 userId, ActorId actorId) const
 	{
-		if (auto it = m_states.find(userId); it != m_states.end())
-			return it->second.visible.contains(actorId);
+		const entt::entity actor = m_world.ResolveActor(actorId);
+		if (actor != entt::null)
+			if (auto it = m_states.find(userId); it != m_states.end())
+				return it->second.visible.contains(actor);
 		return false;
 	}
 
@@ -241,14 +221,6 @@ namespace jam::net
 		return nullptr;
 	}
 
-	void ServerAoiSystem::RefreshContext()
-	{
-		if (auto* nwPtr = m_registry.ctx().find<ServerWorld*>(); nwPtr)
-			m_world = *nwPtr;
-		if (auto* phys = m_registry.ctx().find<ServerPhysicsSystem>())
-			m_serverPhysics = phys;
-	}
-
 	void ServerAoiSystem::ClearTransientEvents()
 	{
 		for (UserAoiState& state : m_states | std::views::values)
@@ -260,10 +232,7 @@ namespace jam::net
 
 	void ServerAoiSystem::CollectDirtyActorsFromPhysics()
 	{
-		if (!m_serverPhysics)
-			return;
-
-		for (entt::entity actor : m_serverPhysics->GetLastActiveEntities())
+		for (entt::entity actor : m_serverPhysics.GetLastActiveEntities())
 		{
 			MarkActorDirty(actor);
 
@@ -287,7 +256,6 @@ namespace jam::net
 			state.left.clear();
 
 			const px::Vec3 userPos = ResolveUserPosition(userId);
-			m_userPositions[userId] = userPos;
 			UpdateUserAnchorAndInterestCells(userId, userPos);
 		}
 
@@ -327,11 +295,8 @@ namespace jam::net
 			EvaluateVisibility(pending.userId, pending.actor);
 		}
 
-		if (m_metrics)
-		{
-			for (const UserAoiState& state : m_states | std::views::values)
-				m_metrics->RecordAoiNeighbors(state.visible.size());
-		}
+		for (const UserAoiState& state : m_states | std::views::values)
+			m_metrics.RecordAoiNeighbors(state.visible.size());
 
 		m_pendingVisibility.clear();
 		m_pendingVisibilityDedup.clear();
@@ -497,8 +462,7 @@ namespace jam::net
 		if (auto it = m_userVisibleActors.find(userId); it != m_userVisibleActors.end())
 		{
 			for (const AoiVisibleActorSlot& slot : it->second)
-				if (slot.alive)
-					EnqueueVisibilityEval(userId, slot.actor);
+				EnqueueVisibilityEval(userId, slot.actor);
 		}
 	}
 
@@ -507,8 +471,7 @@ namespace jam::net
 		if (auto it = m_actorVisibleUsers.find(actor); it != m_actorVisibleUsers.end())
 		{
 			for (const AoiVisibleUserSlot& slot : it->second)
-				if (slot.alive)
-					EnqueueVisibilityEval(slot.userId, actor);
+				EnqueueVisibilityEval(slot.userId, actor);
 		}
 	}
 
@@ -524,8 +487,7 @@ namespace jam::net
 		UserAoiState& state = stateIt->second;
 		const ActorId actorId = m_registry.get<ActorId>(actor);
 		const AoiVisibilityKey visibilityKey = MakeVisibilityKey(userId, actor);
-		const auto visibleIt = state.visible.find(actorId);
-		const bool wasVisible = visibleIt != state.visible.end();
+		const bool wasVisible = state.visible.contains(actor);
 		auto membershipIt = m_visibleMembership.find(visibilityKey);
 
 		const AoiUserCellState* userCellState = nullptr;
@@ -559,9 +521,11 @@ namespace jam::net
 			}
 		}
 
-		const auto userPosIt = m_userPositions.find(userId);
-		const px::Vec3 userPos = userPosIt != m_userPositions.end()
-			? userPosIt->second
+		if (!userCellState)
+			if (const auto it = m_userStates.find(userId); it != m_userStates.end())
+				userCellState = &it->second;
+		const px::Vec3 userPos = userCellState
+			? userCellState->lastPos
 			: ResolveUserPosition(userId);
 		const auto actorPosIt = m_entityPositions.find(actor);
 		const px::Vec3 actorPos = actorPosIt != m_entityPositions.end()
@@ -601,8 +565,8 @@ namespace jam::net
 				auto& visibleActors = m_userVisibleActors[userId];
 				const size_t actorUserIndex = visibleUsers.size();
 				const size_t userActorIndex = visibleActors.size();
-				visibleUsers.push_back(AoiVisibleUserSlot{ userId, true });
-				visibleActors.push_back(AoiVisibleActorSlot{ actor, true });
+				visibleUsers.push_back(AoiVisibleUserSlot{ userId });
+				visibleActors.push_back(AoiVisibleActorSlot{ actor });
 				const auto [insertedIt, inserted] = m_visibleMembership.emplace(
 					visibilityKey,
 					AoiVisibleMembershipEntry{
@@ -615,46 +579,24 @@ namespace jam::net
 			refreshCertificate(membershipIt->second);
 			if (!wasVisible)
 			{
-				state.visible.insert(actorId);
+				state.visible.push(actor);
 				state.entered.push_back(actorId);
-				if (m_metrics)
-					m_metrics->RecordAoiEnteredActor();
+				m_metrics.RecordAoiEnteredActor();
 			}
 			return;
 		}
 
 		if (wasVisible)
 		{
-			state.visible.erase(visibleIt);
+			state.visible.erase(actor);
 			state.left.push_back(actorId);
-			if (m_metrics)
-				m_metrics->RecordAoiLeftActor();
+			m_metrics.RecordAoiLeftActor();
 		}
 
 		if (membershipIt == m_visibleMembership.end())
 			return;
 
-		auto actorUsersIt = m_actorVisibleUsers.find(actor);
-		auto userActorsIt = m_userVisibleActors.find(userId);
-		if (actorUsersIt != m_actorVisibleUsers.end()
-			&& membershipIt->second.actorUserIndex < actorUsersIt->second.size())
-		{
-			AoiVisibleUserSlot& slot = actorUsersIt->second[membershipIt->second.actorUserIndex];
-			if (slot.alive && slot.userId == userId)
-				slot.alive = false;
-		}
-
-		if (userActorsIt != m_userVisibleActors.end()
-			&& membershipIt->second.userActorIndex < userActorsIt->second.size())
-		{
-			AoiVisibleActorSlot& slot = userActorsIt->second[membershipIt->second.userActorIndex];
-			if (slot.alive && slot.actor == actor)
-				slot.alive = false;
-		}
-
-		m_visibleMembership.erase(membershipIt);
-		m_pendingVisibleUserCompactions.insert(actor);
-		m_pendingVisibleActorCompactions.insert(userId);
+		(void)RemoveVisibleMembership(userId, actor);
 	}
 
 	bool ServerAoiSystem::PassesVisibilityTests(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible)
@@ -696,7 +638,7 @@ namespace jam::net
 		if (!m_physics)
 			return true;
 
-		const uint32 currentTick = m_registry.ctx().contains<TickCounter>() ? m_registry.ctx().get<TickCounter>().tick : 0;
+		const uint32 currentTick = m_tickCounter.tick;
 		const AoiVisibilityKey key = MakeVisibilityKey(userId, actor);
 
 		if (wasVisible)
@@ -732,10 +674,7 @@ namespace jam::net
 
 	px::Vec3 ServerAoiSystem::ResolveUserPosition(uint64 userId) const
 	{
-		if (!m_world)
-			return {};
-
-		const entt::entity actor = m_world->GetControlledEntity(userId);
+		const entt::entity actor = m_world.GetControlledEntity(userId);
 		if (actor == entt::null || !m_registry.valid(actor))
 			return {};
 		return ResolveActorPosition(actor);
@@ -916,6 +855,65 @@ namespace jam::net
 		m_dirtyActors.push_back(actor);
 	}
 
+	bool ServerAoiSystem::RemoveVisibleMembership(uint64 userId, entt::entity actor)
+	{
+		const AoiVisibilityKey key = MakeVisibilityKey(userId, actor);
+		auto membershipIt = m_visibleMembership.find(key);
+		if (membershipIt == m_visibleMembership.end())
+			return false;
+
+		const AoiVisibleMembershipEntry removed = membershipIt->second;
+		auto actorUsersIt = m_actorVisibleUsers.find(actor);
+		auto userActorsIt = m_userVisibleActors.find(userId);
+		const bool indicesValid = actorUsersIt != m_actorVisibleUsers.end()
+			&& userActorsIt != m_userVisibleActors.end()
+			&& removed.actorUserIndex < actorUsersIt->second.size()
+			&& removed.userActorIndex < userActorsIt->second.size()
+			&& actorUsersIt->second[removed.actorUserIndex].userId == userId
+			&& userActorsIt->second[removed.userActorIndex].actor == actor;
+		JAM_ASSERT(indicesValid);
+		if (!indicesValid)
+		{
+			m_visibleMembership.erase(membershipIt);
+			return false;
+		}
+
+		auto& visibleUsers = actorUsersIt->second;
+		if (removed.actorUserIndex != visibleUsers.size() - 1)
+		{
+			visibleUsers[removed.actorUserIndex] = visibleUsers.back();
+			const AoiVisibilityKey movedKey = MakeVisibilityKey(
+				visibleUsers[removed.actorUserIndex].userId,
+				actor);
+			auto movedIt = m_visibleMembership.find(movedKey);
+			JAM_ASSERT(movedIt != m_visibleMembership.end());
+			if (movedIt != m_visibleMembership.end())
+				movedIt->second.actorUserIndex = removed.actorUserIndex;
+		}
+		visibleUsers.pop_back();
+		if (visibleUsers.empty())
+			m_actorVisibleUsers.erase(actorUsersIt);
+
+		auto& visibleActors = userActorsIt->second;
+		if (removed.userActorIndex != visibleActors.size() - 1)
+		{
+			visibleActors[removed.userActorIndex] = visibleActors.back();
+			const AoiVisibilityKey movedKey = MakeVisibilityKey(
+				userId,
+				visibleActors[removed.userActorIndex].actor);
+			auto movedIt = m_visibleMembership.find(movedKey);
+			JAM_ASSERT(movedIt != m_visibleMembership.end());
+			if (movedIt != m_visibleMembership.end())
+				movedIt->second.userActorIndex = removed.userActorIndex;
+		}
+		visibleActors.pop_back();
+		if (visibleActors.empty())
+			m_userVisibleActors.erase(userActorsIt);
+
+		m_visibleMembership.erase(membershipIt);
+		return true;
+	}
+
 	void ServerAoiSystem::CompactCellActorsIfNeeded(uint64 cellKey)
 	{
 		auto it = m_cellActors.find(cellKey);
@@ -966,86 +964,14 @@ namespace jam::net
 		std::erase_if(slots, [](const AoiSubscriberSlot& slot) { return !slot.alive; });
 	}
 
-	void ServerAoiSystem::CompactVisibleUsersIfNeeded(entt::entity actor)
-	{
-		auto it = m_actorVisibleUsers.find(actor);
-		if (it == m_actorVisibleUsers.end())
-			return;
-
-		auto& slots = it->second;
-		size_t dead = 0;
-		for (const AoiVisibleUserSlot& slot : slots)
-		{
-			if (!slot.alive)
-				++dead;
-		}
-
-		if (dead == slots.size())
-		{
-			m_actorVisibleUsers.erase(it);
-			return;
-		}
-		if (dead < m_cfg.compactMinDeadCount)
-			return;
-		if (slots.empty() || (static_cast<float>(dead) / static_cast<float>(slots.size())) < m_cfg.compactDeadRatio)
-			return;
-
-		std::erase_if(slots, [](const AoiVisibleUserSlot& slot) { return !slot.alive; });
-		for (size_t i = 0; i < slots.size(); ++i)
-		{
-			const AoiVisibilityKey key = MakeVisibilityKey(slots[i].userId, actor);
-			if (auto membershipIt = m_visibleMembership.find(key); membershipIt != m_visibleMembership.end())
-				membershipIt->second.actorUserIndex = i;
-		}
-	}
-
-	void ServerAoiSystem::CompactVisibleActorsIfNeeded(uint64 userId)
-	{
-		auto it = m_userVisibleActors.find(userId);
-		if (it == m_userVisibleActors.end())
-			return;
-
-		auto& slots = it->second;
-		size_t dead = 0;
-		for (const AoiVisibleActorSlot& slot : slots)
-		{
-			if (!slot.alive)
-				++dead;
-		}
-
-		if (dead == slots.size())
-		{
-			m_userVisibleActors.erase(it);
-			return;
-		}
-		if (dead < m_cfg.compactMinDeadCount)
-			return;
-		if (slots.empty() || (static_cast<float>(dead) / static_cast<float>(slots.size())) < m_cfg.compactDeadRatio)
-			return;
-
-		std::erase_if(slots, [](const AoiVisibleActorSlot& slot) { return !slot.alive; });
-		for (size_t i = 0; i < slots.size(); ++i)
-		{
-			const AoiVisibilityKey key = MakeVisibilityKey(userId, slots[i].actor);
-			if (auto membershipIt = m_visibleMembership.find(key); membershipIt != m_visibleMembership.end())
-				membershipIt->second.userActorIndex = i;
-		}
-	}
-
 	void ServerAoiSystem::FlushPendingCompactions()
 	{
 		for (const uint64 cellKey : m_pendingCellActorCompactions)
 			CompactCellActorsIfNeeded(cellKey);
 		for (const uint64 cellKey : m_pendingCellSubscriberCompactions)
 			CompactCellSubscribersIfNeeded(cellKey);
-		for (const entt::entity actor : m_pendingVisibleUserCompactions)
-			CompactVisibleUsersIfNeeded(actor);
-		for (const uint64 userId : m_pendingVisibleActorCompactions)
-			CompactVisibleActorsIfNeeded(userId);
 
 		m_pendingCellActorCompactions.clear();
 		m_pendingCellSubscriberCompactions.clear();
-		m_pendingVisibleUserCompactions.clear();
-		m_pendingVisibleActorCompactions.clear();
 	}
 }

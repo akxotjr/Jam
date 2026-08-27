@@ -38,8 +38,8 @@ namespace jam::net
 		}
 	}
 
-	ServerPhysicsSystem::ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics)
-		: m_world(world), m_physics(physics)
+	ServerPhysicsSystem::ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics, ServerWorld& serverWorld, ServerInputSystem& inputSystem)
+		: m_world(world), m_physics(physics), m_serverWorld(serverWorld), m_inputSystem(inputSystem)
 	{
 	}
 
@@ -127,16 +127,14 @@ namespace jam::net
 	void ServerPhysicsSystem::ApplyInputs() const
 	{
 		auto view = m_world.view<ControlTag, px::CharacterMotorInput>();
-		auto* inputSys = m_world.ctx().find<ServerInputSystem>();
-
 		for (auto e : view)
 		{
 			const auto& control = view.get<ControlTag>(e);
 			auto& input = view.get<px::CharacterMotorInput>(e);
 			m_physics->ApplyCharacterMotorInput(GetPhysicsActorId(m_world, e), input);
 
-			if (inputSys && control.userId != 0)
-				inputSys->MarkInputApplied(control.userId);
+			if (control.userId != 0)
+				m_inputSystem.MarkInputApplied(control.userId);
 		}
 	}
 
@@ -174,13 +172,9 @@ namespace jam::net
 		px::CharacterState csBuf{};
 		px::RigidState	   rsBuf{};
 
-		auto* nwPtr = m_world.ctx().find<ServerWorld*>();
-		if (!nwPtr || !*nwPtr)
-			return;
-
 		for (const px::ActorId id : activeList)
 		{
-			const entt::entity e = (*nwPtr)->ResolveActor(ActorId(id));
+			const entt::entity e = m_serverWorld.ResolveActor(ActorId(id));
 			if (e == entt::null || !m_world.valid(e)) continue;
 
 			if (auto* cs = m_world.try_get<CharAuthorityState>(e))
@@ -241,11 +235,6 @@ namespace jam::net
 		if (!m_physics)
 			return;
 
-		auto* nwPtr = m_world.ctx().find<ServerWorld*>();
-		if (!nwPtr || !*nwPtr)
-			return;
-
-		ServerWorld* physicalWorld = *nwPtr;
 		std::unordered_set<uint32> pending;
 		const std::vector<px::PhysicsEvent> events = m_physics->ConsumePhysicsEvents();
 
@@ -257,7 +246,7 @@ namespace jam::net
 				continue;
 			}
 
-			const entt::entity e = physicalWorld->ResolveActor(ActorId(evt.sourceActorId));
+			const entt::entity e = m_serverWorld.ResolveActor(ActorId(evt.sourceActorId));
 			if (e == entt::null || !m_world.valid(e))
 				continue;
 
@@ -268,9 +257,9 @@ namespace jam::net
 			if (!pending.insert(actorId->Value()).second)
 				continue;
 
-			physicalWorld->DespawnActor(*actorId);
+			m_serverWorld.DespawnActor(*actorId);
 		}
 
-		physicalWorld->DispatchPhysicsEvents(events);
+		m_serverWorld.DispatchPhysicsEvents(events);
 	}
 }

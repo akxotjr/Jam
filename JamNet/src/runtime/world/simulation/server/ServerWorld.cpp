@@ -142,12 +142,22 @@ namespace jam::net
 		m_physics->SetJobBridge(m_bridge.get());
 		m_physics->Init();
 
-		m_registry.ctx().emplace<ServerWorld*>(this);
-		m_registry.ctx().emplace<TickCounter>().Init();
-		m_registry.ctx().emplace<ServerInputSystem>(m_registry).Init();
-		m_registry.ctx().emplace<ServerPhysicsSystem>(m_registry, m_physics.get()).Init();
-		m_registry.ctx().emplace<ServerAoiSystem>(m_registry, m_physics.get(), m_metrics).Init();
-		m_registry.ctx().emplace<ServerReplicationSystem>(m_registry, m_metrics).Init();
+		m_replicationSystem.reset();
+		m_aoiSystem.reset();
+		m_physicsSystem.reset();
+		m_inputSystem.reset();
+
+		m_tickCounter.Init();
+
+		m_inputSystem		= std::make_unique<ServerInputSystem>(m_registry, *this);
+		m_physicsSystem		= std::make_unique<ServerPhysicsSystem>(m_registry, m_physics.get(), *this, *m_inputSystem);
+		m_aoiSystem			= std::make_unique<ServerAoiSystem>(m_registry, m_physics.get(), m_metrics, *this, *m_physicsSystem, m_tickCounter);
+		m_replicationSystem = std::make_unique<ServerReplicationSystem>(m_registry, m_metrics, *this, *m_inputSystem, *m_aoiSystem, *m_physicsSystem, m_tickCounter);
+
+		m_inputSystem->Init();
+		m_physicsSystem->Init();
+		m_aoiSystem->Init();
+		m_replicationSystem->Init();
 
 		BootstrapLevelActors();
 
@@ -205,8 +215,7 @@ namespace jam::net
 		if (!WorldMembershipHost::AddMember(std::move(user)))
 			return false;
 
-		auto* replication = m_registry.ctx().find<ServerReplicationSystem>();
-		if (!replication || !replication->AttachUser(userId))
+		if (!m_replicationSystem || !m_replicationSystem->AttachUser(userId))
 		{
 			WorldMembershipHost::RemoveMember(userId);
 			return false;
@@ -219,8 +228,8 @@ namespace jam::net
 		JAM_ASSERT(IsCurrentShardContext());
 		if (!m_userContexts.contains(userId))
 			return;
-		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
-			replication->SuspendUser(userId);
+		if (m_replicationSystem)
+			m_replicationSystem->SuspendUser(userId);
 	}
 
 	bool ServerWorld::ResumeMemberReplication(UserId userId)
@@ -229,10 +238,10 @@ namespace jam::net
 		if (!m_userContexts.contains(userId))
 			return false;
 
-		if (auto* input = m_registry.ctx().find<ServerInputSystem>())
-			input->RemoveUser(userId);
-		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
-			return replication->ResumeUserWithFullSync(userId);
+		if (m_inputSystem)
+			m_inputSystem->RemoveUser(userId);
+		if (m_replicationSystem)
+			return m_replicationSystem->ResumeUserWithFullSync(userId);
 		return false;
 	}
 
@@ -255,11 +264,7 @@ namespace jam::net
 
 		if (const auto it = m_userContexts.find(userId); it != m_userContexts.end())
 		{
-			if (!PostToSession(it->second.sessions, protocol, std::move(packet)))
-			{
-				JAM_LOG_WARN("[ServerWorldTx] failed to schedule packet. userId={}, type={}, id={}, channel={}",
-					userId, static_cast<uint8>(view.Type()), view.Id(), static_cast<uint8>(view.Channel()));
-			}
+			PostToSession(it->second.sessions, protocol, std::move(packet));
 		}
 	}
 
@@ -310,16 +315,15 @@ namespace jam::net
 			const auto* batch = fb::GetfbBaselineAckBatch(view.Payload());
 			if (!batch || batch->world_id() != GetWorldId() || batch->world_instance_id() != GetWorldInstance().instanceId.value)
 				break;
-			if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
-				replication->HandleBaselineFeedback(userId, *batch);
+			if (m_replicationSystem)
+				m_replicationSystem->HandleBaselineFeedback(userId, *batch);
 			break;
 		}
 		default: break;
 		}
 	}
 
-	void ServerWorld::SpawnPlayerAsync(UserId userId, const WorldEventCorrelation& correlation, SpawnParams params,
-		std::function<void(ActorId, ePlayerSpawnFailure)> onDone)
+	void ServerWorld::SpawnPlayerAsync(UserId userId, const WorldEventCorrelation& correlation, SpawnParams params, std::function<void(ActorId, ePlayerSpawnFailure)> onDone)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
 
@@ -340,9 +344,8 @@ namespace jam::net
 					onDone(actorId, failure);
 			};
 
-		const auto* replication = m_registry.ctx().find<ServerReplicationSystem>();
 		if (userId == 0 || !correlation.world.IsValid() || correlation.world != GetWorldRef()
-			|| !m_userContexts.contains(userId) || !replication
+			|| !m_userContexts.contains(userId) || !m_replicationSystem
 			|| params.controller != userId || params.desc.IsRigid())
 		{
 			complete(ActorId::Invalid(), ePlayerSpawnFailure::InvalidCorrelation);
@@ -371,7 +374,7 @@ namespace jam::net
 			return;
 		}
 
-		if (!replication->IsAwaitingPlayer(userId))
+		if (!m_replicationSystem->IsAwaitingPlayer(userId))
 		{
 			complete(ActorId::Invalid(), ePlayerSpawnFailure::InvalidCorrelation);
 			return;
@@ -429,12 +432,13 @@ namespace jam::net
 			return false;
 		}
 
-		ApplyInitialControl(player, userId);
+		if (!ApplyInitialControl(player, userId))
+			return false;
 		EnsureUserAoiRegistration(userId);
-		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
+		if (m_replicationSystem)
 		{
-			replication->MarkActorDirty(player, true);
-			if (replication->IsAwaitingPlayer(userId) && !replication->BeginInitialSync(userId))
+			m_replicationSystem->MarkActorDirty(player, true);
+			if (m_replicationSystem->IsAwaitingPlayer(userId) && !m_replicationSystem->BeginInitialSync(userId))
 				return false;
 		}
 		return GetControlledEntity(userId) == player;
@@ -497,33 +501,29 @@ namespace jam::net
 
 	void ServerWorld::Tick()
 	{
-		if (!m_registry.ctx().contains<TickCounter>() 
-			|| !m_registry.ctx().contains<ServerInputSystem>() 
-			|| !m_registry.ctx().contains<ServerPhysicsSystem>()
-			|| !m_registry.ctx().contains<ServerAoiSystem>()
-			|| !m_registry.ctx().contains<ServerReplicationSystem>())
+		if (!m_inputSystem || !m_physicsSystem || !m_aoiSystem || !m_replicationSystem)
 			return;
 
 		std::array<uint64, 6> phases{};
 		const uint64 tickStartNs = NOW_NS();
-		m_registry.ctx().get<TickCounter>().Tick();
+		m_tickCounter.Tick();
 
 		uint64 phaseStartNs = NOW_NS();
-		m_registry.ctx().get<ServerInputSystem>().Tick();
+		m_inputSystem->Tick();
 		phases[1] = NOW_NS() - phaseStartNs;
 
 		phaseStartNs = NOW_NS();
-		m_registry.ctx().get<ServerPhysicsSystem>().Tick();
+		m_physicsSystem->Tick();
 		phases[2] = NOW_NS() - phaseStartNs;
 		YieldCurrentWorldFiber();
 
 		phaseStartNs = NOW_NS();
-		m_registry.ctx().get<ServerAoiSystem>().Tick();
+		m_aoiSystem->Tick();
 		phases[3] = NOW_NS() - phaseStartNs;
 		YieldCurrentWorldFiber();
 
 		phaseStartNs = NOW_NS();
-		m_registry.ctx().get<ServerReplicationSystem>().Tick();
+		m_replicationSystem->Tick();
 		phases[4] = NOW_NS() - phaseStartNs;
 
 		phaseStartNs = NOW_NS();
@@ -549,9 +549,7 @@ namespace jam::net
 		if (m_pendingPlayerSpawns.empty())
 			return;
 
-		auto* aoi = m_registry.ctx().find<ServerAoiSystem>();
-		auto* replication = m_registry.ctx().find<ServerReplicationSystem>();
-		if (!aoi || !replication)
+		if (!m_aoiSystem || !m_replicationSystem)
 			return;
 
 		const uint64 nowNs = NOW_NS();
@@ -564,7 +562,7 @@ namespace jam::net
 		{
 			if (!m_userContexts.contains(userId)
 				|| pending.correlation.world != GetWorldRef()
-				|| !replication->IsAwaitingPlayer(userId)
+				|| !m_replicationSystem->IsAwaitingPlayer(userId)
 				|| pending.entity == entt::null
 				|| !m_registry.valid(pending.entity)
 				|| ResolveActor(pending.actorId) != pending.entity)
@@ -579,8 +577,8 @@ namespace jam::net
 			const bool playerReady = m_registry.all_of<PhysicsSpawnedTag>(pending.entity)
 				&& control && control->userId == userId
 				&& GetControlledEntity(userId) == pending.entity
-				&& aoi->IsActorRegistered(pending.entity)
-				&& aoi->IsUserReady(userId);
+				&& m_aoiSystem->IsActorRegistered(pending.entity)
+				&& m_aoiSystem->IsUserReady(userId);
 
 			if (playerReady)
 				readyUsers.push_back(userId);
@@ -595,7 +593,7 @@ namespace jam::net
 				continue;
 
 			const ActorId actorId = it->second.actorId;
-			if (replication->BeginInitialSync(userId))
+			if (m_replicationSystem->BeginInitialSync(userId))
 				CompletePendingPlayerSpawn(userId, actorId, ePlayerSpawnFailure::None);
 			else
 				CompletePendingPlayerSpawn(userId, ActorId::Invalid(), ePlayerSpawnFailure::SpawnFailed);
@@ -635,8 +633,8 @@ namespace jam::net
 
 	void ServerWorld::OnUserLeft(UserId userId)
 	{
-		if (auto* input = m_registry.ctx().find<ServerInputSystem>())
-			input->RemoveUser(userId);
+		if (m_inputSystem)
+			m_inputSystem->RemoveUser(userId);
 
 		if (auto it = m_userToControlledEntity.find(userId); it != m_userToControlledEntity.end())
 		{
@@ -649,17 +647,17 @@ namespace jam::net
 				{
 					control.userId = 0;
 					m_registry.remove<px::CharacterMotorInput>(controlled);
-					if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
-						replication->MarkActorDirty(controlled, true);
+					if (m_replicationSystem)
+						m_replicationSystem->MarkActorDirty(controlled, true);
 				}
 			}
 		}
 
-		if (auto* repl = m_registry.ctx().find<ServerReplicationSystem>())
-			repl->OnUserLeave(userId);
+		if (m_replicationSystem)
+			m_replicationSystem->OnUserLeave(userId);
 
-		if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
-			aoi->OnUserLeave(userId);
+		if (m_aoiSystem)
+			m_aoiSystem->OnUserLeave(userId);
 
 		if (auto it = m_pendingPlayerSpawns.find(userId); it != m_pendingPlayerSpawns.end())
 		{
@@ -742,7 +740,7 @@ namespace jam::net
 			else if (m_physics->FindMotionType(physicsArchetypeKey) == px::eMotionType::Static)
 				m_registry.emplace<ReplicationStaticTag>(e);
 
-			m_registry.ctx().get<ServerPhysicsSystem>().SpawnActor(e, desc);
+			m_physicsSystem->SpawnActor(e, desc);
 			if (!m_registry.valid(e))
 			{
 				m_actorDirectory.Unbind(actorId);
@@ -758,8 +756,8 @@ namespace jam::net
 
 			if (!m_registry.all_of<ReplicationDisabledTag>(e) && m_registry.all_of<PhysicsSpawnedTag>(e))
 			{
-				if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
-					aoi->OnActorSpawned(e);
+				if (m_aoiSystem)
+					m_aoiSystem->OnActorSpawned(e);
 			}
 		}
 		JAM_ASSERT(ValidateActorIdentities());
@@ -820,12 +818,16 @@ namespace jam::net
 		m_registry.emplace<ClientRequestCorrelation>(e, ClientRequestCorrelation{ params.clientRequestId });
 
 
-		if (params.controller != 0)
-			ApplyInitialControl(e, params.controller);
+		if (params.controller != 0 && !ApplyInitialControl(e, params.controller))
+		{
+			ReleaseActorId(e);
+			m_registry.destroy(e);
+			return ActorId::Invalid();
+		}
 
 		params.desc.targetActorId = BindingTarget(m_registry, e, params.targetActorId, m_actorDirectory);
 
-		m_registry.ctx().get<ServerPhysicsSystem>().SpawnActor(e, params.desc);
+		m_physicsSystem->SpawnActor(e, params.desc);
 		if (!m_registry.valid(e))
 		{
 			m_actorDirectory.Release(actorId);
@@ -853,8 +855,8 @@ namespace jam::net
 
 		if (!m_registry.all_of<ReplicationDisabledTag>(e) && m_registry.all_of<PhysicsSpawnedTag>(e))
 		{
-			if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
-				aoi->OnActorSpawned(e);
+			if (m_aoiSystem)
+				m_aoiSystem->OnActorSpawned(e);
 		}
 
 
@@ -906,10 +908,10 @@ namespace jam::net
 				return false;
 		}
 
-		if (auto* repl = m_registry.ctx().find<ServerReplicationSystem>())
-			repl->OnActorDestroyed(targetEntity);
-		if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
-			aoi->OnActorDestroyed(targetEntity);
+		if (m_replicationSystem)
+			m_replicationSystem->OnActorDestroyed(targetEntity);
+		if (m_aoiSystem)
+			m_aoiSystem->OnActorDestroyed(targetEntity);
 
 		if (const auto* control = m_registry.try_get<ControlTag>(targetEntity))
 		{
@@ -931,14 +933,9 @@ namespace jam::net
 
 		if (m_registry.all_of<PhysicsSpawnedTag>(targetEntity))
 		{
-			if (auto* phys = m_registry.ctx().find<ServerPhysicsSystem>())
-			{
-				phys->DespawnActor(targetEntity);
-			}
-			else
-			{
+			if (!m_physicsSystem)
 				return false;
-			}
+			m_physicsSystem->DespawnActor(targetEntity);
 		}
 
 		ReleaseActorId(targetEntity);
@@ -973,18 +970,25 @@ namespace jam::net
 			return;
 
 		const entt::entity controlled = GetControlledEntity(userId);
-		if (controlled == entt::null || !m_registry.valid(controlled)
-			|| !m_registry.all_of<PhysicsSpawnedTag>(controlled))
+		if (controlled == entt::null || !m_registry.valid(controlled) || !m_registry.all_of<PhysicsSpawnedTag>(controlled))
 			return;
 
-		if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>(); aoi && !aoi->GetState(userId))
-			aoi->OnUserEnter(userId);
+		if (m_aoiSystem && !m_aoiSystem->GetState(userId))
+			m_aoiSystem->OnUserEnter(userId);
 	}
 
-	void ServerWorld::ApplyInitialControl(entt::entity entity, UserId userId)
+	bool ServerWorld::ApplyInitialControl(entt::entity entity, UserId userId)
 	{
 		if (userId == 0 || !m_registry.valid(entity))
-			return;
+			return false;
+
+		const auto* targetControl = m_registry.try_get<ControlTag>(entity);
+		const bool controlledByOtherUser = targetControl
+			&& targetControl->userId != 0
+			&& targetControl->userId != userId;
+		JAM_ASSERT(!controlledByOtherUser);
+		if (controlledByOtherUser)
+			return false;
 
 		const entt::entity previous = GetControlledEntity(userId);
 		if (previous != entt::null && previous != entity && m_registry.valid(previous) && m_registry.all_of<ControlTag>(previous))
@@ -994,8 +998,8 @@ namespace jam::net
 			{
 				control.userId = 0;
 				m_registry.remove<px::CharacterMotorInput>(previous);
-				if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
-					replication->MarkActorDirty(previous, true);
+				if (m_replicationSystem)
+					m_replicationSystem->MarkActorDirty(previous, true);
 			}
 		}
 
@@ -1004,11 +1008,12 @@ namespace jam::net
 			m_registry.emplace_or_replace<px::CharacterMotorInput>(entity);
 
 		m_userToControlledEntity[userId] = entity;
-		if (auto* aoi = m_registry.ctx().find<ServerAoiSystem>())
-			aoi->OnControlledActorChanged(userId);
+		if (m_aoiSystem)
+			m_aoiSystem->OnControlledActorChanged(userId);
 
-		if (auto* replication = m_registry.ctx().find<ServerReplicationSystem>())
-			replication->MarkActorDirty(entity, true);
+		if (m_replicationSystem)
+			m_replicationSystem->MarkActorDirty(entity, true);
+		return true;
 	}
 
 	void ServerWorld::ProcessGameInput(UserId userId, const PacketHeaderView& pkt)
@@ -1050,9 +1055,7 @@ namespace jam::net
 			break;
 		}
 
-		if (m_registry.ctx().contains<ServerInputSystem>())
-		{
-			m_registry.ctx().get<ServerInputSystem>().EnqueueInput(userId, cmd);
-		}
+		if (m_inputSystem)
+			m_inputSystem->EnqueueInput(userId, cmd);
 	}
 }

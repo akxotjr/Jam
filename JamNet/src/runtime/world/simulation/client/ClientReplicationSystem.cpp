@@ -36,7 +36,6 @@ namespace jam::net
 		m_pendingLifecycle.clear();
 		m_pendingSnapshotBatches.clear();
 		m_pendingBaselineFeedback.clear();
-		m_headlessSnapshotBatch.reset();
 		m_headlessBaselines.clear();
 		m_localActorId = ActorId::Invalid();
 		m_localEntity = entt::null;
@@ -209,23 +208,6 @@ namespace jam::net
 		if (serverTick == 0 || chunkIndex >= chunkCount)
 			return;
 
-		if (!m_headlessSnapshotBatch || serverTick > m_headlessSnapshotBatch->serverTick)
-		{
-			m_headlessSnapshotBatch = HeadlessSnapshotBatch{
-				.serverTick = serverTick,
-				.expectedChunkCount = chunkCount,
-				.receivedChunks = std::vector<uint8>(chunkCount, 0),
-			};
-		}
-		else if (serverTick < m_headlessSnapshotBatch->serverTick)
-		{
-			return;
-		}
-
-		HeadlessSnapshotBatch& batch = *m_headlessSnapshotBatch;
-		if (batch.expectedChunkCount != chunkCount || batch.receivedChunks[chunkIndex] != 0)
-			return;
-
 		if (const auto* entities = snapshot.entities())
 		{
 			for (const fb::fbActorEntity* entity : *entities)
@@ -240,7 +222,8 @@ namespace jam::net
 
 				if (entity->character_full() || entity->transform_full())
 				{
-					batch.baselines[actorId] = baselineRev;
+					m_headlessBaselines[actorId] = baselineRev;
+					QueueBaselineAck(actorId, baselineRev);
 					continue;
 				}
 
@@ -252,17 +235,6 @@ namespace jam::net
 				}
 			}
 		}
-
-		batch.receivedChunks[chunkIndex] = 1;
-		if (!batch.IsComplete())
-			return;
-
-		for (const auto& [actorId, baselineRev] : batch.baselines)
-		{
-			m_headlessBaselines[actorId] = baselineRev;
-			QueueBaselineAck(actorId, baselineRev);
-		}
-		m_headlessSnapshotBatch.reset();
 		FlushBaselineFeedback();
 	}
 

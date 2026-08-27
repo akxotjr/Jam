@@ -67,7 +67,8 @@ namespace jam::net
 		uint16																shardIndex = 0;
 		ShardOwnedObjectTable<WorldBase>									worldsById;
 		std::unordered_map<WorldId, WorldRecord>							worldRecordsById;
-		std::unordered_map<WorldTransitionToken, WorldTransitionMember, WorldTransitionTokenHash> transitionMembers;
+		std::unordered_map<WorldTransitionToken, WorldTransitionMember, WorldTransitionTokenHash> enterTransitionMembers;
+		std::unordered_map<WorldTransitionToken, WorldTransitionMember, WorldTransitionTokenHash> leaveTransitionMembers;
 
 		WorldId										AllocWorldId();
 		void										FreeWorldId(WorldId worldId);

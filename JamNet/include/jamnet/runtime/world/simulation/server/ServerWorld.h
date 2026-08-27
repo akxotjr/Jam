@@ -1,6 +1,7 @@
 #pragma once
 #include "jamnet/runtime/world/simulation/common/PhysicalWorld.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
+#include "jamnet/runtime/world/simulation/common/WorldContext.h"
 #include "jamnet/runtime/content/world/IWorldContent.h"
 #include "jamnet/runtime/world/simulation/server/WorldMetrics.h"
 
@@ -12,7 +13,10 @@
 namespace jam::net
 {
 	struct PacketHeaderView;
+	class ServerInputSystem;
 	class ServerPhysicsSystem;
+	class ServerAoiSystem;
+	class ServerReplicationSystem;
 
 	enum class ePlayerSpawnFailure : uint8
 	{
@@ -70,7 +74,7 @@ namespace jam::net
 		void								BootstrapLevelActors();
 
 		void								EnsureUserAoiRegistration(UserId userId);
-		void								ApplyInitialControl(entt::entity entity, UserId userId);
+		bool								ApplyInitialControl(entt::entity entity, UserId userId);
 
 		void								ProcessGameInput(UserId userId, const PacketHeaderView& pkt);
 		void								FinalizePendingPlayerSpawns();
@@ -97,10 +101,15 @@ namespace jam::net
 			std::vector<std::function<void(ActorId, ePlayerSpawnFailure)>> completions;
 		};
 
-		std::unordered_map<uint64, PendingPlayerSpawn> m_pendingPlayerSpawns;
-		std::unique_ptr<IWorldContent>			m_content;
-		EnterWorldHandler						m_enterWorld;
-		bool									m_contentInitialized = false;
-		WorldMetrics                            m_metrics;
+		std::unordered_map<uint64, PendingPlayerSpawn>	m_pendingPlayerSpawns;
+		std::unique_ptr<IWorldContent>					m_content;
+		EnterWorldHandler								m_enterWorld;
+		bool											m_contentInitialized = false;
+		WorldMetrics									m_metrics;
+		TickCounter										m_tickCounter;
+		std::unique_ptr<ServerInputSystem>				m_inputSystem;
+		std::unique_ptr<ServerPhysicsSystem>			m_physicsSystem;
+		std::unique_ptr<ServerAoiSystem>				m_aoiSystem;
+		std::unique_ptr<ServerReplicationSystem>		m_replicationSystem;
 	};
 }

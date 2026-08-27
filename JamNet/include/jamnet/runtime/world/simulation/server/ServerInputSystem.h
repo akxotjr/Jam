@@ -4,13 +4,24 @@
 
 #include <cstddef>
 #include <map>
+#include <optional>
 
 namespace jam::net
 {
+	class ServerWorld;
+
+	struct ServerUserInputState
+	{
+		std::map<uint32, CharacterControlCommand>	pending;
+		std::optional<CharacterControlCommand>		current;
+		std::optional<CharacterControlCommand>		applied;
+		uint32								latestControlRevision = 0;
+	};
+
 	class ServerInputSystem
 	{
-public:
-		ServerInputSystem(entt::registry& world);
+	public:
+		ServerInputSystem(entt::registry& world, ServerWorld& serverWorld);
 		~ServerInputSystem() = default;
 
 		void									Init();
@@ -22,31 +33,21 @@ public:
 		uint32									LastAppliedSeq(uint64 userId) const;
 		uint32									LastAppliedControlRevision(uint64 userId) const;
 
-private:
+	private:
 		void									QueuePendingInput(uint64 userId, const CharacterControlCommand& cmd);
 		CharacterControlCommand					SelectInputForTick(uint64 userId);
 
-private:
+	private:
 		static constexpr std::size_t kMaxPendingInputsPerUser = 256;
-		//struct MoveToDiagnosticState
-		//{
-		//	px::Vec3 target = px::Vec3::Zero();
-		//	px::Vec3 lastPosition = px::Vec3::Zero();
-		//	uint32 lastSampleTick = 0;
-		//	uint8 stationarySamples = 0;
-		//	bool initialized = false;
-		//	bool reported = false;
-		//};
 
 		entt::registry&							m_world;
+		ServerWorld&							m_serverWorld;
 
-		// Preserve client sequence order so one server simulation step consumes
-		// exactly one logical client input slot. Missing slots are synthesized from
-		// the held continuous state once a newer sequence proves that the slot exists.
-		std::unordered_map<uint64, std::map<uint32, CharacterControlCommand>>	m_pendingInputs;
-		std::unordered_map<uint64, CharacterControlCommand>				m_currentInputs;
-		std::unordered_map<uint64, CharacterControlCommand>				m_appliedInputs;
-		std::unordered_map<uint64, uint32>								m_latestControlRevisions;
+		// One input stream exists per user. Preserve client sequence order so one
+		// server simulation step consumes exactly one logical client input slot.
+		// Missing slots are synthesized from the held continuous state once a newer
+		// sequence proves that the slot exists.
+		std::unordered_map<uint64, ServerUserInputState>				m_userInputs;
 		//std::unordered_map<uint64, MoveToDiagnosticState>				m_moveToDiagnostics;
 		CharacterControlResolveConfig					m_controlResolveConfig = {};
 	};

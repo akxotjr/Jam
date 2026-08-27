@@ -9,10 +9,13 @@ namespace jam::px
 
 namespace jam::net
 {
+	class ServerInputSystem;
+	class ServerWorld;
+
 	class ServerPhysicsSystem
 	{
     public:
-		ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics);
+		ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics, ServerWorld& serverWorld, ServerInputSystem& inputSystem);
 
         void                    Init();
         void                    Tick();
@@ -35,6 +38,8 @@ namespace jam::net
     private:
         entt::registry&                     m_world;
         px::PhysicsFacade*                  m_physics           = nullptr;
+		ServerWorld&                        m_serverWorld;
+		ServerInputSystem&                  m_inputSystem;
 
         bool                                m_tickFiberRunning  = false;
 		uint32                              m_completedTickCount = 0;
