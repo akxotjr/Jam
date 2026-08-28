@@ -28,9 +28,8 @@ namespace jam::net
 		TCP_BIND_RES		= 23,
 		UDP_BIND_REQ		= 24,
 		UDP_BIND_RES		= 25,
-		UDP_BIND_CONFIRM	= 26,
-		UDP_UNBIND_REQ		= 27,
-		UDP_UNBIND_RES		= 28,
+		UDP_UNBIND_REQ		= 26,
+		UDP_UNBIND_RES		= 27,
 	};
 
 	enum class eBootstrapKind : uint8
@@ -145,12 +144,6 @@ namespace jam::net
 		uint64 sessionId	 = 0;
 		uint64 transactionId = 0;
 		uint8  success		 = 0;
-	};
-
-	struct UDP_BIND_CONFIRM_DATA
-	{
-		uint64 sessionId	 = 0;
-		uint64 transactionId = 0;
 	};
 
 	struct UDP_UNBIND_REQ_DATA

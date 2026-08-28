@@ -65,11 +65,6 @@ namespace jam::net
 		return CreateSystemPacket(eSystemPacketId::UDP_BIND_RES, PacketFlags::NONE, eChannel::UDP_DEFAULT, &res, sizeof(UDP_BIND_RES_DATA));
 	}
 
-	Packet PacketBuilder::CreateUdpBindConfirmPacket(const UDP_BIND_CONFIRM_DATA& confirm)
-	{
-		return CreateSystemPacket(eSystemPacketId::UDP_BIND_CONFIRM, PacketFlags::NONE, eChannel::UDP_DEFAULT, &confirm, sizeof(UDP_BIND_CONFIRM_DATA));
-	}
-
 	Packet PacketBuilder::CreateUdpUnbindReqPacket(const UDP_UNBIND_REQ_DATA& req)
 	{
 		return CreateSystemPacket(eSystemPacketId::UDP_UNBIND_REQ, PacketFlags::NONE, eChannel::UDP_DEFAULT, &req, sizeof(UDP_UNBIND_REQ_DATA));

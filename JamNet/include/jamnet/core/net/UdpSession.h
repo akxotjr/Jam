@@ -47,12 +47,10 @@ namespace jam::net
 		void							HandleUdpControlPacket(const PacketHeaderView& view);
 		void							TrySessionBinding();
 		void							ScheduleSessionBindingRetry();
-		void							ScheduleServerBindResponseRetry();
 		void							ScheduleSessionUnbindRetry();
 		void							ScheduleUnbindTombstoneExpiry();
 		void							SendBindRequest();
 		void							SendBindResponse();
-		void							SendBindConfirm();
 		void							SendUnbindRequest();
 		void							SendUnbindResponse();
 		void							AbortTransport(const char* reason);
@@ -62,9 +60,7 @@ namespace jam::net
 	private:
 		uint64							m_bindTransactionId = 0;
 		uint64							m_bindDeadline_ns = 0;
-		uint32							m_bindTimerToken = 0;
 		bool							m_bindAccepted = false;
-		bool							m_serverBindResponseActive = false;
 
 		uint64							m_unbindTransactionId = 0;
 		uint64							m_unbindDeadline_ns = 0;

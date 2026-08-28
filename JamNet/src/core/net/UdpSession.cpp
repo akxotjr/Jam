@@ -29,8 +29,9 @@ namespace jam::net
 				return false;
 
 			const auto id = ToEnum<eSystemPacketId>(view.Id());
-			return id == eSystemPacketId::UDP_BIND_REQ || id == eSystemPacketId::UDP_BIND_RES
-				|| id == eSystemPacketId::UDP_BIND_CONFIRM || id == eSystemPacketId::UDP_UNBIND_REQ
+			return id == eSystemPacketId::UDP_BIND_REQ 
+				|| id == eSystemPacketId::UDP_BIND_RES
+				|| id == eSystemPacketId::UDP_UNBIND_REQ
 				|| id == eSystemPacketId::UDP_UNBIND_RES;
 		}
 	}
@@ -157,10 +158,7 @@ namespace jam::net
 				if (IsClosing())
 					return;
 				if (m_bindAccepted && res->success && res->sessionId == GetSessionId())
-				{
-					SendBindConfirm();
 					return;
-				}
 
 				if (!m_clientBind.active)
 					return;
@@ -183,7 +181,6 @@ namespace jam::net
 					AbortTransport("failed to adopt UDP session id");
 					return;
 				}
-				SendBindConfirm();
 				m_bindAccepted = true;
 				CompleteSessionEstablishment(false);
 			}
@@ -197,17 +194,6 @@ namespace jam::net
 				req && req->accountId == m_accountId && req->userId == m_userId && req->transactionId == m_bindTransactionId)
 			{
 				SendBindResponse();
-			}
-			return;
-
-		case eSystemPacketId::UDP_BIND_CONFIRM:
-			if (!IsServerSide() || view.PayloadSize() < sizeof(UDP_BIND_CONFIRM_DATA))
-				return;
-			if (const auto* confirm = reinterpret_cast<const UDP_BIND_CONFIRM_DATA*>(view.Payload());
-				confirm && confirm->sessionId == GetSessionId() && confirm->transactionId == m_bindTransactionId)
-			{
-				m_serverBindResponseActive = false;
-				++m_bindTimerToken;
 			}
 			return;
 
@@ -340,26 +326,6 @@ namespace jam::net
 			}, eJobPriority::Control), MakeRetryDelayNs(kControlRetryDelayNs, kControlRetryJitterNs, m_endpointId, token));
 	}
 
-	void UdpSession::ScheduleServerBindResponseRetry()
-	{
-		const uint32 token = ++m_bindTimerToken;
-		const SessionRef<UdpSession> selfRef(this);
-		SubmitAfter(Job([selfRef, token]()
-			{
-				auto* self = selfRef.TryGet();
-				if (!self || !self->m_serverBindResponseActive || self->m_bindTimerToken != token)
-					return;
-				if (NOW_NS() >= self->m_bindDeadline_ns)
-				{
-					JAM_LOG_ERROR("[UdpSession] UDP bind confirm timed out. accountId={}, userId={}, sessionId={}", self->m_accountId, self->m_userId, self->m_sessionId);
-					self->AbortTransport("UDP bind confirm deadline exceeded");
-					return;
-				}
-				self->SendBindResponse();
-				self->ScheduleServerBindResponseRetry();
-			}, eJobPriority::Control), MakeRetryDelayNs(kControlRetryDelayNs, kControlRetryJitterNs, m_endpointId, token));
-	}
-
 	void UdpSession::ScheduleSessionUnbindRetry()
 	{
 		const uint32 token = ++m_unbindTimerToken;
@@ -412,12 +378,6 @@ namespace jam::net
 		SendImmediatePacket(PacketBuilder::CreateUdpBindResPacket(data));
 	}
 
-	void UdpSession::SendBindConfirm()
-	{
-		const UDP_BIND_CONFIRM_DATA data{ .sessionId = GetSessionId(), .transactionId = m_bindTransactionId };
-		SendImmediatePacket(PacketBuilder::CreateUdpBindConfirmPacket(data));
-	}
-
 	void UdpSession::SendUnbindRequest()
 	{
 		const UDP_UNBIND_REQ_DATA data{ .sessionId = GetSessionId(), .transactionId = m_unbindTransactionId };
@@ -434,10 +394,8 @@ namespace jam::net
 	{
 		JAM_LOG_DEBUG("[UdpSession] transport aborted. reason={}, accountId={}, userId={}, sessionId={}", reason, m_accountId, m_userId, m_sessionId);
 		m_clientBind.active = false;
-		m_serverBindResponseActive = false;
 		m_unbindRequestActive = false;
 		++m_clientBind.timerToken;
-		++m_bindTimerToken;
 		++m_unbindTimerToken;
 		CompleteProtocolDisconnect();
 	}

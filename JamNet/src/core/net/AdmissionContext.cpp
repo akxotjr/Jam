@@ -539,13 +539,10 @@ namespace jam::net
 				udp->SetAccountId(accountId);
 				udp->SetUserId(userId);
 				udp->m_bindAccepted = true;
-				udp->m_serverBindResponseActive = true;
-				udp->m_bindDeadline_ns = NOW_NS() + 10_s;
 				if (udp->GetEntity() == entt::null)
 					udp->CreateEntity();
 				udp->CompleteSessionEstablishment(true);
 				udp->SendBindResponse();
-				udp->ScheduleServerBindResponseRetry();
 			}, eJobPriority::Critical));
 	}
 
