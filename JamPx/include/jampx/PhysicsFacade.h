@@ -11,6 +11,11 @@ namespace jam::px
 	enum class ePxSceneSlot : uint8;
 	class IPhysicsJobBridge;
 
+	struct PhysicsConfig
+	{
+		bool enableReplay = true;
+	};
+
 	class PhysicsFacade
 	{
 	public:
@@ -24,6 +29,7 @@ namespace jam::px
 		void								Shutdown();
 
 		void								SetJobBridge(IPhysicsJobBridge* bridge);
+		void								SetConfig(const PhysicsConfig& config);
 		void								SetPhysicsAssetPath(const std::string& path);
 		bool								IsStepPending() const;
 

@@ -20,9 +20,10 @@ namespace jam::px
 		PhysicsWorld() = default;
 		~PhysicsWorld() = default;
 
-		void							Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter);
+		void							Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter, bool enableReplay);
 		void							Destroy();
 		PhysicsArchetypeRegistry&		Registry() const;
+		bool							IsReplayEnabled() const { return GetScene(ePxSceneSlot::Replay) != nullptr; }
 
 		PxScene*						GetScene(ePxSceneSlot slot = ePxSceneSlot::Main) const;
 		PxTaskManager*					GetTaskManager() const { return m_scenes[0] ? m_scenes[0]->getTaskManager() : nullptr; }

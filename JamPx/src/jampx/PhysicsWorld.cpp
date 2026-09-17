@@ -7,12 +7,13 @@
 
 namespace jam::px
 {
-	void PhysicsWorld::Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter)
+	void PhysicsWorld::Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter, bool enableReplay)
 	{
 		if (m_scenes[0]) return;
 		m_registry = registry;
 
-		for (int i = 0; i < 2; ++i)
+		const int sceneCount = enableReplay ? 2 : 1;
+		for (int i = 0; i < sceneCount; ++i)
 		{
 			if (dispacter)
 			{
@@ -135,6 +136,9 @@ namespace jam::px
 		desc.stepOffset				= data.stepOffset;
 		desc.scaleCoeff				= data.scaleCoeff;
 		desc.volumeGrowth			= data.volumeGrowth;
+
+		desc.behaviorCallback		= m_characterBehaviorCB;
+		desc.reportCallback			= m_characterReportCB;
 
 		if (!desc.isValid()) return nullptr;
 

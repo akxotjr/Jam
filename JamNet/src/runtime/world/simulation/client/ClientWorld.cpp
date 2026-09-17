@@ -46,6 +46,7 @@ namespace jam::net
 			else
 				return false;
 
+			m_physics->SetConfig(px::PhysicsConfig{ .enableReplay = true });
 			m_physics->SetJobBridge(m_bridge.get());
 			m_physics->Init();
 		}

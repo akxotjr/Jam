@@ -30,7 +30,7 @@ namespace jam::px
 		  m_replayCCT(replayCCT),
 		  m_hitbox(hitbox), 
 		  m_mainMover(std::make_unique<LocomotionComponent>(cfg, mainCCT, hitbox, collideWithControllers)),
-		  m_replayMover(std::make_unique<LocomotionComponent>(cfg, replayCCT, nullptr, collideWithControllers))
+		  m_replayMover(replayCCT ? std::make_unique<LocomotionComponent>(cfg, replayCCT, nullptr, collideWithControllers) : nullptr)
 	{
 		if (m_mainMover)
 			m_mainState.pos = m_mainMover->GetMoveState().position;

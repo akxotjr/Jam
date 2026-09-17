@@ -53,7 +53,9 @@ namespace jam::px
 		if (!m_replayDriver)
 			return;
 
-		auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
+		auto* replayActor = body.GetReplayActor();
+		if (!replayActor) return;
+		auto* dyn = replayActor->is<PxRigidDynamic>();
 		if (!dyn) return;
 
 		m_lastDtReplay = dt;
@@ -95,7 +97,9 @@ namespace jam::px
 
 	void KinematicRigidBehavior::SyncReplayState(RigidBody& body)
 	{
-		const auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
+		const auto* replayActor = body.GetReplayActor();
+		if (!replayActor || !m_replayDriver) return;
+		const auto* dyn = replayActor->is<PxRigidDynamic>();
 		if (!dyn) return;
 
 		const RigidState prev = body.GetReplayState();
@@ -120,7 +124,7 @@ namespace jam::px
 
 	bool KinematicRigidBehavior::ApplyMainState(const RigidState& state)
 	{
-		if (auto* netDriver = dynamic_cast<NetworkPoseKinematicDriver*>(m_replayDriver.get()))
+		if (auto* netDriver = dynamic_cast<NetworkPoseKinematicDriver*>(m_mainDriver.get()))
 		{
 			netDriver->SetAuthoritativePose(ToPhysX(state.pose));
 			netDriver->SetAuthoritativeLinearVelocity(ToPhysX(state.linVel));
@@ -160,4 +164,3 @@ namespace jam::px
 
 
 } // namespace jam::px
-

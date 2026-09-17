@@ -89,12 +89,11 @@ namespace jam::px
 
 	void ProjectileRigidBehavior::SetTargetResolver(ProjectileTargetResolver resolver)
 	{
-		if (!m_mainProjectile || !m_replayProjectile)
-			return;
-
 		auto copied = resolver;
+		if (!m_mainProjectile) return;
 		m_mainProjectile->SetTargetResolver(std::move(resolver));
-		m_replayProjectile->SetTargetResolver(std::move(copied));
+		if (m_replayProjectile)
+			m_replayProjectile->SetTargetResolver(std::move(copied));
 	}
 
 
@@ -123,7 +122,9 @@ namespace jam::px
 	{
 		if (!m_replayProjectile) return;
 
-		auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
+		auto* replayActor = body.GetReplayActor();
+		if (!replayActor) return;
+		auto* dyn = replayActor->is<PxRigidDynamic>();
 		if (!dyn) return;
 
 		const PxScene* scene = dyn->getScene();
@@ -164,7 +165,9 @@ namespace jam::px
 
 	void ProjectileRigidBehavior::SyncReplayState(RigidBody& body)
 	{
-		auto* dyn = body.GetReplayActor()->is<PxRigidDynamic>();
+		auto* replayActor = body.GetReplayActor();
+		if (!replayActor || !m_replayProjectile) return;
+		auto* dyn = replayActor->is<PxRigidDynamic>();
 		if (!dyn) return;
 
 		const RigidState prev = body.GetReplayState();

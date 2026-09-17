@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 
 
 namespace jam::px
@@ -75,10 +74,16 @@ namespace jam::px
 			m_accumulator->Clear();
 		}
 
-		const MotorStepResult step = m_motor->Move(dt, disp);
+
+		MotorStepResult step;
+
+		if (IsStableIdle() && m_motor->CanSkipIdleMove())
+			step = m_motor->Stay();
+		else
+			step = m_motor->Move(dt, disp);
 
 		m_state.position = step.position;
-		// 매 프레임 0으로 리셋되어 중력 누적이 깨지기 때문
+
 		if (dt > 0.f)
 		{
 			m_state.velocity.x = step.velocity.x;
@@ -192,7 +197,7 @@ namespace jam::px
 			// 소량 음수를 유지해 CCT가 항상 바닥으로 눌리도록 함.
 			//m_state.velocity.y = -(m_cfg.gravity * dt);
 
-			constexpr float kGroundStickSpeed = -2.0f;
+			constexpr float kGroundStickSpeed = -0.05f;
 			m_state.velocity.y = kGroundStickSpeed;
 		}
 	}
@@ -292,6 +297,30 @@ namespace jam::px
 		{
 			m_state.velocity.y = std::min(m_state.velocity.y, 0.f);
 		}
+	}
+
+	bool LocomotionComponent::IsStableIdle() const
+	{
+		if (!m_state.grounded)
+			return false;
+
+		if (m_state.justJumped || m_state.dash.active)
+			return false;
+
+		constexpr float idleEpsilonSq = EPS_5 * EPS_5;
+		const float horizontalSpeedSq = m_state.velocity.x * m_state.velocity.x + m_state.velocity.z * m_state.velocity.z;
+		if (horizontalSpeedSq >= idleEpsilonSq)
+			return false;
+
+		if (m_accumulator)
+		{
+			if (m_accumulator->GetAddVelocity().MagnitudeSquared() >= idleEpsilonSq)
+				return false;
+			if (m_accumulator->GetAddDisplacement().MagnitudeSquared() >= idleEpsilonSq)
+				return false;
+		}
+
+		return true;
 	}
 
 	bool LocomotionComponent::CanSprint()

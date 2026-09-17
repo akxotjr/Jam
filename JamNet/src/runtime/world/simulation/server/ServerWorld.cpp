@@ -139,6 +139,7 @@ namespace jam::net
 		m_pendingPlayerSpawns.clear();
 		m_metrics.Init(GetWorldId(), GetWorldShardIndex(GetWorldId()));
 
+		m_physics->SetConfig(px::PhysicsConfig{ .enableReplay = false });
 		m_physics->SetJobBridge(m_bridge.get());
 		m_physics->Init();
 

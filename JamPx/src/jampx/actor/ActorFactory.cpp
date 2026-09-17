@@ -37,6 +37,13 @@ namespace jam::px
 				ApplyRigidOverrides(*dyn, overrides);
 		}
 
+		void EnablePoseIntegrationPreview(PxRigidActor* actor)
+		{
+			if (!actor) return;
+			if (auto* dyn = actor->is<PxRigidDynamic>())
+				dyn->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_POSE_INTEGRATION_PREVIEW, true);
+		}
+
 		eMotionType ResolveMotionType(eSpawnSource spawnSource, const PhysicsArchetypeData& data)
 		{
 			if (spawnSource != eSpawnSource::Network)
@@ -82,7 +89,8 @@ namespace jam::px
 			const PhysicsArchetypeRegistry& registry,
 			const PhysicsArchetypeData& data, 
 			const TargetPoseResolver& resolver,
-			const RigidSpawnOverrides* overrides)
+			const RigidSpawnOverrides* overrides,
+			bool enableReplay)
 		{
 			if (!data.IsRigid())
 				return nullptr;
@@ -96,9 +104,9 @@ namespace jam::px
 				const KinematicDriverConfig& cfg = registry.GetKinematicDriverConfig(*kHandle);
 
 				auto mainDriver   = CreateKinematicDriver(cfg, resolver);
-				auto replayDriver = CreateKinematicDriver(cfg, resolver);
+				auto replayDriver = enableReplay ? CreateKinematicDriver(cfg, resolver) : nullptr;
 
-				if (mainDriver && replayDriver)
+				if (mainDriver)
 					return std::make_unique<KinematicRigidBehavior>(std::move(mainDriver), std::move(replayDriver));
 			}
 			else if (const auto* pHandle = bodyDef.GetBehavior<ProjectileConfigHandle>())
@@ -109,7 +117,7 @@ namespace jam::px
 					cfg.motion.initialVelocity = ToPhysX(overrides->linearVelocity);
 
 				auto mainProjectile   = std::make_unique<ProjectileComponent>(cfg);
-				auto replayProjectile = std::make_unique<ProjectileComponent>(cfg);
+				auto replayProjectile = enableReplay ? std::make_unique<ProjectileComponent>(cfg) : nullptr;
 
 				return std::make_unique<ProjectileRigidBehavior>(std::move(mainProjectile), std::move(replayProjectile));
 			}
@@ -193,12 +201,18 @@ namespace jam::px
 
 		PxRigidActor* mainActor = world.CreateRigidActor(ePxSceneSlot::Main, key, ToPhysX(desc.pose), userData);
 		if (!mainActor) return std::nullopt;
+		EnablePoseIntegrationPreview(mainActor);
 
-		PxRigidActor* replayActor = world.CreateRigidActor(ePxSceneSlot::Replay, key, ToPhysX(desc.pose), userData);
-		if (!replayActor)
+		PxRigidActor* replayActor = nullptr;
+		if (world.IsReplayEnabled())
 		{
-			world.RemoveRigidActor(ePxSceneSlot::Main, mainActor);
-			return std::nullopt;
+			replayActor = world.CreateRigidActor(ePxSceneSlot::Replay, key, ToPhysX(desc.pose), userData);
+			if (!replayActor)
+			{
+				world.RemoveRigidActor(ePxSceneSlot::Main, mainActor);
+				return std::nullopt;
+			}
+			EnablePoseIntegrationPreview(replayActor);
 		}
 
 		const auto& overrides = std::get<RigidSpawnOverrides>(desc.overrides);
@@ -220,12 +234,14 @@ namespace jam::px
 				dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 
 			body.AttachBehavior(std::make_unique<KinematicRigidBehavior>(
-				std::make_unique<NetworkPoseKinematicDriver>(KinematicCommon{}, NetworkPoseSource{}),
-				std::make_unique<NetworkPoseKinematicDriver>(KinematicCommon{}, NetworkPoseSource{})));
+				std::make_unique<NetworkPoseKinematicDriver>(
+					KinematicCommon{}, 
+					NetworkPoseSource{}),
+					world.IsReplayEnabled() ? std::make_unique<NetworkPoseKinematicDriver>(KinematicCommon{}, NetworkPoseSource{}) : nullptr));
 
 			kineType = eKineDrivenType::RuntimeDynamic;
 		}
-		else if (auto behavior = CreateRigidBehavior(registry, data, resolver, &overrides))
+		else if (auto behavior = CreateRigidBehavior(registry, data, resolver, &overrides, world.IsReplayEnabled()))
 		{
 			body.AttachBehavior(std::move(behavior));
 
@@ -265,11 +281,15 @@ namespace jam::px
 		PxCapsuleController* mainCCT = world.CreateController(ePxSceneSlot::Main, cctDef, ToPhysX(desc.pose.p), userData);
 		if (!mainCCT) return std::nullopt;
 
-		PxCapsuleController* replayCCT = world.CreateController(ePxSceneSlot::Replay, cctDef, ToPhysX(desc.pose.p), userData);
-		if (!replayCCT)
+		PxCapsuleController* replayCCT = nullptr;
+		if (world.IsReplayEnabled())
 		{
-			world.RemoveController(mainCCT);
-			return std::nullopt;
+			replayCCT = world.CreateController(ePxSceneSlot::Replay, cctDef, ToPhysX(desc.pose.p), userData);
+			if (!replayCCT)
+			{
+				world.RemoveController(mainCCT);
+				return std::nullopt;
+			}
 		}
 
 		PxRigidActor* hitbox = nullptr;

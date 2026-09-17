@@ -79,9 +79,7 @@ namespace jam::px
 	MotorStepResult CharacterMotor::Move(float dt, const Vec3& displacement)
 	{
 		MotorStepResult r{};
-		if (!m_controller) return r;
-
-		dt = std::max(dt, 0.0f);
+		if (!m_controller || dt <= 0.0f) return r;
 
 		const PxExtendedVec3& before = m_controller->getPosition();
 		const PxVec3 disp = ToPhysX(displacement);
@@ -92,42 +90,43 @@ namespace jam::px
 		const PxControllerCollisionFlags flags = m_controller->move(disp, EPSILON, dt, filters);
 		const PxExtendedVec3& after = m_controller->getPosition();
 
-		//// ---- DEBUG LOG BEGIN ----
-		//{
-		//	const bool hitSide = flags.isSet(PxControllerCollisionFlag::eCOLLISION_SIDES);
-		//	const bool hitUp = flags.isSet(PxControllerCollisionFlag::eCOLLISION_UP);
-		//	const bool hitDown = flags.isSet(PxControllerCollisionFlag::eCOLLISION_DOWN);
+		PxControllerState state{};
+		m_controller->getState(state);
 
-		//	const auto d = diff(after, before);
+		const bool grounded = flags.isSet(PxControllerCollisionFlag::eCOLLISION_DOWN);
 
-		//	std::cout
-		//		<< "[CCT_MOVE] "
-		//		<< "dt=" << dt
-		//		<< " disp=(" << disp.x << "," << disp.y << "," << disp.z << ")"
-		//		<< " before=(" << before.x << "," << before.y << "," << before.z << ")"
-		//		<< " after=(" << after.x << "," << after.y << "," << after.z << ")"
-		//		<< " delta=(" << d.x << "," << d.y << "," << d.z << ")"
-		//		<< " flags[s=" << (hitSide ? 1 : 0)
-		//		<< ",u=" << (hitUp ? 1 : 0)
-		//		<< ",d=" << (hitDown ? 1 : 0) << "]"
-		//		<< "\n";
-		//}
-		//// ---- DEBUG LOG END ----
+		m_lastSense.grounded	 = grounded;
+		m_lastSense.ceiling		 = flags.isSet(PxControllerCollisionFlag::eCOLLISION_UP);
+		m_lastSense.groundNormal = { 0, 1, 0 };
+
+		if (grounded && state.touchedActor && state.touchedShape)
+		{
+			const QueryFD qfd = QueryFD::FromPx(state.touchedShape->getQueryFilterData());
+
+			m_lastSense.supportRideable = qfd.flags.has_any(ShapeQueryFlag::RIDEABLE);
+			m_lastSense.supportStatic = state.touchedActor->getType() == physx::PxActorType::eRIGID_STATIC;
+		}
 
 		auto delta = diff(after, before);
 
 		r.position = ToPx(after);
 		r.velocity = ToPx(delta) * (1.0f / dt);
-
-		m_lastSense.grounded		= flags.isSet(PxControllerCollisionFlag::eCOLLISION_DOWN);
-		m_lastSense.ceiling			= flags.isSet(PxControllerCollisionFlag::eCOLLISION_UP);
-		m_lastSense.groundNormal = { 0,1,0 };
-
-		r.sense = m_lastSense;
+		r.sense	   = m_lastSense;
 
 		m_lastSenseValid = true;
 
 		FollowHitboxToController();
+
+		return r;
+	}
+
+	MotorStepResult CharacterMotor::Stay()
+	{
+		MotorStepResult r{};
+
+		r.position = ToPx(m_controller->getPosition());
+		r.velocity = {};
+		r.sense	   = m_lastSense;
 
 		return r;
 	}
@@ -148,6 +147,11 @@ namespace jam::px
 	{
 		if (!m_controller) return 0.0f;
 		return m_controller->getHeight();
+	}
+
+	bool CharacterMotor::CanSkipIdleMove() const noexcept
+	{
+		return m_lastSenseValid && m_lastSense.grounded && m_lastSense.supportStatic;
 	}
 
 	void CharacterMotor::Teleport(const Vec3& p)

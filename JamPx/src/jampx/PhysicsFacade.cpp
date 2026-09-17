@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "jampx/PhysicsFacade.h"
 
+#include <jambase/JamAssert.h>
+
 #include "jampx/PhysicsCompletionTask.h"
 #include "jampx/PhysicsWorld.h"
 #include "jampx/PhysicsSceneSlot.h"
@@ -36,6 +38,7 @@ namespace jam::px
 		};
 
 		std::atomic<bool>							m_inited = false;
+		PhysicsConfig								m_config = {};
 		std::unique_ptr<PhysicsWorld>				m_world;
 		PhysicsArchetypeRegistry					m_registry;
 		PxTaskManager*								m_taskManager = nullptr;
@@ -75,7 +78,7 @@ namespace jam::px
 		m_impl->m_registry.Init(m_impl->m_physicsAssetPath);
 
 		m_impl->m_world = std::make_unique<PhysicsWorld>();
-		m_impl->m_world->Init(&m_impl->m_registry, m_impl->m_dispacter.get());
+		m_impl->m_world->Init(&m_impl->m_registry, m_impl->m_dispacter.get(), m_impl->m_config.enableReplay);
 
 		m_impl->m_taskManager = m_impl->m_world->GetTaskManager();
 
@@ -128,6 +131,12 @@ namespace jam::px
 		m_impl->m_bridge = bridge;
 		if (bridge)
 			m_impl->m_dispacter = std::make_unique<ShardPxCpuDispatcher>(*bridge);
+	}
+
+	void PhysicsFacade::SetConfig(const PhysicsConfig& config)
+	{
+		JAM_ASSERT(!m_impl->m_inited.load());
+		m_impl->m_config = config;
 	}
 
 	void PhysicsFacade::SetPhysicsAssetPath(const std::string& path)
@@ -191,7 +200,7 @@ namespace jam::px
 
 	void PhysicsFacade::Resimulate(float dt)
 	{
-		if (!m_impl->m_inited.load(std::memory_order_relaxed) || !m_impl->m_world) return;
+		if (!m_impl->m_config.enableReplay || !m_impl->m_inited.load(std::memory_order_relaxed) || !m_impl->m_world) return;
 
 		StepCharacters(ePxSceneSlot::Replay, dt);
 		StepKinematics(ePxSceneSlot::Replay, dt);
@@ -202,7 +211,7 @@ namespace jam::px
 
 	bool PhysicsFacade::BeginResimulate(float dt, uint64 awaitKey)
 	{
-		if (!m_impl->m_world) return false;
+		if (!m_impl->m_config.enableReplay || !m_impl->m_world) return false;
 
 		StepCharacters(ePxSceneSlot::Replay, dt);
 		StepKinematics(ePxSceneSlot::Replay, dt);
@@ -228,7 +237,7 @@ namespace jam::px
 
 	void PhysicsFacade::EndResimulate()
 	{
-		if (!m_impl->m_world || !m_impl->m_stepPending) return;
+		if (!m_impl->m_config.enableReplay || !m_impl->m_world || !m_impl->m_stepPending) return;
 		m_impl->m_world->EndSimulate(ePxSceneSlot::Replay);
 		m_impl->m_stepPending = false;
 
@@ -310,6 +319,8 @@ namespace jam::px
 
 	bool PhysicsFacade::IsReplayCandidate(PhysicsArchetypeKey key) const
 	{
+		if (!m_impl->m_config.enableReplay) return false;
+
 		const auto* def = m_impl->m_registry.FindArchetype(key);
 		if (!def) return false;
 
@@ -334,6 +345,8 @@ namespace jam::px
 
 	void PhysicsFacade::PushReplayStates(const std::vector<ActorContext>& contexts)
 	{
+		if (!m_impl->m_config.enableReplay) return;
+
 		for (const auto& c : contexts)
 		{
 			if (const auto* rs = std::get_if<RigidState>(&c.state))
@@ -354,6 +367,8 @@ namespace jam::px
 	
 	void PhysicsFacade::PullCorrectionState(ActorId oid, OUT CharacterState& state)
 	{
+		if (!m_impl->m_config.enableReplay) return;
+
 		if (auto it = m_impl->m_cctMap.find(oid); it != m_impl->m_cctMap.end())
 		{
 			state = it->second.GetReplayState();
@@ -502,6 +517,8 @@ namespace jam::px
 
 	void PhysicsFacade::ApplyReplayCharacterMotorInput(ActorId id, const CharacterMotorInput& input)
 	{
+		if (!m_impl->m_config.enableReplay) return;
+
 		auto it = m_impl->m_cctMap.find(id);
 		if (it == m_impl->m_cctMap.end()) return;
 

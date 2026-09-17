@@ -704,11 +704,8 @@ namespace jam::net
 		if (current.worldId == kInvalidWorldId)
 			return;
 
-		constexpr uint32 previousIndex = 0;
-		constexpr uint32 currentIndex = 1;
-
-		m_snapshotBuffers[previousIndex] = {};
-		m_snapshotBufferWorldIds.fill(kInvalidWorldId);
+		const uint32 previousIndex = m_frontSnapshotIndex;
+		const uint32 currentIndex  = 1u - previousIndex;
 
 		if (previous.has_value()
 			&& previous->worldId == current.worldId
@@ -716,6 +713,11 @@ namespace jam::net
 		{
 			m_snapshotBuffers[previousIndex] = previous->frame;
 			m_snapshotBufferWorldIds[previousIndex] = current.worldId;
+		}
+		else if (m_snapshotBufferWorldIds[previousIndex] != current.worldId || m_snapshotBuffers[previousIndex].sequence >= current.frame.sequence)
+		{
+			m_snapshotBuffers[previousIndex] = {};
+			m_snapshotBufferWorldIds[previousIndex] = kInvalidWorldId;
 		}
 
 		m_snapshotBuffers[currentIndex] = current.frame;

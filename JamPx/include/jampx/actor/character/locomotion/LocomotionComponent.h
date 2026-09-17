@@ -38,6 +38,7 @@ namespace jam::px
 
         void                            PostMoveUpdate(const MotorSense& sense);
 
+		bool							IsStableIdle() const;
         bool                            CanSprint();
 
     private:

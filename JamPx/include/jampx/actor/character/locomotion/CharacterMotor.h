@@ -1,5 +1,7 @@
 #pragma once
 
+#include "jampx/PhysXTypes.h"
+
 #include "jampx/PhysicsQueryFilter.h"
 #include "jampx/actor/character/CharacterMovementTypes.h"
 
@@ -21,6 +23,9 @@ namespace jam::px
         Vec3					groundNormal{ 0,1,0 };
 
         MoveCollision::Flags	collisionFlags = MoveCollision::NONE;
+
+		bool					supportStatic   = false;
+		bool					supportRideable = false;
     };
 
     // ---- Motor step result ----
@@ -47,6 +52,7 @@ namespace jam::px
 
         /// @brief Resoleve collision for desired displacement over dt (CCT move expects displacement)
         MotorStepResult         Move(float dt, const Vec3& displacement);
+		MotorStepResult			Stay();
 
         void                    Teleport(const Vec3& p);
 
@@ -56,6 +62,8 @@ namespace jam::px
         Vec3                    GetPosition() const;
         float                   GetRadius() const;
         float                   GetHeight() const;
+
+		bool					CanSkipIdleMove() const noexcept;
 
     private:
         void                    RefreshSenseCache() const;
