@@ -361,7 +361,7 @@ namespace jam::net
 			.bootstrapKind	= eBootstrapKind::Pending,
 		};
 
-		tcp->SendImmediatePacket(PacketBuilder::CreateTcpBindResPacket(response));
+		tcp->RegisterSend(PacketBuilder::CreateTcpBindResPacket(response));
 		tcp->Disconnect();
 	}
 
@@ -455,7 +455,7 @@ namespace jam::net
 					.bootstrapKind	= bootstrapKind,
 				};
 
-				tcp->SendImmediatePacket(PacketBuilder::CreateTcpBindResPacket(response));
+				tcp->RegisterSend(PacketBuilder::CreateTcpBindResPacket(response));
 			}, eJobPriority::Critical));
 	}
 

@@ -28,10 +28,10 @@ namespace jam::net
 	bool FragmentState::Reassembly::AddFragment(uint8 index, const BYTE* data, uint32 size, uint64 now_ns)
 	{
 		if (index >= totalFragments)  // invalid fragment
-			return false;  
+			return false;
 
 		if (receivedMask.test(index)) // already received
-			return false; 
+			return false;
 
 		fragments[index].assign(data, data + size);
 		receivedMask.set(index);
@@ -139,6 +139,56 @@ namespace jam::net
 	// ============================================================
 	//  ReliabilityState
 	// ============================================================
+	void RttState::OnSample(uint64 sample_ns, uint64 peerDelay_ns)
+	{
+		if (sample_ns == 0)
+			return;
+
+		latestRtt_ns = sample_ns;
+		minRtt_ns = std::min(minRtt_ns, sample_ns);
+
+		uint64 adjustedSample_ns = sample_ns;
+		if (peerDelay_ns != 0 && minRtt_ns != UINT64_MAX && sample_ns > minRtt_ns && sample_ns - minRtt_ns > peerDelay_ns)
+			adjustedSample_ns -= peerDelay_ns;
+
+		if (smoothedRtt_ns == 0)
+		{
+			smoothedRtt_ns = adjustedSample_ns;
+			rttVariance_ns = adjustedSample_ns / 2;
+			return;
+		}
+
+		const uint64 deviation = smoothedRtt_ns > adjustedSample_ns ? smoothedRtt_ns - adjustedSample_ns : adjustedSample_ns - smoothedRtt_ns;
+
+		rttVariance_ns = (3 * rttVariance_ns + deviation) / 4;
+		smoothedRtt_ns = (7 * smoothedRtt_ns + adjustedSample_ns) / 8;
+	}
+
+	void RttState::OnReliableSample(const uint64 sample_ns, const uint64 peerDelay_ns)
+	{
+		OnSample(sample_ns, peerDelay_ns);
+		if (sample_ns != 0)
+			hasReliableSample = true;
+	}
+
+	void RttState::OnTimeSyncSample(const uint64 sample_ns)
+	{
+		if (!hasReliableSample)
+			OnSample(sample_ns);
+	}
+
+	uint64 RttState::GetRetransmitTimeout(uint8 retryCount) const
+	{
+		constexpr uint64 InitialRetransmitTimeout_ns = 250_ms;
+		constexpr uint64 MinRetransmitTimeout_ns = 50_ms;
+		constexpr uint64 MaxRetransmitTimeout_ns = 1_s;
+		constexpr uint64 MaxBackoffTimeout_ns = 2_s;
+		constexpr uint8 MaxBackoffShift = 4;
+
+		const uint64 baseRto = smoothedRtt_ns == 0 ? InitialRetransmitTimeout_ns : std::clamp(smoothedRtt_ns + 4 * rttVariance_ns, MinRetransmitTimeout_ns, MaxRetransmitTimeout_ns);
+		const uint8 shift = std::min(retryCount, MaxBackoffShift);
+		return std::min(baseRto << shift, MaxBackoffTimeout_ns);
+	}
 
 	bool ReliabilityState::StoreSendPacket(eChannel ch, Packet packet, uint16 reliabilitySeq, uint64 now_ns)
 	{
@@ -157,31 +207,36 @@ namespace jam::net
 				.packet				   = packet
 			});
 
-		if (packet.IsValid()) inflightSize += packet->Size();
-
 		return true;
 	}
 
-	std::vector<uint16> ReliabilityState::GetRetransmitNeeded(uint64 now_ns) const
+	void ReliabilityState::MarkInitialSend(uint16 seq, uint64 now_ns)
+	{
+		auto* pending = TryGetPending(seq);
+		if (!pending || pending->hasInitialSend || !pending->packet.IsValid())
+			return;
+
+		pending->hasInitialSend = true;
+		pending->sendTime_ns = now_ns;
+		pending->lastTransmitTime_ns = now_ns;
+		inflightSize += pending->packet->Size();
+	}
+
+	std::vector<uint16> ReliabilityState::GetRetransmitNeeded(uint64 now_ns, const RttState& rtt) const
 	{
 		std::vector<uint16> out;
 		for (const auto& [seq, pkt] : reliablePendings)
 		{
 			if (!pkt.hasInitialSend || pkt.retransmitQueued)
 				continue;
+			// The transport submit timestamp can be newer than the network tick snapshot.
+			if (now_ns < pkt.lastTransmitTime_ns)
+				continue;
 
-			if (pkt.fastRetransmitRequested || now_ns - pkt.lastTransmitTime_ns >= GetRetransmitTimeout(pkt.retryCount))
+			if (pkt.fastRetransmitRequested || now_ns - pkt.lastTransmitTime_ns >= rtt.GetRetransmitTimeout(pkt.retryCount))
 				out.push_back(seq);
 		}
 		return out;
-	}
-
-	uint64 ReliabilityState::GetRetransmitTimeout(uint8 retryCount) const
-	{
-		const uint64 baseRto = smoothedRtt_ns == 0 ? InitialRetransmitTimeout_ns : std::clamp(smoothedRtt_ns + 4 * rttVariance_ns, MinRetransmitTimeout_ns, MaxRetransmitTimeout_ns);
-		const uint8  shift   = std::min(retryCount, MaxBackoffShift);
-
-		return std::min(baseRto << shift, MaxBackoffTimeout_ns);
 	}
 
 	ReliabilityState::PendingPacket* ReliabilityState::TryGetPending(uint16 seq)
@@ -208,7 +263,7 @@ namespace jam::net
 		if (it == reliablePendings.end())
 			return;
 
-		if (it->second.packet.IsValid())
+		if (it->second.hasInitialSend && it->second.packet.IsValid())
 		{
 			const uint32 size = it->second.packet->Size();
 			inflightSize = (inflightSize >= size) ? (inflightSize - size) : 0;
@@ -219,8 +274,9 @@ namespace jam::net
 
 	void ReliabilityState::MarkReceived(uint16 seq, uint64 now_ns)
 	{
-		if (ackTrack.none() && latestReliabilityRecvSeq == 0)
+		if (!hasReliabilityRecv)
 		{
+			hasReliabilityRecv = true;
 			latestReliabilityRecvSeq = seq;
 			ackTrack.reset();
 			ackTrack.set(0);
@@ -244,6 +300,35 @@ namespace jam::net
 				ackTrack.set(dist);
 		}
 
+		auto wasReceived = [&](uint16 candidate)
+		{
+			if (SeqGreater(candidate, latestReliabilityRecvSeq))
+				return false;
+
+			const uint16 distance = SeqDistance(latestReliabilityRecvSeq, candidate);
+			return distance < AckTrackSize && ackTrack.test(distance);
+		};
+
+		if (!hasCumulativeAck)
+		{
+			if (wasReceived(0))
+			{
+				hasCumulativeAck = true;
+				cumulativeRecvSeq = 0;
+			}
+		}
+
+		if (hasCumulativeAck)
+		{
+			for (;;)
+			{
+				const uint16 next = static_cast<uint16>(cumulativeRecvSeq + 1);
+				if (!wasReceived(next))
+					break;
+				cumulativeRecvSeq = next;
+			}
+		}
+
 		MarkAckPending(now_ns);
 	}
 
@@ -264,68 +349,89 @@ namespace jam::net
 		if (!ackDirty)
 			return;
 
-		pendingAckSeq	   = latestReliabilityRecvSeq;
-		pendingAckWindow = BuildAckWindow();
+		pendingAckData = {};
+		auto& header = pendingAckData.header;
+		header.largestAck = latestReliabilityRecvSeq;
+		if (hasCumulativeAck)
+		{
+			header.flags |= AckFlags::HasCumulativeAck;
+			header.cumulativeAck = cumulativeRecvSeq;
+		}
+
+		const uint16 distanceLimit = hasCumulativeAck ? std::min<uint16>(SeqDistance(latestReliabilityRecvSeq, cumulativeRecvSeq), AckTrackSize) : AckTrackSize;
+
+		uint16 distance = 0;
+		while (distance < distanceLimit && header.rangesCount < kMaxAckRanges)
+		{
+			uint16 gap = 0;
+			while (distance < distanceLimit && !ackTrack.test(distance))
+			{
+				++gap;
+				++distance;
+			}
+			if (distance == distanceLimit)
+				break;
+
+			uint16 length = 0;
+			while (distance < distanceLimit && ackTrack.test(distance))
+			{
+				++length;
+				++distance;
+			}
+
+			pendingAckData.ranges[header.rangesCount++] = AckRange{ gap, length };
+		}
 	}
 
-	void ReliabilityState::ProcessAck(uint16 ackSeq, uint64 ackWindow, uint64 now_ns)
+	void ReliabilityState::ProcessAck(const AckData& ack, uint64 ackRecvTime_ns, RttState& rtt)
 	{
-		bool sampledRtt = false;
-		auto ackOne = [&](uint16 seq)
-			{
-				auto it = reliablePendings.find(seq);
-				if (it == reliablePendings.end())
-					return;
-
-				const auto& pending = it->second;
-				if (!sampledRtt && pending.hasInitialSend && !pending.hasRetransmitted && now_ns >= pending.sendTime_ns)
-				{
-					const uint64 sample = now_ns - pending.sendTime_ns;
-					if (smoothedRtt_ns == 0)
-					{
-						smoothedRtt_ns  = sample;
-						rttVariance_ns = sample / 2;
-					}
-					else
-					{
-						const uint64 deviation = smoothedRtt_ns > sample ? smoothedRtt_ns - sample : sample - smoothedRtt_ns;
-						rttVariance_ns = (3 * rttVariance_ns + deviation) / 4;
-						smoothedRtt_ns  = (7 * smoothedRtt_ns + sample) / 8;
-					}
-					sampledRtt = true;
-				}
-
-				if (it->second.packet.IsValid())
-				{
-					const uint32 size = it->second.packet->Size();
-					inflightSize = (inflightSize >= size) ? (inflightSize - size) : 0;
-				}
-
-				reliablePendings.erase(it);
-			};
-
-		ackOne(ackSeq);
-
-		for (uint16 i = 1; i <= AckWindowSize; ++i)
+		auto isAcked = [&](uint16 seq)
 		{
-			if (ackWindow & (uint64{ 1 } << (i - 1)))
-				ackOne(static_cast<uint16>(ackSeq - i));
+			if (HasFlag(ack.header.flags, AckFlags::HasCumulativeAck) && !SeqGreater(seq, ack.header.cumulativeAck))
+				return true;
+
+			uint16 cursor = ack.header.largestAck;
+			for (uint8 i = 0; i < ack.header.rangesCount; ++i)
+			{
+				const AckRange& range = ack.ranges[i];
+				cursor = static_cast<uint16>(cursor - range.gap);
+				if (SeqDistance(cursor, seq) < range.length)
+					return true;
+				cursor = static_cast<uint16>(cursor - range.length);
+			}
+			return false;
+		};
+
+		std::vector<uint16> ackedSequences;
+		ackedSequences.reserve(reliablePendings.size());
+
+		for (const auto& seq : reliablePendings | std::views::keys)
+		{
+			if (isAcked(seq))
+				ackedSequences.push_back(seq);
 		}
 
 		for (auto& [pendingSeq, pending] : reliablePendings)
 		{
-			if (pending.fastRetransmitUsed || !SeqGreater(ackSeq, pendingSeq))
+			if (pending.fastRetransmitUsed || isAcked(pendingSeq))
 				continue;
 
-			const uint16 distance = SeqDistance(ackSeq, pendingSeq);
-			if (distance > AckWindowSize)
-				continue;
+			uint8 newerAckCount = 0;
+			if (HasFlag(ack.header.flags, AckFlags::HasCumulativeAck) && SeqGreater(ack.header.cumulativeAck, pendingSeq))
+				newerAckCount = static_cast<uint8>(std::min<uint16>(SeqDistance(ack.header.cumulativeAck, pendingSeq), FastRetransmitThreshold));
 
-			uint8 newerAckCount = 1; // ackSeq itself
-			for (uint16 i = 1; i < distance && newerAckCount < FastRetransmitThreshold; ++i)
+			uint16 cursor = ack.header.largestAck;
+			for (uint8 i = 0; i < ack.header.rangesCount && newerAckCount < FastRetransmitThreshold; ++i)
 			{
-				if (ackWindow & (uint64{ 1 } << (i - 1)))
-					++newerAckCount;
+				const AckRange& range = ack.ranges[i];
+				cursor = static_cast<uint16>(cursor - range.gap);
+				for (uint16 offset = 0; offset < range.length && newerAckCount < FastRetransmitThreshold; ++offset)
+				{
+					const uint16 ackedSeq = static_cast<uint16>(cursor - offset);
+					if (SeqGreater(ackedSeq, pendingSeq))
+						++newerAckCount;
+				}
+				cursor = static_cast<uint16>(cursor - range.length);
 			}
 
 			if (newerAckCount >= FastRetransmitThreshold)
@@ -335,43 +441,51 @@ namespace jam::net
 			}
 		}
 
-		if (SeqGreater(ackSeq, lastAckedReliabilitySeq))
-			lastAckedReliabilitySeq = ackSeq;
+		bool sampledRtt = false;
+		auto ackOne = [&](uint16 seq)
+			{
+				auto it = reliablePendings.find(seq);
+				if (it == reliablePendings.end())
+					return;
+
+				const auto& pending = it->second;
+				if (!sampledRtt && pending.hasInitialSend && !pending.hasRetransmitted && ackRecvTime_ns >= pending.sendTime_ns)
+				{
+					const uint64 sample = ackRecvTime_ns - pending.sendTime_ns;
+					const uint64 ackDelay_ns = static_cast<uint64>(ack.header.ackDelay_us) * 1'000ull;
+					rtt.OnReliableSample(sample, ackDelay_ns);
+					sampledRtt = true;
+				}
+
+				if (it->second.hasInitialSend && it->second.packet.IsValid())
+				{
+					const uint32 size = it->second.packet->Size();
+					inflightSize = (inflightSize >= size) ? (inflightSize - size) : 0;
+				}
+
+				reliablePendings.erase(it);
+			};
+
+		for (uint16 seq : ackedSequences)
+			ackOne(seq);
+
+		if (SeqGreater(ack.header.largestAck, lastAckedReliabilitySeq))
+			lastAckedReliabilitySeq = ack.header.largestAck;
 	}
 
 	bool ReliabilityState::ShouldSendAck(uint64 now_ns) const
 	{
 		if (!ackDirty) return false;
 
-		return pendingAckPacketCount >= AckElicitingPacketThreshold || (now_ns - firstPendingAckTime_ns) >= DelayPiggybackAckTimeout_ns;
+		return pendingAckPacketCount >= AckElicitingPacketThreshold || (now_ns - firstPendingAckTime_ns) >= DelayedAckTimeout_ns;
 	}
 
 	void ReliabilityState::ClearPendingAck()
 	{
 		ackDirty				= false;
-		pendingAckSeq			= 0;
-		pendingAckWindow		= 0;
+		pendingAckData			= {};
 		pendingAckPacketCount	= 0;
 		firstPendingAckTime_ns	= 0;
-	}
-
-	uint64 ReliabilityState::BuildAckWindow() const
-	{
-		uint64 bitfield = 0;
-		const uint16 base = pendingAckSeq;
-
-		for (uint16 i = 1; i <= AckWindowSize; ++i)
-		{
-			const uint16 seq = static_cast<uint16>(base - i);
-			const uint16 dist = SeqDistance(base, seq);
-
-			if (dist == 0 || dist > AckTrackSize)
-				continue;
-
-			if (ackTrack.test(dist))
-				bitfield |= (uint64{ 1 } << (i - 1));
-		}
-		return bitfield;
 	}
 
 	// ============================================================
@@ -427,13 +541,19 @@ namespace jam::net
 	//  Time Sync
 	// ============================================================
 
-	void TimeSyncState::ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4)
+	void TimeSyncState::ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4, RttState& rttState)
 	{
-		const uint64 rtt = (t4 - t1) - (t3 - t2);
-		minRtt_ns		= std::min(minRtt_ns, rtt);
-		offset_ns		= (static_cast<int64>(t2 - t1) + static_cast<int64>(t3 - t4)) / 2;
-		lastPingSend_ns = t1;
-		lastPongRecv_ns = t4;
+		if (t4 < t1 || t3 < t2)
+			return;
+
+		const uint64 roundTrip_ns = t4 - t1;
+		const uint64 peerProcessing_ns = t3 - t2;
+		if (roundTrip_ns <= peerProcessing_ns)
+			return;
+
+		const uint64 rtt = roundTrip_ns - peerProcessing_ns;
+		rttState.OnTimeSyncSample(rtt);
+		offset_ns = (static_cast<int64>(t2 - t1) + static_cast<int64>(t3 - t4)) / 2;
 
 		rwnd[winHead] = rtt;
 		ownd[winHead] = offset_ns;
@@ -459,66 +579,15 @@ namespace jam::net
 	}
 
 	// ============================================================
-	//  Congestion Control
-	// ============================================================
-
-	void CongestionState::OnSend(uint32 packetSize)
-	{
-		bytesInFlight += packetSize;
-	}
-
-	void CongestionState::OnAck(uint32 ackedBytes)
-	{
-		if (bytesInFlight >= ackedBytes)
-			bytesInFlight -= ackedBytes;
-		else
-			bytesInFlight = 0;
-
-		switch (state)
-		{
-		case SLOW_START:
-			cwnd = std::min(maxCwnd, static_cast<uint32>(cwnd + ackedBytes));
-			if (cwnd >= ssthresh)
-				state = CONGESTION_AVOIDANCE;
-			break;
-		case CONGESTION_AVOIDANCE:
-			cwnd = std::min(maxCwnd, static_cast<uint32>(cwnd + std::max<uint32>(1, (JAMNET_MTU * ackedBytes) / std::max<uint32>(1, cwnd))));
-			break;
-		case FAST_RECOVERY:
-			state = CONGESTION_AVOIDANCE;
-			break;
-		}
-	}
-
-	void CongestionState::OnLoss()
-	{
-		ssthresh		= std::max(minCwnd, cwnd / 2);
-		cwnd			= minCwnd;
-		bytesInFlight	= 0;
-		duplicateAcks	= 0;
-		state			= SLOW_START;
-	}
-
-	void CongestionState::OnTimeout()
-	{
-		OnLoss();
-	}
-
-	bool CongestionState::CanSend(uint32 packetSize) const
-	{
-		return bytesInFlight + packetSize <= cwnd;
-	}
-
-	// ============================================================
 	//  TransmissionWaitingQueue
 	// ============================================================
 
-	void TransmissionWaitingQueue::Enqueue(Packet packet, Priority priority)
+	void TransmissionWaitingQueue::Enqueue(Packet packet)
 	{
 		if (!packet.IsValid()) return;
 
 		const uint32 size = packet->Size();
-		queue.push_back({ priority, size, packet, {} });
+		queue.push_back({ size, packet });
 		bytesQueued += size;
 	}
 
@@ -532,11 +601,6 @@ namespace jam::net
 			return true;
 		if (now_ns - lastFlushTime_ns >= FlushInterval_ns)
 			return true;
-		for (const auto& pkt : queue)
-		{
-			if (pkt.priority <= ACK_ONLY)
-				return true;
-		}
 		return false;
 	}
 

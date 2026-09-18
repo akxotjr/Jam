@@ -6,6 +6,7 @@
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/IocpCore.h"
 #include "jamnet/core/net/NetAddress.h"
+#include "jamnet/core/net/PacketWireTime.h"
 #include "jamnet/core/net/Session.h"
 
 namespace jam::net
@@ -87,8 +88,7 @@ namespace jam::net
 		HANDLE					GetHandle() override;
 		void					Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
-
-		void					RegisterSend(std::vector<PacketChain>&& chains, const NetAddress& to);
+		bool					RegisterSend(Datagram&& datagram, const NetAddress& to, std::span<const WireTimePatch> wireTimePatches = {}, uint64* submitTime_ns = nullptr);
 		void					RegisterRecv();
 
 		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddr);
@@ -117,8 +117,8 @@ namespace jam::net
 
 		Service*				m_service		= nullptr;
 
-		SOCKET					m_socket		= INVALID_SOCKET;
-		SOCKADDR_IN				m_remoteSockAddr{};
+		SOCKET					m_socket			= INVALID_SOCKET;
+		SOCKADDR_IN				m_remoteSockAddr	= {};
 
 		std::array<RoutingSlot, INGRESS_TABLE_CAPACITY> m_ingressRoutes = {};
 		std::vector<std::shared_ptr<IngressBudget>>		m_ingressBudgets;

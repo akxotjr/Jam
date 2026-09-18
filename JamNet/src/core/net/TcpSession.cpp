@@ -109,7 +109,7 @@ namespace jam::net
 		if (view.IsValid() && view.TotalSize() == packet->Size() && view.Type() == ePacketType::SYSTEM
 			&& (IsTcpBindRequest(view) || GetEntity() == entt::null || !CanCreateSessionEntity()))
 		{
-			SendImmediatePacket(packet);
+			RegisterSend(packet);
 			return;
 		}
 
@@ -203,49 +203,55 @@ namespace jam::net
 		return true;
 	}
 
-	void TcpSession::RegisterSend(std::vector<PacketChain>&& chains)
+	void TcpSession::RegisterSend(Packet packet)
+	{
+		if (!packet.IsValid())
+			return;
+
+		Stream stream;
+		stream.Add(std::move(packet));
+
+		RegisterSend(std::move(stream));
+	}
+
+	void TcpSession::RegisterSend(Stream&& stream)
 	{
 		if (IsClosing())
 			return;
 
 		auto* ev = ObjectPool<TcpSendEvent>::Pop();
 		ev->Init();
-		ev->chains     = std::move(chains);
+		ev->stream     = std::move(stream);
 		ev->curIndex   = 0;
 		ev->curOffset  = 0;
 		ev->totalBytes = 0;
 		ev->wsaBufs.clear();
-		size_t partCount = 0;
-		for (const auto& chain : ev->chains)
-			partCount += chain.Count();
-		ev->wsaBufs.reserve(partCount);		// chain 수가 들쭉날쭉한경우 allocate 비용이 발생할수 있음. 고정으로 하는게 좋아보임
+		ev->wsaBufs.reserve(ev->stream.Count());
 
-		for (auto& chain : ev->chains)
+		for (const OwnedBufferSlice& ownedPart : ev->stream.Parts())
 		{
-			for (const BufferSlice& part : chain.Parts())
-			{
-				if (!part.IsValid() || part.Size() == 0)
-					continue;
+			const BufferSlice& part = ownedPart.Get();
+			if (!part.IsValid() || part.Size() == 0)
+				continue;
 
-				WSABUF w;
-				w.buf = reinterpret_cast<char*>(part.Head());
-				w.len = static_cast<ULONG>(part.Size());
+			WSABUF w;
+			w.buf = reinterpret_cast<char*>(part.Head());
+			w.len = static_cast<ULONG>(part.Size());
 
-				ev->wsaBufs.push_back(w);
-				ev->totalBytes += w.len;
-			}
+			ev->wsaBufs.push_back(w);
+			ev->totalBytes += w.len;
 		}
 
 		if (ev->wsaBufs.empty())
 		{
-			ev->chains.clear();
+			ev->stream.Clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
 		}
 
 		if (!TryAddPendingDispatch())
 		{
-			ev->chains.clear();
+			ev->stream.Clear();
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
@@ -259,7 +265,7 @@ namespace jam::net
 			{
 				ReleasePendingDispatch();
 				HandleError(ec);
-				ev->chains.clear();
+				ev->stream.Clear();
 				ev->wsaBufs.clear();
 				ObjectPool<TcpSendEvent>::Push(ev);
 			}
@@ -416,6 +422,9 @@ namespace jam::net
 		if (!win_error::IsNativeStatusSuccess(nativeStatus))
 		{
 			const int32 errorCode = static_cast<int32>(win_error::NativeStatusToWinError(nativeStatus));
+
+			JAM_LOG_ERROR("[TcpRecv:Completion] failed. nativeStatus=0x{:08X}", nativeStatus);
+
 			ObjectPool<TcpRecvEvent>::Push(ev);
 			HandleError(errorCode);
 			return;
@@ -509,7 +518,7 @@ namespace jam::net
 		if (!win_error::IsNativeStatusSuccess(nativeStatus))
 		{
 			const int32 errorCode = static_cast<int32>(win_error::NativeStatusToWinError(nativeStatus));
-			ev->chains.clear();
+			ev->stream.Clear();
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			HandleError(errorCode);
@@ -518,7 +527,7 @@ namespace jam::net
 
 		if (bytes <= 0)
 		{
-			ev->chains.clear();
+			ev->stream.Clear();
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			Disconnect();
@@ -532,7 +541,7 @@ namespace jam::net
 
 		if (remaining == 0)
 		{
-			ev->chains.clear();
+			ev->stream.Clear();
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
@@ -540,7 +549,7 @@ namespace jam::net
 
 		if (IsClosing())
 		{
-			ev->chains.clear();
+			ev->stream.Clear();
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
@@ -585,7 +594,7 @@ namespace jam::net
 
 		if (bufs.empty())
 		{
-			ev->chains.clear();
+			ev->stream.Clear();
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
@@ -593,7 +602,7 @@ namespace jam::net
 
 		if (!TryAddPendingDispatch())
 		{
-			ev->chains.clear();
+			ev->stream.Clear();
 			ev->wsaBufs.clear();
 			ObjectPool<TcpSendEvent>::Push(ev);
 			return;
@@ -607,7 +616,7 @@ namespace jam::net
 			{
 				ReleasePendingDispatch();
 				HandleError(ec);
-				ev->chains.clear();
+				ev->stream.Clear();
 				ev->wsaBufs.clear();
 				ObjectPool<TcpSendEvent>::Push(ev);
 			}
@@ -750,18 +759,4 @@ namespace jam::net
 			}, eJobPriority::Control), MakeRetryDelayNs(kClientBindRetryDelayNs, kClientBindRetryJitterNs, m_endpointId, token));
 	}
 
-
-
-	void TcpSession::SendImmediatePacket(Packet packet)
-	{
-		if (!packet.IsValid())
-			return;
-
-		PacketChain chain;
-		chain.Add(packet);
-
-		std::vector<PacketChain> chains;
-		chains.push_back(std::move(chain));
-		RegisterSend(std::move(chains));
-	}
 }

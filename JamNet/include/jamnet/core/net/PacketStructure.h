@@ -3,6 +3,8 @@
 namespace jam::net
 {
 	constexpr uint16 JAMNET_MTU = 1400;
+	inline constexpr size_t kMaxUdpScatterParts = 16;
+	inline constexpr uint8 kMaxAckRanges = 8;
 
 
 	enum class ePacketType : uint8
@@ -86,11 +88,10 @@ namespace jam::net
 
 	namespace PacketFlags
 	{
-		constexpr uint8 NONE = 0x00;		// 0b 0000	
+		constexpr uint8 NONE = 0x00;		// 0b 0000
 		constexpr uint8 COMPRESSED = 0x01;		// 0b 0001
 		constexpr uint8 ENCRYPTED = 0x02;		// 0b 0010
 		constexpr uint8 FRAGMENTED = 0x04;		// 0b 0100
-		constexpr uint8 PIGGYBACK_ACK = 0x08;		// 0b 1000
 	}
 
 	constexpr bool	HasFlag(uint8 flags, uint8 flag) { return (flags & flag) != 0; }
@@ -101,12 +102,28 @@ namespace jam::net
 
 
 #pragma pack(push, 1)
-	struct ACK_DATA
+	struct AckHeader
 	{
-		uint16 ackBaseSeq = 0;
-		uint64 ackWindow = 0;
+		uint16	largestAck		= 0;	// Most recently received reliability sequence; the reference point for decoding AckRange entries.
+		uint16	cumulativeAck	= 0;	// Indicates that all packets up to this sequence were received contiguously; valid when HasCumulativeAck is set.
+		uint8	flags			= 0;	// Flags for optional information included in the ACK header.
+		uint8	rangesCount		= 0;	// Number of AckRange entries following the header.
+		uint32	ackDelay_us		= 0;	// Delay between receiving the acknowledged packet and sending this ACK, in microseconds.
 	};
+
+	struct AckRange
+	{
+		uint16 gap		= 0;	// Number of unacknowledged sequences between the previous and current ACK ranges; 0 for the first range, which starts at largestAck.
+		uint16 length	= 0;	// Number of contiguous acknowledged sequences in the current ACK range.
+	};
+
 #pragma pack(pop)
+
+	namespace AckFlags
+	{
+		inline constexpr uint8 HasCumulativeAck = 0x01;
+	}
+
 
 #pragma pack(push, 1)
 	inline constexpr size_t kMaxAuthFieldBytes = 256;
@@ -166,9 +183,9 @@ namespace jam::net
 	struct PING_DATA
 	{
 		uint64		t1Wire_ns		= 0;
-		uint64		t1App_ns		= 0;		
-		uint64		prev_t3_server_send_ns	= 0;	
-		uint64		prev_t4_client_recv_ns	= 0;	
+		uint64		t1App_ns		= 0;
+		uint64		prev_t3_server_send_ns	= 0;
+		uint64		prev_t4_client_recv_ns	= 0;
 	};
 #pragma pack(pop)
 
@@ -179,9 +196,9 @@ namespace jam::net
 		uint64		t2Wire_ns		= 0;
 		uint64		t3Wire_ns		= 0;
 
-		uint64		t1App_ns		= 0;			
-		uint64		t2App_ns		= 0;						
-		uint64		t3App_ns		= 0;						
+		uint64		t1App_ns		= 0;
+		uint64		t2App_ns		= 0;
+		uint64		t3App_ns		= 0;
 	};
 #pragma pack(pop)
 

@@ -76,7 +76,7 @@ namespace jam::net
 		if (view.IsValid() && view.TotalSize() == packet->Size() && view.Type() == ePacketType::SYSTEM
 			&& (IsUdpControlPacket(view) || GetEntity() == entt::null || !CanCreateSessionEntity()))
 		{
-			SendImmediatePacket(packet);
+			RegisterSend(packet);
 			return;
 		}
 
@@ -111,11 +111,21 @@ namespace jam::net
 		ProcessReceivedPacket(e, std::move(packet), ingressRecvTime_ns);
 	}
 
-	void UdpSession::RegisterSend(std::vector<PacketChain>&& chains)
+	bool UdpSession::RegisterSend(Packet packet)
 	{
-		GetService()->m_udpRouter->RegisterSend(std::move(chains), GetRemoteNetAddress());
+		if (!packet.IsValid())
+			return false;
+
+		Datagram datagram;
+		datagram.Add(std::move(packet));
+
+		return RegisterSend(std::move(datagram));
 	}
 
+	bool UdpSession::RegisterSend(Datagram&& datagram, const std::span<const WireTimePatch> wireTimePatches, uint64* submitTime_ns)
+	{
+		return GetService()->m_udpRouter->RegisterSend(std::move(datagram), GetRemoteNetAddress(), wireTimePatches, submitTime_ns);
+	}
 
 	void UdpSession::ProcessConnect()
 	{
@@ -367,7 +377,7 @@ namespace jam::net
 	void UdpSession::SendBindRequest()
 	{
 		const UDP_BIND_REQ_DATA data{ .accountId = m_accountId, .userId = m_userId, .transactionId = m_bindTransactionId };
-		SendImmediatePacket(PacketBuilder::CreateUdpBindReqPacket(data));
+		RegisterSend(PacketBuilder::CreateUdpBindReqPacket(data));
 	}
 
 	void UdpSession::SendBindResponse()
@@ -375,19 +385,19 @@ namespace jam::net
 		const bool success = GetSessionId() != kInvalidSessionId;
 		const UDP_BIND_RES_DATA data{ .accountId = m_accountId, .userId = m_userId, .sessionId = success ? GetSessionId() : kInvalidSessionId,
 			.transactionId = m_bindTransactionId, .success = static_cast<uint8>(success) };
-		SendImmediatePacket(PacketBuilder::CreateUdpBindResPacket(data));
+		RegisterSend(PacketBuilder::CreateUdpBindResPacket(data));
 	}
 
 	void UdpSession::SendUnbindRequest()
 	{
 		const UDP_UNBIND_REQ_DATA data{ .sessionId = GetSessionId(), .transactionId = m_unbindTransactionId };
-		SendImmediatePacket(PacketBuilder::CreateUdpUnbindReqPacket(data));
+		RegisterSend(PacketBuilder::CreateUdpUnbindReqPacket(data));
 	}
 
 	void UdpSession::SendUnbindResponse()
 	{
 		const UDP_UNBIND_RES_DATA data{ .sessionId = GetSessionId(), .transactionId = m_unbindTransactionId };
-		SendImmediatePacket(PacketBuilder::CreateUdpUnbindResPacket(data));
+		RegisterSend(PacketBuilder::CreateUdpUnbindResPacket(data));
 	}
 
 	void UdpSession::AbortTransport(const char* reason)
@@ -400,17 +410,4 @@ namespace jam::net
 		CompleteProtocolDisconnect();
 	}
 
-
-	void UdpSession::SendImmediatePacket(Packet packet)
-	{
-		if (!packet.IsValid())
-			return;
-
-		PacketChain chain;
-		chain.Add(packet);
-
-		std::vector<PacketChain> chains;
-		chains.push_back(std::move(chain));
-		RegisterSend(std::move(chains));
-	}
 }

@@ -67,7 +67,7 @@ namespace jam::net
 	struct TcpSendEvent final : IocpEvent
 	{
 		std::vector<WSABUF>				wsaBufs;			// TCP gather-send
-		std::vector<PacketChain>		chains;
+		Stream							stream;
 
 		size_t							curIndex	= 0;	// current WSABUF index
 		ULONG							curOffset	= 0;	// current offset within WSABUF
@@ -96,9 +96,10 @@ namespace jam::net
 
 	struct UdpSendEvent final : IocpEvent
 	{
-		std::vector<WSABUF>			wsaBufs;
-		PacketChain					chain;
-		NetAddress					remoteAddr	= {};
+		std::array<WSABUF, kMaxUdpScatterParts> wsaBufs		= {};
+		uint8									wsaBufCount = 0;
+		Datagram								datagram;
+		NetAddress								remoteAddr	= {};
 
 		UdpSendEvent() : IocpEvent(eEventType::UdpSend) {}
 

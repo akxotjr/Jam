@@ -10,7 +10,7 @@
 
 namespace jam::net
 {
-	
+
 	class BufferPool;
 	class IoBufferReservation;
 
@@ -62,7 +62,7 @@ namespace jam::net
 		std::unique_ptr<BYTE[]>				m_storage;
 		uint32								m_capacity	 = 0;
 		uint32								m_maxSliceStates = 0;
-													 
+
 		uint32								m_used		 = 0;
 		bool								m_open		 = false;
 
@@ -92,12 +92,12 @@ namespace jam::net
 	 *	+----------------+-------------------------------+-----------------+
 	 *	|    headroom    |             data              |    tailroom     |
 	 *	+----------------+-------------------------------+-----------------+
-	 *	
+	 *
 	 *			|-------------- Size() ----------------------------|
 	 *                    (Head() ~ Tail())
-	 *               
+	 *
 	 * invariant: begin <= head <= data <= tail <= end
-	 * 
+	 *
 	 *	[ Begin ~ Head ) = unused prefix / headroom
 	 *	[ Head  ~ Data ) = headers
 	 *	[ Data  ~ Tail ) = payload
@@ -139,7 +139,7 @@ namespace jam::net
 		uint32		PayloadSize()	const { Validate(); return tail - data;  }
 		uint32		Size()			const { Validate(); return tail - head;  }
 		uint32		CommittedSize() const { Validate(); return tail - begin; }
-		uint32		Tailroom()		const { Validate(); return end  - tail;  }
+		uint32		Tailroom()		const { Validate(); JAM_ASSERT(!IsClosed()); return end - tail; }
 
 		bool		Empty()			const { return Size() == 0; }
 
@@ -197,7 +197,6 @@ namespace jam::net
 	public:
 		OwnedBufferSlice() = default;
 		explicit OwnedBufferSlice(const BufferSlice& slice);
-		explicit OwnedBufferSlice(BufferSlice&& slice);
 		OwnedBufferSlice(const OwnedBufferSlice& rhs);
 		OwnedBufferSlice(OwnedBufferSlice&& rhs) noexcept;
 
@@ -230,7 +229,7 @@ namespace jam::net
 	private:
 		BufferSlice			m_slice = {};
 	};
-	
+
 
 	struct BufferPoolConfig
 	{
@@ -307,7 +306,6 @@ namespace jam::net
 		TcpIo,
 		UdpClientIo,
 		UdpServerIo,
-		PiggybackAck,
 		Clone,
 	};
 
@@ -315,7 +313,7 @@ namespace jam::net
 
 	BufferPool&	GetNetBufferPool(eNetBufferPoolKind kind);
 	BufferPool&	GetPacketBufferPool(uint32 packetBytes);
-	
+
 	void		FlushNetBufferThreadLocalCaches();
 
 	inline bool IsSupportedBufferAlignment(uint32 alignment)
@@ -394,33 +392,21 @@ namespace jam::net
 	};
 
 
-	class BufferChain
-	{
-	public:
-		void								Add(BufferSlice slice) { m_parts.push_back(slice); }
-		uint32								TotalSize() const;
-		const std::vector<BufferSlice>&		Parts() const { return m_parts; }
-
-	private:
-		std::vector<BufferSlice>			m_parts;
-	};
-
-
 	class OwnedBufferChain
 	{
 	public:
 		OwnedBufferChain() = default;
-		OwnedBufferChain(const OwnedBufferChain& rhs);
+		OwnedBufferChain(const OwnedBufferChain&) = default;
 		OwnedBufferChain(OwnedBufferChain&& rhs) noexcept;
 
-		OwnedBufferChain& operator=(const OwnedBufferChain& rhs);
+		OwnedBufferChain& operator=(const OwnedBufferChain&) = default;
 		OwnedBufferChain& operator=(OwnedBufferChain&& rhs) noexcept;
 
-		~OwnedBufferChain() { Clear(); }
+		~OwnedBufferChain() = default;
 
 		void							Add(const BufferSlice& slice);
-		void							Add(BufferSlice&& slice);
-		void							Add(const OwnedBufferSlice& slice) { Add(slice.Get()); }
+		void							Add(const OwnedBufferSlice& slice);
+		void							Add(OwnedBufferSlice&& slice);
 
 		void							Reserve(size_t n) { m_parts.reserve(n); }
 
@@ -428,18 +414,16 @@ namespace jam::net
 
 		bool							Empty() const { return m_parts.empty(); }
 		size_t							Count() const { return m_parts.size(); }
-		uint32							TotalSize() const;
+		uint32							TotalSize() const { return m_totalSize; }
 
-		const std::vector<BufferSlice>& Parts() const { return m_parts; }
-		std::vector<BufferSlice>&		Parts()		  { return m_parts; }
-
-		const BufferSlice&				operator[](size_t idx) const { return m_parts[idx]; }
-		BufferSlice&					operator[](size_t idx)		 { return m_parts[idx]; }
+		const std::vector<OwnedBufferSlice>& Parts() const { return m_parts; }
+		const BufferSlice&					 operator[](size_t idx) const { return m_parts[idx].Get(); }
 
 	private:
-		std::vector<BufferSlice>		m_parts;
+		std::vector<OwnedBufferSlice>	m_parts;
+		uint32							m_totalSize = 0;
 	};
-	
+
 
 
 
@@ -502,7 +486,7 @@ namespace jam::net
 		JAM_ASSERT(src != nullptr || bytes == 0);
 		JAM_ASSERT(!buf.IsClosed());
 
-		BYTE* writePtr = buf.Tail();  
+		BYTE* writePtr = buf.Tail();
 		JAM_ASSERT_OR_RETURN_VALUE(buf.TryAppendPayload(bytes), nullptr);
 
 		if (bytes > 0) std::memcpy(writePtr, src, bytes);
@@ -580,22 +564,11 @@ namespace jam::net
 		return OwnedBufferSlice(slice);
 	}
 
-	inline OwnedBufferChain MakeOwnedChain(const BufferChain& chain)
-	{
-		OwnedBufferChain out;
-		out.Reserve(chain.Parts().size());
-
-		for (const BufferSlice& s : chain.Parts())
-			out.Add(s);
-
-		return out;
-	}
-
-
 	using Packet		= OwnedBufferSlice;
 	using PacketView	= BufferSlice;
 	using PacketChain	= OwnedBufferChain;
 
-
+	using Datagram		= OwnedBufferChain;
+	using Stream		= OwnedBufferChain;
 
 } // namespace jam::net

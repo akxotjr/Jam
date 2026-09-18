@@ -19,7 +19,75 @@ namespace jam::net
 
 	namespace
 	{
-		constexpr size_t kMaxUdpScatterParts                  = 16;
+		void AppendWireTimePatch(const PacketHeaderView& header, std::array<WireTimePatch, kMaxUdpScatterParts>& patches, size_t& patchCount)
+		{
+			if (header.Type() != ePacketType::SYSTEM || patchCount >= patches.size())
+				return;
+
+			BYTE* destination = nullptr;
+			const auto id = ToEnum<eSystemPacketId>(header.Id());
+			
+			if (id == eSystemPacketId::PING && header.PayloadSize() >= sizeof(PING_DATA))
+				destination = header.Payload() + offsetof(PING_DATA, t1Wire_ns);
+			else if (id == eSystemPacketId::PONG && header.PayloadSize() >= sizeof(PONG_DATA))
+				destination = header.Payload() + offsetof(PONG_DATA, t3Wire_ns);
+
+			if (destination)
+				patches[patchCount++] = WireTimePatch{ destination };
+		}
+
+		bool IsAckedBy(const AckData& ack, uint16 seq)
+		{
+			if (HasFlag(ack.header.flags, AckFlags::HasCumulativeAck) && !SeqGreater(seq, ack.header.cumulativeAck))
+				return true;
+
+			uint16 cursor = ack.header.largestAck;
+			for (uint8 i = 0; i < ack.header.rangesCount; ++i)
+			{
+				const AckRange& range = ack.ranges[i];
+				cursor = static_cast<uint16>(cursor - range.gap);
+
+				if (SeqDistance(cursor, seq) < range.length)
+					return true;
+				
+				cursor = static_cast<uint16>(cursor - range.length);
+			}
+			return false;
+		}
+
+		bool IsValidAck(const AckData& ack)
+		{
+			if ((ack.header.flags & ~AckFlags::HasCumulativeAck) != 0 || ack.header.rangesCount > kMaxAckRanges)
+				return false;
+
+			if (ack.header.rangesCount == 0)
+				return HasFlag(ack.header.flags, AckFlags::HasCumulativeAck) && ack.header.largestAck == ack.header.cumulativeAck;
+
+			uint32 coveredDistance = 0;
+			const uint32 distanceLimit = HasFlag(ack.header.flags, AckFlags::HasCumulativeAck) ? std::min<uint16>(SeqDistance(ack.header.largestAck, ack.header.cumulativeAck), ReliabilityState::AckTrackSize) : ReliabilityState::AckTrackSize;
+
+			for (uint8 i = 0; i < ack.header.rangesCount; ++i)
+			{
+				const AckRange& range = ack.ranges[i];
+				if (range.length == 0 || (i == 0 && range.gap != 0))
+					return false;
+
+				coveredDistance += static_cast<uint32>(range.gap) + range.length;
+				if (coveredDistance > distanceLimit)
+					return false;
+			}
+			return true;
+		}
+
+		bool HasSameAckCoverage(const AckData& lhs, const AckData& rhs)
+		{
+			AckHeader lhsHeader = lhs.header;
+			AckHeader rhsHeader = rhs.header;
+			lhsHeader.ackDelay_us = 0;
+			rhsHeader.ackDelay_us = 0;
+
+			return std::memcmp(&lhsHeader, &rhsHeader, sizeof(AckHeader)) == 0 && std::memcmp(lhs.ranges, rhs.ranges, sizeof(AckRange) * lhs.header.rangesCount) == 0;
+		}
 
 		void OnReliablePendingAdded(ShardLocal& L)
 		{
@@ -34,48 +102,12 @@ namespace jam::net
 			return chain;
 		}
 
-		void AppendChainParts(PacketChain& dst, const PacketChain& src)
-		{
-			dst.Reserve(dst.Count() + src.Count());
-			for (const BufferSlice& part : src.Parts())
-				dst.Add(part);
-		}
-
 		void AppendPacketToChain(PacketChain& dst, const Packet& packet)
 		{
 			if (!packet.IsValid())
 				return;
 
 			dst.Add(packet);
-		}
-		
-		PacketChain BuildPiggybackAckChain(const Packet& packet, const PacketHeaderView& view, const ACK_DATA& ack)
-		{
-			PacketChain chain;
-			if (!packet.IsValid() || !view.IsValid())
-				return chain;
-
-			PacketHeader patched = *view.Header();
-			const uint16 patchedSize = static_cast<uint16>(view.TotalSize() + sizeof(ACK_DATA));
-			patched.SetSize(patchedSize);
-			patched.SetFlags(patched.GetFlags() | static_cast<uint8>(PacketFlags::PIGGYBACK_ACK));
-
-			BufWriter writer(GetNetBufferPool(eNetBufferPoolKind::PiggybackAck));
-
-			BufferSlice headerSlice = writer.OpenForPayload(view.HeaderSize(), alignof(PacketHeader));
-			WritePayload(headerSlice, &patched, view.HeaderSize());
-			headerSlice.Close();
-			chain.Add(headerSlice);
-
-			if (view.PayloadSize() > 0)
-				chain.Add(packet->SliceVisible(view.HeaderSize(), view.PayloadSize()));
-
-			BufferSlice ackSlice = writer.OpenForPayload(sizeof(ACK_DATA), alignof(ACK_DATA));
-			WritePayload(ackSlice, &ack, sizeof(ACK_DATA));
-			ackSlice.Close();
-			chain.Add(ackSlice);
-
-			return chain;
 		}
 
 		void MarkRetransmitSubmitted(NetworkMetrics& metrics, ReliabilityState::PendingPacket& pkt, const uint64 now_ns)
@@ -101,11 +133,12 @@ namespace jam::net
 				metrics.RecordRetransmitGiveup();
 		}
 
-		void ProcessAck(ShardLocal& L, const entt::entity e, const uint16 ackBaseSeq, const uint64 ackWindow, const uint64 now_ns)
+		void ProcessAck(ShardLocal& L, const entt::entity e, const AckData& ack, const uint64 ackRecvTime_ns)
 		{
 			auto& R = L.registry;
 			auto* reliability = R.try_get<ReliabilityState>(e);
-			if (!reliability) return;
+			auto* rtt = R.try_get<RttState>(e);
+			if (!reliability || !rtt) return;
 
 			struct AckedMeta
 			{
@@ -113,47 +146,23 @@ namespace jam::net
 				uint32 size        = 0;
 			};
 
-			std::array<AckedMeta, ReliabilityState::AckWindowSize + 1> acked{};
-			uint32 ackedCount = 0;
-
-			auto capture = [&](uint16 seq)
-				{
-					const auto* pkt = reliability->TryGetPending(seq);
-					if (!pkt || ackedCount >= acked.size())
-						return;
-
-					acked[ackedCount++] = AckedMeta{
-						.hasRetransmitted      = pkt->hasRetransmitted,
-						.size                  = pkt->packet.IsValid() ? pkt->packet->Size() : 0
-					};
-				};
-
-			capture(ackBaseSeq);
-			for (uint16 i = 1; i <= ReliabilityState::AckWindowSize; ++i)
+			std::vector<AckedMeta> acked;
+			acked.reserve(reliability->reliablePendings.size());
+			for (const auto& [seq, pkt] : reliability->reliablePendings)
 			{
-				if (ackWindow & (uint64{ 1 } << (i - 1)))
-					capture(static_cast<uint16>(ackBaseSeq - i));
+				if (IsAckedBy(ack, seq))
+					acked.push_back(AckedMeta{
+						.hasRetransmitted = pkt.hasRetransmitted,
+						.size = pkt.packet.IsValid() ? pkt.packet->Size() : 0
+					});
 			}
 
-			reliability->ProcessAck(ackBaseSeq, ackWindow, now_ns);
+			reliability->ProcessAck(ack, ackRecvTime_ns, *rtt);
 			auto& metrics = L.networkMetrics;
-			metrics.RemoveReliablePending(ackedCount);
+			metrics.RemoveReliablePending(static_cast<uint32>(acked.size()));
 
-			uint32 ackedBytes = 0;
-			{
-				for (uint32 i = 0; i < ackedCount; ++i)
-				{
-					metrics.RecordReliableAcked(acked[i].size, acked[i].hasRetransmitted);
-
-					ackedBytes += acked[i].size;
-				}
-			}
-
-			if (ackedBytes > 0)
-			{
-				if (auto* congestion = R.try_get<CongestionState>(e))
-					congestion->OnAck(ackedBytes);
-			}
+			for (const AckedMeta& meta : acked)
+				metrics.RecordReliableAcked(meta.size, meta.hasRetransmitted);
 		}
 
 		void DispatchApplicationPacket(RecvContext& ctx)
@@ -219,67 +228,7 @@ namespace jam::net
 		}
 
 
-		bool TryPiggybackAck(ShardLocal& L, const entt::entity e, TxPendingPacket& pending)
-		{
-			auto& R = L.registry;
-			auto* reliability = R.try_get<ReliabilityState>(e);
-			if (!reliability || !reliability->ackDirty || pending.priority != TxPriority::NORMAL)
-				return false;
 
-			if (!pending.packet.IsValid() || !pending.wire.Empty())
-				return false;
-
-			PacketHeaderView view = PacketHeaderView::Parse(pending.packet->Head(), pending.packet->Size());
-			if (!view.IsValid() || view.IsFragmented())
-				return false;
-			if (view.TotalSize() + sizeof(ACK_DATA) > JAMNET_MTU)
-				return false;
-
-			pending.wire = BuildPiggybackAckChain(pending.packet, view, ACK_DATA{ reliability->pendingAckSeq, reliability->pendingAckWindow });
-			if (pending.wire.Empty())
-				return false;
-
-			pending.size = pending.wire.TotalSize();
-			reliability->ClearPendingAck();
-			return true;
-		}
-
-
-		bool IncomingTailAckProcess(RecvContext& ctx)
-		{
-			if (!HasFlag(ctx.view.Flags(), PacketFlags::PIGGYBACK_ACK))
-				return true;
-
-			const uint32 payloadSize = ctx.view.PayloadSize();
-			if (payloadSize < sizeof(ACK_DATA))
-				return false;
-
-			const BYTE* tail = ctx.view.Payload() + (payloadSize - sizeof(ACK_DATA));
-			const auto* ack  = reinterpret_cast<const ACK_DATA*>(tail);
-
-			ProcessAck(ctx.L, ctx.e, ack->ackBaseSeq, ack->ackWindow, ctx.now_ns);
-
-			ctx.view.Header()->SetFlags(ClearFlag(ctx.view.Header()->GetFlags(), PacketFlags::PIGGYBACK_ACK));
-			ctx.view.Header()->SetSize(static_cast<uint16>(ctx.view.TotalSize() - sizeof(ACK_DATA)));
-			ctx.view.WriteHeaderTo(ctx.packet);
-			ctx.packet.Get().tail = ctx.packet->head + ctx.view.Header()->GetSize();
-			ctx.view = PacketHeaderView::Parse(ctx.packet->Head(), ctx.packet->Size());
-
-			return ctx.view.IsValid();
-		}
-
-
-		int32 GetPriority(TransmissionWaitingQueue::Priority priority)
-		{
-			switch (priority)
-			{
-			case TransmissionWaitingQueue::CONTROL:     return 0;
-			case TransmissionWaitingQueue::RETRANSMIT:  return 1;
-			case TransmissionWaitingQueue::ACK_ONLY:    return 2;
-			case TransmissionWaitingQueue::NORMAL:      return 3;
-			default: return 3;
-			}
-		}
 	}
 
 
@@ -310,8 +259,8 @@ namespace jam::net
 
 			if (!R.all_of<SequenceState>(e))    R.emplace<SequenceState>(e);
 			if (!R.all_of<OrderState>(e))       R.emplace<OrderState>(e);
+			if (!R.all_of<RttState>(e))         R.emplace<RttState>(e);
 			if (!R.all_of<ReliabilityState>(e)) R.emplace<ReliabilityState>(e);
-			if (!R.all_of<CongestionState>(e))  R.emplace<CongestionState>(e);
 			if (!R.all_of<FragmentState>(e))    R.emplace<FragmentState>(e);
 
 		}
@@ -414,7 +363,7 @@ namespace jam::net
 		if (!SeqGreater(reliabilitySeq, reliability->latestReliabilityRecvSeq - ReliabilityState::AckTrackSize))
 			return false;
 
-		if (!(reliability->ackTrack.none() && reliability->latestReliabilityRecvSeq == 0))
+		if (reliability->hasReliabilityRecv)
 		{
 			if (!SeqGreater(reliabilitySeq, reliability->latestReliabilityRecvSeq))
 			{
@@ -427,14 +376,7 @@ namespace jam::net
 
 				if (reliability->ackTrack.test(dist))
 				{
-					if (dist <= ReliabilityState::AckWindowSize)
-					{
-						reliability->MarkAckPending(ctx.now_ns);
-					}
-					else if (auto* txQueue = R.try_get<TransmissionWaitingQueue>(ctx.e))
-					{
-						txQueue->Enqueue(PacketBuilder::CreateAckPacket(ACK_DATA{ reliabilitySeq, 0 }), TxPriority::ACK_ONLY);
-					}
+					reliability->MarkAckPending(ctx.ingressTime_ns);
 					ctx.shouldDrop = true;
 					ctx.L.networkMetrics.RecordDuplicate();
 					return false;
@@ -442,7 +384,7 @@ namespace jam::net
 			}
 		}
 
-		reliability->MarkReceived(reliabilitySeq, ctx.now_ns);
+		reliability->MarkReceived(reliabilitySeq, ctx.ingressTime_ns);
 		return true;
 	}
 
@@ -517,6 +459,7 @@ namespace jam::net
 	{
 		auto& R         = ctx.L.registry;
 		auto* timesync  = R.try_get<TimeSyncState>(ctx.e);
+		auto* rtt       = R.try_get<RttState>(ctx.e);
 		auto* info      = R.try_get<SessionInfo>(ctx.e);
 		if (!info)
 			return false;
@@ -528,7 +471,7 @@ namespace jam::net
 
 		case eSystemPacketId::PING:
 		{
-			if (!timesync)
+			if (!timesync || !rtt)
 				return true;
 			if (ctx.view.PayloadSize() < sizeof(PING_DATA))
 				return true;
@@ -551,14 +494,14 @@ namespace jam::net
 
 			if (auto* txQueue = R.try_get<TransmissionWaitingQueue>(ctx.e))
 			{
-				txQueue->Enqueue(PacketBuilder::CreatePongPacket(pong), TxPriority::CONTROL);
+				txQueue->Enqueue(PacketBuilder::CreatePongPacket(pong));
 			}
 			return true;
 		}
 
 		case eSystemPacketId::PONG:
 		{
-			if (!timesync)
+			if (!timesync || !rtt)
 				return true;
 			if (ctx.view.PayloadSize() < sizeof(PONG_DATA))
 				return true;
@@ -582,11 +525,12 @@ namespace jam::net
 
 			if (hasWireTimes)
 			{
-				timesync->ProcessPingPong(pong->t1Wire_ns, pong->t2Wire_ns, pong->t3Wire_ns, t4_wire);
+				timesync->ProcessPingPong(pong->t1Wire_ns, pong->t2Wire_ns,
+					pong->t3Wire_ns, t4_wire, *rtt);
 			}
 			else
 			{
-				timesync->ProcessPingPong(pong->t1App_ns, pong->t2App_ns, pong->t3App_ns, t4_app);
+				timesync->ProcessPingPong(pong->t1App_ns, pong->t2App_ns, pong->t3App_ns, t4_app, *rtt);
 			}
 
 			return true;
@@ -607,11 +551,26 @@ namespace jam::net
 
 		if (ToEnum<eAckPacketId>(ctx.view.Id()) == eAckPacketId::ACK)
 		{
-			if (ctx.view.PayloadSize() < sizeof(ACK_DATA))
+			if (ctx.view.PayloadSize() < sizeof(AckHeader))
 				return;
 
-			const auto* ack = reinterpret_cast<const ACK_DATA*>(ctx.view.Payload());
-			ProcessAck(ctx.L, ctx.e, ack->ackBaseSeq, ack->ackWindow, ctx.now_ns);
+			AckData ack{};
+			std::memcpy(&ack.header, ctx.view.Payload(), sizeof(AckHeader));
+			if (ack.header.rangesCount > kMaxAckRanges)
+				return;
+
+			const uint32 expectedSize = static_cast<uint32>(sizeof(AckHeader))
+				+ static_cast<uint32>(sizeof(AckRange)) * ack.header.rangesCount;
+			if (ctx.view.PayloadSize() != expectedSize)
+				return;
+
+			if (ack.header.rangesCount != 0)
+				std::memcpy(ack.ranges, ctx.view.Payload() + sizeof(AckHeader),
+					sizeof(AckRange) * ack.header.rangesCount);
+			if (!IsValidAck(ack))
+				return;
+
+			ProcessAck(ctx.L, ctx.e, ack, ctx.ingressTime_ns);
 		}
 	}
 
@@ -642,7 +601,6 @@ namespace jam::net
 		if (!IncomingReliabilityProcess(ctx))   return;
 		if (!IncomingFragmentationProcess(ctx)) return;
 		if (!IncomingNetstatProcess(ctx))       return;
-		if (!IncomingTailAckProcess(ctx))		return;
 		if (!IncomingOrderingProcess(ctx))      return;
 
 		DispatchApplicationPacket(ctx);
@@ -714,7 +672,7 @@ namespace jam::net
 			}
 
 
-			txQueue.Enqueue(frag, TxPriority::NORMAL);
+			txQueue.Enqueue(frag);
 		}
 
 		ctx.bIsFragmentized = true;
@@ -730,7 +688,7 @@ namespace jam::net
 		const auto ch = ctx.header.Channel();
 		if (ch == eChannel::UDP_DEFAULT || ch == eChannel::TCP_DEFAULT)
 		{
-			txQueue->Enqueue(ctx.packet, ctx.priority);
+			txQueue->Enqueue(ctx.packet);
 			return true;
 		}
 
@@ -764,7 +722,7 @@ namespace jam::net
 		}
 
 		ctx.header.WriteHeaderTo(ctx.packet);
-		txQueue->Enqueue(ctx.packet, ctx.priority);
+		txQueue->Enqueue(ctx.packet);
 		return true;
 	}
 
@@ -781,7 +739,7 @@ namespace jam::net
 
 		if (!isUdp)
 		{
-			txQueue->Enqueue(ctx.packet, ctx.priority);
+			txQueue->Enqueue(ctx.packet);
 			txQueue->flushRequested = true;
 			return;
 		}
@@ -861,11 +819,10 @@ namespace jam::net
 			PING_DATA ping{};
 			ping.t1Wire_ns                = 0;          // wire send time : fill in UdpRouter
 			ping.t1App_ns                 = now_ns;
-
 			ping.prev_t3_server_send_ns   = timeSync.lastT3ServerSend_ns;
 			ping.prev_t4_client_recv_ns   = timeSync.lastT4ClientRecv_ns;
 
-			txQueue.Enqueue(PacketBuilder::CreatePingPacket(ping), TransmissionWaitingQueue::CONTROL);
+			txQueue.Enqueue(PacketBuilder::CreatePingPacket(ping));
 
 			timeSync.lastPingSend_ns      = now_ns;
 			timeSync.lastT1ClientSend_ns  = now_ns;
@@ -899,206 +856,199 @@ namespace jam::net
 
 	void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
 	{
-		auto& R = L.registry;
-		auto view = R.view<TransmissionWaitingQueue, SessionInfo>();
+		(void)dt_ns;
+		auto& registry = L.registry;
+		auto view = registry.view<TransmissionWaitingQueue, SessionInfo>();
 
 		for (auto entity : view)
 		{
 			auto& txQueue = view.get<TransmissionWaitingQueue>(entity);
-			auto& info = view.get<SessionInfo>(entity);
+			auto& info	  = view.get<SessionInfo>(entity);
 
-			if (!info.session)
-				continue;
+			if (!info.session || info.session->IsClosing()) continue;
 
-			const bool isUdp = info.session->IsUdp();
-			auto* congestion = R.try_get<CongestionState>(entity);
-			auto* reliabilityState = isUdp ? R.try_get<ReliabilityState>(entity) : nullptr;
+			const bool isUDP = info.session->IsUdp();
 
-			if (isUdp && R.all_of<ReliabilityState>(entity))
+			if (!isUDP)	// tcp path
 			{
-				auto& reliability = R.get<ReliabilityState>(entity);
+				if (!txQueue.ShouldFlush(now_ns))
+					continue;
 
-				bool piggybackOK = false;
-				if (reliability.ackDirty)
+				Stream stream;
+				stream.Reserve(txQueue.queue.size());
+				for (const auto& pkt : txQueue.queue)
 				{
-					for (int32 i = static_cast<int32>(txQueue.queue.size()) - 1; i >= 0; --i)
-					{
-						if (TryPiggybackAck(L, entity, txQueue.queue[i]))
-						{
-							piggybackOK = true;
-							break;
-						}
-					}
+					if (!pkt.packet.IsValid())
+						continue;
+
+					const auto header = PacketHeaderView::Parse(pkt.packet->Head(), pkt.packet->Size());
+					if (!header.IsValid())
+						continue;
+
+					L.networkMetrics.RecordTransmit(pkt.packet->Size(), false, false, false, false, false);
+					stream.Add(pkt.packet);
 				}
 
-				if (!piggybackOK && reliability.ShouldSendAck(now_ns))
+				txQueue.Clear();
+				if (!stream.Empty())
 				{
-					auto pkt = PacketBuilder::CreateAckPacket(ACK_DATA{ reliability.pendingAckSeq, reliability.pendingAckWindow });
-					txQueue.Enqueue(pkt, TxPriority::ACK_ONLY);
-					reliability.ClearPendingAck();
+					static_cast<TcpSession*>(info.session)->RegisterSend(std::move(stream));
+					txQueue.lastFlushTime_ns = now_ns;
+					info.lastSendTime_ns	 = now_ns;
 				}
+				continue;
 			}
 
-			if (txQueue.queue.empty())
-				continue;
-			if (!txQueue.ShouldFlush(now_ns))
-				continue;
-
-			std::ranges::stable_sort(txQueue.queue, [](const TxPendingPacket& a, const TxPendingPacket& b) {
-					return GetPriority(a.priority) < GetPriority(b.priority);
-				});
-
-			std::vector<PacketChain> batch;
-			batch.reserve(txQueue.queue.size());
-
-			std::vector<TxPendingPacket> remain;
-			remain.reserve(txQueue.queue.size());
-
-			auto& metrics = L.networkMetrics;
-			PacketChain currentUdpBundle;
-			uint32 currentUdpBundleBytes = 0;
-			uint32 currentUdpBundlePacketCount = 0;
-			bool hasCurrentUdpBundle = false;
-			bool currentUdpBundleReliable = false;
-
-			auto flushUdpBundle = [&]()
+			auto* reliability = registry.try_get<ReliabilityState>(entity);
+			if (!reliability)
 			{
-				if (!hasCurrentUdpBundle || currentUdpBundle.Empty())
-					return;
+				continue;
+			}
 
-				batch.push_back(std::move(currentUdpBundle));
-				currentUdpBundle = {};
-				currentUdpBundleBytes = 0;
-				currentUdpBundlePacketCount = 0;
-				hasCurrentUdpBundle = false;
-				currentUdpBundleReliable = false;
+			const bool ackDue   = reliability->ShouldSendAck(NOW_NS());
+
+			if (!txQueue.ShouldFlush(now_ns) && !ackDue) continue;
+
+			AckData snapshot = reliability->ackDirty ? reliability->pendingAckData : AckData{};
+			if (reliability->ackDirty)
+			{
+				const uint64 ackDelay_us = now_ns >= reliability->firstPendingAckTime_ns ? (now_ns - reliability->firstPendingAckTime_ns) / 1'000ull : 0;
+				snapshot.header.ackDelay_us = static_cast<uint32>(std::min<uint64>(ackDelay_us, UINT32_MAX));
+			}
+
+			const uint32 ackCount = reliability ? reliability->pendingAckPacketCount : 0;
+			bool ackPending = reliability && reliability->ackDirty;
+
+			auto consumeAck = [&]()
+			{
+				if (reliability->ackDirty && reliability->pendingAckPacketCount == ackCount && HasSameAckCoverage(reliability->pendingAckData, snapshot))
+					reliability->ClearPendingAck();
+				ackPending = false;
 			};
 
-			for (size_t i = 0; i < txQueue.queue.size(); ++i)
+			auto* udp = static_cast<UdpSession*>(info.session);
+			size_t remainingCount = txQueue.queue.size();
+			while (remainingCount != 0)
 			{
-				auto& pkt = txQueue.queue[i];
+				Datagram datagram;
+				std::array<WireTimePatch, kMaxUdpScatterParts> wireTimePatches = {};
+				size_t wireTimePatchCount = 0;
+				size_t selectedCount = 0;
+				bool bundledAck = false;
 
-				PacketHeaderView v = PacketHeaderView::Parse(pkt.packet->Head(), pkt.packet->Size());
-				if (!v.IsValid()) continue;
-
-				ReliabilityState::PendingPacket* pending = nullptr;
-				if (isUdp && reliabilityState && v.IsReliable())
+				while (remainingCount != 0)
 				{
-					pending = reliabilityState->TryGetPending(v.ReliabilitySequence());
-					if (pkt.priority == TxPriority::RETRANSMIT && !pending)
+					const auto& front = txQueue.queue.front();
+					const auto header = front.packet.IsValid() ? PacketHeaderView::Parse(front.packet->Head(), front.packet->Size()) : PacketHeaderView{};
+
+					if (!header.IsValid() || (header.IsReliable() && (!reliability || !reliability->TryGetPending(header.ReliabilitySequence()))))
+					{
+						txQueue.bytesQueued -= front.size;
+						txQueue.queue.pop_front();
+						--remainingCount;
 						continue;
-				}
-
-				const bool bypassCongestion = (pkt.priority <= TxPriority::ACK_ONLY);
-
-				if (!bypassCongestion && isUdp && congestion && v.IsReliable() && !congestion->CanSend(pkt.size))
-				{
-					remain.insert(remain.end(), txQueue.queue.begin() + static_cast<std::ptrdiff_t>(i), txQueue.queue.end());
-					break;
-				}
-
-				const bool hasPiggybackAck = !pkt.wire.Empty();
-				const uint32 wireSize = hasPiggybackAck ? pkt.wire.TotalSize() : pkt.packet->Size();
-
-				if (isUdp)
-				{
-					const bool packetReliable = v.IsReliable();
-					if (wireSize > JAMNET_MTU)
-					{
-						flushUdpBundle();
-						batch.push_back(hasPiggybackAck ? std::move(pkt.wire) : MakeSinglePacketChain(pkt.packet));
 					}
-					else
+
+					if (selectedCount != 0 && (datagram.TotalSize() + front.packet->Size() > JAMNET_MTU || datagram.Count() + 1 > kMaxUdpScatterParts))
 					{
-						const size_t wirePartCount = hasPiggybackAck ? pkt.wire.Count() : 1;
-						if (hasCurrentUdpBundle
-							&& (currentUdpBundleReliable != packetReliable
-								|| (currentUdpBundleBytes + wireSize) > JAMNET_MTU
-								|| (currentUdpBundle.Count() + wirePartCount) > kMaxUdpScatterParts))
-						{
-							flushUdpBundle();
-						}
-
-						if (!hasCurrentUdpBundle)
-						{
-							hasCurrentUdpBundle = true;
-							currentUdpBundleReliable = packetReliable;
-							currentUdpBundleBytes = 0;
-							currentUdpBundlePacketCount = 0;
-						}
-
-						if (hasPiggybackAck)
-							AppendChainParts(currentUdpBundle, pkt.wire);
-						else
-							AppendPacketToChain(currentUdpBundle, pkt.packet);
-
-						currentUdpBundleBytes += wireSize;
-						currentUdpBundlePacketCount++;
+						break;
 					}
-				}
-				else
-				{
-					batch.push_back(hasPiggybackAck ? std::move(pkt.wire) : MakeSinglePacketChain(pkt.packet));
+
+
+					AppendPacketToChain(datagram, front.packet);
+					AppendWireTimePatch(header, wireTimePatches, wireTimePatchCount);
+					// Keep the current datagram's packets at the tail until submission succeeds.
+					txQueue.queue.push_back(std::move(txQueue.queue.front()));
+					txQueue.queue.pop_front();
+					++selectedCount;
+					--remainingCount;
 				}
 
-				const bool countedReliableOriginal = (pending != nullptr && pkt.priority != TxPriority::RETRANSMIT);
-				metrics.RecordTransmit(pkt.size, isUdp, countedReliableOriginal,
-					pkt.priority == TxPriority::RETRANSMIT,
-					v.Type() == ePacketType::ACK && pkt.priority == TxPriority::ACK_ONLY,
-					hasPiggybackAck || HasFlag(v.Flags(), PacketFlags::PIGGYBACK_ACK));
+				if (selectedCount == 0) continue;
 
-				if (pending)
+				Packet ackPacket;
+				if (ackPending)
 				{
-					if (pkt.priority == TxPriority::RETRANSMIT)
-						MarkRetransmitSubmitted(metrics, *pending, now_ns);
-					else if (!pending->hasInitialSend)
+					ackPacket = PacketBuilder::CreateAckPacket(snapshot.header, snapshot.ranges);
+					if (ackPacket.IsValid() && datagram.TotalSize() + ackPacket->Size() <= JAMNET_MTU && datagram.Count() + 1 <= kMaxUdpScatterParts)
 					{
-						pending->hasInitialSend      = true;
-						pending->sendTime_ns         = now_ns;
-						pending->lastTransmitTime_ns = now_ns;
+						AppendPacketToChain(datagram, ackPacket);
+						bundledAck = true;
 					}
 				}
 
-				if (!bypassCongestion && isUdp && congestion && v.IsReliable())
-					congestion->OnSend(pkt.size);
+				// On failure, leave these packets queued and continue with the original entries.
+				uint64 submitTime_ns = 0;
+				const std::span patches(wireTimePatches.data(), wireTimePatchCount);
+
+				if (!udp->RegisterSend(std::move(datagram), patches, &submitTime_ns)) continue;
+
+				for (size_t i = 0; i < selectedCount; ++i)
+				{
+					const auto& pkt = txQueue.queue[txQueue.queue.size() - selectedCount + i];
+					const auto header = PacketHeaderView::Parse(pkt.packet->Head(), pkt.packet->Size());
+					auto* pending = header.IsReliable() ? reliability->TryGetPending(header.ReliabilitySequence()) : nullptr;
+					const bool retransmit = pending && pending->hasInitialSend;
+
+					L.networkMetrics.RecordTransmit(pkt.packet->Size(), true, pending && !retransmit, retransmit, header.Type() == ePacketType::ACK, false);
+
+					if (pending)
+					{
+						if (retransmit) MarkRetransmitSubmitted(L.networkMetrics, *pending, submitTime_ns);
+						else reliability->MarkInitialSend(header.ReliabilitySequence(), submitTime_ns);
+					}
+				}
+
+				for (size_t i = 0; i < selectedCount; ++i)
+				{
+					txQueue.bytesQueued -= txQueue.queue.back().size;
+					txQueue.queue.pop_back();
+				}
+
+				if (bundledAck)
+				{
+					L.networkMetrics.RecordTransmit(ackPacket->Size(), true, false, false, true, false);
+					consumeAck();
+				}
+
+
+				txQueue.lastFlushTime_ns = now_ns;
+				info.lastSendTime_ns	 = now_ns;
 			}
 
-			if (isUdp)
-				flushUdpBundle();
+			if (ackPending && ackDue)
+			{
+				auto packet = PacketBuilder::CreateAckPacket(snapshot.header, snapshot.ranges);
+				if (packet.IsValid() && udp->RegisterSend(packet))
+				{
+					L.networkMetrics.RecordTransmit(packet->Size(), true, false, false, true, false);
+					consumeAck();
+					txQueue.lastFlushTime_ns = now_ns;
+					info.lastSendTime_ns	 = now_ns;
+				}
+			}
 
-			txQueue.queue       = std::move(remain);
-			txQueue.bytesQueued = 0;
-			for (const auto& p : txQueue.queue) txQueue.bytesQueued += p.size;
 			txQueue.flushRequested = !txQueue.queue.empty();
-
-			if (batch.empty())
-				continue;
-
-			Session* session = info.session;
-			if (session->IsUdp())
-			{
-				auto* udp = static_cast<UdpSession*>(session);
-				udp->RegisterSend(std::move(batch));
-			}
-			else if (session->IsTcp())
-			{
-				auto* tcp = static_cast<TcpSession*>(session);
-				tcp->RegisterSend(std::move(batch));
-			}
-
-			txQueue.lastFlushTime_ns = now_ns;
-			info.lastSendTime_ns     = now_ns;
 		}
 	}
 
+
+
 	void SystemRetransmit(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
 	{
+		(void)now_ns;
+		(void)dt_ns;
+		// TransportFlushSystem runs earlier in the same tick and records a later
+		// WSASendTo submit timestamp, so retransmission checks need a fresh clock value.
+		const uint64 retransmitNow_ns = NOW_NS();
+
 		auto& R = L.registry;
-		auto view = R.view<ReliabilityState, TransmissionWaitingQueue, SessionInfo>();
+		auto view = R.view<ReliabilityState, RttState, TransmissionWaitingQueue, SessionInfo>();
 
 		for (auto entity : view)
 		{
 			auto& reliability = view.get<ReliabilityState>(entity);
+			auto& rtt         = view.get<RttState>(entity);
 			auto& txQueue     = view.get<TransmissionWaitingQueue>(entity);
 			auto& info        = view.get<SessionInfo>(entity);
 			auto& metrics     = L.networkMetrics;
@@ -1106,14 +1056,14 @@ namespace jam::net
 			if (info.state != SessionInfo::CONNECTED)
 				continue;
 
-			auto retransmitList = reliability.GetRetransmitNeeded(now_ns);
+			auto retransmitList = reliability.GetRetransmitNeeded(retransmitNow_ns, rtt);
 			for (uint16 seq : retransmitList)
 			{
 				auto* pending = reliability.TryGetPending(seq);
 				if (!pending || !pending->packet.IsValid())
 					continue;
 
-				if (now_ns - pending->sendTime_ns >= ReliabilityState::ReliableDeliveryTimeout_ns)
+				if (retransmitNow_ns >= pending->sendTime_ns && retransmitNow_ns - pending->sendTime_ns >= ReliabilityState::ReliableDeliveryTimeout_ns)
 				{
 					JAM_LOG_ERROR("[Retransmit] Packet seq={} exceeded reliable delivery timeout", seq);
 					MarkRetransmitGiveup(metrics, *pending);
@@ -1128,7 +1078,7 @@ namespace jam::net
 				}
 
 				const bool fastRetransmit = pending->fastRetransmitRequested;
-				txQueue.Enqueue(pending->packet, TransmissionWaitingQueue::RETRANSMIT);
+				txQueue.Enqueue(pending->packet);
 				pending->retransmitQueued = true;
 				if (!fastRetransmit)
 					metrics.RecordRetransmitTimeout();
@@ -1209,7 +1159,6 @@ namespace jam::net
 			.e          = e,
 			.header     = view,
 			.packet     = packet,
-			.priority   = TransmissionWaitingQueue::NORMAL,
 			.now_ns     = NOW_NS(),
 		};
 

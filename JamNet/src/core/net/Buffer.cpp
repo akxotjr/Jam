@@ -252,6 +252,7 @@ namespace jam::net
 		Validate();
 		JAM_ASSERT(!IsClosed());
 		JAM_ASSERT(committedBytes <= Capacity());
+		JAM_ASSERT(tail <= begin + committedBytes);
 
 		block->Commit(begin + committedBytes); // absolute offset
 		block->SetSliceClosed(closedStateIndex, true);
@@ -277,12 +278,6 @@ namespace jam::net
 
 	OwnedBufferSlice::OwnedBufferSlice(const BufferSlice& slice)
 		: m_slice(slice)
-	{
-		AddRefIfNeeded();
-	}
-
-	OwnedBufferSlice::OwnedBufferSlice(BufferSlice&& slice)
-		: m_slice(std::move(slice))
 	{
 		AddRefIfNeeded();
 	}
@@ -736,38 +731,11 @@ namespace jam::net
 		m_storage.Reset();
 	}
 
-	uint32 BufferChain::TotalSize() const
-	{
-		uint32 sum = 0;
-		for (const auto& p : m_parts)
-			sum += p.Size();
-		return sum;
-	}
-
-	OwnedBufferChain::OwnedBufferChain(const OwnedBufferChain& rhs)
-	{
-		m_parts.reserve(rhs.m_parts.size());
-		for (const BufferSlice& s : rhs.m_parts)
-			Add(s);
-	}
-
 	OwnedBufferChain::OwnedBufferChain(OwnedBufferChain&& rhs) noexcept
 		: m_parts(std::move(rhs.m_parts))
+		, m_totalSize(rhs.m_totalSize)
 	{
-		rhs.m_parts.clear();
-	}
-
-	OwnedBufferChain& OwnedBufferChain::operator=(const OwnedBufferChain& rhs)
-	{
-		if (this == &rhs)
-			return *this;
-
-		Clear();
-		m_parts.reserve(rhs.m_parts.size());
-		for (const BufferSlice& s : rhs.m_parts)
-			Add(s);
-
-		return *this;
+		rhs.m_totalSize = 0;
 	}
 
 	OwnedBufferChain& OwnedBufferChain::operator=(OwnedBufferChain&& rhs) noexcept
@@ -775,44 +743,45 @@ namespace jam::net
 		if (this == &rhs)
 			return *this;
 
-		Clear();
 		m_parts = std::move(rhs.m_parts);
-		rhs.m_parts.clear();
+		m_totalSize = rhs.m_totalSize;
+		rhs.m_totalSize = 0;
 		return *this;
 	}
 
 	void OwnedBufferChain::Add(const BufferSlice& slice)
 	{
-		if (slice.block)
-			slice.block->AddRef();
+		if (!slice.IsValid())
+			return;
 
-		m_parts.push_back(slice);
+		m_parts.emplace_back(slice);
+		m_totalSize += slice.Size();
 	}
 
-	void OwnedBufferChain::Add(BufferSlice&& slice)
+	void OwnedBufferChain::Add(const OwnedBufferSlice& slice)
 	{
-		if (slice.block)
-			slice.block->AddRef();
+		if (!slice.IsValid())
+			return;
 
+		const uint32 size = slice->Size();
+		m_parts.push_back(slice);
+		m_totalSize += size;
+	}
+
+	void OwnedBufferChain::Add(OwnedBufferSlice&& slice)
+	{
+		if (!slice.IsValid())
+			return;
+
+		const uint32 size = slice->Size();
 		m_parts.push_back(std::move(slice));
+		m_totalSize += size;
 	}
 
 	void OwnedBufferChain::Clear()
 	{
-		for (BufferSlice& s : m_parts)
-		{
-			if (s.block)
-				s.block->Release();
-		}
 		m_parts.clear();
-	}
-
-	uint32 OwnedBufferChain::TotalSize() const
-	{
-		uint32 sum = 0;
-		for (const auto& s : m_parts)
-			sum += s.Size();
-		return sum;
+		m_totalSize = 0;
 	}
 
 	namespace
@@ -824,7 +793,6 @@ namespace jam::net
 			BufferPool tcpIo{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 4, .tlsHighWatermark = 32, .batchSize = 8 } };
 			BufferPool udpClientIo{ BufferPoolConfig{ .initialBlocks = 128, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16, .blockSize = JAMNET_MTU, .maxSliceStates = 1, .retainedBlockLimit = 4096 } };
 			BufferPool udpServerIo{ BufferPoolConfig{ .initialBlocks = 512, .tlsLowWatermark = 32, .tlsHighWatermark = 128, .batchSize = 16, .blockSize = JAMNET_MTU, .maxSliceStates = 1, .retainedBlockLimit = 8192 }};
-			BufferPool piggybackAck{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 8, .tlsHighWatermark = 64, .batchSize = 16 } };
 			BufferPool clone{ BufferPoolConfig{ .initialBlocks = 64, .tlsLowWatermark = 4, .tlsHighWatermark = 32, .batchSize = 8 } };
 		};
 
@@ -846,7 +814,6 @@ namespace jam::net
 		case eNetBufferPoolKind::TcpIo:			return pools.tcpIo;
 		case eNetBufferPoolKind::UdpClientIo:	return pools.udpClientIo;
 		case eNetBufferPoolKind::UdpServerIo:	return pools.udpServerIo;
-		case eNetBufferPoolKind::PiggybackAck:	return pools.piggybackAck;
 		case eNetBufferPoolKind::Clone:			return pools.clone;
 		default:
 			JAM_ASSERT(false);

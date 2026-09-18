@@ -25,12 +25,6 @@ namespace jam::net
 		BYTE*  payload = view.Payload();
 		uint32 len     = view.payloadSize;
 
-		if (HasFlag(view.Flags(), PacketFlags::PIGGYBACK_ACK) && view.IsReliable())
-		{
-			if (len < sizeof(ACK_DATA))
-				return;
-			len -= static_cast<uint32>(sizeof(ACK_DATA));
-		}
 
 		if (len < sizeof(RpcHeader))
 			return;

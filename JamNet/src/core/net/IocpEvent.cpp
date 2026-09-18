@@ -33,7 +33,7 @@ namespace jam::net
 		IocpEvent::Init();
 
 		wsaBufs.clear();
-		chains.clear();
+		stream.Clear();
 		curIndex   = 0;
 		curOffset  = 0;
 		totalBytes = 0;
@@ -49,10 +49,8 @@ namespace jam::net
 	void UdpSendEvent::Init()
 	{
 		IocpEvent::Init();
-		if (wsaBufs.capacity() == 0)
-			wsaBufs.reserve(8);
-		wsaBufs.clear();
-		chain.Clear();
+		wsaBufCount = 0;
+		datagram.Clear();
 		remoteAddr = {};
 	}
 

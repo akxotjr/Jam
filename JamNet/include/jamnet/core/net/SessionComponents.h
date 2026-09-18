@@ -5,6 +5,7 @@
 #include "jamnet/core/net/PacketBuilder.h"
 
 #include <bitset>
+#include <deque>
 
 namespace jam::net
 {
@@ -77,7 +78,7 @@ namespace jam::net
 		uint16 AllocRecencySeq(uint16 count = 1)
 		{
 			JAM_ASSERT(count < 0x8000);
-				
+
 			const uint16 base = nextRecencySeq;
 			nextRecencySeq = static_cast<uint16>(nextRecencySeq + count);
 			return base;
@@ -133,20 +134,40 @@ namespace jam::net
 		std::vector<OrderedPacket>	PopOrderedPackets(OUT uint16& expectedSeq);
 	};
 
+	struct RttState
+	{
+		uint64	latestRtt_ns		= 0;
+		uint64	minRtt_ns			= UINT64_MAX;
+		uint64	smoothedRtt_ns		= 0;
+		uint64	rttVariance_ns		= 0;
+		bool	hasReliableSample	= false;
+
+		void	OnSample(uint64 sample_ns, uint64 peerDelay_ns = 0);
+
+		// ACK samples drive RTO after the reliable path has produced its first unambiguous sample.
+		void	OnReliableSample(uint64 sample_ns, uint64 peerDelay_ns);
+		
+		// Ping/Pong provides only the initial RTO estimate; time synchronization still keeps its own window.
+		void	OnTimeSyncSample(uint64 sample_ns);
+		uint64	GetRetransmitTimeout(uint8 retryCount) const;
+	};
+
+
+	struct AckData
+	{
+		AckHeader	header;
+		AckRange	ranges[kMaxAckRanges];
+	};
+
+
 	/// 신뢰성 상태 - RELIABLE_ORDERED, RELIABLE_UNORDERED 2개만 사용
 	struct ReliabilityState
 	{
-		static constexpr uint64 InitialRetransmitTimeout_ns	= 250_ms;
-		static constexpr uint64 MinRetransmitTimeout_ns		= 50_ms;
-		static constexpr uint64 MaxRetransmitTimeout_ns		= 1_s;
-		static constexpr uint64 MaxBackoffTimeout_ns		= 2_s;
 		static constexpr uint64 ReliableDeliveryTimeout_ns	= 30_s;
-		static constexpr uint8  MaxBackoffShift				= 4;
-		static constexpr uint32 AckTrackSize				= 2048;
-		static constexpr uint32 AckWindowSize				= 64;
+		static constexpr uint32 AckTrackSize				= 4096;
 		static constexpr uint8  FastRetransmitThreshold		= 3;
 		static constexpr uint32 AckElicitingPacketThreshold	= 2;
-		static constexpr uint64 DelayPiggybackAckTimeout_ns = 20_ms;
+		static constexpr uint64 DelayedAckTimeout_ns		= 20_ms;
 
 		struct PendingPacket
 		{
@@ -166,25 +187,24 @@ namespace jam::net
 
 		// reliable 송신 추적 (reliable sequence 기준)
 		std::map<uint16, PendingPacket>     reliablePendings;
-		uint32                              inflightSize			= 0;
-		uint64								smoothedRtt_ns			= 0;
-		uint64								rttVariance_ns			= 0;
-
+		uint32                              inflightSize			= 0;		// Original reliable bytes submitted locally and not yet ACKed; no send limit.
 		// reliable-only ACK receive state
+		bool                                hasReliabilityRecv       = false;
+		bool                                hasCumulativeAck         = false;
+		uint16                              cumulativeRecvSeq        = 0;
 		uint16                              latestReliabilityRecvSeq = 0;
 		uint16                              lastAckedReliabilitySeq = 0;
 		std::bitset<AckTrackSize>			ackTrack;							// latestReliabilityRecvSeq-relative receive state
 
 		bool                                ackDirty				= false;
-		uint16                              pendingAckSeq			= 0;
-		uint64                              pendingAckWindow		= 0;
+		AckData                             pendingAckData;
 		uint32                              pendingAckPacketCount	= 0;
 		uint64                              firstPendingAckTime_ns	= 0;
 
 		bool							StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns);
-		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns) const;
-		uint64							GetRetransmitTimeout(uint8 retryCount) const;
-		
+		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns, const RttState& rtt) const;
+		void							MarkInitialSend(uint16 seq, uint64 now_ns);
+
 		PendingPacket*					TryGetPending(uint16 seq);
 		const PendingPacket*			TryGetPending(uint16 seq) const;
 		void							ErasePendingPacket(uint16 seq);
@@ -192,11 +212,10 @@ namespace jam::net
 		void							MarkReceived(uint16 seq, uint64 now_ns);
 		void							MarkAckPending(uint64 now_ns);
 		void							BuildPendingAck();
-		void							ProcessAck(uint16 ackSeq, uint64 ackWindow, uint64 now_ns);
+		void							ProcessAck(const AckData& ack, uint64 ackRecvTime_ns, RttState& rtt);
 		bool							ShouldSendAck(uint64 now_ns) const;
 		void							ClearPendingAck();
 
-		uint64							BuildAckWindow() const;
 	};
 
 	// ============================================================
@@ -206,7 +225,7 @@ namespace jam::net
 	struct FragmentState
 	{
 		static constexpr uint16				MaxFragmentSize			= JAMNET_MTU;
-		static constexpr uint16				MaxFragmentPayloadSize	= MaxFragmentSize - PacketHeader::MAX_WIRE_SIZE - sizeof(ACK_DATA);
+		static constexpr uint16				MaxFragmentPayloadSize	= MaxFragmentSize - PacketHeader::MAX_WIRE_SIZE;
 		static constexpr uint8				MaxFragments			= UINT8_MAX;
 		static constexpr uint64				Timeout_ns				= 5_s;
 
@@ -298,48 +317,16 @@ namespace jam::net
 		std::array<int64, Window>	ownd					= {};
 		uint8						winCount				= 0;
 		uint8						winHead					= 0;
-		uint64						minRtt_ns				= UINT64_MAX;
-
 		bool						bIsServerSide			= false;
 		bool						bIsStabilized			= false;
 		uint64						currentPingInterval_ns	= PingIntervalInitial_ns;
 
 
-		void						ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4);
+		void						ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4, RttState& rtt);
 		int64						GetServerTime(uint64 clientTime_ns) const;
 		bool						ShouldSendPing(uint64 now_ns) const;
 	};
 
-
-	// ============================================================
-	// Congestion Control
-	// ============================================================
-
-	struct CongestionState
-	{
-		enum State : uint8
-		{
-			SLOW_START			 = 0,
-			CONGESTION_AVOIDANCE = 1,
-			FAST_RECOVERY		 = 2,
-		};
-
-		State		state		  = SLOW_START;
-		uint32		cwnd		  = 4   * JAMNET_MTU;
-		uint32		ssthresh	  = 32  * JAMNET_MTU;
-
-		uint32		minCwnd		  = 1   * JAMNET_MTU;
-		uint32		maxCwnd		  = 256 * JAMNET_MTU;
-
-		uint32		bytesInFlight = 0;
-		uint32		duplicateAcks = 0;
-
-		void		OnSend(uint32 packetSize);
-		void		OnAck(uint32 ackedBytes);
-		void		OnLoss();
-		void		OnTimeout();
-		bool		CanSend(uint32 packetSize) const;
-	};
 
 	// ============================================================
 	// Transmission Queue
@@ -349,34 +336,22 @@ namespace jam::net
 	{
 		static constexpr uint32		MaxTransportBatch = 32;
 		static constexpr uint64		FlushInterval_ns  = 1_ms;
-		static constexpr uint64		ImmediateCtrl_ns  = 0_ns;
-
-		enum Priority : uint8
-		{
-			CONTROL		= 0,
-			RETRANSMIT	= 1,
-			ACK_ONLY	= 2,
-			NORMAL		= 3,
-		};
 
 		struct PendingPacket
 		{
-			Priority					priority = NORMAL;
 			uint32						size	 = 0;
 			Packet						packet;
-			PacketChain					wire;
 		};
 
-		std::vector<PendingPacket>		queue;
+		std::deque<PendingPacket>		queue;
 		uint64							lastFlushTime_ns = 0;
 		uint64							bytesQueued		 = 0;
 		bool							flushRequested	 = false;
 
-		void						Enqueue(Packet packet, Priority priority);
+		void						Enqueue(Packet packet);
 		bool						ShouldFlush(uint64 now_ns) const;
 		void						Clear();
 	};
-	using TxPriority	  = TransmissionWaitingQueue::Priority;
 	using TxPendingPacket = TransmissionWaitingQueue::PendingPacket;
 
 } // namespace jam::net

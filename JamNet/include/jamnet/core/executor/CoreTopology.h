@@ -59,7 +59,7 @@ namespace jam
 	{
 		ExecutorAffinityConfig cfg{};
 		cfg.useProfileDefaults  = false;
-		cfg.pinShardWorkers     = true;
+		cfg.pinShardWorkers     = false;
 		cfg.pinIocpWorkers      = false;
 		cfg.pinMainThread       = false;
 

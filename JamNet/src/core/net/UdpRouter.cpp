@@ -248,8 +248,8 @@ namespace jam::net
 
 			if (numOfBytes > 0)
 				ProcessSend(numOfBytes, ev->remoteAddr);
-			ev->chain.Clear();
-			ev->wsaBufs.clear();
+			ev->datagram.Clear();
+			ev->wsaBufCount = 0;
 			ObjectPool<UdpSendEvent>::Push(ev);
 			break;
 		}
@@ -258,67 +258,79 @@ namespace jam::net
 		}
 	}
 
-
-	void UdpRouter::RegisterSend(std::vector<PacketChain>&& chains, const NetAddress& to)
+	bool UdpRouter::RegisterSend(Datagram&& datagram, const NetAddress& to, const std::span<const WireTimePatch> wireTimePatches, uint64* submitTime_ns)
 	{
-		if (IsClosing())
-			return;
+		if (submitTime_ns)
+			*submitTime_ns = 0;
 
-		for (auto& chain : chains)
+		if (IsClosing() || datagram.Empty()) return false;
+
+		auto* ev = ObjectPool<UdpSendEvent>::Pop();
+		ev->Init();
+		ev->remoteAddr = to;
+		ev->datagram   = std::move(datagram);
+
+		const auto& parts = ev->datagram.Parts();
+		if (parts.size() > ev->wsaBufs.size())
 		{
-			if (chain.Empty()) continue;
+			JAM_ASSERT(false);
+			ev->datagram.Clear();
+			ObjectPool<UdpSendEvent>::Push(ev);
+			return false;
+		}
+		ev->wsaBufCount = 0;
 
-			auto* ev = ObjectPool<UdpSendEvent>::Pop();
-			ev->Init();
-			ev->remoteAddr = to;
-			ev->chain      = std::move(chain);
-
-			const auto& parts = ev->chain.Parts();
-			ev->wsaBufs.clear();
-			ev->wsaBufs.reserve(parts.size());
-
-			for (const BufferSlice& part : parts)
-			{
-				if (!part.IsValid() || part.Size() == 0)
-					continue;
-
-				WSABUF w{};
-				w.buf = reinterpret_cast<char*>(part.Head());
-				w.len = static_cast<ULONG>(part.Size());
-				ev->wsaBufs.push_back(w);
-			}
-
-			if (ev->wsaBufs.empty())
-			{
-				ev->chain.Clear();
-				ev->wsaBufs.clear();
-				ObjectPool<UdpSendEvent>::Push(ev);
+		for (const OwnedBufferSlice& ownedPart : parts)
+		{
+			const BufferSlice& part = ownedPart.Get();
+			if (!part.IsValid() || part.Size() == 0)
 				continue;
-			}
 
-			PatchOutgoingSystemWireTime(ev->chain, CaptureWireTimestampNow());
+			WSABUF w{};
+			w.buf = reinterpret_cast<char*>(part.Head());
+			w.len = static_cast<ULONG>(part.Size());
+			ev->wsaBufs[ev->wsaBufCount++] = w;
+		}
 
-			if (!TryAddPendingDispatch())
+		if (ev->wsaBufCount == 0)
+		{
+			ev->datagram.Clear();
+			ObjectPool<UdpSendEvent>::Push(ev);
+			return false;
+		}
+
+		if (!TryAddPendingDispatch())
+		{
+			ev->datagram.Clear();
+			ev->wsaBufCount = 0;
+			ObjectPool<UdpSendEvent>::Push(ev);
+			return false;
+		}
+
+		const uint64 wireTime_ns = CaptureWireTimestampNow();
+		ApplyWireTimePatches(wireTimePatches, wireTime_ns);
+
+		const int32 sendResult = ::WSASendTo(m_socket, ev->wsaBufs.data(), ev->wsaBufCount, nullptr, 0, ev->remoteAddr.GetSockAddrPtr(), sizeof(SOCKADDR_IN), ev, nullptr);
+		if (SOCKET_ERROR == sendResult)
+		{
+			const int32 ec = win_error::GetLastWsaError();
+			if (!win_error::IsIoPending(ec))
 			{
-				ev->chain.Clear();
-				ev->wsaBufs.clear();
+				ReleasePendingDispatch();
+				HandleError(ec);
+				ev->datagram.Clear();
+				ev->wsaBufCount = 0;
 				ObjectPool<UdpSendEvent>::Push(ev);
-				continue;
-			}
-			if (SOCKET_ERROR == ::WSASendTo(m_socket, ev->wsaBufs.data(), static_cast<DWORD>(ev->wsaBufs.size()), nullptr, 0, ev->remoteAddr.GetSockAddrPtr(), sizeof(SOCKADDR_IN), ev, nullptr))
-			{
-				const int32 ec = win_error::GetLastWsaError();
-				if (!win_error::IsIoPending(ec))
-				{
-					ReleasePendingDispatch();
-					HandleError(ec);
-					ev->chain.Clear();
-					ev->wsaBufs.clear();
-					ObjectPool<UdpSendEvent>::Push(ev);
-				}
+				return false;
 			}
 		}
+
+		if (submitTime_ns)
+			*submitTime_ns = wireTime_ns;
+		// Completion may already have recycled ev; do not access it after submission.
+		return true;
 	}
+
 
 	void UdpRouter::RegisterRecv()
 	{
@@ -340,7 +352,6 @@ namespace jam::net
 		ev->wsaBuf.buf		= reinterpret_cast<char*>(ev->reservation.Data());
 		ev->wsaBuf.len		= static_cast<ULONG>(ev->reservation.Capacity());
 		ev->remoteAddrLen   = sizeof(SOCKADDR_IN);
-
 		if (!TryAddPendingDispatch())
 		{
 			RecycleUdpRecvEvent(ev);
@@ -348,7 +359,8 @@ namespace jam::net
 		}
 
 
-		if (SOCKET_ERROR == ::WSARecvFrom(m_socket, &ev->wsaBuf, 1, nullptr, &ev->flags, ev->remoteAddr.GetSockAddrPtr(), OUT &ev->remoteAddrLen, ev, nullptr))
+		const int32 recvResult = ::WSARecvFrom(m_socket, &ev->wsaBuf, 1, nullptr, &ev->flags, ev->remoteAddr.GetSockAddrPtr(), OUT &ev->remoteAddrLen, ev, nullptr);
+		if (SOCKET_ERROR == recvResult)
 		{
 			const int32 error = win_error::GetLastWsaError();
 			if (!win_error::IsIoPending(error))

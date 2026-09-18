@@ -78,7 +78,6 @@ namespace jam::net
 		entt::entity                        e;
 		PacketHeaderView                    header;
 		Packet                              packet;
-		TxPriority                          priority        = TxPriority::NORMAL;
 		uint64                              now_ns          = 0_ns;
 		bool                                bIsFragmentized = false;
 	};
@@ -121,8 +120,6 @@ namespace jam::net
 	// Helper Functions
 	// ============================================================
 
-	void ConnectHandshake(entt::entity e);
-	void DisconnectHandshake(entt::entity e);
 
 	bool SendPacketToSession(entt::entity e, Packet packet);
 

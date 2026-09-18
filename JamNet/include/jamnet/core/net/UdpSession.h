@@ -1,6 +1,7 @@
 #pragma once
 #include "jamnet/core/executor/RuntimeId.h"
 #include "jamnet/core/net/IocpEvent.h"
+#include "jamnet/core/net/PacketWireTime.h"
 #include "jamnet/core/net/Session.h"
 
 namespace jam
@@ -38,9 +39,9 @@ namespace jam::net
 		void							ProcessRecv(int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns);
 
 	private:
-		void							RegisterSend(std::vector<PacketChain>&& chains);
+		bool							RegisterSend(Packet packet);
+		bool							RegisterSend(Datagram&& datagram, std::span<const WireTimePatch> wireTimePatches = {}, uint64* submitTime_ns = nullptr);
 		void							ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns);
-		void							SendImmediatePacket(Packet packet);
 		void							ProcessConnect();
 		void							ProcessDisconnect();
 

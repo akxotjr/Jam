@@ -18,7 +18,6 @@ namespace jam::net
 {
 	class AdmissionContext;
 
-	void FlushTransportEntity(ShardLocal& L, entt::entity entity, uint64 now_ns);
 	void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
 
 	class TcpSession : public Session
@@ -27,7 +26,6 @@ namespace jam::net
 		friend class TcpListener;
 		friend class IocpCore;
 		friend class Service;
-		friend void FlushTransportEntity(ShardLocal& L, entt::entity entity, uint64 now_ns);
 		friend void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
 
 	public:
@@ -50,7 +48,8 @@ namespace jam::net
 
 		bool					RegisterConnect();
 		bool					RegisterDisconnect();
-		void					RegisterSend(std::vector<PacketChain>&& chains);
+		void					RegisterSend(Packet packet);
+		void					RegisterSend(Stream&& stream);
 		void					RegisterRecv();
 
 		void					ProcessInboundConnect();
@@ -65,7 +64,6 @@ namespace jam::net
 		void					TrySessionBinding();
 		void					ScheduleSessionBindingRetry();
 
-		void					SendImmediatePacket(Packet packet);
 		void					HandleError(int32 errorCode);
 
 	protected:

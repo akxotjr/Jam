@@ -86,9 +86,19 @@ namespace jam::net
 	}
 
 	
-	Packet PacketBuilder::CreateAckPacket(const ACK_DATA& ack)
+	Packet PacketBuilder::CreateAckPacket(const AckHeader& header, const AckRange* ranges)
 	{
-		return CreatePacketInternal(E2U(ePacketType::ACK), E2U(eAckPacketId::ACK), PacketFlags::NONE, E2U(eChannel::UDP_DEFAULT), &ack, sizeof(ACK_DATA));
+		if (header.rangesCount > kMaxAckRanges || (header.rangesCount != 0 && ranges == nullptr))
+			return {};
+
+		std::array<BYTE, sizeof(AckHeader) + sizeof(AckRange) * kMaxAckRanges> payload{};
+		const uint32 rangesSize = sizeof(AckRange) * header.rangesCount;
+		std::memcpy(payload.data(), &header, sizeof(AckHeader));
+		if (rangesSize != 0)
+			std::memcpy(payload.data() + sizeof(AckHeader), ranges, rangesSize);
+
+		return CreatePacketInternal(E2U(ePacketType::ACK), E2U(eAckPacketId::ACK), PacketFlags::NONE,
+			E2U(eChannel::UDP_DEFAULT), payload.data(), static_cast<uint32>(sizeof(AckHeader)) + rangesSize);
 	}
 
 

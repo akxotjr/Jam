@@ -38,7 +38,7 @@ namespace jam::net
 
 		// Getter
 		uint8			GetType()			 const { return static_cast<uint8>((GetFixedBits() & TYPE_MASK) >> TYPE_SHIFT); }				// 2 bit
-		uint8			GetId()				 const { return static_cast<uint8>((GetFixedBits() & ID_MASK) >> ID_SHIFT); }						// 5 bit  
+		uint8			GetId()				 const { return static_cast<uint8>((GetFixedBits() & ID_MASK) >> ID_SHIFT); }						// 5 bit
 		uint16			GetSize()			 const { return static_cast<uint16>((GetFixedBits() & SIZE_MASK) >> SIZE_SHIFT); }				// 11 bit
 		uint8			GetFlags()			 const { return static_cast<uint8>((GetFixedBits() & FLAGS_MASK) >> FLAGS_SHIFT); }				// 4 bit
 		uint8			GetChannel()		 const { return static_cast<uint8>((GetFixedBits() & CHANNEL_MASK) >> CHANNEL_SHIFT); }
@@ -205,11 +205,10 @@ namespace jam::net
 
 	static_assert(sizeof(PacketHeader) == PacketHeader::MAX_WIRE_SIZE, "PacketHeader wire layout must remain packed to 10 bytes");
 
-	// 개별 ACK 패킷 크기 (BaseHeader + ACK_DATA)
-	constexpr uint16 ACK_PACKET_SIZE  = PacketHeader::BASE_SIZE + sizeof(ACK_DATA);
+	constexpr uint16 MIN_ACK_PACKET_SIZE = PacketHeader::BASE_SIZE + sizeof(AckHeader);
 
-	// 최대 페이로드 크기(보수): 최대 헤더 + Piggyback ACK 데이터 공간을 고려
-	constexpr uint16 MAX_PAYLOAD_SIZE = JAMNET_MTU - PacketHeader::MAX_WIRE_SIZE - sizeof(ACK_DATA);
+	// Maximum payload after reserving the largest wire header.
+	constexpr uint16 MAX_PAYLOAD_SIZE = JAMNET_MTU - PacketHeader::MAX_WIRE_SIZE;
 
 
 
@@ -317,9 +316,9 @@ namespace jam::net
 		// Common
 		static Packet		CreatePacket(ePacketType type, uint8 id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UDP_DEFAULT, const void* payload = nullptr, uint32 payloadSize = 0, uint16 recencySeq = 0, uint16 reliabilitySeq = 0, uint16 orderSeq = 0, uint8 fragIndex = 0, uint8 fragTotal = 0);
 
-		// System 
+		// System
 		static Packet		CreateSystemPacket(eSystemPacketId id, uint8 flags = PacketFlags::NONE, eChannel channel = eChannel::UDP_DEFAULT, const void* payload = nullptr, uint32 payloadSize = 0);
-		
+
 		static Packet		CreateTcpBindReqPacket(const TCP_BIND_REQ_DATA& req);
 		static Packet		CreateTcpBindResPacket(const TCP_BIND_RES_DATA& res);
 		static Packet		CreateUdpBindReqPacket(const UDP_BIND_REQ_DATA& req);
@@ -330,8 +329,8 @@ namespace jam::net
 		static Packet		CreatePingPacket(const PING_DATA& ping);
 		static Packet		CreatePongPacket(const PONG_DATA& pong);
 
-		// Ack 
-		static Packet		CreateAckPacket(const ACK_DATA& ack);
+		// Ack
+		static Packet		CreateAckPacket(const AckHeader& header, const AckRange* ranges);
 
 		// Rpc
 		static Packet		CreateRpcPacket(const RpcHeader* rpc, const void* payload = nullptr, uint32 payloadSize = 0, uint8 flags = PacketFlags::NONE, eChannel ch = eChannel::RELIABLE_ORDERED);
