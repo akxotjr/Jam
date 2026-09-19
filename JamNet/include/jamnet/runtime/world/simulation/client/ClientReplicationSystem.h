@@ -45,7 +45,7 @@ namespace jam::net
     struct PendingSnapshot
     {
         fb::fbSnapshotT snapshot = {};
-        uint64          recvNs   = 0;
+        Timestamp       recvNs   = Timestamp::Zero();
     };
 
     struct PendingSnapshotBatch
@@ -54,8 +54,8 @@ namespace jam::net
         uint32                          inputAck = 0;
         uint32                          inputEpoch = 0;
         uint16                          expectedChunkCount = 1;
-        uint64                          firstRecvNs = 0;
-        uint64                          lastRecvNs = 0;
+        Timestamp                       firstRecvNs = Timestamp::Zero();
+        Timestamp                       lastRecvNs  = Timestamp::Zero();
         std::vector<std::optional<PendingSnapshot>> chunks;
 
         bool IsComplete() const
@@ -118,7 +118,7 @@ namespace jam::net
         void                                Tick();
 
         void                                EnqueueLifecycle(fb::fbLifecycleBatchT batch);
-        void                                EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs);
+        void                                EnqueueSnapshot(fb::fbSnapshotT snapshot, Timestamp recvNs);
         void                                AcceptHeadlessSnapshot(const fb::fbSnapshot& snapshot);
 
         bool                                IsLocalActor(ActorId actorId) const { return actorId == m_localActorId; }

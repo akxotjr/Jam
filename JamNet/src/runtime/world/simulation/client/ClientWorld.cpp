@@ -71,14 +71,14 @@ namespace jam::net
 		return true;
 	}
 
-	void ClientWorld::Start(uint64 dt_ns)
+	void ClientWorld::Start(Duration dt)
 	{
-		StartTickPipeline({ DOMAIN_PHYSICS, m_pipelineSubtype }, dt_ns);
+		StartTickPipeline({ DOMAIN_PHYSICS, m_pipelineSubtype }, dt);
 	}
 
-	void ClientWorld::Resume(uint64 dt_ns)
+	void ClientWorld::Resume(Duration dt)
 	{
-		Start(dt_ns);
+		Start(dt);
 	}
 
 	void ClientWorld::Stop()
@@ -283,7 +283,7 @@ namespace jam::net
 
 		const auto payload = codec::EncodeSpawnPlayerRequest(correlation, params);
 
-		RPCCallOptions opt{ .channel = eChannel::TCP_DEFAULT, .timeout_ns = 15_s };
+		RPCCallOptions opt{ .channel = eChannel::TCP_DEFAULT, .timeout = 15_s };
 		RPCCallAsync<fb::fbSpawnPlayerReq, fb::fbSpawnPlayerRes>(
 			m_principal->tcp,
 			payload.data,
@@ -306,7 +306,7 @@ namespace jam::net
 			m_principal->udp, 
 			payload.data,
 			payload.size,
-			{ .channel = eChannel::RELIABLE_ORDERED, .timeout_ns = 1_s },
+			{ .channel = eChannel::RELIABLE_ORDERED, .timeout = 1_s },
 			[this, requestId = params.clientRequestId](std::optional<RPCTableRef<fb::fbSpawnActorRes>> res)
 			{
 				OnSpawnActorResponse(requestId, std::move(res));
@@ -317,7 +317,7 @@ namespace jam::net
 	{
 		const auto payload = codec::EncodeDespawnActorRequest(GetWorldRef(), request.actorId);
 
-		RPCCallOptions opt{ .channel = eChannel::RELIABLE_ORDERED, .timeout_ns = 1_s };
+		RPCCallOptions opt{ .channel = eChannel::RELIABLE_ORDERED, .timeout = 1_s };
 		RPCCallAsync<fb::fbDespawnActorReq, fb::fbDespawnActorRes>(
 			m_principal->udp,
 			payload.data,
@@ -342,7 +342,7 @@ namespace jam::net
 			m_principal->tcp, 
 			payload.data,
 			payload.size,
-			{ .channel = eChannel::TCP_DEFAULT, .timeout_ns = 10_s },
+			{ .channel = eChannel::TCP_DEFAULT, .timeout = 10_s },
 			[this, requestId = request.requestId, actorId = request.actorId](std::optional<RPCTableRef<fb::fbDespawnPlayerRes>> res)
 			{
 				OnDespawnPlayerResponse(requestId, actorId, std::move(res));
@@ -552,7 +552,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 
 		const auto unpacked = fb::UnPackfbSnapshot(view.Payload());
 		if (unpacked)
-			repl->EnqueueSnapshot(std::move(*unpacked), NOW_NS());
+			repl->EnqueueSnapshot(std::move(*unpacked), NOW());
 	}
 
 

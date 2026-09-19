@@ -33,8 +33,8 @@ namespace jam
 
 		uint32                  SpawnFiber(FiberFn fn, const FiberDesc& desc = {});
 		void                    YieldFiber();
-		void                    SleepUntil(uint64 wakeup_ns);
-		bool                    Suspend(FiberAwaitKey key, uint64 deadline_ns); // true=정상, false=타임아웃/취소
+		void                    SleepUntil(Timestamp wakeup);
+		bool                    Suspend(FiberAwaitKey key, Timestamp deadline); // true=정상, false=타임아웃/취소
 
 		// inside
 		bool                    Resume(FiberAwaitKey key);
@@ -51,8 +51,8 @@ namespace jam
 
 
 		void                    DrainInbox();
-		void                    Poll(int32 budget, uint64 now_ns);
-		uint64                  NextWakeupTime() const;
+		void                    Poll(int32 budget, Timestamp now);
+		Timestamp               NextWakeupTime() const;
 		void                    ResetProfile() { m_metrics = {}; }
 
 		uint32                  Current() const;
@@ -78,8 +78,8 @@ namespace jam
 
 			eFiberState     state           = eFiberState::Ready;
 			eResumeCode     resume          = eResumeCode::None;
-			uint64          wakeup_ns       = 0_ns;
-			uint64          deadline_ns     = 0_ns;
+			Timestamp       wakeup          = Timestamp::Zero();
+			Timestamp       deadline        = Timestamp::Zero();
 			uint64          sleepGeneration = 0;
 			FiberAwaitKey   awaitKey        = 0;
 			bool            inReadyQ        = false;
@@ -90,8 +90,8 @@ namespace jam
 			CancelToken*    cancel          = nullptr;
 			uint64          switches        = 0;
 			uint64          steps           = 0;
-			uint64          runtimeAcc_ns   = 0_ns;
-			uint64          lastRunStart_ns = 0_ns;
+			Duration        runtimeAcc      = 0_ns;
+			Timestamp       lastRunStart    = Timestamp::Zero();
 			uint64          stackUsed       = 0;
 			uint64          stackTotal      = 0;
 			uint64          stackPeak       = 0;
@@ -145,7 +145,7 @@ namespace jam
 
 		struct SleepItem
 		{
-			uint64          wakeup_ns  = 0_ns;
+			Timestamp       wakeup	   = Timestamp::Zero();
 			uint32          fiberId    = 0;
 			uint64          generation = 0;
 		};
@@ -154,7 +154,7 @@ namespace jam
 		{
 			bool operator()(const SleepItem& a, const SleepItem& b) const
 			{
-				return a.wakeup_ns > b.wakeup_ns;
+				return a.wakeup > b.wakeup;
 			}
 		};
 
@@ -176,7 +176,7 @@ namespace jam
 		void                        CompleteAwait(Fiber* f, eResumeCode rc, eCancelCode cc = eCancelCode::None);
 		void                        DrainResumeInbox();
 
-		void                        WakeupTimed(uint64 wakeup_ns);
+		void                        WakeupTimed(Timestamp wakeup);
 
 	private:
 

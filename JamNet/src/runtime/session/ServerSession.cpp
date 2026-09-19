@@ -155,7 +155,7 @@ namespace jam::net
 				return;
 
 			if (auto* coordinator = m_manager->GetWorldTransitionSystem())
-				coordinator->OnClientWorldSyncResult(m_userId, result, NOW_NS());
+				coordinator->OnClientWorldSyncResult(m_userId, result, NOW());
 
 			return;
 		}

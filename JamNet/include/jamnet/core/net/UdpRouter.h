@@ -88,11 +88,11 @@ namespace jam::net
 		HANDLE					GetHandle() override;
 		void					Dispatch(IocpEvent* iocpEvent, int32 numOfBytes = 0) override;
 
-		bool					RegisterSend(Datagram&& datagram, const NetAddress& to, std::span<const WireTimePatch> wireTimePatches = {}, uint64* submitTime_ns = nullptr);
+		bool					RegisterSend(Datagram&& datagram, const NetAddress& to, std::span<const WireTimePatch> wireTimePatches = {}, Timestamp* submitTime = nullptr);
 		void					RegisterRecv();
 
 		void					ProcessSend(int32 numOfBytes, const NetAddress& remoteAddr);
-		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddr, UdpRecvEvent* recvEvent, uint64 ingressRecvTime_ns);
+		void					ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddr, UdpRecvEvent* recvEvent, Timestamp ingressRecvTime);
 
 		void					HandleError(int32 errorCode);
 

@@ -136,7 +136,7 @@ namespace jam::net
 			return;
 		}
 
-		m_worldTransitions->Enter(userId, request, NOW_NS());
+		m_worldTransitions->Enter(userId, request, NOW());
 	}
 
 	void ServerNetworkManager::LeaveWorld(UserId userId, const LeaveWorldRequest& request)
@@ -310,9 +310,9 @@ namespace jam::net
 				Job([coordinator]()
 					{
 						if (const auto locked = coordinator.lock())
-							locked->Tick(NOW_NS());
+							locked->Tick(NOW());
 					}, eJobPriority::Control),
-				{ .period_ns = 100_ms, .initialDelay_ns = 100_ms, .name = "WorldTransition.Tick" });
+				{ .period = 100_ms, .initialDelay = 100_ms, .name = "WorldTransition.Tick" });
 			m_worldTransitionTicks.emplace_back(shard, handle);
 		}
 	}

@@ -66,7 +66,7 @@ namespace jam
 		void											Join();	
 
 		void											Submit(Job j) override;
-		void											SubmitAfter(Job j, uint64 delay_ns);
+		void											SubmitAfter(Job j, Duration delay);
 		void											SubmitMetrics(MetricSnapshot snapshot);
 		MetricsAggregator*								GetMetricsAggregator() const { return m_metricsAggregator.get(); }
 
@@ -112,8 +112,8 @@ namespace jam
 			uint64	loopCount		= 0;
 			uint64	jobExecCount	= 0;
 			uint64	idleLoopCount	= 0;
-			uint64	waitCost_ns		= 0_ns;
-			uint64	jobExecCost_ns	= 0_ns;
+			uint64	waitCost_ns		= 0;
+			uint64	jobExecCost_ns	= 0;
 		};
 
 		struct FiberWorkerMetrics
@@ -121,8 +121,8 @@ namespace jam
 			uint64	loopCount		= 0;
 			uint64	pollCount		= 0;
 			uint64	emptyPollCount	= 0;
-			uint64	pollCost_ns		= 0_ns;
-			uint64	sleepCost_ns	= 0_ns;
+			uint64	pollCost_ns		= 0;
+			uint64	sleepCost_ns	= 0;
 			uint64	readyRunCount	= 0;
 		};
 
@@ -139,7 +139,7 @@ namespace jam
 		void									IocpWorkerLoop(std::shared_ptr<IocpDomain> domain);
 		void									FiberLoop();
 		void									NotifyFiberWorkAvailable() const;
-		void									WaitForFiberWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns) const;
+		void									WaitForFiberWorkOrTimeout(uint64 observedWakeEpoch, Duration timeout) const;
 
 		void									StartIocpDomain(const std::shared_ptr<IocpDomain>& domain);
 		void									StopIocpDomain(const std::shared_ptr<IocpDomain>& domain);
@@ -155,7 +155,7 @@ namespace jam
 		OffloadWorkerMetrics					GetOffloadMetricsSnapshot(const MetricsSlot<OffloadWorkerMetrics>& slot) const;
 		FiberWorkerMetrics						GetFiberMetricsSnapshot(const MetricsSlot<FiberWorkerMetrics>& slot) const;
 		GlobalExecutorMetrics					CaptureExecutorMetrics() const;
-		void									SubmitExecutorMetricsWindow(uint64 now_ns);
+		void									SubmitExecutorMetricsWindow(Timestamp now);
 
 	private:
 
@@ -199,8 +199,8 @@ namespace jam
 		struct PeriodicState
 		{
 			std::atomic<bool>	cancelled		= false;
-			uint64				period_ns		= 0_ns;
-			uint64				initialDelay_ns = 0_ns;
+			Duration			period		= 0_ns;
+			Duration			initialDelay = 0_ns;
 			int32				maxCatchUp		= 0;
 			bool				fixedRate		= true;
 			FiberAwaitKey		awaitKey		= 0;

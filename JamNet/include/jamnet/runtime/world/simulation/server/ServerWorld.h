@@ -34,8 +34,8 @@ namespace jam::net
 		ServerWorld(const WorldConfig& config, std::unique_ptr<IWorldContent> content = {}, EnterWorldHandler enterWorld = {});
 		~ServerWorld() override;
 
-		void								Start(uint64 dt_ns) override;
-		void								Resume(uint64 dt_ns) override;
+		void								Start(Duration dt) override;
+		void								Resume(Duration dt) override;
 		void								Stop() override;
 
 		void								HandleWorldPacket(UserId userId, Packet packet) override;
@@ -79,7 +79,7 @@ namespace jam::net
 		void								ProcessGameInput(UserId userId, const PacketHeaderView& pkt);
 		void								FinalizePendingPlayerSpawns();
 		void								CompletePendingPlayerSpawn(UserId userId, ActorId actorId, ePlayerSpawnFailure failure);
-		void                                SubmitWorldMetrics(uint64 nowNs);
+		void                                SubmitWorldMetrics(Timestamp nowNs);
 
 	private:
 		std::unordered_map<uint64, entt::entity>	m_userToControlledEntity;
@@ -97,7 +97,7 @@ namespace jam::net
 			ClientRequestId			clientRequestId = kInvalidClientRequestId;
 			ActorId					actorId = ActorId::Invalid();
 			entt::entity			entity = entt::null;
-			uint64					deadlineNs = 0;
+			Timestamp				deadlineNs = Timestamp::Zero();
 			std::vector<std::function<void(ActorId, ePlayerSpawnFailure)>> completions;
 		};
 

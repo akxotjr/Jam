@@ -8,14 +8,14 @@ namespace jam::net
 	//	SessionInfo
 	// ============================================================
 
-	SessionInfo SessionInfo::FromSession(Session* session, uint64 now_ns)
+	SessionInfo SessionInfo::FromSession(Session* session, Timestamp now)
 	{
 		SessionInfo comp;
-		comp.session			= session;
-		comp.connectedTime_ns	= now_ns;
-		comp.lastRecvTime_ns	= now_ns;
-		comp.lastSendTime_ns	= now_ns;
-		comp.state				= State::CONNECTED;
+		comp.session		= session;
+		comp.connectedTime	= now;
+		comp.lastRecvTime	= now;
+		comp.lastSendTime	= now;
+		comp.state			= State::CONNECTED;
 
 		return comp;
 	}
@@ -25,7 +25,7 @@ namespace jam::net
 	//	FragmentState
 	// ============================================================
 
-	bool FragmentState::Reassembly::AddFragment(uint8 index, const BYTE* data, uint32 size, uint64 now_ns)
+	bool FragmentState::Reassembly::AddFragment(uint8 index, const BYTE* data, uint32 size, Timestamp now)
 	{
 		if (index >= totalFragments)  // invalid fragment
 			return false;
@@ -36,7 +36,7 @@ namespace jam::net
 		fragments[index].assign(data, data + size);
 		receivedMask.set(index);
 		receivedCount++;
-		lastRecvTime_ns = now_ns;
+		lastRecvTime = now;
 
 		return true;
 	}
@@ -52,7 +52,7 @@ namespace jam::net
 	}
 
 
-	bool FragmentState::AddFragment(uint16 fragmentId, uint8 totalFragments, const uint8 index, const BYTE* data, const uint32 size, uint64 now_ns)
+	bool FragmentState::AddFragment(uint16 fragmentId, uint8 totalFragments, const uint8 index, const BYTE* data, const uint32 size, Timestamp now)
 	{
 		auto it = reassemblies.find(fragmentId);
 		if (it == reassemblies.end())
@@ -60,12 +60,12 @@ namespace jam::net
 			auto [newIt, inserted] = reassemblies.emplace(
 				std::piecewise_construct,
 				std::forward_as_tuple(fragmentId),
-				std::forward_as_tuple(fragmentId, totalFragments, now_ns)
+				std::forward_as_tuple(fragmentId, totalFragments, now)
 			);
 			it = newIt;
 		}
 
-		return it->second.AddFragment(index, data, size, now_ns);
+		return it->second.AddFragment(index, data, size, now);
 	}
 
 	std::optional<std::vector<BYTE>> FragmentState::PopCompleted(const uint16 fragmentId)
@@ -82,11 +82,11 @@ namespace jam::net
 		return result;
 	}
 
-	void FragmentState::CleanupTimeouts(const uint64 now_ns)
+	void FragmentState::CleanupTimeouts(const Timestamp now)
 	{
 		for (auto it = reassemblies.begin(); it != reassemblies.end(); )
 		{
-			if (now_ns - it->second.lastRecvTime_ns > Timeout_ns)
+			if (now - it->second.lastRecvTime > Timeout)
 			{
 				timeoutDrops++;
 				it = reassemblies.erase(it);
@@ -101,7 +101,7 @@ namespace jam::net
 	//  OrderState
 	// ============================================================
 
-	bool OrderState::StoreRecvPacket(uint16 orderSeq, uint16 span, ::jam::net::Packet packet, uint64 now_ns)
+	bool OrderState::StoreRecvPacket(uint16 orderSeq, uint16 span, ::jam::net::Packet packet, Timestamp now)
 	{
 		if (pendings.size() >= MaxRecvBufferSize)
 			return false;
@@ -112,7 +112,7 @@ namespace jam::net
 		pendings.emplace(orderSeq, OrderedPacket{
 			.orderSeq    = orderSeq,
 			.span		 = span,
-			.recvTime_ns = now_ns,
+			.recvTime    = now,
 			.packet		 = std::move(packet)
 		});
 		return true;
@@ -139,58 +139,58 @@ namespace jam::net
 	// ============================================================
 	//  ReliabilityState
 	// ============================================================
-	void RttState::OnSample(uint64 sample_ns, uint64 peerDelay_ns)
+	void RttState::OnSample(Duration sample, Duration peerDelay)
 	{
-		if (sample_ns == 0)
+		if (sample.IsZero())
 			return;
 
-		latestRtt_ns = sample_ns;
-		minRtt_ns = std::min(minRtt_ns, sample_ns);
+		latestRtt = sample;
+		minRtt = std::min(minRtt, sample);
 
-		uint64 adjustedSample_ns = sample_ns;
-		if (peerDelay_ns != 0 && minRtt_ns != UINT64_MAX && sample_ns > minRtt_ns && sample_ns - minRtt_ns > peerDelay_ns)
-			adjustedSample_ns -= peerDelay_ns;
+		Duration adjustedSample = sample;
+		if (!peerDelay.IsZero() && minRtt != Duration::Max() && sample > minRtt && sample - minRtt > peerDelay)
+			adjustedSample -= peerDelay;
 
-		if (smoothedRtt_ns == 0)
+		if (smoothedRtt.IsZero())
 		{
-			smoothedRtt_ns = adjustedSample_ns;
-			rttVariance_ns = adjustedSample_ns / 2;
+			smoothedRtt = adjustedSample;
+			rttVariance = adjustedSample / 2;
 			return;
 		}
 
-		const uint64 deviation = smoothedRtt_ns > adjustedSample_ns ? smoothedRtt_ns - adjustedSample_ns : adjustedSample_ns - smoothedRtt_ns;
+		const Duration deviation = smoothedRtt > adjustedSample ? smoothedRtt - adjustedSample : adjustedSample - smoothedRtt;
 
-		rttVariance_ns = (3 * rttVariance_ns + deviation) / 4;
-		smoothedRtt_ns = (7 * smoothedRtt_ns + adjustedSample_ns) / 8;
+		rttVariance = (3 * rttVariance + deviation) / 4;
+		smoothedRtt = (7 * smoothedRtt + adjustedSample) / 8;
 	}
 
-	void RttState::OnReliableSample(const uint64 sample_ns, const uint64 peerDelay_ns)
+	void RttState::OnReliableSample(const Duration sample, const Duration peerDelay)
 	{
-		OnSample(sample_ns, peerDelay_ns);
-		if (sample_ns != 0)
+		OnSample(sample, peerDelay);
+		if (!sample.IsZero())
 			hasReliableSample = true;
 	}
 
-	void RttState::OnTimeSyncSample(const uint64 sample_ns)
+	void RttState::OnTimeSyncSample(const Duration sample)
 	{
 		if (!hasReliableSample)
-			OnSample(sample_ns);
+			OnSample(sample);
 	}
 
-	uint64 RttState::GetRetransmitTimeout(uint8 retryCount) const
+	Duration RttState::GetRetransmitTimeout(uint8 retryCount) const
 	{
-		constexpr uint64 InitialRetransmitTimeout_ns = 250_ms;
-		constexpr uint64 MinRetransmitTimeout_ns = 50_ms;
-		constexpr uint64 MaxRetransmitTimeout_ns = 1_s;
-		constexpr uint64 MaxBackoffTimeout_ns = 2_s;
+		constexpr Duration InitialRetransmitTimeout = 250_ms;
+		constexpr Duration MinRetransmitTimeout = 50_ms;
+		constexpr Duration MaxRetransmitTimeout = 1_s;
+		constexpr Duration MaxBackoffTimeout = 2_s;
 		constexpr uint8 MaxBackoffShift = 4;
 
-		const uint64 baseRto = smoothedRtt_ns == 0 ? InitialRetransmitTimeout_ns : std::clamp(smoothedRtt_ns + 4 * rttVariance_ns, MinRetransmitTimeout_ns, MaxRetransmitTimeout_ns);
+		const Duration baseRto = smoothedRtt.IsZero() ? InitialRetransmitTimeout : std::clamp(smoothedRtt + 4 * rttVariance, MinRetransmitTimeout, MaxRetransmitTimeout);
 		const uint8 shift = std::min(retryCount, MaxBackoffShift);
-		return std::min(baseRto << shift, MaxBackoffTimeout_ns);
+		return std::min(baseRto * (1ull << shift), MaxBackoffTimeout);
 	}
 
-	bool ReliabilityState::StoreSendPacket(eChannel ch, Packet packet, uint16 reliabilitySeq, uint64 now_ns)
+	bool ReliabilityState::StoreSendPacket(eChannel ch, Packet packet, uint16 reliabilitySeq, Timestamp now)
 	{
 		if (!IsReliableChannel(ch))
 			return false;
@@ -201,8 +201,8 @@ namespace jam::net
 		reliablePendings.emplace(reliabilitySeq, PendingPacket{
 				.reliabilitySeq	   = reliabilitySeq,
 				.channel			   = ch,
-				.sendTime_ns		   = now_ns,
-				.lastTransmitTime_ns   = now_ns,
+				.sendTime			   = now,
+				.lastTransmitTime	   = now,
 				.retryCount			   = 0,
 				.packet				   = packet
 			});
@@ -210,19 +210,19 @@ namespace jam::net
 		return true;
 	}
 
-	void ReliabilityState::MarkInitialSend(uint16 seq, uint64 now_ns)
+	void ReliabilityState::MarkInitialSend(uint16 seq, Timestamp now)
 	{
 		auto* pending = TryGetPending(seq);
 		if (!pending || pending->hasInitialSend || !pending->packet.IsValid())
 			return;
 
 		pending->hasInitialSend = true;
-		pending->sendTime_ns = now_ns;
-		pending->lastTransmitTime_ns = now_ns;
+		pending->sendTime = now;
+		pending->lastTransmitTime = now;
 		inflightSize += pending->packet->Size();
 	}
 
-	std::vector<uint16> ReliabilityState::GetRetransmitNeeded(uint64 now_ns, const RttState& rtt) const
+	std::vector<uint16> ReliabilityState::GetRetransmitNeeded(Timestamp now, const RttState& rtt) const
 	{
 		std::vector<uint16> out;
 		for (const auto& [seq, pkt] : reliablePendings)
@@ -230,10 +230,10 @@ namespace jam::net
 			if (!pkt.hasInitialSend || pkt.retransmitQueued)
 				continue;
 			// The transport submit timestamp can be newer than the network tick snapshot.
-			if (now_ns < pkt.lastTransmitTime_ns)
+			if (now < pkt.lastTransmitTime)
 				continue;
 
-			if (pkt.fastRetransmitRequested || now_ns - pkt.lastTransmitTime_ns >= rtt.GetRetransmitTimeout(pkt.retryCount))
+			if (pkt.fastRetransmitRequested || now - pkt.lastTransmitTime >= rtt.GetRetransmitTimeout(pkt.retryCount))
 				out.push_back(seq);
 		}
 		return out;
@@ -272,7 +272,7 @@ namespace jam::net
 		reliablePendings.erase(it);
 	}
 
-	void ReliabilityState::MarkReceived(uint16 seq, uint64 now_ns)
+	void ReliabilityState::MarkReceived(uint16 seq, Timestamp now)
 	{
 		if (!hasReliabilityRecv)
 		{
@@ -329,15 +329,15 @@ namespace jam::net
 			}
 		}
 
-		MarkAckPending(now_ns);
+		MarkAckPending(now);
 	}
 
-	void ReliabilityState::MarkAckPending(uint64 now_ns)
+	void ReliabilityState::MarkAckPending(Timestamp now)
 	{
 		if (!ackDirty)
 		{
 			ackDirty = true;
-			firstPendingAckTime_ns = now_ns;
+			firstPendingAckTime = now;
 		}
 		++pendingAckPacketCount;
 
@@ -383,7 +383,7 @@ namespace jam::net
 		}
 	}
 
-	void ReliabilityState::ProcessAck(const AckData& ack, uint64 ackRecvTime_ns, RttState& rtt)
+	void ReliabilityState::ProcessAck(const AckData& ack, Timestamp ackRecvTime, RttState& rtt)
 	{
 		auto isAcked = [&](uint16 seq)
 		{
@@ -449,11 +449,11 @@ namespace jam::net
 					return;
 
 				const auto& pending = it->second;
-				if (!sampledRtt && pending.hasInitialSend && !pending.hasRetransmitted && ackRecvTime_ns >= pending.sendTime_ns)
+				if (!sampledRtt && pending.hasInitialSend && !pending.hasRetransmitted && ackRecvTime >= pending.sendTime)
 				{
-					const uint64 sample = ackRecvTime_ns - pending.sendTime_ns;
-					const uint64 ackDelay_ns = static_cast<uint64>(ack.header.ackDelay_us) * 1'000ull;
-					rtt.OnReliableSample(sample, ackDelay_ns);
+					const Duration sample = ackRecvTime - pending.sendTime;
+					const Duration ackDelay = Duration::FromUs(ack.header.ackDelay_us);
+					rtt.OnReliableSample(sample, ackDelay);
 					sampledRtt = true;
 				}
 
@@ -473,11 +473,11 @@ namespace jam::net
 			lastAckedReliabilitySeq = ack.header.largestAck;
 	}
 
-	bool ReliabilityState::ShouldSendAck(uint64 now_ns) const
+	bool ReliabilityState::ShouldSendAck(Timestamp now) const
 	{
 		if (!ackDirty) return false;
 
-		return pendingAckPacketCount >= AckElicitingPacketThreshold || (now_ns - firstPendingAckTime_ns) >= DelayedAckTimeout_ns;
+		return pendingAckPacketCount >= AckElicitingPacketThreshold || (now - firstPendingAckTime) >= DelayedAckTimeout;
 	}
 
 	void ReliabilityState::ClearPendingAck()
@@ -485,7 +485,7 @@ namespace jam::net
 		ackDirty				= false;
 		pendingAckData			= {};
 		pendingAckPacketCount	= 0;
-		firstPendingAckTime_ns	= 0;
+		firstPendingAckTime		= Timestamp::Zero();
 	}
 
 	// ============================================================
@@ -526,12 +526,12 @@ namespace jam::net
 		return st;
 	}
 
-	std::vector<uint32> RpcState::GetTimedOutRequests(uint64 now_ns) const
+	std::vector<uint32> RpcState::GetTimedOutRequests(Timestamp now) const
 	{
 		std::vector<uint32> out;
 		for (const auto& [id, st] : inflight)
 		{
-			if (st.hasDeadline && now_ns >= st.deadline_ns)
+			if (st.hasDeadline && now >= st.deadline)
 				out.push_back(id);
 		}
 		return out;
@@ -551,7 +551,7 @@ namespace jam::net
 		if (roundTrip_ns <= peerProcessing_ns)
 			return;
 
-		const uint64 rtt = roundTrip_ns - peerProcessing_ns;
+		const Duration rtt = Duration::FromNs(roundTrip_ns - peerProcessing_ns);
 		rttState.OnTimeSyncSample(rtt);
 		offset_ns = (static_cast<int64>(t2 - t1) + static_cast<int64>(t3 - t4)) / 2;
 
@@ -564,7 +564,7 @@ namespace jam::net
 		if (!bIsStabilized && winCount >= StabilizationThreshold)
 		{
 			bIsStabilized = true;
-			currentPingInterval_ns = PingIntervalStable_ns;
+			currentPingInterval = PingIntervalStable;
 		}
 	}
 
@@ -573,9 +573,9 @@ namespace jam::net
 		return static_cast<int64>(clientTime_ns) + offset_ns;
 	}
 
-	bool TimeSyncState::ShouldSendPing(uint64 now_ns) const
+	bool TimeSyncState::ShouldSendPing(Timestamp now) const
 	{
-		return (now_ns - lastPingSend_ns) >= currentPingInterval_ns;
+		return (now - lastPingSend) >= currentPingInterval;
 	}
 
 	// ============================================================
@@ -591,7 +591,7 @@ namespace jam::net
 		bytesQueued += size;
 	}
 
-	bool TransmissionWaitingQueue::ShouldFlush(uint64 now_ns) const
+	bool TransmissionWaitingQueue::ShouldFlush(Timestamp now) const
 	{
 		if (queue.empty())
 			return false;
@@ -599,7 +599,7 @@ namespace jam::net
 			return true;
 		if (queue.size() >= MaxTransportBatch)
 			return true;
-		if (now_ns - lastFlushTime_ns >= FlushInterval_ns)
+		if (now - lastFlushTime >= FlushInterval)
 			return true;
 		return false;
 	}

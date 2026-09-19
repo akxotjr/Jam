@@ -2,6 +2,8 @@
 
 #include <jambase/JamTypes.h>
 
+#include "jamnet/core/utils/TimeUnits.h"
+
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -86,7 +88,7 @@ namespace jam
 	struct MetricsAggregatorConfig
 	{
 		bool					enabled				= false;
-		uint64					windowPeriodNs		= 5_s;
+		Duration				windowPeriod		= 5_s;
 		std::filesystem::path	outputDirectory		= "logs/metrics";
 		std::string				fileName;
 		std::string				histogramFileName;
@@ -103,8 +105,8 @@ namespace jam
 		void	Flush();
 		void	Shutdown();
 
-		uint64	WindowIndex(uint64 nowNs) const;
-		uint64	WindowPeriodNs() const { return m_config.windowPeriodNs; }
+		uint64	WindowIndex(Timestamp now) const;
+		Duration WindowPeriod() const { return m_config.windowPeriod; }
 		bool	IsEnabled() const { return m_config.enabled; }
 
 	private:
@@ -153,6 +155,6 @@ namespace jam
 		std::ofstream						m_output;
 		std::unique_ptr<HistogramLogState>	m_histogramLog;
 		uint64								m_startUnixNs = 0;
-		uint64								m_startMonotonicNs = 0;
+		Timestamp							m_startMonotonic = Timestamp::Zero();
 	};
 }

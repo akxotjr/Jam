@@ -20,16 +20,10 @@ namespace jam
 		void			Start(uint32 tickHz);
 
 		// 절대 단조 시간(부트 원점 기준)
-		uint64			NowNs()  const;
-		uint64			NowUs()  const;
-		uint64			NowMs()  const;
-		uint64			NowSec() const;
+		Timestamp		Now() const;
 
 		// Start() 이후 경과
-		uint64			ElapsedNs()  const;
-		uint64			ElapsedUs()  const;
-		uint64			ElapsedMs()  const;
-		uint64			ElapsedSec() const;
+		Duration		Elapsed() const;
 
 
 		FractionalTick	NowFractionalTick() const;
@@ -39,20 +33,20 @@ namespace jam
 		template<class Dur>
 		Dur NowChrono() const
 		{
-			return std::chrono::duration_cast<Dur>(std::chrono::nanoseconds(NowNs()));
+			return std::chrono::duration_cast<Dur>(std::chrono::nanoseconds(Now().Ns()));
 		}
 		template<class Dur>
 		Dur ElapsedChrono() const
 		{
-			return std::chrono::duration_cast<Dur>(std::chrono::nanoseconds(ElapsedNs()));
+			return std::chrono::duration_cast<Dur>(std::chrono::nanoseconds(Elapsed().Ns()));
 		}
 
 	private:
 
 		int64			ReadQpc() const;
-		uint64			QpcToNs(int64 counter) const;
-		uint64			NowAbsNs() const;
-		uint64			ElapsedAbsNs() const;
+		Duration		QpcToDuration(int64 counter) const;
+		Timestamp		NowAbs() const;
+		Duration		ElapsedAbs() const;
 
 	private:
 
@@ -61,20 +55,14 @@ namespace jam
 		int64	m_qpcAtStart	  = 0;
 
 		uint32	m_tickHz		  = 0;
-		uint64	m_tickInterval_ns = 0_ns;
+		Duration m_tickInterval = Duration::Zero();
 	};
 }
 
 
 #define CLOCK							jam::Clock::Instance()
-#define NOW_NS()						jam::Clock::Instance().NowNs()
-#define NOW_US()						jam::Clock::Instance().NowUs()
-#define NOW_MS()						jam::Clock::Instance().NowMs()
-#define NOW_SEC()						jam::Clock::Instance().NowSec()
-#define ELAPSED_NS()					jam::Clock::Instance().ElapsedNs()
-#define ELAPSED_US()					jam::Clock::Instance().ElapsedUs()
-#define ELAPSED_MS()					jam::Clock::Instance().ElapsedMs()
-#define ELAPSED_SEC()					jam::Clock::Instance().ElapsedSec()
+#define NOW()							jam::Clock::Instance().Now()
+#define ELAPSED()						jam::Clock::Instance().Elapsed()
 #define NOW_FRACTIONAL_TICK()			jam::Clock::Instance().NowFractionalTick()
 #define ELAPSED_FRACTIONAL_TICK()		jam::Clock::Instance().ElapsedFractionalTick()
 #define NOW_CHRONO(Dur)					jam::Clock::Instance().NowChrono<Dur>()

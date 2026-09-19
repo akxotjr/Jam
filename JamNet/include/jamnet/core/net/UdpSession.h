@@ -13,14 +13,14 @@ namespace jam::net
 {
 	class AdmissionContext;
 
-	void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemTransportFlush(ShardLocal& L, Timestamp now, Duration dt);
 
 	class UdpSession : public Session
 	{
 		friend class AdmissionContext;
 		friend class IocpCore;
 		friend class Service;
-		friend void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+		friend void SystemTransportFlush(ShardLocal& L, Timestamp now, Duration dt);
 
 	public:
 		UdpSession();
@@ -36,12 +36,12 @@ namespace jam::net
 		void							OnPendingDispatchDrained() override;
 
 	public:
-		void							ProcessRecv(int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns);
+		void							ProcessRecv(int32 numOfBytes, Packet packet, Timestamp ingressRecvTime_ns);
 
 	private:
 		bool							RegisterSend(Packet packet);
-		bool							RegisterSend(Datagram&& datagram, std::span<const WireTimePatch> wireTimePatches = {}, uint64* submitTime_ns = nullptr);
-		void							ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns);
+		bool							RegisterSend(Datagram&& datagram, std::span<const WireTimePatch> wireTimePatches = {}, Timestamp* submitTime = nullptr);
+		void							ProcessSystemPacket(Packet packet, const PacketHeaderView& view, Timestamp ingressRecvTime);
 		void							ProcessConnect();
 		void							ProcessDisconnect();
 
@@ -60,11 +60,11 @@ namespace jam::net
 		void							OnSessionPrincipalUpdated() override { TrySessionBinding(); }
 	private:
 		uint64							m_bindTransactionId = 0;
-		uint64							m_bindDeadline_ns = 0;
-		bool							m_bindAccepted = false;
+		Timestamp						m_bindDeadline_ns	= Timestamp::Zero();
+		bool							m_bindAccepted		= false;
 
 		uint64							m_unbindTransactionId = 0;
-		uint64							m_unbindDeadline_ns = 0;
+		Timestamp						m_unbindDeadline_ns = Timestamp::Zero();
 		uint32							m_unbindTimerToken = 0;
 		bool							m_unbindRequestActive = false;
 		bool							m_unbindTombstone = false;

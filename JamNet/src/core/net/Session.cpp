@@ -80,10 +80,10 @@ namespace jam::net
 			shard->Submit(std::move(j));
 	}
 
-	void Session::SubmitAfter(Job j, uint64 delay_ns) const
+	void Session::SubmitAfter(Job j, Duration delay) const
 	{
 		if (auto shard = m_shard.lock())
-			shard->SubmitAfter(std::move(j), delay_ns);
+			shard->SubmitAfter(std::move(j), delay);
 	}
 
 	bool Session::IsCurrentShardContext() const
@@ -128,14 +128,18 @@ namespace jam::net
 		m_isReady = false;
 		m_clientBind.active = false;
 		++m_clientBind.timerToken;
-		if (m_sessionEstablished)
-		{
-			m_sessionEstablished = false;
-			OnSessionReleased();
-		}
+		CompleteSessionRelease();
 		m_releaseQueued.store(true, std::memory_order_release);
 		if (GetPendingDispatchCount() == 0)
 			OnPendingDispatchDrained();
+	}
+
+	void Session::CompleteSessionRelease()
+	{
+		if (!m_sessionEstablished)
+			return;
+		m_sessionEstablished = false;
+		OnSessionReleased();
 	}
 
 	void Session::CompleteSessionEstablishment(bool ready)

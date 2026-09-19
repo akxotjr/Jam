@@ -45,12 +45,12 @@ namespace jam
 	}
 
 
-	void ProcessMetrics::SubmitCompletedWindow(const uint64 nowNs, MetricsAggregator& aggregator)
+	void ProcessMetrics::SubmitCompletedWindow(const Timestamp now, MetricsAggregator& aggregator)
 	{
 		if (!aggregator.IsEnabled())
 			return;
 
-		const uint64 currentWindowIndex = aggregator.WindowIndex(nowNs);
+		const uint64 currentWindowIndex = aggregator.WindowIndex(now);
 		if (m_windowIndex == UINT64_MAX)
 		{
 			m_windowIndex = currentWindowIndex;
@@ -77,13 +77,13 @@ namespace jam
 		memory.cb = sizeof(memory);
 		K32GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory), sizeof(memory));
 
-		const uint64 periodNs = aggregator.WindowPeriodNs();
-		const uint64 startNs  = m_windowIndex * periodNs;
-		const uint64 endNs	  = startNs + periodNs;
+		const Duration  period = aggregator.WindowPeriod();
+		const Timestamp start  = Timestamp::FromNs(m_windowIndex * period.Ns());
+		const Timestamp end	   = start + period;
 		const uint64 processDelta = processTime - m_previousProcessTime;
 
 		MetricSnapshot process{
-			m_windowIndex, startNs, endNs, "process", 0, 0,
+			m_windowIndex, start.Ns(), end.Ns(), "process", 0, 0,
 			{
 				{ "process_cpu_usage", Percent(processDelta, totalDelta), eMetricAggregation::Latest },
 				{ "working_set_bytes", memory.WorkingSetSize, eMetricAggregation::Latest },
@@ -97,7 +97,7 @@ namespace jam
 			const uint64 coreTotalDelta = coreTimes[i].total - m_previousCoreTimes[i].total;
 			const uint64 coreIdleDelta = coreTimes[i].idle - m_previousCoreTimes[i].idle;
 			const uint64 busyDelta = coreTotalDelta >= coreIdleDelta ? coreTotalDelta - coreIdleDelta : 0;
-			MetricSnapshot core{ m_windowIndex, startNs, endNs, "process", 0, i,
+			MetricSnapshot core{ m_windowIndex, start.Ns(), end.Ns(), "process", 0, i,
 				{ { "core_cpu_usage", Percent(busyDelta, coreTotalDelta), eMetricAggregation::Latest } } };
 			aggregator.Submit(std::move(core));
 		}

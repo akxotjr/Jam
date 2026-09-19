@@ -139,7 +139,7 @@ namespace jam::net
 
 		std::atomic<bool>									m_running				= false;
 		std::atomic<bool>									m_transportClosed		= false;
-		uint64												m_lastUpdateTime_ns		= 0_ns;
+		Timestamp											m_lastUpdateTime_ns		= Timestamp::Zero();
 
 		void*												m_userData				= nullptr;
 	};

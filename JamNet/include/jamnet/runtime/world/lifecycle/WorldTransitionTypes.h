@@ -189,12 +189,12 @@ namespace jam::net
 		uint64								userId			 = 0;
 		ClientRequestId						requestId		 = kInvalidClientRequestId;
 		eWorldTransitionPhase				phase			 = eWorldTransitionPhase::ResolvingTarget;
-		std::optional<WorldRef>		source			 = std::nullopt;
-		std::optional<WorldRef>		target			 = std::nullopt;
+		std::optional<WorldRef>				source			 = std::nullopt;
+		std::optional<WorldRef>				target			 = std::nullopt;
 		WorldInstanceRef					targetInstance	 = {};
 		WorldStateRevision					expectedRevision = 0;
 		WorldSyncToken						syncToken		 = {};
-		uint64								deadlineNs		 = 0;
+		Timestamp							deadline		 = Timestamp::Zero();
 		eWorldTransitionFailure				terminalFailure  = eWorldTransitionFailure::None;
 		bool								sourceDetached	 = false;
 		std::string							contentEntryPoint;

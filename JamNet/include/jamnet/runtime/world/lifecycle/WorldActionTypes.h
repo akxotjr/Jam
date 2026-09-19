@@ -55,8 +55,8 @@ namespace jam::net
 		bool				pauseWhenNoActivePresence	 = true;
 		bool				destroyWhenEmpty			 = false;
 		bool				isPrivate					 = false;
-		uint64				standbyTTL_ns				 = 0_ns;
-		uint64				pausedTTL_ns				 = 0_ns;
+		Duration			standbyTTL					 = 0_ns;
+		Duration			pausedTTL					 = 0_ns;
 		uint32				capacity					 = 0;
 		WorldRouteConfig	route						 = {};
 	};
@@ -64,7 +64,7 @@ namespace jam::net
 	// Concrete instance config resolved from authored instance + live world address.
 	struct WorldConfig
 	{
-		WorldRef		world		 = {};
+		WorldRef			world		 = {};
 		WorldTemplateData	templateData = {};
 
 		std::string			actorLevelPath;

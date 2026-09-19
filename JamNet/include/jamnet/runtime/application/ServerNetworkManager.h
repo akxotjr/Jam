@@ -44,16 +44,16 @@ namespace jam::net
 		using WorldContentFactory = std::function<std::unique_ptr<IWorldContent>(const WorldConfig&)>;
 		using EnterWorldDestinationResolver = std::function<std::optional<WorldArchetypeKey>(AccountId, UserId)>;
 
-		NetAddress				tcpAddress		= { "127.0.0.1", 7777 };
-		NetAddress				udpAddress		= { "127.0.0.1", 8888 };
-		uint32					maxConnections  = 1000;
-		uint64					reconnectTimeoutNs = 15'000'000'000ull;
-		std::string				sharedDataManifestPath;
-		WorldContentFactory		worldContentFactory;
-		EnterWorldDestinationResolver enterWorldDestinationResolver;
-		std::shared_ptr<ISocialContent>			socialContent = nullptr;
-		std::shared_ptr<IAuthenticator>			authenticator = nullptr;
-		std::shared_ptr<IGenericContent>					content = nullptr;
+		NetAddress								tcpAddress		= { "127.0.0.1", 7777 };
+		NetAddress								udpAddress		= { "127.0.0.1", 8888 };
+		uint32									maxConnections  = 1000;
+		Duration								reconnectTimeout = 15_s;
+		std::string								sharedDataManifestPath;
+		WorldContentFactory						worldContentFactory;
+		EnterWorldDestinationResolver			enterWorldDestinationResolver;
+		std::shared_ptr<ISocialContent>			socialContent	= nullptr;
+		std::shared_ptr<IAuthenticator>			authenticator	= nullptr;
+		std::shared_ptr<IGenericContent>		content			= nullptr;
 	};
 
 	class ServerNetworkManager
@@ -75,9 +75,9 @@ namespace jam::net
 		bool									DispatchContentRequest(UserId userId, GenericContentRequest request);
 		std::shared_ptr<ServerService>			GetService() const { return m_service; }
 		const SharedDataManifest*				GetSharedDataManifest() const { return &m_manifest; }
-		uint64									GetReconnectTimeoutNs() const { return m_config.reconnectTimeoutNs; }
+		Duration								GetReconnectTimeoutNs() const { return m_config.reconnectTimeout; }
 		std::optional<WorldArchetypeKey>		ResolveEnterWorldDestination(AccountId accountId, UserId userId) const;
-		std::unique_ptr<IWorldContent>	CreateWorldContent(const WorldConfig& config) const;
+		std::unique_ptr<IWorldContent>			CreateWorldContent(const WorldConfig& config) const;
 
 		void									BootstrapWorldInstances(std::function<void(bool)> completed);
 		void									DestroyWorld(const WorldRef& world);

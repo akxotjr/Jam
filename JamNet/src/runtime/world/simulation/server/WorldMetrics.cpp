@@ -8,7 +8,7 @@ namespace jam::net
 {
 	namespace
 	{
-		constexpr uint64 kMetricsWindowNs = 5_s;
+		constexpr Duration kMetricsWindowNs = 5_s;
 		const MetricHistogramConfig kDurationShortConfig{
 			.lowestTrackableValue  = 1,
 			.highestTrackableValue = 10'000'000,
@@ -69,16 +69,16 @@ namespace jam::net
 		Reset();
 	}
 
-	void WorldMetrics::RecordTick(const std::array<uint64, 6>& phasesNs, uint64 participantCount, uint64 nowNs)
+	void WorldMetrics::RecordTick(const std::array<uint64, 6>& phasesNs, uint64 participantCount, Timestamp now)
 	{
-		if (m_windowStartNs == 0)
-			m_windowStartNs = nowNs;
+		if (m_windowStart.IsZero())
+			m_windowStart = now;
 
-		m_windowEndNs = nowNs;
+		m_windowEndNs = now;
 		for (size_t i = 0; i < phasesNs.size(); ++i)
 			m_simulationSnapshot.histograms[i].Record(phasesNs[i] / 1'000ull);
 
-		if (phasesNs[0] > SIMULATION_TICK_NS)
+		if (phasesNs[0] > SIMULATION_TICK_NS.Ns())
 			++m_simulationSnapshot.values[eTickOverrunCount].value;
 
 		m_simulationSnapshot.values[eParticipantsCurrent].value = participantCount;
@@ -144,39 +144,39 @@ namespace jam::net
 		++m_replicationSnapshot.values[eBaselineResyncs].value;
 	}
 
-	bool WorldMetrics::IsReadyToSubmit(uint64 nowNs) const
+	bool WorldMetrics::IsReadyToSubmit(Timestamp nowNs) const
 	{
-		return m_windowStartNs != 0 && (nowNs - m_windowStartNs) >= kMetricsWindowNs;
+		return !m_windowStart.IsZero() && (nowNs - m_windowStart) >= kMetricsWindowNs;
 	}
 
 	void WorldMetrics::Reset()
 	{
-		m_windowStartNs = 0;
-		m_windowEndNs = 0;
+		m_windowStart = Timestamp::Zero();
+		m_windowEndNs = Timestamp::Zero();
 		InitializeSnapshots();
 	}
 
-	void WorldMetrics::SubmitSnapshot(uint64 nowNs)
+	void WorldMetrics::SubmitSnapshot(Timestamp nowNs)
 	{
 		if (auto* aggregator = GLOBAL_EXEC.GetMetricsAggregator(); aggregator && aggregator->IsEnabled())
 		{
 			const uint64 windowIndex = aggregator->WindowIndex(nowNs);
 
 			m_simulationSnapshot.windowIndex   = windowIndex;
-			m_simulationSnapshot.windowStartNs = m_windowStartNs;
-			m_simulationSnapshot.windowEndNs   = m_windowEndNs;
+			m_simulationSnapshot.windowStartNs = m_windowStart.Ns();
+			m_simulationSnapshot.windowEndNs   = m_windowEndNs.Ns();
 			m_simulationSnapshot.values[eTickDurationOverflow].value = m_simulationSnapshot.histograms[eTickDuration].OverflowCount();
 			GLOBAL_EXEC.SubmitMetrics(std::move(m_simulationSnapshot));
 
 			m_aoiSnapshot.windowIndex   = windowIndex;
-			m_aoiSnapshot.windowStartNs = m_windowStartNs;
-			m_aoiSnapshot.windowEndNs   = m_windowEndNs;
+			m_aoiSnapshot.windowStartNs = m_windowStart.Ns();
+			m_aoiSnapshot.windowEndNs   = m_windowEndNs.Ns();
 			m_aoiSnapshot.values[eNeighborsPerUserOverflow].value = m_aoiSnapshot.histograms[0].OverflowCount();
 			GLOBAL_EXEC.SubmitMetrics(std::move(m_aoiSnapshot));
 
 			m_replicationSnapshot.windowIndex   = windowIndex;
-			m_replicationSnapshot.windowStartNs = m_windowStartNs;
-			m_replicationSnapshot.windowEndNs   = m_windowEndNs;
+			m_replicationSnapshot.windowStartNs = m_windowStart.Ns();
+			m_replicationSnapshot.windowEndNs   = m_windowEndNs.Ns();
 			GLOBAL_EXEC.SubmitMetrics(std::move(m_replicationSnapshot));
 		}
 	}

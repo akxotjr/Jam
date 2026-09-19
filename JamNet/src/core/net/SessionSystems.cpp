@@ -110,9 +110,9 @@ namespace jam::net
 			dst.Add(packet);
 		}
 
-		void MarkRetransmitSubmitted(NetworkMetrics& metrics, ReliabilityState::PendingPacket& pkt, const uint64 now_ns)
+		void MarkRetransmitSubmitted(NetworkMetrics& metrics, ReliabilityState::PendingPacket& pkt, const Timestamp now)
 		{
-			pkt.lastTransmitTime_ns = now_ns;
+			pkt.lastTransmitTime = now;
 			if (pkt.retryCount < std::numeric_limits<uint8>::max())
 				pkt.retryCount++;
 			pkt.retransmitQueued = false;
@@ -133,31 +133,31 @@ namespace jam::net
 				metrics.RecordRetransmitGiveup();
 		}
 
-		void ProcessAck(ShardLocal& L, const entt::entity e, const AckData& ack, const uint64 ackRecvTime_ns)
+		void ProcessAck(ShardLocal& L, const entt::entity e, const AckData& ack, const Timestamp ackRecvTime)
 		{
 			auto& R = L.registry;
-			auto* reliability = R.try_get<ReliabilityState>(e);
+			auto* rel = R.try_get<ReliabilityState>(e);
 			auto* rtt = R.try_get<RttState>(e);
-			if (!reliability || !rtt) return;
+			if (!rel || !rtt) return;
 
 			struct AckedMeta
 			{
 				bool   hasRetransmitted = false;
-				uint32 size        = 0;
+				uint32 size				= 0;
 			};
 
 			std::vector<AckedMeta> acked;
-			acked.reserve(reliability->reliablePendings.size());
-			for (const auto& [seq, pkt] : reliability->reliablePendings)
+			acked.reserve(rel->reliablePendings.size());
+			for (const auto& [seq, pkt] : rel->reliablePendings)
 			{
 				if (IsAckedBy(ack, seq))
 					acked.push_back(AckedMeta{
 						.hasRetransmitted = pkt.hasRetransmitted,
-						.size = pkt.packet.IsValid() ? pkt.packet->Size() : 0
+						.size			  = pkt.packet.IsValid() ? pkt.packet->Size() : 0
 					});
 			}
 
-			reliability->ProcessAck(ack, ackRecvTime_ns, *rtt);
+			rel->ProcessAck(ack, ackRecvTime, *rtt);
 			auto& metrics = L.networkMetrics;
 			metrics.RemoveReliablePending(static_cast<uint32>(acked.size()));
 
@@ -216,8 +216,8 @@ namespace jam::net
 						.e              = e,
 						.view           = view,
 						.packet         = pkt.packet,
-						.now_ns         = NOW_NS(),
-						.ingressTime_ns = pkt.recvTime_ns,
+						.now         = NOW(),
+						.ingressTime	= pkt.recvTime,
 						.orderedSpan    = pkt.span
 					};
 
@@ -236,10 +236,10 @@ namespace jam::net
 	void BootstrapSessionEntity(ShardLocal& L, entt::entity e, Session* session)
 	{
 		auto& R = L.registry;
-		uint64 now_ns = NOW_NS();
+		Timestamp now = NOW();
 
 		// common component
-		if (!R.all_of<SessionInfo>(e))                    R.emplace<SessionInfo>(e, SessionInfo::FromSession(session, now_ns));
+		if (!R.all_of<SessionInfo>(e))                    R.emplace<SessionInfo>(e, SessionInfo::FromSession(session, now));
 		if (!R.all_of<TransmissionWaitingQueue>(e))       R.emplace<TransmissionWaitingQueue>(e);
 		if (!R.all_of<RpcState>(e))                       R.emplace<RpcState>(e);
 
@@ -251,10 +251,10 @@ namespace jam::net
 			{
 				auto& ts = R.emplace<TimeSyncState>(e);
 				ts.bIsServerSide        = session->IsServerSide();
-				ts.lastPingSend_ns      = now_ns;
-				ts.lastPongRecv_ns      = now_ns;
-				ts.lastT2ServerRecv_ns  = now_ns;
-				ts.lastT4ClientRecv_ns  = now_ns;
+				ts.lastPingSend			= now;
+				ts.lastPongRecv			= now;
+				ts.lastT2ServerRecv_ns  = now.Ns();
+				ts.lastT4ClientRecv_ns  = now.Ns();
 			}
 
 			if (!R.all_of<SequenceState>(e))    R.emplace<SequenceState>(e);
@@ -330,7 +330,7 @@ namespace jam::net
 				return false;
 			}
 
-			if (!orderState->StoreRecvPacket(orderSeq, orderedSpan, ctx.packet, ctx.now_ns))
+			if (!orderState->StoreRecvPacket(orderSeq, orderedSpan, ctx.packet, ctx.now))
 			{
 				ctx.shouldDrop = true;
 				ctx.L.networkMetrics.RecordDuplicate();
@@ -376,7 +376,7 @@ namespace jam::net
 
 				if (reliability->ackTrack.test(dist))
 				{
-					reliability->MarkAckPending(ctx.ingressTime_ns);
+					reliability->MarkAckPending(ctx.ingressTime);
 					ctx.shouldDrop = true;
 					ctx.L.networkMetrics.RecordDuplicate();
 					return false;
@@ -384,7 +384,7 @@ namespace jam::net
 			}
 		}
 
-		reliability->MarkReceived(reliabilitySeq, ctx.ingressTime_ns);
+		reliability->MarkReceived(reliabilitySeq, ctx.ingressTime);
 		return true;
 	}
 
@@ -409,7 +409,7 @@ namespace jam::net
 		const BYTE*  payload     = ctx.view.Payload();
 		const uint32 payloadSize = ctx.view.PayloadSize();
 
-		const uint64 now = ctx.now_ns;
+		const Timestamp now = ctx.now;
 		fragmentation->CleanupTimeouts(now);
 
 		if (!fragmentation->AddFragment(fragmentId, fragTotal, fragIdx, payload, payloadSize, now))
@@ -464,7 +464,7 @@ namespace jam::net
 		if (!info)
 			return false;
 
-		const uint64 now_ns = ctx.now_ns;
+		const Timestamp now = ctx.now;
 
 		switch (U2E(eSystemPacketId, ctx.view.Id()))
 		{
@@ -479,18 +479,18 @@ namespace jam::net
 			const auto* ping = reinterpret_cast<const PING_DATA*>(ctx.view.Payload());
 
 			timesync->lastT1ClientSend_ns = ping->t1App_ns;
-			timesync->lastT2ServerRecv_ns = now_ns;
+			timesync->lastT2ServerRecv_ns = now.Ns();
 			timesync->lastSampleClient_ns = ping->t1App_ns;
 
 			PONG_DATA pong{};
 
 			pong.t1Wire_ns = ping->t1Wire_ns;
-			pong.t2Wire_ns = ctx.ingressTime_ns; // wire ingress
+			pong.t2Wire_ns = ctx.ingressTime.Ns(); // wire ingress
 			pong.t3Wire_ns = 0;                  // wire egress : fill in UdpRouter
 
 			pong.t1App_ns = ping->t1App_ns;
-			pong.t2App_ns = now_ns;
-			pong.t3App_ns = NOW_NS();
+			pong.t2App_ns = now.Ns();
+			pong.t3App_ns = NOW().Ns();
 
 			if (auto* txQueue = R.try_get<TransmissionWaitingQueue>(ctx.e))
 			{
@@ -510,27 +510,26 @@ namespace jam::net
 			if (pong->t1App_ns < timesync->lastT1ClientSend_ns)
 				return true;
 
-			const uint64 t4_app  = now_ns;
-			const uint64 t4_wire = ctx.ingressTime_ns;
+			const Timestamp t4_app  = now;
+			const Timestamp t4_wire = ctx.ingressTime;
 			const bool hasWireTimes = pong->t1Wire_ns != 0
 				&& pong->t2Wire_ns != 0
 				&& pong->t3Wire_ns != 0
-				&& t4_wire >= pong->t1Wire_ns
+				&& t4_wire.Ns() >= pong->t1Wire_ns
 				&& pong->t3Wire_ns >= pong->t2Wire_ns;
 
-			timesync->lastPongRecv_ns     = t4_app;
+			timesync->lastPongRecv		  = t4_app;
 			timesync->lastT2ServerRecv_ns = pong->t2App_ns;
 			timesync->lastT3ServerSend_ns = pong->t3App_ns;
-			timesync->lastT4ClientRecv_ns = t4_app;
+			timesync->lastT4ClientRecv_ns = t4_app.Ns();
 
 			if (hasWireTimes)
 			{
-				timesync->ProcessPingPong(pong->t1Wire_ns, pong->t2Wire_ns,
-					pong->t3Wire_ns, t4_wire, *rtt);
+				timesync->ProcessPingPong(pong->t1Wire_ns, pong->t2Wire_ns, pong->t3Wire_ns, t4_wire.Ns(), *rtt);
 			}
 			else
 			{
-				timesync->ProcessPingPong(pong->t1App_ns, pong->t2App_ns, pong->t3App_ns, t4_app, *rtt);
+				timesync->ProcessPingPong(pong->t1App_ns, pong->t2App_ns, pong->t3App_ns, t4_app.Ns(), *rtt);
 			}
 
 			return true;
@@ -570,7 +569,7 @@ namespace jam::net
 			if (!IsValidAck(ack))
 				return;
 
-			ProcessAck(ctx.L, ctx.e, ack, ctx.ingressTime_ns);
+			ProcessAck(ctx.L, ctx.e, ack, ctx.ingressTime);
 		}
 	}
 
@@ -580,7 +579,7 @@ namespace jam::net
 	{
 		auto& R = ctx.L.registry;
 		auto& sessInfo = R.get<SessionInfo>(ctx.e);
-		sessInfo.lastRecvTime_ns = ctx.now_ns;
+		sessInfo.lastRecvTime = ctx.now;
 
 		ctx.L.networkMetrics.RecordReceive(ctx.view.TotalSize(), sessInfo.session && sessInfo.session->IsUdp());
 
@@ -756,8 +755,10 @@ namespace jam::net
 	}
 
 
-	void SystemSessionTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
+	void SystemSessionTimeout(ShardLocal& L, Timestamp now, Duration dt)
 	{
+		(void)dt;
+
 		auto& R = L.registry;
 		auto view = R.view<SessionInfo, TimeSyncState>();
 
@@ -769,18 +770,17 @@ namespace jam::net
 			if (info.state != SessionInfo::CONNECTED)      continue;
 			if (!info.session || !info.session->IsReady()) continue;
 
-			if ((now_ns - info.connectedTime_ns) < 3_s)
+			if ((now - info.connectedTime) < 3_s)
 				continue;
 
-			const uint64 keepaliveAliveNs = timesync.bIsServerSide ? timesync.lastT2ServerRecv_ns : timesync.lastPongRecv_ns;
+			const Timestamp keepaliveAliveNs = timesync.bIsServerSide ? Timestamp::FromNs(timesync.lastT2ServerRecv_ns) : timesync.lastPongRecv;
+			const Timestamp lastAliveNs		 = std::max(keepaliveAliveNs, info.lastRecvTime);
 
-			const uint64 lastAliveNs = std::max(keepaliveAliveNs, info.lastRecvTime_ns);
-
-			if (now_ns <= lastAliveNs)
+			if (now <= lastAliveNs)
 				continue;
 
-			const uint64 delta = now_ns - lastAliveNs;
-			if (delta <= SessionInfo::Timeout_ns)
+			const Duration delta = now - lastAliveNs;
+			if (delta <= SessionInfo::Timeout)
 				continue;
 
 			info.state = SessionInfo::DISCONNECTING;
@@ -793,8 +793,10 @@ namespace jam::net
 		}
 	}
 
-	void SystemSessionKeepalive(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
+	void SystemSessionKeepalive(ShardLocal& L, Timestamp now, Duration dt)
 	{
+		(void)dt;
+
 		auto& R = L.registry;
 		auto view = R.view<SessionInfo, TransmissionWaitingQueue, TimeSyncState>();
 
@@ -813,25 +815,27 @@ namespace jam::net
 			if (timeSync.bIsServerSide)
 				continue;
 
-			if (!timeSync.ShouldSendPing(now_ns))
+			if (!timeSync.ShouldSendPing(now))
 				continue;
 
 			PING_DATA ping{};
 			ping.t1Wire_ns                = 0;          // wire send time : fill in UdpRouter
-			ping.t1App_ns                 = now_ns;
+			ping.t1App_ns                 = now.Ns();
 			ping.prev_t3_server_send_ns   = timeSync.lastT3ServerSend_ns;
 			ping.prev_t4_client_recv_ns   = timeSync.lastT4ClientRecv_ns;
 
 			txQueue.Enqueue(PacketBuilder::CreatePingPacket(ping));
 
-			timeSync.lastPingSend_ns      = now_ns;
-			timeSync.lastT1ClientSend_ns  = now_ns;
-			info.lastSendTime_ns          = now_ns;
+			timeSync.lastPingSend		  = now;
+			timeSync.lastT1ClientSend_ns  = now.Ns();
+			info.lastSendTime			  = now;
 		}
 	}
 
-	void SystemRpcTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
+	void SystemRpcTimeout(ShardLocal& L, Timestamp now, Duration dt)
 	{
+		(void)dt;
+
 		auto& R = L.registry;
 		auto view = R.view<RpcState>();
 
@@ -839,7 +843,7 @@ namespace jam::net
 		{
 			auto& rpcState = view.get<RpcState>(entity);
 
-			std::vector<uint32> timedOut = rpcState.GetTimedOutRequests(now_ns);
+			std::vector<uint32> timedOut = rpcState.GetTimedOutRequests(now);
 
 			for (uint32 requestId : timedOut)
 			{
@@ -854,9 +858,9 @@ namespace jam::net
 		}
 	}
 
-	void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
+	void SystemTransportFlush(ShardLocal& L, Timestamp now, Duration dt)
 	{
-		(void)dt_ns;
+		(void)dt;
 		auto& registry = L.registry;
 		auto view = registry.view<TransmissionWaitingQueue, SessionInfo>();
 
@@ -871,7 +875,7 @@ namespace jam::net
 
 			if (!isUDP)	// tcp path
 			{
-				if (!txQueue.ShouldFlush(now_ns))
+				if (!txQueue.ShouldFlush(now))
 					continue;
 
 				Stream stream;
@@ -893,8 +897,8 @@ namespace jam::net
 				if (!stream.Empty())
 				{
 					static_cast<TcpSession*>(info.session)->RegisterSend(std::move(stream));
-					txQueue.lastFlushTime_ns = now_ns;
-					info.lastSendTime_ns	 = now_ns;
+					txQueue.lastFlushTime = now;
+					info.lastSendTime	 = now;
 				}
 				continue;
 			}
@@ -905,15 +909,14 @@ namespace jam::net
 				continue;
 			}
 
-			const bool ackDue   = reliability->ShouldSendAck(NOW_NS());
+			const bool ackDue   = reliability->ShouldSendAck(NOW());
 
-			if (!txQueue.ShouldFlush(now_ns) && !ackDue) continue;
+			if (!txQueue.ShouldFlush(now) && !ackDue) continue;
 
 			AckData snapshot = reliability->ackDirty ? reliability->pendingAckData : AckData{};
 			if (reliability->ackDirty)
 			{
-				const uint64 ackDelay_us = now_ns >= reliability->firstPendingAckTime_ns ? (now_ns - reliability->firstPendingAckTime_ns) / 1'000ull : 0;
-				snapshot.header.ackDelay_us = static_cast<uint32>(std::min<uint64>(ackDelay_us, UINT32_MAX));
+				snapshot.header.ackDelay_us = now >= reliability->firstPendingAckTime ? (now - reliability->firstPendingAckTime).Us32() : 0;
 			}
 
 			const uint32 ackCount = reliability ? reliability->pendingAckPacketCount : 0;
@@ -978,10 +981,10 @@ namespace jam::net
 				}
 
 				// On failure, leave these packets queued and continue with the original entries.
-				uint64 submitTime_ns = 0;
+				Timestamp submitTime = Timestamp::Zero();
 				const std::span patches(wireTimePatches.data(), wireTimePatchCount);
 
-				if (!udp->RegisterSend(std::move(datagram), patches, &submitTime_ns)) continue;
+				if (!udp->RegisterSend(std::move(datagram), patches, &submitTime)) continue;
 
 				for (size_t i = 0; i < selectedCount; ++i)
 				{
@@ -994,8 +997,8 @@ namespace jam::net
 
 					if (pending)
 					{
-						if (retransmit) MarkRetransmitSubmitted(L.networkMetrics, *pending, submitTime_ns);
-						else reliability->MarkInitialSend(header.ReliabilitySequence(), submitTime_ns);
+						if (retransmit) MarkRetransmitSubmitted(L.networkMetrics, *pending, submitTime);
+						else reliability->MarkInitialSend(header.ReliabilitySequence(), submitTime);
 					}
 				}
 
@@ -1012,8 +1015,8 @@ namespace jam::net
 				}
 
 
-				txQueue.lastFlushTime_ns = now_ns;
-				info.lastSendTime_ns	 = now_ns;
+				txQueue.lastFlushTime = now;
+				info.lastSendTime	 = now;
 			}
 
 			if (ackPending && ackDue)
@@ -1023,8 +1026,8 @@ namespace jam::net
 				{
 					L.networkMetrics.RecordTransmit(packet->Size(), true, false, false, true, false);
 					consumeAck();
-					txQueue.lastFlushTime_ns = now_ns;
-					info.lastSendTime_ns	 = now_ns;
+					txQueue.lastFlushTime = now;
+					info.lastSendTime	 = now;
 				}
 			}
 
@@ -1034,13 +1037,13 @@ namespace jam::net
 
 
 
-	void SystemRetransmit(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
+	void SystemRetransmit(ShardLocal& L, Timestamp now_ns, Duration dt)
 	{
 		(void)now_ns;
-		(void)dt_ns;
+		(void)dt;
 		// TransportFlushSystem runs earlier in the same tick and records a later
 		// WSASendTo submit timestamp, so retransmission checks need a fresh clock value.
-		const uint64 retransmitNow_ns = NOW_NS();
+		const Timestamp retransmitNow_ns = NOW();
 
 		auto& R = L.registry;
 		auto view = R.view<ReliabilityState, RttState, TransmissionWaitingQueue, SessionInfo>();
@@ -1063,7 +1066,7 @@ namespace jam::net
 				if (!pending || !pending->packet.IsValid())
 					continue;
 
-				if (retransmitNow_ns >= pending->sendTime_ns && retransmitNow_ns - pending->sendTime_ns >= ReliabilityState::ReliableDeliveryTimeout_ns)
+				if (retransmitNow_ns >= pending->sendTime && retransmitNow_ns - pending->sendTime >= ReliabilityState::ReliableDeliveryTimeout)
 				{
 					JAM_LOG_ERROR("[Retransmit] Packet seq={} exceeded reliable delivery timeout", seq);
 					MarkRetransmitGiveup(metrics, *pending);
@@ -1086,7 +1089,7 @@ namespace jam::net
 		}
 	}
 
-	void SystemFragmentCleanup(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
+	void SystemFragmentCleanup(ShardLocal& L, Timestamp now, Duration dt)
 	{
 		auto& R = L.registry;
 		auto view = R.view<FragmentState>();
@@ -1094,17 +1097,17 @@ namespace jam::net
 		for (auto entity : view)
 		{
 			auto& fragState = view.get<FragmentState>(entity);
-			fragState.CleanupTimeouts(now_ns);
+			fragState.CleanupTimeouts(now);
 
 		}
 	}
 
 
-	void SystemNetworkStats(ShardLocal& L, uint64 now_ns, uint64 dt_ns)
+	void SystemNetworkStats(ShardLocal& L, Timestamp now, Duration dt)
 	{
+		(void)dt;
+
 		auto& R = L.registry;
-		const uint64 sampleTime_ns = (now_ns > 0) ? now_ns : NOW_NS();
-		(void)dt_ns;
 
 		auto* aggregator = GLOBAL_EXEC.GetMetricsAggregator();
 		if (!aggregator || !aggregator->IsEnabled())
@@ -1121,7 +1124,7 @@ namespace jam::net
 		}
 
 		L.networkMetrics.SetCurrent(currentSessions, currentPendingReliable);
-		L.networkMetrics.UpdateWindow(sampleTime_ns, *aggregator);
+		L.networkMetrics.UpdateWindow(now, *aggregator);
 	}
 
 
@@ -1159,14 +1162,14 @@ namespace jam::net
 			.e          = e,
 			.header     = view,
 			.packet     = packet,
-			.now_ns     = NOW_NS(),
+			.now_ns     = NOW(),
 		};
 
 		PipelineOutgoingPacket(ctx);
 		return true;
 	}
 
-	void ProcessReceivedPacket(entt::entity e, Packet packet, uint64 ingressRecvTime_ns)
+	void ProcessReceivedPacket(entt::entity e, Packet packet, Timestamp ingressRecvTime)
 	{
 		auto& L = CurrentShardLocalChecked();
 		auto& R = L.registry;
@@ -1184,9 +1187,9 @@ namespace jam::net
 			return;
 		}
 
-		const uint64 now_ns = NOW_NS();
-		if (ingressRecvTime_ns == 0)
-			ingressRecvTime_ns = now_ns;
+		const Timestamp now = NOW();
+		if (ingressRecvTime.IsZero())
+			ingressRecvTime = now;
 
 		if (sessionInfo->session->IsTcp())
 		{
@@ -1198,7 +1201,7 @@ namespace jam::net
 				return;
 			}
 
-			sessionInfo->lastRecvTime_ns = now_ns;
+			sessionInfo->lastRecvTime = now;
 			L.networkMetrics.RecordReceive(view.TotalSize(), false);
 
 			RecvContext ctx{
@@ -1206,8 +1209,8 @@ namespace jam::net
 				.e = e,
 				.view = view,
 				.packet = std::move(packet),
-				.now_ns = now_ns,
-				.ingressTime_ns = ingressRecvTime_ns
+				.now = now,
+				.ingressTime = ingressRecvTime
 			};
 
 			DispatchApplicationPacket(ctx);
@@ -1231,12 +1234,12 @@ namespace jam::net
 
 			Packet subPacket = MakeOwned(packet->SliceVisible(offset, view.TotalSize()));
 			RecvContext ctx{
-				.L              = L,
-				.e              = e,
-				.view           = view,
-				.packet         = std::move(subPacket),
-				.now_ns         = now_ns,
-				.ingressTime_ns = ingressRecvTime_ns
+				.L           = L,
+				.e           = e,
+				.view        = view,
+				.packet      = std::move(subPacket),
+				.now      = now,
+				.ingressTime = ingressRecvTime
 			};
 
 			PipelineIncomingPacket(ctx);
@@ -1246,15 +1249,15 @@ namespace jam::net
 
 	struct NetworkDomainRegisteredTag {};
 
-	void RegisterNetworkDomain(ShardLocal& L, uint64 tickPeriod_ns)
+	void RegisterNetworkDomain(ShardLocal& L, Duration tickPeriod)
 	{
 		auto& R = L.registry;
 		if (R.ctx().contains<NetworkDomainRegisteredTag>())
 			return;
 
 		auto& group = L.domainGroups[{DOMAIN_NETWORK, 0}];
-		group.tag           = { .domain = DOMAIN_NETWORK, .subType = 0 };
-		group.tickPeriod_ns = tickPeriod_ns;
+		group.tag        = { .domain = DOMAIN_NETWORK, .subType = 0 };
+		group.tickPeriod = tickPeriod;
 
 		// Systems
 		group.systems.emplace_back(SystemSessionTimeout);
@@ -1265,15 +1268,15 @@ namespace jam::net
 		group.systems.emplace_back(SystemFragmentCleanup);
 		group.systems.emplace_back(SystemNetworkStats);
 
-		const uint64 now_ns = NOW_NS();
+		const Timestamp now = NOW();
 
-		SystemSessionTimeout(L, now_ns, 0);
-		SystemSessionKeepalive(L, now_ns, 0);
-		SystemRpcTimeout(L, now_ns, 0);
-		SystemTransportFlush(L, now_ns, 0);
-		SystemRetransmit(L, now_ns, 0);
-		SystemFragmentCleanup(L, now_ns, 0);
-		SystemNetworkStats(L, now_ns, 0);
+		SystemSessionTimeout(L, now, 0_ns);
+		SystemSessionKeepalive(L, now, 0_ns);
+		SystemRpcTimeout(L, now, 0_ns);
+		SystemTransportFlush(L, now, 0_ns);
+		SystemRetransmit(L, now, 0_ns);
+		SystemFragmentCleanup(L, now, 0_ns);
+		SystemNetworkStats(L, now, 0_ns);
 
 		group.entityFilter = [](const entt::registry& R, entt::entity e) {
 				return R.all_of<SessionInfo>(e);

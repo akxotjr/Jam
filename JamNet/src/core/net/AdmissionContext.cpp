@@ -19,8 +19,8 @@ namespace jam::net
 	namespace
 	{
 		inline constexpr uint32 kMaxAuthRetryCount	= 2;
-		inline constexpr uint64 kAuthDeadlineNs		= 3_s;
-		inline constexpr uint64 kAuthRetryDelayNs	= 100_ms;
+		inline constexpr Duration kAuthDeadlineNs	= 3_s;
+		inline constexpr Duration kAuthRetryDelayNs	= 100_ms;
 	}
 
 
@@ -104,7 +104,7 @@ namespace jam::net
 
 		tcpData->authCredential = credential;
 		tcpData->authRetryCount = 0;
-		tcpData->authDeadlineNs = NOW_NS() + kAuthDeadlineNs;
+		tcpData->authDeadline   = NOW() + kAuthDeadlineNs;
 		tcpData->state			= eTcpAdmissionState::Authenticating;
 
 		SubmitAuthentication(key, credential);
@@ -260,7 +260,7 @@ namespace jam::net
 		tcp.state = eTcpAdmissionState::AuthRetryWaiting;
 
 		std::weak_ptr<AdmissionContext> weakContext = std::static_pointer_cast<AdmissionContext>(shared_from_this());
-		const uint64 delayNs = kAuthRetryDelayNs * tcp.authRetryCount;
+		const Duration delayNs = kAuthRetryDelayNs * tcp.authRetryCount;
 		GLOBAL_EXEC.SubmitAfter(Job([weakContext, key]
 			{
 				if (auto context = weakContext.lock())
@@ -297,7 +297,7 @@ namespace jam::net
 			return;
 		}
 
-		if (event.result.retryable && tcp->authCredential && tcp->authRetryCount < kMaxAuthRetryCount && NOW_NS() < tcp->authDeadlineNs)
+		if (event.result.retryable && tcp->authCredential && tcp->authRetryCount < kMaxAuthRetryCount && NOW() < tcp->authDeadline)
 		{
 			ScheduleAuthRetry(event.key, *tcp);
 			return;
@@ -316,7 +316,7 @@ namespace jam::net
 		if (!tcp || tcp->state != eTcpAdmissionState::AuthRetryWaiting || !tcp->authCredential)
 			return;
 
-		if (entry->session->IsClosing() || NOW_NS() >= tcp->authDeadlineNs)
+		if (entry->session->IsClosing() || NOW() >= tcp->authDeadline)
 		{
 			RejectTcp(*entry);
 			return;
@@ -338,7 +338,7 @@ namespace jam::net
 			return;
 		}
 
-		if (NOW_NS() >= tcp->authDeadlineNs)
+		if (NOW() >= tcp->authDeadline)
 			RejectTcp(*entry);
 	}
 

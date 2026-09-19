@@ -52,7 +52,7 @@ namespace jam::net
 		eTcpAdmissionState				state			= eTcpAdmissionState::AwaitingBind;
 		std::optional<AuthCredential>	authCredential	= {};
 		uint32							authRetryCount	= 0;
-		uint64							authDeadlineNs	= 0_ns;
+		Timestamp						authDeadline	= Timestamp::Zero();
 	};
 
 	struct UdpAdmissionData

@@ -5,10 +5,10 @@
 namespace jam::net
 {
 
-	inline constexpr uint64 SIMULATION_TICK_NS		 = 33'333'333_ns;
+	inline constexpr Duration SIMULATION_TICK_NS	 = 33'333'333_ns;
 	inline constexpr float	SIMULATION_TICK_SEC		 = 0.033f;
 
-	inline constexpr uint64 FULLSNAPSHOT_INTERVAL_NS = 5_s;
+	inline constexpr Duration FULLSNAPSHOT_INTERVAL_NS = 5_s;
 
 
 

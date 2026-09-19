@@ -46,7 +46,7 @@ namespace jam::net
 			Stop();
 	}
 
-	void PhysicalWorld::StartTickPipeline(ShardDomain domain, uint64 dt_ns)
+	void PhysicalWorld::StartTickPipeline(ShardDomain domain, Duration dt)
 	{
 		auto& local = CurrentShardLocalChecked();
 		auto* scheduler = local.scheduler;
@@ -59,8 +59,8 @@ namespace jam::net
 		m_pipelineExecutor = shard.get();
 		m_pipelineActive = true;
 
-		RegisterShardSystemFn(local, domain, dt_ns,
-			[this](ShardLocal&, uint64, uint64)
+		RegisterShardSystemFn(local, domain, dt,
+			[this](ShardLocal&, Timestamp, Duration)
 			{
 				RequestPipelineTick();
 			},
@@ -162,7 +162,7 @@ namespace jam::net
 				if (m_pipelineTickDebt == 0)
 				{
 					m_pipelineIdleAwaitKey = m_pipelineExecutor->AllocateAwaitKey();
-					m_pipelineScheduler->Suspend(m_pipelineIdleAwaitKey, 0);
+					m_pipelineScheduler->Suspend(m_pipelineIdleAwaitKey, Timestamp::Zero());
 					m_pipelineIdleAwaitKey = 0;
 					continue;
 				}

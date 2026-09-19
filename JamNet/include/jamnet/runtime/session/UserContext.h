@@ -65,9 +65,9 @@ namespace jam::net
 	{
 		eUserWorldResyncPhase	phase			= eUserWorldResyncPhase::None;
 		WorldSyncToken			token			= {};
-		WorldRef			world			= {};
+		WorldRef				world			= {};
 		WorldStateRevision		mainRevision	= 0;
-		uint64					deadlineNs		= 0;
+		Timestamp				deadline		= Timestamp::Zero();
 	};
 
 	struct UserContext
@@ -77,7 +77,7 @@ namespace jam::net
 		SessionId						tcp					= kInvalidSessionId;
 		SessionId						udp					= kInvalidSessionId;
 		eUserConnectionState			connectionState		= eUserConnectionState::Connected;
-		uint64							reconnectDeadlineNs = 0;
+		Timestamp						reconnectDeadline   = Timestamp::Zero();
 		UserWorldResyncContext			worldResync;
 		UserWorldState					worldState;
 		UserWorldTransitionContext		worldTransition;

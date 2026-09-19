@@ -18,7 +18,7 @@ namespace jam::net
 {
 	class AdmissionContext;
 
-	void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemTransportFlush(ShardLocal& L, Timestamp now, Duration dt);
 
 	class TcpSession : public Session
 	{
@@ -26,7 +26,7 @@ namespace jam::net
 		friend class TcpListener;
 		friend class IocpCore;
 		friend class Service;
-		friend void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+		friend void SystemTransportFlush(ShardLocal& L, Timestamp now, Duration dt);
 
 	public:
 		TcpSession();
@@ -58,7 +58,7 @@ namespace jam::net
 		void					ProcessSend(TcpSendEvent* ev, int32 bytes);
 		void					ProcessRecv(TcpRecvEvent* ev, int32 bytes);
 
-		void					ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns = 0_ns);
+		void					ProcessSystemPacket(Packet packet, const PacketHeaderView& view, Timestamp ingressRecvTime = Timestamp::Zero());
 		void					HandleClientBindResponse(const PacketHeaderView& view);
 
 		void					TrySessionBinding();

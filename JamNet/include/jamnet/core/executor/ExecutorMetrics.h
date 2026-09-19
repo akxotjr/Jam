@@ -1,6 +1,5 @@
 #pragma once
-#include "jamnet/core/executor/Job.h"
-#include "jamnet/core/utils/TimeUnits.h"
+
 
 namespace jam
 {
@@ -9,14 +8,14 @@ namespace jam
 		uint64 workerLoopCount          = 0;
 		uint64 workerJobExecCount       = 0;
 		uint64 workerIdleLoopCount      = 0;
-		uint64 workerWaitCost_ns        = 0_ns;
-		uint64 workerJobExecCost_ns     = 0_ns;
+		uint64 workerWaitCost_ns        = 0;
+		uint64 workerJobExecCost_ns     = 0;
 
 		uint64 fiberLoopCount           = 0;
 		uint64 fiberPollCount           = 0;
 		uint64 fiberEmptyPollCount      = 0;
-		uint64 fiberPollCost_ns         = 0_ns;
-		uint64 fiberSleepCost_ns        = 0_ns;
+		uint64 fiberPollCost_ns         = 0;
+		uint64 fiberSleepCost_ns        = 0;
 		uint64 fiberReadyRunCount       = 0;
 	};
 
@@ -27,7 +26,7 @@ namespace jam
 		uint64 loopCount                = 0;
 		uint64 didWorkLoopCount         = 0;
 		uint64 idleLoopCount            = 0;
-		uint64 idleSleepCost_ns         = 0_ns;
+		uint64 idleSleepCost_ns         = 0;
 
 		uint64 ingressBatchCount        = 0;
 		uint64 ingressJobSubmitCount    = 0;
@@ -44,19 +43,19 @@ namespace jam
 		uint64 mailboxCountBudgetHitCount				= 0;
 		uint64 mailboxPerMailboxBudgetHitCount			= 0;
 		uint64 mailboxReadyWaitSampleCount				= 0;
-		uint64 mailboxReadyWaitTotal_ns					= 0_ns;
-		uint64 mailboxReadyWaitMax_ns					= 0_ns;
+		uint64 mailboxReadyWaitTotal_ns					= 0;
+		uint64 mailboxReadyWaitMax_ns					= 0;
 
 		uint64 schedulerPollCount       = 0;
 		uint64 schedulerEmptyPollCount  = 0;
-		uint64 schedulerPollCost_ns     = 0_ns;
+		uint64 schedulerPollCost_ns     = 0;
 		uint64 schedulerReadyRunCount   = 0;
 
 		uint64 tickCount                = 0;
 		uint64 tickCatchUpCount         = 0;
 
-		uint64 loopDurationTotal_ns     = 0_ns;
-		uint64 loopDurationMax_ns       = 0_ns;
+		uint64 loopDurationTotal_ns     = 0;
+		uint64 loopDurationMax_ns       = 0;
 		uint64 jobsExecutedCritical     = 0;
 		uint64 jobsExecutedControl      = 0;
 		uint64 jobsExecutedBackground   = 0;
@@ -91,8 +90,8 @@ namespace jam
 
 		uint64 pollCount                = 0;
 		uint64 emptyPollCount           = 0;
-		uint64 pollCostAcc_ns           = 0_ns;
-		uint64 lastPollCost_ns          = 0_ns;
+		uint64 pollCostAcc_ns           = 0;
+		uint64 lastPollCost_ns          = 0;
 
 		uint64 readyRunCount            = 0;
 		uint64 lastPollReadyRunCount    = 0;

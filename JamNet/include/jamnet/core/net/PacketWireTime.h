@@ -13,6 +13,5 @@ namespace jam::net
 		BYTE* destination = nullptr;
 	};
 
-	uint64 CaptureWireTimestampNow();
-	void ApplyWireTimePatches(std::span<const WireTimePatch> patches, uint64 wireNow_ns);
+	void ApplyWireTimePatches(std::span<const WireTimePatch> patches, Timestamp wireNow);
 }

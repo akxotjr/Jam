@@ -54,12 +54,12 @@ namespace jam::net
 		PhysicalWorld(const WorldConfig& config);
 		~PhysicalWorld() override;
 
-		virtual void						Start(uint64 dt_ns) = 0;
-		virtual void						Resume(uint64 dt_ns) = 0;
+		virtual void						Start(Duration dt) = 0;
+		virtual void						Resume(Duration dt) = 0;
 		virtual void						Stop() = 0;
 		void								SetRuntimeState(eWorldRuntimeState runtime);
 		eWorldRuntimeState					GetRuntimeState() const { return m_runtimeState; }
-		void								SetTickIntervalNs(uint64 dt_ns) { m_tickIntervalNs = dt_ns; }
+		void								SetTickIntervalNs(Duration dt) { m_tickIntervalNs = dt; }
 		void								SetActorArchetypeDatabase(ActorArchetypeDatabase database) { m_actorArchetypes = std::move(database); }
 		void								SetActorLevelDatabase(ActorLevelDatabase database) { m_actorLevels = std::move(database); }
 		uint32								GetPipelineTickDebt() const { return m_pipelineTickDebt; }
@@ -75,7 +75,7 @@ namespace jam::net
 		ActorId								AllocateActorId(entt::entity entity);
 		bool								ReleaseActorId(entt::entity entity);
 		void								ClearActorDirectory();
-		void								StartTickPipeline(ShardDomain domain, uint64 dt_ns);
+		void								StartTickPipeline(ShardDomain domain, Duration dt);
 		void								StopTickPipeline();
 		void								ShutdownPhysicsWhenPipelineStops();
 		bool								IsPipelineTickInProgress() const { return m_pipelineActive && m_pipelineTickInProgress; }
@@ -99,7 +99,7 @@ namespace jam::net
 		ActorLevelDatabase					m_actorLevels;
 
 		eWorldRuntimeState					m_runtimeState	 = eWorldRuntimeState::Standby;
-		uint64								m_tickIntervalNs = SIMULATION_TICK_NS;
+		Duration							m_tickIntervalNs = SIMULATION_TICK_NS;
 
 	private:
 		FiberScheduler*						m_pipelineScheduler = nullptr;

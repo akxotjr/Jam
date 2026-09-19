@@ -32,8 +32,8 @@ namespace jam::net
 		explicit ClientWorld(const WorldConfig& config) : PhysicalWorld(config) {}
 		~ClientWorld() override = default;
 
-		void								Start(uint64 dt_ns) override;
-		void								Resume(uint64 dt_ns) override;
+		void								Start(Duration dt) override;
+		void								Resume(Duration dt) override;
 		void								Stop() override;
 		void								SetHeadless(bool headless) { m_headless = headless; }
 		bool								IsHeadless() const { return m_headless; }

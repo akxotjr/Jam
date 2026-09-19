@@ -73,28 +73,28 @@ namespace jam
 		m_backend.SwitchTo(m_main);
 	}
 
-	void FiberScheduler::SleepUntil(uint64 wakeup_ns)
+	void FiberScheduler::SleepUntil(Timestamp wakeup)
 	{
 		Fiber* f = CurrentFiber();
 		f->state	 = eFiberState::WatingTimer;
-		f->wakeup_ns = wakeup_ns;
-		m_sleepPQ.push({ wakeup_ns, f->id, ++f->sleepGeneration });
+		f->wakeup = wakeup;
+		m_sleepPQ.push({ wakeup, f->id, ++f->sleepGeneration });
 		ProbeFiberStack(f);
 		m_backend.SwitchTo(m_main);
 	}
 
-	bool FiberScheduler::Suspend(FiberAwaitKey key, uint64 deadline_ns)
+	bool FiberScheduler::Suspend(FiberAwaitKey key, Timestamp deadline)
 	{
 		Fiber* f = CurrentFiber();
 		f->state		= eFiberState::WatingExternal;
 		f->awaitKey		= key;
 		f->resume		= eResumeCode::None;
-		f->deadline_ns	= deadline_ns;
+		f->deadline	= deadline;
 		m_waitMap.emplace(key, f->id);
 
-		if (deadline_ns) 
+		if (!deadline.IsZero()) 
 		{
-			m_sleepPQ.push({ deadline_ns, f->id, ++f->sleepGeneration });
+			m_sleepPQ.push({ deadline, f->id, ++f->sleepGeneration });
 		}
 		ProbeFiberStack(f);
 		m_backend.SwitchTo(m_main); // 재개되면 아래로 이어짐
@@ -132,7 +132,7 @@ namespace jam
 			return false;
 
 		f->awaitKey	   = 0;
-		f->deadline_ns = 0_ns;
+		f->deadline = Timestamp::Zero();
 		++f->sleepGeneration;
 		f->resume	   = eResumeCode::Signaled;
 		MakeReady(id, readyPriority);
@@ -229,16 +229,16 @@ namespace jam
 		}
 	}
 
-	void FiberScheduler::Poll(int32 budget, uint64 now_ns)
+	void FiberScheduler::Poll(int32 budget, Timestamp now)
 	{
-		const uint64 pollStart_ns = NOW_NS();
+		const Timestamp pollStart = NOW();
 		++m_metrics.pollCount;
 
 		// 0) 인박스 먼저 처리
 		DrainInbox();
 
 		// 1) 타이머/타임아웃 기상
-		WakeupTimed(now_ns);
+		WakeupTimed(now);
 
 		// 2) ready 실행 (budget 만큼)
 		int32 steps = 0;
@@ -290,21 +290,21 @@ namespace jam
 		}
 
 		// 3) 실행 중 경과된 시간 기준으로 한 번 더 기상
-		WakeupTimed(NOW_NS());
+		WakeupTimed(NOW());
 
 		// 3) 인박스 한 번 더 비우기(레이턴시↓)
 		DrainInbox();
-		const uint64 pollEnd_ns = NOW_NS();
-		m_metrics.lastPollCost_ns = pollEnd_ns - pollStart_ns;
+		const Timestamp pollEnd = NOW();
+		m_metrics.lastPollCost_ns = (pollEnd - pollStart).Ns();
 		m_metrics.pollCostAcc_ns += m_metrics.lastPollCost_ns;
 
 		if (steps == 0)
 			++m_metrics.emptyPollCount;
 	}
 
-	uint64 FiberScheduler::NextWakeupTime() const
+	Timestamp FiberScheduler::NextWakeupTime() const
 	{
-		return m_sleepPQ.empty() ? 0_ns : m_sleepPQ.top().wakeup_ns;
+		return m_sleepPQ.empty() ? Timestamp::Zero() : m_sleepPQ.top().wakeup;
 	}
 
 	uint32 FiberScheduler::Current() const
@@ -401,14 +401,14 @@ namespace jam
 	{
 		++f->switches;
 		++m_metrics.switchCount;
-		f->lastRunStart_ns = NOW_NS();
+		f->lastRunStart = NOW();
 	}
 
 	void FiberScheduler::EndRun(Fiber* f)
 	{
-		uint64 now_ns = NOW_NS();
-		if (f->lastRunStart_ns)
-			f->runtimeAcc_ns += (now_ns - f->lastRunStart_ns);
+		Timestamp now = NOW();
+		if (!f->lastRunStart.IsZero())
+			f->runtimeAcc += (now - f->lastRunStart);
 		++f->steps;
 	}
 
@@ -461,17 +461,17 @@ namespace jam
 			f->cancel->RequestCancel(cc == eCancelCode::None ? eCancelCode::Manual : cc);
 		}
 
-		f->resume      = rc;
-		f->awaitKey    = 0;
-		f->wakeup_ns   = 0_ns;
-		f->deadline_ns = 0_ns;
+		f->resume   = rc;
+		f->awaitKey = 0;
+		f->wakeup   = Timestamp::Zero();
+		f->deadline = Timestamp::Zero();
 		++f->sleepGeneration;
 		MakeReady(f->id);
 	}
 
-	void FiberScheduler::WakeupTimed(uint64 wakeup_ns)
+	void FiberScheduler::WakeupTimed(Timestamp wakeup)
 	{
-		while (!m_sleepPQ.empty() && m_sleepPQ.top().wakeup_ns <= wakeup_ns)
+		while (!m_sleepPQ.empty() && m_sleepPQ.top().wakeup <= wakeup)
 		{
 			const auto& [wake, id, gen] = m_sleepPQ.top();
 
@@ -487,15 +487,15 @@ namespace jam
 
 			if (f->state == eFiberState::WatingTimer)
 			{
-				if (wake != f->wakeup_ns)
+				if (wake != f->wakeup)
 					continue;
-				f->wakeup_ns = 0_ns;
+				f->wakeup = Timestamp::Zero();
 				++m_metrics.wakeupTimerCount;
 				MakeReady(id);
 			}
 			else if (f->state == eFiberState::WatingExternal)
 			{
-				if (wake != f->deadline_ns)
+				if (wake != f->deadline)
 					continue;
 
 				if (f->awaitKey)
@@ -504,9 +504,9 @@ namespace jam
 					if (w != m_waitMap.end() && w->second == id)
 						m_waitMap.erase(w);
 
-					f->resume      = eResumeCode::Timeout;
-					f->awaitKey    = 0;
-					f->deadline_ns = 0_ns;
+					f->resume   = eResumeCode::Timeout;
+					f->awaitKey = 0;
+					f->deadline = Timestamp::Zero();
 
 					if (f->cancel) 
 						f->cancel->RequestCancel(eCancelCode::Timeout);

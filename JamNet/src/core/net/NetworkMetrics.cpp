@@ -46,7 +46,7 @@ namespace jam::net
 	{
 		m_shardIndex    = shardIndex;
 		m_windowIndex   = UINT64_MAX;
-		m_windowStartNs = 0;
+		m_windowStart = Timestamp::Zero();
 		InitializeSnapshots();
 	}
 
@@ -148,13 +148,13 @@ namespace jam::net
 		peak = std::max(peak, pendingReliable);
 	}
 
-	void NetworkMetrics::UpdateWindow(const uint64 nowNs, MetricsAggregator& aggregator)
+	void NetworkMetrics::UpdateWindow(const Timestamp now, MetricsAggregator& aggregator)
 	{
-		const uint64 windowIndex = aggregator.WindowIndex(nowNs);
+		const uint64 windowIndex = aggregator.WindowIndex(now);
 		if (m_windowIndex == UINT64_MAX)
 		{
 			m_windowIndex = windowIndex;
-			m_windowStartNs = windowIndex * aggregator.WindowPeriodNs();
+			m_windowStart = Timestamp::FromNs((windowIndex * aggregator.WindowPeriod()).Ns());
 			return;
 		}
 		if (m_windowIndex == windowIndex)
@@ -162,22 +162,22 @@ namespace jam::net
 
 		const uint64 activeSessions = m_shardSnapshot.values[eActiveSessions].value;
 		const uint64 pendingReliable = m_shardSnapshot.values[ePendingReliableCurrent].value;
-		SubmitSnapshot(m_windowStartNs + aggregator.WindowPeriodNs());
+		SubmitSnapshot(m_windowStart + aggregator.WindowPeriod());
 		m_windowIndex = windowIndex;
-		m_windowStartNs = windowIndex * aggregator.WindowPeriodNs();
+		m_windowStart = Timestamp::FromNs((windowIndex * aggregator.WindowPeriod()).Ns());
 		InitializeSnapshots();
 		SetCurrent(activeSessions, pendingReliable);
 	}
 
-	void NetworkMetrics::SubmitSnapshot(const uint64 windowEndNs)
+	void NetworkMetrics::SubmitSnapshot(const Timestamp windowEnd)
 	{
 		m_shardSnapshot.windowIndex   = m_windowIndex;
-		m_shardSnapshot.windowStartNs = m_windowStartNs;
-		m_shardSnapshot.windowEndNs   = windowEndNs;
+		m_shardSnapshot.windowStartNs = m_windowStart.Ns();
+		m_shardSnapshot.windowEndNs   = windowEnd.Ns();
 
 		m_processSnapshot.windowIndex = m_windowIndex;
-		m_processSnapshot.windowStartNs = m_windowStartNs;
-		m_processSnapshot.windowEndNs = windowEndNs;
+		m_processSnapshot.windowStartNs = m_windowStart.Ns();
+		m_processSnapshot.windowEndNs = windowEnd.Ns();
 
 		for (size_t i = 0; i < m_shardSnapshot.values.size(); ++i)
 			m_processSnapshot.values[i].value = m_shardSnapshot.values[i].value;

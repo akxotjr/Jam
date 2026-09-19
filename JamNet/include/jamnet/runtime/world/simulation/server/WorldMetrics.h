@@ -11,7 +11,7 @@ namespace jam::net
 	public:
 		void			Init(uint64 worldId, uint32 shardIndex);
 
-		void			RecordTick(const std::array<uint64, 6>& phasesNs, uint64 participantCount, uint64 nowNs);
+		void			RecordTick(const std::array<uint64, 6>& phasesNs, uint64 participantCount, Timestamp now);
 		void			RecordAoiNeighbors(uint64 visibleActorCount);
 		void			RecordAoiEnteredActor();
 		void			RecordAoiLeftActor();
@@ -23,11 +23,11 @@ namespace jam::net
 		void			RecordBaselineFullRequest();
 		void			RecordBaselineResync();
 
-		bool			IsReadyToSubmit(uint64 nowNs) const;
+		bool			IsReadyToSubmit(Timestamp nowNs) const;
 
 		void			Reset();
 
-		void			SubmitSnapshot(uint64 nowNs);
+		void			SubmitSnapshot(Timestamp nowNs);
 
 	private:
 		void			InitializeSnapshots();
@@ -35,8 +35,8 @@ namespace jam::net
 	private:
 		uint64			m_worldId = 0;
 		uint32			m_shardIndex = 0;
-		uint64			m_windowStartNs = 0;
-		uint64			m_windowEndNs = 0;
+		Timestamp		m_windowStart = Timestamp::Zero();
+		Timestamp		m_windowEndNs   = Timestamp::Zero();
 		MetricSnapshot	m_simulationSnapshot;
 		MetricSnapshot	m_aoiSnapshot;
 		MetricSnapshot	m_replicationSnapshot;

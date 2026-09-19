@@ -30,15 +30,15 @@ namespace jam
 
 	struct ShardSystemGroup
 	{
-		using SystemFn    = std::function<void(ShardLocal&, uint64 now_ns, uint64 dt_ns)>;
+		using SystemFn    = std::function<void(ShardLocal&, Timestamp now, Duration dt)>;
 		using BootstrapFn = std::function<void(ShardLocal&)>;
 
 
-		ShardDomain											tag			  = {};
-		uint64												tickPeriod_ns = 0_ns;
-		uint64												nextTick_ns   = 0_ns;
-		uint64												workerPreWakeLead_ns = 0_ns;
-		uint64												workerPreWakePublishedTick_ns = 0_ns;
+		ShardDomain		tag						   = {};
+		Duration		tickPeriod				   = 0_ns;
+		Timestamp		nextTick				   = Timestamp::Zero();
+		Duration		workerPreWakeLead		   = 0_ns;
+		Timestamp		workerPreWakePublishedTick = Timestamp::Zero();
 
 		std::vector<SystemFn>								systems;
 		std::vector<BootstrapFn>							bootstraps;
@@ -65,12 +65,12 @@ namespace jam
 	};
 
 
-	inline void RegisterShardSystemFn(ShardLocal& L, ShardDomain tag, uint64 tickPeriod_ns, ShardSystemGroup::SystemFn system, uint64 workerPreWakeLead_ns = 0_ns)
+	inline void RegisterShardSystemFn(ShardLocal& L, ShardDomain tag, Duration tickPeriod, ShardSystemGroup::SystemFn system, Duration workerPreWakeLead = 0_ns)
 	{
 		auto& group = L.domainGroups[tag];
 		group.tag				   = tag;
-		group.tickPeriod_ns		   = tickPeriod_ns;
-		group.workerPreWakeLead_ns = workerPreWakeLead_ns;
+		group.tickPeriod		   = tickPeriod;
+		group.workerPreWakeLead = workerPreWakeLead;
 
 		group.systems.push_back(std::move(system));
 	}
@@ -87,17 +87,17 @@ namespace jam
 
 	struct ShardExecutorConfig
 	{
-		int32  index                              = 0;
-		int32  ingressMoveBudgetPerLoop           = 64;
-		int32  localExecuteBudgetPerPreTickPass   = 64;
-		int32  localRecoveryBudgetAfterTick       = 128;
-		int32  mailboxServiceBudgetPerLoop        = 128;
-		int32  mailboxMoveBudgetPerLoop           = 4096;
-		int32  mailboxMoveBudgetPerMailbox        = 64;
-		int32  schedulerPollBudgetPerLoop         = 64;
-		int32  idleSleepMs                        = 1;
-		uint16 numaNode                           = 0xFFFF;
-		int32  maxTickCatchUp                     = 4;
+		int32		index                              = 0;
+		int32		ingressMoveBudgetPerLoop           = 64;
+		int32		localExecuteBudgetPerPreTickPass   = 64;
+		int32		localRecoveryBudgetAfterTick       = 128;
+		int32		mailboxServiceBudgetPerLoop        = 128;
+		int32		mailboxMoveBudgetPerLoop           = 4096;
+		int32		mailboxMoveBudgetPerMailbox        = 64;
+		int32		schedulerPollBudgetPerLoop         = 64;
+		Duration	idleSleepMs						   = 1_ms;
+		uint16		numaNode						   = 0xFFFF;
+		int32		maxTickCatchUp					   = 4;
 	};
 
 
@@ -116,7 +116,7 @@ namespace jam
 
 		void							Submit(Job j) override;
 		void							SubmitWorkerJob(Job j);
-		void							SubmitAfter(Job j, uint64 delay_ns);
+		void							SubmitAfter(Job j, Duration delay);
 
 		MailboxRef						CreateMailboxRef(RuntimeId ownerId);
 		bool							CloseMailbox(uint32 id, eMailboxCloseMode mode = eMailboxCloseMode::Drain, std::function<void()> onClosed = {});
@@ -145,19 +145,19 @@ namespace jam
 		void							PinCoreSlot(const CoreSlot& slot, uint16 numaNode = 0xFFFF);
 		uint16							GetNumaNode() const { return m_config.numaNode; }
 	private:
-		void							UpdateMetricsWindow(uint64 now_ns, uint64 loopDuration_ns, uint64 ingressMoved, uint64 mailboxMoved, uint64 jobsExecuted);
-		void							SubmitMetricsWindow(uint64 windowEnd_ns);
+		void							UpdateMetricsWindow(Timestamp now, Duration loopDuration, uint64 ingressMoved, uint64 mailboxMoved, uint64 jobsExecuted);
+		void							SubmitMetricsWindow(Timestamp windowEnd);
 		void							ResetMetricsWindow();
 
 		void							Loop();
 		void							WorkerLoop();
-		bool							RunDueDomainGroups(uint64 now_ns);
-		void							PublishDueWorkerPreWakes(uint64 now_ns);
+		bool							RunDueDomainGroups(Timestamp now);
+		void							PublishDueWorkerPreWakes(Timestamp now);
 		bool							ProcessDefers();
-		uint64							TimeUntilNextDomainDue(uint64 now_ns) const;
-		uint64							TimeUntilNextWorkerPreWake(uint64 now_ns) const;
+		Duration						TimeUntilNextDomainDue(Timestamp now) const;
+		Duration						TimeUntilNextWorkerPreWake(Timestamp now) const;
 		void							NotifyWorkAvailable();
-		void							WaitForWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns);
+		void							WaitForWorkOrTimeout(uint64 observedWakeEpoch, Duration timeout);
 
 		void							PushLocal(Job&& j);
 		bool							TryPopLocal(OUT Job& j);
@@ -200,8 +200,8 @@ namespace jam
 		std::atomic<uint32>										m_nextMailboxId	 = 1;
 		struct ReadyMailboxEntry
 		{
-			uint32 mailboxId = 0;
-			uint64 enqueuedAt_ns = 0;
+			uint32	  mailboxId		= 0;
+			Timestamp enqueuedAt = Timestamp::Zero();
 		};
 		ConcurrentQueue<ReadyMailboxEntry>						m_readyMailboxes;
 		std::mutex												m_wakeMutex;
@@ -220,8 +220,8 @@ namespace jam
 		struct PeriodicState
 		{
 			std::atomic<bool>   cancelled		= false;
-			uint64				period_ns		= 0_ns;
-			uint64				initialDelay_ns = 0_ns;
+			Duration			period			= 0_ns;
+			Duration			initialDelay	= 0_ns;
 			int32				maxCatchUp		= 0;
 			bool				fixedRate		= true;
 			FiberAwaitKey		awaitKey		= 0;
@@ -232,7 +232,7 @@ namespace jam
 
 		ShardExecutorMetrics										m_metrics			= {};
 		uint64														m_metricsWindowIndex = UINT64_MAX;
-		uint64														m_metricsWindowStart_ns = 0_ns;
+		Timestamp													m_metricsWindowStart_ns = Timestamp::Zero();
 	};
 
 

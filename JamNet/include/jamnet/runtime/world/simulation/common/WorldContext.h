@@ -31,41 +31,41 @@ namespace jam::net
 
 	struct EstimatedServerTick
 	{
-		bool	valid				= false;
+		bool		valid				= false;
 
-		uint64	anchorServerTick	= 0;
-		uint64	anchorRecvNs		= 0;
+		uint64		anchorServerTick	= 0;
+		Timestamp	anchorReceiveTime	= Timestamp::Zero();
 
-		uint64	lastSnapshotTick	= 0;
-		uint64	lastSnapshotRecvNs	= 0;
+		uint64		lastSnapshotTick	= 0;
+		Timestamp	lastSnapshotReceiveTime = Timestamp::Zero();
 
-		double	estimatedNowTick	= 0.0;
+		double		estimatedNowTick	= 0.0;
 
 		void Reset()
 		{
-			valid				= false;
-			anchorServerTick	= 0;
-			anchorRecvNs		= 0;
-			lastSnapshotTick	= 0;
-			lastSnapshotRecvNs	= 0;
-			estimatedNowTick	= 0.0;
+			valid					= false;
+			anchorServerTick		= 0;
+			anchorReceiveTime		= Timestamp::Zero();
+			lastSnapshotTick		= 0;
+			lastSnapshotReceiveTime = Timestamp::Zero();
+			estimatedNowTick		= 0.0;
 		}
 
-		void Update(uint64 snapshotServerTick, uint64 snapshotRecvNs, uint64 nowNs)
+		void Update(uint64 snapshotServerTick, Timestamp snapshotReceiveTime, Timestamp now)
 		{
 			// out-of-order snapshot 보호: 더 최신 tick만 anchor 갱신
 			if (!valid || snapshotServerTick >= anchorServerTick)
 			{
 				anchorServerTick = snapshotServerTick;
-				anchorRecvNs	 = snapshotRecvNs;
+				anchorReceiveTime = snapshotReceiveTime;
 				valid			 = true;
 			}
 
-			lastSnapshotTick   = snapshotServerTick;
-			lastSnapshotRecvNs = snapshotRecvNs;
+			lastSnapshotTick			= snapshotServerTick;
+			lastSnapshotReceiveTime = snapshotReceiveTime;
 
-			const uint64 elapsedNs = (nowNs > anchorRecvNs) ? (nowNs - anchorRecvNs) : 0;
-			estimatedNowTick = static_cast<double>(anchorServerTick) + (static_cast<double>(elapsedNs) / static_cast<double>(SIMULATION_TICK_NS));
+			const Duration elapsed = now >= anchorReceiveTime ? now - anchorReceiveTime : Duration::Zero();
+			estimatedNowTick = static_cast<double>(anchorServerTick) + elapsed.Ratio(SIMULATION_TICK_NS);
 		}
 	};
 

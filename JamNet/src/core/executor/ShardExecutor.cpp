@@ -151,8 +151,9 @@ namespace jam
 			JAM_LOG_WARN("ShardPhysics#{} has no SMT sibling affinity; worker remains unpinned", m_config.index);
 		}
 
-		constexpr uint32 kActiveSpinCount = 256;
-		constexpr uint64 kPreWakeSpinNs = 1_ms;
+		constexpr uint32   kActiveSpinCount = 256;
+		constexpr Duration kPreWakeSpin     = 1_ms;
+
 		for (;;)
 		{
 			Job job;
@@ -168,10 +169,12 @@ namespace jam
 			const uint64 preWakeDeadlineNs = m_workerPreWakeDeadlineNs.exchange(0, std::memory_order_acq_rel);
 			if (preWakeDeadlineNs != 0)
 			{
-				const uint64 spinStartNs = NOW_NS();
-				const uint64 spinEndNs = spinStartNs + kPreWakeSpinNs;
+				const Timestamp spinStart = NOW();
+				const Timestamp spinEnd   = spinStart + kPreWakeSpin;
+
 				bool preWakeHit = false;
-				while (NOW_NS() < spinEndNs)
+
+				while (NOW() < spinEnd)
 				{
 					if (m_workerIngress.try_dequeue(job))
 					{
@@ -215,7 +218,7 @@ namespace jam
 		}
 	}
 
-	void ShardExecutor:: SubmitAfter(Job j, uint64 delay_ns)
+	void ShardExecutor:: SubmitAfter(Job j, Duration delay)
 	{
 		if (!m_scheduler) 
 		{
@@ -223,7 +226,7 @@ namespace jam
 			return;
 		}
 
-		const uint64 deadline = NOW_NS() + delay_ns;
+		const Timestamp deadline = NOW() + delay;
 
 		m_scheduler->PostSpawn(
 			[this, deadline, j = std::move(j)]() mutable
@@ -295,8 +298,9 @@ namespace jam
 		if (mailboxId == 0)
 			return false;
 
-		if (!m_readyMailboxes.enqueue(ReadyMailboxEntry{ .mailboxId = mailboxId, .enqueuedAt_ns = NOW_NS() }))
+		if (!m_readyMailboxes.enqueue(ReadyMailboxEntry{ .mailboxId = mailboxId, .enqueuedAt = NOW() }))
 			return false;
+
 		NotifyWorkAvailable();
 		return true;
 	}
@@ -344,7 +348,7 @@ namespace jam
 		return m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
 	}
 
-	bool ShardExecutor::RunDueDomainGroups(uint64 now_ns)
+	bool ShardExecutor::RunDueDomainGroups(Timestamp now)
 	{
 		auto& L = m_local;
 		bool didWork = false;
@@ -367,16 +371,16 @@ namespace jam
 			if (group.systems.empty())
 				continue;
 
-			const uint64 period_ns = group.tickPeriod_ns;
+			const Duration period_ns = group.tickPeriod;
 
-			if (period_ns == 0)
+			if (period_ns.IsZero())
 			{
-				group.nextTick_ns = now_ns;
+				group.nextTick = now;
 
 				for (auto& fn : group.systems)
 				{
 					if (fn)
-						fn(L, now_ns, 0_ns);
+						fn(L, now, 0_ns);
 				}
 
 				++m_metrics.tickCount;
@@ -384,23 +388,23 @@ namespace jam
 				continue;
 			}
 
-			if (group.nextTick_ns == 0)
-				group.nextTick_ns = now_ns;
+			if (group.nextTick.IsZero())
+				group.nextTick = now;
 
-			if (now_ns < group.nextTick_ns)
+			if (now < group.nextTick)
 				continue;
 
 			int32 catches = 0;
 			const int32 maxCatchUp = std::max(1, m_config.maxTickCatchUp);
-			while (now_ns >= group.nextTick_ns && catches < maxCatchUp)
+			while (now >= group.nextTick && catches < maxCatchUp)
 			{
-				const uint64 tickNow_ns = group.nextTick_ns;
-				group.nextTick_ns += period_ns;
+				const Timestamp tickNow = group.nextTick;
+				group.nextTick += period_ns;
 
 				for (auto& fn : group.systems)
 				{
 					if (fn)
-						fn(L, tickNow_ns, period_ns);
+						fn(L, tickNow, period_ns);
 				}
 
 				++m_metrics.tickCount;
@@ -408,9 +412,9 @@ namespace jam
 				didWork = true;
 			}
 
-			if (now_ns >= group.nextTick_ns)
+			if (now >= group.nextTick)
 			{
-				group.nextTick_ns = now_ns + period_ns;
+				group.nextTick = now + period_ns;
 				++m_metrics.tickCatchUpCount;
 			}
 		}
@@ -418,32 +422,30 @@ namespace jam
 		return didWork;
 	}
 
-	void ShardExecutor::PublishDueWorkerPreWakes(uint64 now_ns)
+	void ShardExecutor::PublishDueWorkerPreWakes(Timestamp now)
 	{
-		uint64 spinDeadlineNs = 0;
+		Timestamp spinDeadline = Timestamp::Zero();
+
 		for (auto& group : m_local.domainGroups | std::views::values)
 		{
-			if (group.systems.empty() || group.tickPeriod_ns == 0 || group.nextTick_ns == 0
-				|| group.workerPreWakeLead_ns == 0 || group.workerPreWakePublishedTick_ns == group.nextTick_ns)
+			if (group.systems.empty() || group.tickPeriod.IsZero() || group.nextTick.IsZero() || group.workerPreWakeLead.IsZero() || group.workerPreWakePublishedTick == group.nextTick)
 				continue;
 
-			const uint64 preWakeNs = group.nextTick_ns > group.workerPreWakeLead_ns
-				? group.nextTick_ns - group.workerPreWakeLead_ns
-				: 0;
-			if (now_ns < preWakeNs)
+			const Timestamp preWake = group.nextTick.SaturatingSub(group.workerPreWakeLead);
+			if (now < preWake)
 				continue;
 
-			group.workerPreWakePublishedTick_ns = group.nextTick_ns;
-			if (spinDeadlineNs == 0 || group.nextTick_ns < spinDeadlineNs)
+			group.workerPreWakePublishedTick = group.nextTick;
+			if (spinDeadline.IsZero() || group.nextTick < spinDeadline)
 			{
-				spinDeadlineNs = group.nextTick_ns;
+				spinDeadline = group.nextTick;
 			}
 		}
 
-		if (spinDeadlineNs == 0)
+		if (spinDeadline.IsZero())
 			return;
 
-		m_workerPreWakeDeadlineNs.store(spinDeadlineNs, std::memory_order_release);
+		m_workerPreWakeDeadlineNs.store(spinDeadline.Ns(), std::memory_order_release);
 		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
 		m_workerWakeEpoch.notify_one();
 	}
@@ -467,45 +469,42 @@ namespace jam
 		return false;
 	}
 
-	uint64 ShardExecutor::TimeUntilNextDomainDue(uint64 now_ns) const
+	Duration ShardExecutor::TimeUntilNextDomainDue(Timestamp now) const
 	{
-		uint64 wait_ns = UINT64_MAX;
+		Duration wait = Duration::Max();
 
 		for (const auto& group : m_local.domainGroups | std::views::values)
 		{
 			if (!group.bootstraps.empty())
-				return 0_ns;
+				return Duration::Zero();
 
 			if (group.systems.empty())
 				continue;
 
-			const uint64 period_ns = group.tickPeriod_ns;
-			if (period_ns == 0 || group.nextTick_ns == 0 || now_ns >= group.nextTick_ns)
-				return 0_ns;
+			if (group.tickPeriod.IsZero() || group.nextTick.IsZero() || now >= group.nextTick)
+				return Duration::Zero();
 
-			wait_ns = std::min(wait_ns, group.nextTick_ns - now_ns);
+			wait = std::min(wait, group.nextTick - now);
 		}
 
-		return wait_ns;
+		return wait;
 	}
 
-	uint64 ShardExecutor::TimeUntilNextWorkerPreWake(uint64 now_ns) const
+	Duration ShardExecutor::TimeUntilNextWorkerPreWake(Timestamp now) const
 	{
-		uint64 wait_ns = UINT64_MAX;
+		Duration wait = Duration::Max();
 		for (const auto& group : m_local.domainGroups | std::views::values)
 		{
-			if (group.systems.empty() || group.tickPeriod_ns == 0 || group.nextTick_ns == 0
-				|| group.workerPreWakeLead_ns == 0 || group.workerPreWakePublishedTick_ns == group.nextTick_ns)
+			if (group.systems.empty() || group.tickPeriod.IsZero() || group.nextTick.IsZero()
+				|| group.workerPreWakeLead.IsZero() || group.workerPreWakePublishedTick == group.nextTick)
 				continue;
 
-			const uint64 preWakeNs = group.nextTick_ns > group.workerPreWakeLead_ns
-				? group.nextTick_ns - group.workerPreWakeLead_ns
-				: 0;
-			if (now_ns >= preWakeNs)
-				return 0_ns;
-			wait_ns = std::min(wait_ns, preWakeNs - now_ns);
+			const Timestamp preWake = group.nextTick.SaturatingSub(group.workerPreWakeLead);
+			if (now >= preWake)
+				return Duration::Zero();
+			wait = std::min(wait, preWake - now);
 		}
-		return wait_ns;
+		return wait;
 	}
 
 
@@ -520,12 +519,12 @@ namespace jam
 
 	PeriodicHandle ShardExecutor::ScheduleFixedRate(Job j, const PeriodicOptions& opt)
 	{
-		if (opt.period_ns == 0)
+		if (opt.period.IsZero())
 			return {};
 
 		auto st				= std::make_shared<PeriodicState>();
-		st->period_ns		= opt.period_ns;
-		st->initialDelay_ns = opt.initialDelay_ns;
+		st->period			= opt.period;
+		st->initialDelay	= opt.initialDelay;
 		st->maxCatchUp		= opt.maxCatchUp;
 		st->fixedRate		= true;
 		st->awaitKey		= m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
@@ -543,12 +542,12 @@ namespace jam
 		m_scheduler->PostSpawn(
 			[this, st, sharedJob, priority, id]()
 			{
-				uint64 next_ns = NOW_NS() + st->initialDelay_ns;
-				const uint64 period_ns = st->period_ns;
+				Timestamp next = NOW() + st->initialDelay;
+				const Duration period = st->period;
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
-					m_scheduler->Suspend(st->awaitKey, next_ns);
+					m_scheduler->Suspend(st->awaitKey, next);
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
@@ -557,10 +556,10 @@ namespace jam
 							sharedJob->Execute();
 						}, priority));
 
-					next_ns += period_ns;
+					next += period;
 
 					int32 catches = 0;
-					for (uint64 now_ns = NOW_NS(); now_ns >= next_ns && catches < st->maxCatchUp; now_ns = NOW_NS(), ++catches)
+					for (Timestamp now_ns = NOW(); now_ns >= next && catches < st->maxCatchUp; now_ns = NOW(), ++catches)
 					{
 						if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 							break;
@@ -568,7 +567,7 @@ namespace jam
 							{
 								sharedJob->Execute();
 							}, priority));
-						next_ns += period_ns;
+						next += period;
 					}
 				}
 
@@ -584,12 +583,12 @@ namespace jam
 
 	PeriodicHandle ShardExecutor::ScheduleFixedDelay(Job j, const PeriodicOptions& opt)
 	{
-		if (opt.period_ns == 0)
+		if (opt.period.IsZero())
 			return {};
 
 		auto st = std::make_shared<PeriodicState>();
-		st->period_ns		= opt.period_ns;
-		st->initialDelay_ns = opt.initialDelay_ns;
+		st->period		= opt.period;
+		st->initialDelay = opt.initialDelay;
 		st->maxCatchUp		= 0;
 		st->fixedRate		= false;
 		st->awaitKey		= m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
@@ -607,7 +606,7 @@ namespace jam
 		m_scheduler->PostSpawn(
 			[this, st, sharedJob, priority, id]()
 			{
-				uint64 next = NOW_NS() + st->initialDelay_ns;
+				Timestamp next = NOW() + st->initialDelay;
 				m_scheduler->Suspend(st->awaitKey, next);
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
@@ -619,7 +618,7 @@ namespace jam
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
-					m_scheduler->Suspend(st->awaitKey, NOW_NS() + st->period_ns);
+					m_scheduler->Suspend(st->awaitKey, NOW() + st->period);
 				}
 
 				WRITE_LOCK
@@ -651,40 +650,41 @@ namespace jam
 	{
 		while (m_running.load())
 		{
-			const uint64 loopStart_ns = NOW_NS();
-			UpdateMetricsWindow(loopStart_ns, 0_ns, 0, 0, 0);
+			const Timestamp loopStart = NOW();
+			UpdateMetricsWindow(loopStart, 0_ns, 0, 0, 0);
+
 			const uint64 ingressMovedBefore = m_metrics.ingressJobCount;
 			const uint64 mailboxMovedBefore = m_metrics.mailboxJobMoveCount;
 			const uint64 jobsExecutedBefore = m_metrics.processJobsExecCount;
+			
 			++m_metrics.loopCount;
 			bool didWork = false;
+
 			const uint64 observedWakeEpoch = m_wakeEpoch.load(std::memory_order_acquire);
-			PublishDueWorkerPreWakes(NOW_NS());
-
-			didWork |= ProcessJobsOnce(m_config.localExecuteBudgetPerPreTickPass);
-			DrainReadyMailboxes(
-				m_config.mailboxServiceBudgetPerLoop,
-				m_config.mailboxMoveBudgetPerLoop,
-				m_config.mailboxMoveBudgetPerMailbox);
-			didWork |= ProcessJobsOnce(m_config.localExecuteBudgetPerPreTickPass);
-
-			const uint64 pollStart_ns = NOW_NS();
 			
-			m_scheduler->Poll(m_config.schedulerPollBudgetPerLoop, pollStart_ns);
+			PublishDueWorkerPreWakes(NOW());
 
-			const uint64 pollCost_ns = NOW_NS() - pollStart_ns;
+			didWork |= ProcessJobsOnce(m_config.localExecuteBudgetPerPreTickPass);
+			DrainReadyMailboxes(m_config.mailboxServiceBudgetPerLoop, m_config.mailboxMoveBudgetPerLoop, m_config.mailboxMoveBudgetPerMailbox);
+			didWork |= ProcessJobsOnce(m_config.localExecuteBudgetPerPreTickPass);
+
+			const Timestamp pollStart_ns = NOW();
+			m_scheduler->Poll(m_config.schedulerPollBudgetPerLoop, pollStart_ns);
+			const Duration pollCost_ns = NOW() - pollStart_ns;
+
 			++m_metrics.schedulerPollCount;
-			m_metrics.schedulerPollCost_ns += pollCost_ns;
+			m_metrics.schedulerPollCost_ns += pollCost_ns.Ns();
 
 			const auto& fiberMetrics = m_scheduler->Profile();
 			if (fiberMetrics.lastPollCost_ns != 0 && fiberMetrics.lastPollReadyRunCount == 0)
 				++m_metrics.schedulerEmptyPollCount;
+			
 			m_metrics.schedulerReadyRunCount = fiberMetrics.readyRunCount;
 
 			if (fiberMetrics.lastPollReadyRunCount > 0)
 				didWork = true;
 
-			const uint64 now_ns = NOW_NS();
+			const Timestamp now_ns = NOW();
 			PublishDueWorkerPreWakes(now_ns);
 			didWork |= RunDueDomainGroups(now_ns);
 			didWork |= ProcessDefers();
@@ -692,15 +692,19 @@ namespace jam
 			// Domain work may submit asynchronous work whose completion resumes a
 			// fiber from another thread. Drain those resumes before sleeping or
 			// starting the next executor loop.
-			const uint64 secondPollStart_ns = NOW_NS();
+			const Timestamp secondPollStart_ns = NOW();
 			m_scheduler->Poll(m_config.schedulerPollBudgetPerLoop, secondPollStart_ns);
-			const uint64 secondPollCost_ns = NOW_NS() - secondPollStart_ns;
+			const Duration secondPollCost_ns = NOW() - secondPollStart_ns;
+
 			++m_metrics.schedulerPollCount;
-			m_metrics.schedulerPollCost_ns += secondPollCost_ns;
+			m_metrics.schedulerPollCost_ns += secondPollCost_ns.Ns();
+
 			const auto& secondFiberMetrics = m_scheduler->Profile();
 			if (secondFiberMetrics.lastPollCost_ns != 0 && secondFiberMetrics.lastPollReadyRunCount == 0)
 				++m_metrics.schedulerEmptyPollCount;
+
 			m_metrics.schedulerReadyRunCount = secondFiberMetrics.readyRunCount;
+			
 			if (secondFiberMetrics.lastPollReadyRunCount > 0)
 				didWork = true;
 
@@ -711,34 +715,36 @@ namespace jam
 			if (!didWork)
 			{
 				++m_metrics.idleLoopCount;
-				const uint64 idleStart_ns = NOW_NS();
-				const uint64 idleNow_ns = idleStart_ns;
-				uint64 idleWait_ns = static_cast<uint64>(std::max(0, m_config.idleSleepMs)) * 1'000'000ull;
-				const uint64 nextDomainDue_ns = TimeUntilNextDomainDue(idleNow_ns);
-				if (nextDomainDue_ns != UINT64_MAX)
-					idleWait_ns = std::min(idleWait_ns, nextDomainDue_ns);
-				const uint64 nextWorkerPreWake_ns = TimeUntilNextWorkerPreWake(idleNow_ns);
-				if (nextWorkerPreWake_ns != UINT64_MAX)
-					idleWait_ns = std::min(idleWait_ns, nextWorkerPreWake_ns);
-				const uint64 nextFiberWakeup_ns = m_scheduler->NextWakeupTime();
-				if (nextFiberWakeup_ns != 0)
-				{
-					idleWait_ns = (idleNow_ns < nextFiberWakeup_ns)
-						? std::min(idleWait_ns, nextFiberWakeup_ns - idleNow_ns)
-						: 0_ns;
-				}
-				WaitForWorkOrTimeout(observedWakeEpoch, idleWait_ns);
-				m_metrics.idleSleepCost_ns += NOW_NS() - idleStart_ns;
+				const Timestamp idleStart = NOW();
+				const Timestamp idleNow   = idleStart;
+
+				Duration idleWait = m_config.idleSleepMs;
+				
+				const Duration nextDomainDue = TimeUntilNextDomainDue(idleNow);
+				if (nextDomainDue != Duration::Max())
+					idleWait = std::min(idleWait, nextDomainDue);
+				
+				const Duration nextWorkerPreWake = TimeUntilNextWorkerPreWake(idleNow);
+				if (nextWorkerPreWake != Duration::Max())
+					idleWait = std::min(idleWait, nextWorkerPreWake);
+
+				const Timestamp nextFiberWakeup = m_scheduler->NextWakeupTime();
+				if (!nextFiberWakeup.IsZero())
+					idleWait = (idleNow < nextFiberWakeup) ? std::min(idleWait, nextFiberWakeup - idleNow) : Duration::Zero();
+				
+				WaitForWorkOrTimeout(observedWakeEpoch, idleWait);
+				m_metrics.idleSleepCost_ns += (NOW() - idleStart).Ns();
 			}
 			else
 			{
 				++m_metrics.didWorkLoopCount;
 			}
 
-			const uint64 loopEnd_ns = NOW_NS();
+			const Timestamp loopEnd = NOW();
+
 			UpdateMetricsWindow(
-				loopEnd_ns,
-				loopEnd_ns - loopStart_ns,
+				loopEnd,
+				loopEnd - loopStart,
 				m_metrics.ingressJobCount - ingressMovedBefore,
 				m_metrics.mailboxJobMoveCount - mailboxMovedBefore,
 				m_metrics.processJobsExecCount - jobsExecutedBefore);
@@ -751,9 +757,9 @@ namespace jam
 		m_wakeCv.notify_one();
 	}
 
-	void ShardExecutor::WaitForWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns)
+	void ShardExecutor::WaitForWorkOrTimeout(uint64 observedWakeEpoch, Duration timeout)
 	{
-		if (timeout_ns == 0)
+		if (timeout.IsZero())
 		{
 			std::this_thread::yield();
 			return;
@@ -762,11 +768,10 @@ namespace jam
 		std::unique_lock lock(m_wakeMutex);
 		m_wakeCv.wait_for(
 			lock,
-			std::chrono::nanoseconds(timeout_ns),
+			std::chrono::nanoseconds(timeout.Ns()),
 			[this, observedWakeEpoch]()
 			{
-				return !m_running.load(std::memory_order_acquire)
-					|| m_wakeEpoch.load(std::memory_order_acquire) != observedWakeEpoch;
+				return !m_running.load(std::memory_order_acquire) || m_wakeEpoch.load(std::memory_order_acquire) != observedWakeEpoch;
 			});
 	}
 
@@ -844,10 +849,6 @@ namespace jam
 		const size_t n = m_jobIngress.try_dequeue_bulk(batch.data(), batch.size());
 		if (n == 0)
 			return false;
-
-		//size_t remained = m_jobIngress.size_approx();
-		//if (m_config.index == 1 && remained != 0)
-		//	JAMNET_LOG_DEBUG("[ShardExecutor::DrainIngressOnce] drain count= {}, remain ingress queue size(approx)= {}", n, remained);
 
 		++m_metrics.ingressBatchCount;
 		m_metrics.ingressJobCount += static_cast<uint64>(n);
@@ -978,13 +979,12 @@ namespace jam
 			if (!mailbox)
 				continue;
 
-			const uint64 now_ns = NOW_NS();
-			const uint64 readyWait_ns = readyEntry.enqueuedAt_ns != 0 && now_ns >= readyEntry.enqueuedAt_ns
-				? now_ns - readyEntry.enqueuedAt_ns
-				: 0;
+			const Timestamp now = NOW();
+			const Duration readyWait = !readyEntry.enqueuedAt.IsZero() && now >= readyEntry.enqueuedAt ? now - readyEntry.enqueuedAt : Duration::Zero();
+
 			++m_metrics.mailboxReadyWaitSampleCount;
-			m_metrics.mailboxReadyWaitTotal_ns += readyWait_ns;
-			m_metrics.mailboxReadyWaitMax_ns = std::max(m_metrics.mailboxReadyWaitMax_ns, readyWait_ns);
+			m_metrics.mailboxReadyWaitTotal_ns += readyWait.Ns();
+			m_metrics.mailboxReadyWaitMax_ns = std::max(m_metrics.mailboxReadyWaitMax_ns, readyWait.Ns());
 
 			++m_metrics.mailboxProcessCount;
 			const int32 mailboxBudget = std::min(budgetPerMailbox, remainingJobBudget);
@@ -995,6 +995,7 @@ namespace jam
 		const bool hasReadyBacklog = m_readyMailboxes.size_approx() != 0;
 		const bool totalJobBudgetHit = remainingJobBudget == 0 && hasReadyBacklog;
 		const bool mailboxCountBudgetHit = servicedMailboxes == maxMailboxes && hasReadyBacklog;
+
 		m_metrics.mailboxTotalJobBudgetHitCount += totalJobBudgetHit ? 1 : 0;
 		m_metrics.mailboxCountBudgetHitCount += mailboxCountBudgetHit ? 1 : 0;
 		m_metrics.mailboxServiceBudgetExhaustedLoopCount += totalJobBudgetHit || mailboxCountBudgetHit ? 1 : 0;
@@ -1018,14 +1019,14 @@ namespace jam
 			m_scheduler->ResetProfile();
 	}
 
-	void ShardExecutor::SubmitMetricsWindow(const uint64 windowEnd_ns)
+	void ShardExecutor::SubmitMetricsWindow(const Timestamp windowEnd)
 	{
 		m_metrics.ingressJobSubmitCount = m_ingressJobSubmitCount.exchange(0, std::memory_order_relaxed);
 		m_metrics.workerJobSubmitCount = m_workerJobSubmitCount.exchange(0, std::memory_order_relaxed);
 		MetricSnapshot snapshot{
 			.windowIndex = m_metricsWindowIndex,
-			.windowStartNs = m_metricsWindowStart_ns,
-			.windowEndNs = windowEnd_ns,
+			.windowStartNs = m_metricsWindowStart_ns.Ns(),
+			.windowEndNs = windowEnd.Ns(),
 			.scope = "executor_shard",
 			.shardIndex = static_cast<uint32>(m_config.index),
 			.values = {
@@ -1084,8 +1085,8 @@ namespace jam
 	}
 
 	void ShardExecutor::UpdateMetricsWindow(
-		const uint64 now_ns,
-		const uint64 loopDuration_ns,
+		const Timestamp now,
+		const Duration loopDuration,
 		const uint64 ingressMoved,
 		const uint64 mailboxMoved,
 		const uint64 jobsExecuted)
@@ -1094,22 +1095,22 @@ namespace jam
 		if (!aggregator || !aggregator->IsEnabled())
 			return;
 
-		const uint64 windowIndex = aggregator->WindowIndex(now_ns);
+		const uint64 windowIndex = aggregator->WindowIndex(now);
 		if (m_metricsWindowIndex == UINT64_MAX)
 		{
-			m_metricsWindowIndex = windowIndex;
-			m_metricsWindowStart_ns = windowIndex * aggregator->WindowPeriodNs();
+			m_metricsWindowIndex    = windowIndex;
+			m_metricsWindowStart_ns = Timestamp::FromNs(windowIndex * aggregator->WindowPeriod().Ns());
 		}
 		else if (windowIndex != m_metricsWindowIndex)
 		{
-			SubmitMetricsWindow(m_metricsWindowStart_ns + aggregator->WindowPeriodNs());
+			SubmitMetricsWindow(m_metricsWindowStart_ns + aggregator->WindowPeriod());
 			ResetMetricsWindow();
-			m_metricsWindowIndex = windowIndex;
-			m_metricsWindowStart_ns = windowIndex * aggregator->WindowPeriodNs();
+			m_metricsWindowIndex    = windowIndex;
+			m_metricsWindowStart_ns = Timestamp::FromNs(windowIndex * aggregator->WindowPeriod().Ns());
 		}
 
-		m_metrics.loopDurationTotal_ns += loopDuration_ns;
-		m_metrics.loopDurationMax_ns = std::max(m_metrics.loopDurationMax_ns, loopDuration_ns);
+		m_metrics.loopDurationTotal_ns	 += loopDuration.Ns();
+		m_metrics.loopDurationMax_ns	 = std::max(m_metrics.loopDurationMax_ns, loopDuration.Ns());
 		m_metrics.ingressMovedPerLoopMax = std::max(m_metrics.ingressMovedPerLoopMax, ingressMoved);
 		m_metrics.mailboxMovedPerLoopMax = std::max(m_metrics.mailboxMovedPerLoopMax, mailboxMoved);
 		m_metrics.jobsExecutedPerLoopMax = std::max(m_metrics.jobsExecutedPerLoopMax, jobsExecuted);

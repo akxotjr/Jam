@@ -21,16 +21,16 @@ namespace jam::net
 		void RecordDuplicate();
 		void SetCurrent(uint64 activeSessions, uint64 pendingReliable);
 
-		void UpdateWindow(uint64 nowNs, MetricsAggregator& aggregator);
+		void UpdateWindow(Timestamp now, MetricsAggregator& aggregator);
 
 	private:
 		void InitializeSnapshots();
-		void SubmitSnapshot(uint64 windowEndNs);
+		void SubmitSnapshot(Timestamp windowEnd);
 
 	private:
 		uint32			m_shardIndex	= 0;
 		uint64			m_windowIndex   = UINT64_MAX;
-		uint64			m_windowStartNs = 0;
+		Timestamp		m_windowStart = Timestamp::Zero();
 
 		MetricSnapshot	m_shardSnapshot;
 		MetricSnapshot	m_processSnapshot;

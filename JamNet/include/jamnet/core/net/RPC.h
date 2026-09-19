@@ -77,7 +77,7 @@ namespace jam::net
 	struct RPCCallOptions
 	{
 		eChannel    channel    = eChannel::RELIABLE_ORDERED;
-		uint64      timeout_ns = 0;
+		Duration    timeout = 0_ns;
 	};
 
 	struct EntityRPCKey
@@ -539,12 +539,13 @@ namespace jam::net
 				scheduler->PostResume(awaitKey);
 			};
 
-		uint64 deadline_ns = 0;
-		if (opt.timeout_ns > 0)
+		Timestamp deadline;
+		if (!opt.timeout.IsZero())
 		{
 			st.hasDeadline = true;
-			st.deadline_ns = NOW_NS() + opt.timeout_ns;
-			deadline_ns = st.deadline_ns;
+			st.deadline	   = NOW() + opt.timeout;
+
+			deadline = st.deadline;
 		}
 
 		if (!rpcState->RegisterRequest(requestId, std::move(st)))
@@ -559,7 +560,7 @@ namespace jam::net
 			return std::nullopt;
 		}
 
-		const bool ok = scheduler->Suspend(awaitKey, deadline_ns);
+		const bool ok = scheduler->Suspend(awaitKey, deadline);
 		if (!ok)
 		{
 			if (auto* rpcState2 = R.try_get<RpcState>(e))
@@ -613,12 +614,13 @@ namespace jam::net
 				scheduler->PostResume(awaitKey);
 			};
 
-		uint64 deadline_ns = 0;
-		if (opt.timeout_ns > 0)
+		Timestamp deadline_ns;
+		if (!opt.timeout.IsZero())
 		{
 			st.hasDeadline = true;
-			st.deadline_ns = NOW_NS() + opt.timeout_ns;
-			deadline_ns = st.deadline_ns;
+			st.deadline	   = NOW() + opt.timeout;
+
+			deadline_ns = st.deadline;
 		}
 
 		if (!rpcState->RegisterRequest(requestId, std::move(st)))

@@ -3,18 +3,20 @@
 #include <jambase/JamTypes.h>
 #include <jambase/SmallHash.h>
 
+#include "jamnet/core/utils/TimeUnits.h"
+
 #include <algorithm>
 
 
 namespace jam::net
 {
-	inline uint64 MakeRetryDelayNs(uint64 baseDelayNs, uint64 jitterNs, uint64 identity, uint32 token)
+	inline Duration MakeRetryDelay(Duration baseDelay, Duration jitter, uint64 identity, uint32 token)
 	{
-		if (jitterNs == 0)
-			return baseDelayNs;
+		if (jitter.IsZero())
+			return baseDelay;
 
-		const uint64 boundedJitterNs = std::min(baseDelayNs, jitterNs);
-		const uint64 windowNs = boundedJitterNs * 2 + 1;
-		return baseDelayNs - boundedJitterNs + SmallHashOf(identity, token) % windowNs;
+		const Duration boundedJitter = std::min(baseDelay, jitter);
+		const Duration window = boundedJitter * 2 + Duration::FromNs(1);
+		return baseDelay - boundedJitter + Duration::FromNs(SmallHashOf(identity, token) % window.Ns());
 	}
 }

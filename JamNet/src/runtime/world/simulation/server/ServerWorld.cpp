@@ -193,15 +193,15 @@ namespace jam::net
 			m_content->OnPhysicsEvents(*this, events);
 	}
 
-	void ServerWorld::Start(uint64 dt_ns)
+	void ServerWorld::Start(Duration dt)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
-		StartTickPipeline({ DOMAIN_PHYSICS, GetWorldLocalIndex(GetWorldId()) }, dt_ns);
+		StartTickPipeline({ DOMAIN_PHYSICS, GetWorldLocalIndex(GetWorldId()) }, dt);
 	}
 
-	void ServerWorld::Resume(uint64 dt_ns)
+	void ServerWorld::Resume(Duration dt)
 	{
-		Start(dt_ns);
+		Start(dt);
 	}
 
 	void ServerWorld::Stop()
@@ -404,7 +404,7 @@ namespace jam::net
 			.clientRequestId = clientRequestId,
 			.actorId = actorId,
 			.entity = entity,
-			.deadlineNs = NOW_NS() + 10_s,
+			.deadlineNs = NOW() + 10_s,
 		};
 		if (onDone)
 			pending.completions.push_back(std::move(onDone));
@@ -506,37 +506,38 @@ namespace jam::net
 			return;
 
 		std::array<uint64, 6> phases{};
-		const uint64 tickStartNs = NOW_NS();
+		const uint64 tickStartNs = NOW().Ns();
 		m_tickCounter.Tick();
 
-		uint64 phaseStartNs = NOW_NS();
+		uint64 phaseStartNs = NOW().Ns();
 		m_inputSystem->Tick();
-		phases[1] = NOW_NS() - phaseStartNs;
+		phases[1] = NOW().Ns() - phaseStartNs;
 
-		phaseStartNs = NOW_NS();
+		phaseStartNs = NOW().Ns();
 		m_physicsSystem->Tick();
-		phases[2] = NOW_NS() - phaseStartNs;
+		phases[2] = NOW().Ns() - phaseStartNs;
 		YieldCurrentWorldFiber();
 
-		phaseStartNs = NOW_NS();
+		phaseStartNs = NOW().Ns();
 		m_aoiSystem->Tick();
-		phases[3] = NOW_NS() - phaseStartNs;
+		phases[3] = NOW().Ns() - phaseStartNs;
 		YieldCurrentWorldFiber();
 
-		phaseStartNs = NOW_NS();
+		phaseStartNs = NOW().Ns();
 		m_replicationSystem->Tick();
-		phases[4] = NOW_NS() - phaseStartNs;
+		phases[4] = NOW().Ns() - phaseStartNs;
 
-		phaseStartNs = NOW_NS();
+		phaseStartNs = NOW().Ns();
 		FinalizePendingPlayerSpawns();
-		const uint64 profileNowNs = NOW_NS();
+		const Timestamp profileNow = NOW();
+		const uint64 profileNowNs = profileNow.Ns();
 		phases[5] = profileNowNs - phaseStartNs;
 		phases[0] = profileNowNs - tickStartNs;
-		m_metrics.RecordTick(phases, m_userContexts.size(), profileNowNs);
-		SubmitWorldMetrics(profileNowNs);
+		m_metrics.RecordTick(phases, m_userContexts.size(), profileNow);
+		SubmitWorldMetrics(profileNow);
 	}
 
-	void ServerWorld::SubmitWorldMetrics(uint64 nowNs)
+	void ServerWorld::SubmitWorldMetrics(Timestamp nowNs)
 	{
 		if (!m_metrics.IsReadyToSubmit(nowNs))
 			return;
@@ -553,7 +554,7 @@ namespace jam::net
 		if (!m_aoiSystem || !m_replicationSystem)
 			return;
 
-		const uint64 nowNs = NOW_NS();
+		const Timestamp now = NOW();
 		std::vector<uint64> readyUsers;
 		std::vector<uint64> failedUsers;
 		readyUsers.reserve(m_pendingPlayerSpawns.size());
@@ -583,7 +584,7 @@ namespace jam::net
 
 			if (playerReady)
 				readyUsers.push_back(userId);
-			else if (nowNs >= pending.deadlineNs)
+			else if (now >= pending.deadlineNs)
 				failedUsers.push_back(userId);
 		}
 

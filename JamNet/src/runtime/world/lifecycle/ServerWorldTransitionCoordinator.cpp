@@ -46,7 +46,7 @@ namespace jam::net
 				[coordinator](UserId userId, const EnterWorldRequest& request)
 				{
 					if (const auto target = coordinator.lock())
-						target->Enter(userId, request, NOW_NS());
+						target->Enter(userId, request, NOW());
 				});
 
 			world->SetActorArchetypeDatabase(actorArchetypes);
@@ -72,7 +72,7 @@ namespace jam::net
 				state.FreeWorldId(worldId);
 				return std::nullopt;
 			}
-			activeWorld->Start(1'000'000'000ull / 30ull);
+			activeWorld->Start(SIMULATION_TICK_NS);
 
 			const WorldRecord* record = state.FindAuthoritativeWorldEntry(worldId);
 			return record ? std::optional(*record) : std::nullopt;
@@ -87,7 +87,8 @@ namespace jam::net
 		m_owner = owner;
 		if (!owner || !owner->GetSharedDataManifest())
 			return false;
-		m_reconnectTimeoutNs = owner->GetReconnectTimeoutNs();
+
+		m_reconnectTimeout = owner->GetReconnectTimeoutNs();
 
 		const auto* manifest = owner->GetSharedDataManifest();
 		m_templatesDB       = WorldTemplatesLoader::Load(manifest->worldTemplateDatabasePath);
@@ -266,7 +267,7 @@ namespace jam::net
 		}
 	}
 
-	void ServerWorldTransitionCoordinator::Enter(UserId userId, const EnterWorldRequest& request, uint64 nowNs)
+	void ServerWorldTransitionCoordinator::Enter(UserId userId, const EnterWorldRequest& request, Timestamp nowNs)
 	{
 		if (!SubmitToUserShard(userId, Job(weak_from_this(), &ServerWorldTransitionCoordinator::EnterOnUserShard, eJobPriority::Control, userId, request, nowNs)))
 		{
@@ -774,7 +775,7 @@ namespace jam::net
 		return submitted;
 	}
 
-	void ServerWorldTransitionCoordinator::EnterOnUserShard(UserId userId, const EnterWorldRequest& request, uint64 nowNs)
+	void ServerWorldTransitionCoordinator::EnterOnUserShard(UserId userId, const EnterWorldRequest& request, Timestamp now)
 	{
 		UserContext* user = FindUserOnCurrentShard(userId);
 		if (!user)
@@ -838,7 +839,7 @@ namespace jam::net
 		transition.expectedRevision		= current.revision;
 		transition.contentEntryPoint	= request.contentEntryPoint;
 		transition.syncToken			= IssueWorldSyncToken();
-		transition.deadlineNs			= nowNs + m_worldSyncTimeoutNs;
+		transition.deadline				= now + m_worldSyncTimeoutNs;
 
 		auto& active = BeginTransition(*user, std::move(transition), eWorldTransitionPhase::ResolvingTarget);
 
@@ -897,7 +898,7 @@ namespace jam::net
 			.requestId			= request.requestId,
 			.source				= current.main,
 			.expectedRevision	= current.revision,
-			.deadlineNs			= NOW_NS() + m_worldSyncTimeoutNs,
+			.deadline			= NOW() + m_worldSyncTimeoutNs,
 		};
 		BeginTransition(*user, std::move(transition), eWorldTransitionPhase::DetachingSource);
 
@@ -911,14 +912,14 @@ namespace jam::net
 	}
 
 
-	void ServerWorldTransitionCoordinator::OnClientWorldSyncResult(uint64 userId, const ClientWorldSyncResult& result, uint64 nowNs)
+	void ServerWorldTransitionCoordinator::OnClientWorldSyncResult(uint64 userId, const ClientWorldSyncResult& result, Timestamp now)
 	{
 		if (UserContext* resyncUser = FindUserOnCurrentShard(userId);
 			resyncUser && resyncUser->worldResync.phase != eUserWorldResyncPhase::None
 			&& resyncUser->worldResync.token == result.token)
 		{
 			auto& resync = resyncUser->worldResync;
-			if (!result.succeeded || resync.deadlineNs <= nowNs)
+			if (!result.succeeded || resync.deadline <= now)
 			{
 				FailWorldResync(*resyncUser);
 				return;
@@ -942,7 +943,7 @@ namespace jam::net
 			return;
 		}
 
-		ReduceTransition(ClientWorldSyncCompletedEvent{ userId, result, nowNs });
+		ReduceTransition(ClientWorldSyncCompletedEvent{ userId, result, now });
 	}
 
 	void ServerWorldTransitionCoordinator::OnWorldCommandCompleted(const WorldTransitionContinuation& continuation, bool succeeded)
@@ -964,7 +965,6 @@ namespace jam::net
 				return;
 			}
 
-			//JAMNET_LOG_INFO("[EnterWorld] world ready. userId={}, token={}, worldId={}", transition.userId, transition.token.value, ready->world->worldId);
 			if (transition.source && *transition.source == *ready->world)
 			{
 				CompleteEnter(*user, user->worldState);
@@ -987,11 +987,13 @@ namespace jam::net
 				&& transition.phase != eWorldTransitionPhase::WaitingClientPrepared)
 				|| transition.syncToken != sync->result.token)
 				return;
-			if (transition.deadlineNs <= sync->nowNs)
+
+			if (transition.deadline <= sync->now)
 			{
 				FailTransition(*user, eWorldTransitionFailure::Timeout);
 				return;
 			}
+
 			if (transition.phase == eWorldTransitionPhase::WaitingClientApplied)
 			{
 				if (sync->result.succeeded)
@@ -1000,14 +1002,19 @@ namespace jam::net
 						FailTransition(*user, eWorldTransitionFailure::InternalError);
 				}
 				else
+				{
 					FailTransition(*user, sync->result.failure == eWorldTransitionFailure::None ? eWorldTransitionFailure::ClientPrepareFailed : sync->result.failure);
+				}
+
 				return;
 			}
+
 			if (!sync->result.succeeded)
 			{
 				FailTransition(*user, sync->result.failure == eWorldTransitionFailure::None ? eWorldTransitionFailure::ClientPrepareFailed : sync->result.failure);
 				return;
 			}
+
 			if (transition.source)
 			{
 				if (!AdvanceTransition(*user, eWorldTransitionPhase::DetachingSource))
@@ -1017,6 +1024,7 @@ namespace jam::net
 			{
 				FailTransition(*user, eWorldTransitionFailure::InternalError);
 			}
+
 			return;
 		}
 
@@ -1024,7 +1032,7 @@ namespace jam::net
 		{
 			JAM_ASSERT(CurrentShardLocal() && CurrentShardLocal()->shardIndex == GetUserShardIndex(timedOut->continuation.userId));
 			UserContext* user = FindExpectedTransition(timedOut->continuation);
-			if (!user || user->worldTransition.active->deadlineNs > timedOut->nowNs)
+			if (!user || user->worldTransition.active->deadline > timedOut->now)
 				return;
 
 			FailTransition(*user, eWorldTransitionFailure::Timeout, true);
@@ -1256,7 +1264,7 @@ namespace jam::net
 			GetOrCreateUserShardState(CurrentShardLocalChecked()).FreeUserContext(transition.userId);
 	}
 
-	void ServerWorldTransitionCoordinator::Tick(uint64 nowNs)
+	void ServerWorldTransitionCoordinator::Tick(Timestamp now)
 	{
 		auto* local = CurrentShardLocal();
 		if (!local)
@@ -1270,24 +1278,24 @@ namespace jam::net
 			if (entry.value.worldTransition.active)
 			{
 				const auto& transition = *entry.value.worldTransition.active;
-				if (transition.deadlineNs <= nowNs)
+				if (transition.deadline <= now)
 				{
 					ReduceTransition(TransitionTimedOutEvent{
 						.continuation = { transition.userId, transition.token, transition.phase },
-						.nowNs = nowNs,
+						.now = now,
 					});
 				}
 			}
 
 			if (entry.occupied && entry.value.worldResync.phase != eUserWorldResyncPhase::None
-				&& entry.value.worldResync.deadlineNs <= nowNs)
+				&& entry.value.worldResync.deadline <= now)
 			{
 				FailWorldResync(entry.value);
 			}
 
 			if (entry.occupied
 				&& entry.value.connectionState == eUserConnectionState::Reconnecting
-				&& entry.value.reconnectDeadlineNs <= nowNs)
+				&& entry.value.reconnectDeadline <= now)
 			{
 				ReleaseReconnectingUser(entry.value);
 			}
@@ -1301,7 +1309,7 @@ namespace jam::net
 			return;
 
 		user->connectionState     = eUserConnectionState::Reconnecting;
-		user->reconnectDeadlineNs = NOW_NS() + m_reconnectTimeoutNs;
+		user->reconnectDeadline	  = NOW() + m_reconnectTimeout;
 		user->worldResync		  = {};
 
 		if (!m_owner)
@@ -1346,8 +1354,8 @@ namespace jam::net
 				if (user->tcp == kInvalidSessionId || user->udp == kInvalidSessionId)
 					return;
 
-				user->connectionState	  = eUserConnectionState::Connected;
-				user->reconnectDeadlineNs = 0;
+				user->connectionState	= eUserConnectionState::Connected;
+				user->reconnectDeadline = Timestamp::Zero();
 
 				RefreshWorldUserContext(*user);
 				BeginWorldResync(*user);
@@ -1406,7 +1414,7 @@ namespace jam::net
 		{
 			user.worldResync = {
 				.phase = eUserWorldResyncPhase::WaitingTransition,
-				.deadlineNs = NOW_NS() + m_worldSyncTimeoutNs,
+				.deadline = NOW() + m_worldSyncTimeoutNs,
 			};
 			return;
 		}
@@ -1418,7 +1426,7 @@ namespace jam::net
 			.token		  = token,
 			.world		  = world,
 			.mainRevision = user.worldState.revision,
-			.deadlineNs	  = NOW_NS() + m_worldSyncTimeoutNs,
+			.deadline	  = NOW() + m_worldSyncTimeoutNs,
 		};
 
 		SuspendWorldUser(user);
@@ -1480,8 +1488,9 @@ namespace jam::net
 			return;
 
 		const UserId userId = user.userId;
-		user.connectionState = eUserConnectionState::Released;
-		user.reconnectDeadlineNs = 0;
+		user.connectionState   = eUserConnectionState::Released;
+		user.reconnectDeadline = Timestamp::Zero();
+
 		GetOrCreateUserShardState(CurrentShardLocalChecked()).ReleaseAccountBinding(userId);
 		if (m_owner)
 			m_owner->NotifyUserReleased(userId);

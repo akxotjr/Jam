@@ -118,7 +118,7 @@ namespace jam::net
 
 		void							Post(Job j) const;
 		void							Submit(Job j) const;
-		void							SubmitAfter(Job j, uint64 delay_ns) const;
+		void							SubmitAfter(Job j, Duration delay) const;
 		bool							IsCurrentShardContext() const;
 		entt::entity					GetEntity() const noexcept { return m_entity; }
 		void							CreateEntity();
@@ -134,6 +134,7 @@ namespace jam::net
 
 		void							CompleteClose();
 		void							CompleteProtocolDisconnect();
+		void							CompleteSessionRelease();
 
 		static EndpointId				MakeEndpointId(const NetAddress& addr);
 		static RouteKey					MakeTcpRouteKey(const NetAddress& remoteAddr);

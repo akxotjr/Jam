@@ -72,7 +72,7 @@ namespace jam
 			m_metricsAggregator.reset();
 		}
 		const uint64 processWindowIndex = m_metricsAggregator && m_metricsAggregator->IsEnabled()
-			? m_metricsAggregator->WindowIndex(NOW_NS())
+			? m_metricsAggregator->WindowIndex(NOW())
 			: UINT64_MAX;
 		m_processMetrics.Initialize(std::max<DWORD>(1, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS)), processWindowIndex);
 		m_executorMetricsWindowIndex = processWindowIndex;
@@ -134,15 +134,15 @@ namespace jam
 		m_directory->Start();
 		if (m_metricsAggregator && m_metricsAggregator->IsEnabled())
 		{
-			const uint64 periodNs = m_metricsAggregator->WindowPeriodNs();
+			const Duration period = m_metricsAggregator->WindowPeriod();
 			m_processMetricsPeriodic = ScheduleFixedRate(Job([this]
 				{
 					if (m_metricsAggregator)
 					{
-						m_processMetrics.SubmitCompletedWindow(NOW_NS(), *m_metricsAggregator);
-						SubmitExecutorMetricsWindow(NOW_NS());
+						m_processMetrics.SubmitCompletedWindow(NOW(), *m_metricsAggregator);
+						SubmitExecutorMetricsWindow(NOW());
 					}
-				}), PeriodicOptions{ .period_ns = periodNs, .initialDelay_ns = periodNs, .name = "GE.ProcessMetrics" });
+				}), PeriodicOptions{ .period = period, .initialDelay = period, .name = "GE.ProcessMetrics" });
 		}
 
 		std::vector<std::shared_ptr<IocpDomain>> domains;
@@ -289,7 +289,7 @@ namespace jam
 			}));
 	}
 
-	void GlobalExecutor::SubmitAfter(Job j, uint64 delay_ns)
+	void GlobalExecutor::SubmitAfter(Job j, Duration delay)
 	{
 		if (!m_scheduler) 
 		{
@@ -297,7 +297,7 @@ namespace jam
 			return;
 		}
 
-		const uint64 deadline = NOW_NS() + delay_ns;
+		const Timestamp deadline = NOW() + delay;
 
 		m_scheduler->PostSpawn(
 			[this, deadline, j = std::move(j)]() mutable
@@ -370,15 +370,15 @@ namespace jam
 
 	PeriodicHandle GlobalExecutor::ScheduleFixedRate(Job j, const PeriodicOptions& opt)
 	{
-		if (!m_scheduler || opt.period_ns == 0)
+		if (!m_scheduler || opt.period.IsZero())
 			return {};
 
 		auto st = std::make_shared<PeriodicState>();
-		st->period_ns = opt.period_ns;
-		st->initialDelay_ns = opt.initialDelay_ns;
-		st->maxCatchUp = opt.maxCatchUp;
-		st->fixedRate = true;
-		st->awaitKey = m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
+		st->period		 = opt.period;
+		st->initialDelay = opt.initialDelay;
+		st->maxCatchUp   = opt.maxCatchUp;
+		st->fixedRate	 = true;
+		st->awaitKey	 = m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
 
 		const uint32 id = m_periodicId.fetch_add(1, std::memory_order_relaxed);
 
@@ -394,32 +394,27 @@ namespace jam
 		m_scheduler->PostSpawn(
 			[this, st, sharedJob, priority, id]
 			{
-				uint64 next_ns = NOW_NS() + st->initialDelay_ns;
-				const uint64 period_ns = st->period_ns;
+				Timestamp next = NOW() + st->initialDelay;
+				const Duration period = st->period;
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
 				{
-					m_scheduler->Suspend(st->awaitKey, next_ns);
+					m_scheduler->Suspend(st->awaitKey, next);
 					if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 						break;
 
-					Submit(Job([sharedJob]()
-						{
-							sharedJob->Execute();
-						}, priority));
+					Submit(Job([sharedJob]() { sharedJob->Execute(); }, priority));
 
-					next_ns += period_ns;
+					next += period;
 
 					int32 catches = 0;
-					for (uint64 now_ns = NOW_NS(); now_ns >= next_ns && catches < st->maxCatchUp; now_ns = NOW_NS(), ++catches)
+					for (Timestamp now_ns = NOW(); now_ns >= next && catches < st->maxCatchUp; now_ns = NOW(), ++catches)
 					{
 						if (!m_running.load(std::memory_order_acquire) || st->cancelled.load(std::memory_order_relaxed))
 							break;
-						Submit(Job([sharedJob]()
-							{
-								sharedJob->Execute();
-							}, priority));
-						next_ns += period_ns;
+
+						Submit(Job([sharedJob]() { sharedJob->Execute(); }, priority));
+						next += period;
 					}
 				}
 
@@ -435,15 +430,15 @@ namespace jam
 
 	PeriodicHandle GlobalExecutor::ScheduleFixedDelay(Job j, const PeriodicOptions& opt)
 	{
-		if (!m_scheduler || opt.period_ns == 0)
+		if (!m_scheduler || opt.period.IsZero())
 			return {};
 
 		auto st = std::make_shared<PeriodicState>();
-		st->period_ns = opt.period_ns;
-		st->initialDelay_ns = opt.initialDelay_ns;
-		st->maxCatchUp = 0;
-		st->fixedRate = false;
-		st->awaitKey = m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
+		st->period		 = opt.period;
+		st->initialDelay = opt.initialDelay;
+		st->maxCatchUp	 = 0;
+		st->fixedRate	 = false;
+		st->awaitKey	 = m_nextAwaitSeq.fetch_add(1, std::memory_order_relaxed);
 
 		const uint32 id = m_periodicId.fetch_add(1, std::memory_order_relaxed);
 
@@ -460,7 +455,7 @@ namespace jam
 			[this, st, sharedJob, priority, id]()
 			{
 				// 초기 지연
-				uint64 next = NOW_NS() + st->initialDelay_ns;
+				Timestamp next = NOW() + st->initialDelay;
 				m_scheduler->Suspend(st->awaitKey, next);
 
 				while (m_running.load(std::memory_order_acquire) && !st->cancelled.load(std::memory_order_relaxed))
@@ -474,7 +469,7 @@ namespace jam
 						break;
 
 					// 2) 고정 딜레이
-					m_scheduler->Suspend(st->awaitKey, NOW_NS() + st->period_ns);
+					m_scheduler->Suspend(st->awaitKey, NOW() + st->period);
 				}
 
 				// 정리
@@ -522,25 +517,26 @@ namespace jam
 		while (m_running.load())
 		{
 			Job j([] {});
-			const uint64 waitStart_ns = NOW_NS();
+			const Timestamp waitStart = NOW();
 			const bool dequeued = m_offload.wait_dequeue_timed(j, 1000);
-			const uint64 waitCost_ns = NOW_NS() - waitStart_ns;
-			uint64 execCost_ns = 0;
+			const Duration waitCost = NOW() - waitStart;
+
+			Duration execCost;
 
 			if (dequeued)
 			{
-				const uint64 execStart_ns = NOW_NS();
+				const Timestamp execStart_ns = NOW();
 				j.Execute();
-				execCost_ns = NOW_NS() - execStart_ns;
+				execCost = NOW() - execStart_ns;
 			}
 
 			metricSlot.seq.WriteBegin();
 			++metricSlot.value.loopCount;
-			metricSlot.value.waitCost_ns += waitCost_ns;
+			metricSlot.value.waitCost_ns += waitCost.Ns();
 			if (dequeued)
 			{
 				++metricSlot.value.jobExecCount;
-				metricSlot.value.jobExecCost_ns += execCost_ns;
+				metricSlot.value.jobExecCost_ns += execCost.Ns();
 			}
 			else
 			{
@@ -609,46 +605,45 @@ namespace jam
 		while (m_running.load(std::memory_order_acquire))
 		{
 			const uint64 observedWakeEpoch = m_fiberWakeEpoch.load(std::memory_order_acquire);
-			const uint64 pollStart_ns = NOW_NS();
-			m_scheduler->Poll(64, pollStart_ns);
-			const uint64 pollCost_ns = NOW_NS() - pollStart_ns;
+			const Timestamp pollStart = NOW();
+			m_scheduler->Poll(64, pollStart);
+			const Duration pollCost = NOW() - pollStart;
 
 			const auto& profile = m_scheduler->Profile();
 			const bool isEmptyPoll = (profile.lastPollReadyRunCount == 0);
 
-			uint64 sleepCost_ns = 0;
 			if (profile.lastPollReadyRunCount > 0)
 			{
 				metricSlot.seq.WriteBegin();
 				++metricSlot.value.loopCount;
 				++metricSlot.value.pollCount;
-				metricSlot.value.pollCost_ns += pollCost_ns;
+				metricSlot.value.pollCost_ns += pollCost.Ns();
 				metricSlot.value.readyRunCount = profile.readyRunCount;
 				metricSlot.seq.WriteEnd();
 
 				continue;
 			}
 
-			const uint64 idleStart_ns = NOW_NS();
-			uint64 idleWait_ns = 1'000'000ull;
-			const uint64 now_ns = NOW_NS();
-			const uint64 nextFiberWakeup_ns = m_scheduler->NextWakeupTime();
-			if (nextFiberWakeup_ns != 0)
+			const Timestamp idleStart = NOW();
+			Duration idleWait = 1_ms;
+
+			const Timestamp now = NOW();
+
+			const Timestamp nextFiberWakeup = m_scheduler->NextWakeupTime();
+			if (!nextFiberWakeup.IsZero())
 			{
-				idleWait_ns = (now_ns < nextFiberWakeup_ns)
-					? std::min(idleWait_ns, nextFiberWakeup_ns - now_ns)
-					: 0_ns;
+				idleWait = (now < nextFiberWakeup) ? std::min(idleWait, nextFiberWakeup - now) : Duration::Zero();
 			}
-			WaitForFiberWorkOrTimeout(observedWakeEpoch, idleWait_ns);
-			sleepCost_ns = NOW_NS() - idleStart_ns;
+			WaitForFiberWorkOrTimeout(observedWakeEpoch, idleWait);
+			const Duration sleepCost = NOW() - idleStart;
 
 			metricSlot.seq.WriteBegin();
 			++metricSlot.value.loopCount;
 			++metricSlot.value.pollCount;
 			if (isEmptyPoll)
 				++metricSlot.value.emptyPollCount;
-			metricSlot.value.pollCost_ns += pollCost_ns;
-			metricSlot.value.sleepCost_ns += sleepCost_ns;
+			metricSlot.value.pollCost_ns  += pollCost.Ns();
+			metricSlot.value.sleepCost_ns += sleepCost.Ns();
 			metricSlot.value.readyRunCount = profile.readyRunCount;
 			metricSlot.seq.WriteEnd();
 		}
@@ -662,9 +657,9 @@ namespace jam
 		m_fiberWakeCv.notify_one();
 	}
 
-	void GlobalExecutor::WaitForFiberWorkOrTimeout(uint64 observedWakeEpoch, uint64 timeout_ns) const
+	void GlobalExecutor::WaitForFiberWorkOrTimeout(uint64 observedWakeEpoch, Duration timeout) const
 	{
-		if (timeout_ns == 0)
+		if (timeout.IsZero())
 		{
 			std::this_thread::yield();
 			return;
@@ -673,11 +668,10 @@ namespace jam
 		std::unique_lock lock(m_fiberWakeMutex);
 		m_fiberWakeCv.wait_for(
 			lock,
-			std::chrono::nanoseconds(timeout_ns),
+			std::chrono::nanoseconds(timeout.Ns()),
 			[this, observedWakeEpoch]()
 			{
-				return !m_running.load(std::memory_order_acquire)
-					|| m_fiberWakeEpoch.load(std::memory_order_acquire) != observedWakeEpoch;
+				return !m_running.load(std::memory_order_acquire) || m_fiberWakeEpoch.load(std::memory_order_acquire) != observedWakeEpoch;
 			});
 	}
 
@@ -811,12 +805,12 @@ namespace jam
 		return result;
 	}
 
-	void GlobalExecutor::SubmitExecutorMetricsWindow(const uint64 now_ns)
+	void GlobalExecutor::SubmitExecutorMetricsWindow(const Timestamp now)
 	{
 		if (!m_metricsAggregator || !m_metricsAggregator->IsEnabled())
 			return;
 
-		const uint64 currentWindowIndex = m_metricsAggregator->WindowIndex(now_ns);
+		const uint64 currentWindowIndex = m_metricsAggregator->WindowIndex(now);
 		if (m_executorMetricsWindowIndex == UINT64_MAX)
 		{
 			m_executorMetricsWindowIndex = currentWindowIndex;
@@ -828,11 +822,12 @@ namespace jam
 
 		const auto current = CaptureExecutorMetrics();
 		auto delta = [](const uint64 value, const uint64 baseline) { return value >= baseline ? value - baseline : 0; };
-		const uint64 period_ns = m_metricsAggregator->WindowPeriodNs();
+		const Duration period = m_metricsAggregator->WindowPeriod();
+
 		MetricSnapshot snapshot{
 			.windowIndex = m_executorMetricsWindowIndex,
-			.windowStartNs = m_executorMetricsWindowIndex * period_ns,
-			.windowEndNs = (m_executorMetricsWindowIndex + 1) * period_ns,
+			.windowStartNs = (m_executorMetricsWindowIndex * period).Ns(),
+			.windowEndNs = ((m_executorMetricsWindowIndex + 1) * period).Ns(),
 			.scope = "executor_global",
 			.values = {
 				{ "worker_loop_count", delta(current.workerLoopCount, m_executorMetricsBaseline.workerLoopCount) },

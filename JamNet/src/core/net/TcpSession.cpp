@@ -18,9 +18,9 @@ namespace jam::net
 
 	namespace
 	{
-		inline constexpr uint8  kMaxBindingRetry		= 15;
-		inline constexpr uint64 kClientBindRetryDelayNs = 2000_ms;
-		inline constexpr uint64 kClientBindRetryJitterNs = 200_ms;
+		inline constexpr uint8    kMaxBindingRetry		 = 15;
+		inline constexpr Duration kClientBindRetryDelay  = 2000_ms;
+		inline constexpr Duration kClientBindRetryJitter = 200_ms;
 
 		bool IsTcpBindRequest(const PacketHeaderView& view)
 		{
@@ -493,7 +493,7 @@ namespace jam::net
 						PacketHeaderView directView = PacketHeaderView::Parse(packet->Head(), packet->Size());
 						if (directView.IsValid() && directView.TotalSize() == packet->Size() && directView.Type() == ePacketType::SYSTEM)
 						{
-							ProcessSystemPacket(std::move(packet), directView, 0_ns);
+							ProcessSystemPacket(std::move(packet), directView);
 							continue;
 						}
 
@@ -646,7 +646,7 @@ namespace jam::net
 		}
 	}
 
-	void TcpSession::ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns)
+	void TcpSession::ProcessSystemPacket(Packet packet, const PacketHeaderView& view, Timestamp ingressRecvTime)
 	{
 		if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
 			return;
@@ -666,8 +666,8 @@ namespace jam::net
 				.e				= e,
 				.view			= view,
 				.packet			= std::move(packet),
-				.now_ns			= NOW_NS(),
-				.ingressTime_ns = ingressRecvTime_ns
+				.now			= NOW(),
+				.ingressTime	= ingressRecvTime
 			};
 
 			HandlePostBindSystemPacket(ctx);
@@ -756,7 +756,7 @@ namespace jam::net
 				auto pkt = PacketBuilder::CreateTcpBindReqPacket(self->m_authRequest);
 				self->Send(pkt);
 				self->ScheduleSessionBindingRetry();
-			}, eJobPriority::Control), MakeRetryDelayNs(kClientBindRetryDelayNs, kClientBindRetryJitterNs, m_endpointId, token));
+			}, eJobPriority::Control), MakeRetryDelay(kClientBindRetryDelay, kClientBindRetryJitter, m_endpointId, token));
 	}
 
 }

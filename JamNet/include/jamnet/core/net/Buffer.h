@@ -73,7 +73,7 @@ namespace jam::net
 		std::atomic<uint32>					m_nextSliceStateIndex = 0;
 		std::unique_ptr<std::atomic<uint8>[]>	m_sliceClosedStates;
 
-		uint64								m_globalFreeSinceNs = 0;
+		Timestamp								m_globalFreeSinceNs = Timestamp::Zero();
 	};
 
 
@@ -233,17 +233,17 @@ namespace jam::net
 
 	struct BufferPoolConfig
 	{
-		uint32 initialBlocks		= 64;
-		uint32 tlsLowWatermark		= 8;
-		uint32 tlsHighWatermark		= 64;
-		uint32 batchSize			= 16;
-		uint32 blockSize			= BufferBlock::k_blockSize;
-		uint32 maxSliceStates		= BufferBlock::k_maxSliceStates;
-		uint32 retainedBlockLimit	= 0;
-		uint32 trimBatchSize		= 64;
-		uint32 trimScanLimit		= 1024;
-		uint64 trimMinAgeNs			= 30'000'000'000ull;
-		uint64 trimEveryGlobalLocks = 64;
+		uint32		initialBlocks			= 64;
+		uint32		tlsLowWatermark			= 8;
+		uint32		tlsHighWatermark		= 64;
+		uint32		batchSize				= 16;
+		uint32		blockSize				= BufferBlock::k_blockSize;
+		uint32		maxSliceStates			= BufferBlock::k_maxSliceStates;
+		uint32		retainedBlockLimit		= 0;
+		uint32		trimBatchSize			= 64;
+		uint32		trimScanLimit			= 1024;
+		Duration	trimMinAgeNs			= 30_s;
+		uint64		trimEveryGlobalLocks	= 64;
 	};
 
 	class BufferPool
@@ -284,7 +284,7 @@ namespace jam::net
 		void			RefillLocalCache(TlsFreeList& local);
 		void			SpillLocalCache(TlsFreeList& local, uint32 keepCount);
 		void            RecycleGlobal(BufferBlock* block);
-		void			MaybeTrimGlobalLocked(uint64 nowNs, uint64 globalLockSequence);
+		void			MaybeTrimGlobalLocked(Timestamp nowNs, uint64 globalLockSequence);
 
 
 	private:

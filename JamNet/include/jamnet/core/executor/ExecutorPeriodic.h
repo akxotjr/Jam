@@ -9,8 +9,8 @@ namespace jam
 
 	struct PeriodicOptions
 	{
-		uint64		period_ns		= 0_ns;
-		uint64		initialDelay_ns = 0_ns;
+		Duration	period			= 0_ns;
+		Duration	initialDelay	= 0_ns;
 		int32		maxCatchUp		= 0;
 		const char* name			= "Periodic";
 	};

@@ -36,12 +36,12 @@ namespace jam::net
 		void					BootstrapConfiguredWorlds(std::function<void(bool)> completed);
 		void					DestroyWorld(const WorldRef& world);
 		
-		void					Enter(UserId userId, const EnterWorldRequest& request, uint64 nowNs);
+		void					Enter(UserId userId, const EnterWorldRequest& request, Timestamp nowNs);
 		void					Leave(UserId userId, const LeaveWorldRequest& request);
 		
-		void					OnClientWorldSyncResult(UserId userId, const ClientWorldSyncResult& result, uint64 nowNs);
+		void					OnClientWorldSyncResult(UserId userId, const ClientWorldSyncResult& result, Timestamp now);
 		
-		void					Tick(uint64 nowNs);
+		void					Tick(Timestamp now);
 		
 		void					OnDisconnected(UserId userId);
 		void					OnReconnected(UserId userId);
@@ -62,19 +62,20 @@ namespace jam::net
 		};
 		struct ClientWorldSyncCompletedEvent
 		{
-			UserId				userId = {};
-			ClientWorldSyncResult result;
-			uint64				nowNs = 0;
+			UserId						userId = {};
+			ClientWorldSyncResult		result;
+			Timestamp					now    = Timestamp::Zero();
 		};
 		struct TransitionTimedOutEvent
 		{
 			WorldTransitionContinuation	continuation;
-			uint64						nowNs = 0;
+			Timestamp					now	   = Timestamp::Zero();
 		};
 		struct UserDisconnectedEvent
 		{
 			WorldTransitionContinuation continuation;
 		};
+
 		using WorldTransitionEvent = std::variant<
 			WorldReadyEvent, 
 			WorldCommandCompletedEvent, 
@@ -113,7 +114,7 @@ namespace jam::net
 		
 		std::optional<WorldInstanceRef>		ResolveDestination(const EnterWorldRequest& request) const;
 		
-		void								EnterOnUserShard(UserId userId, const EnterWorldRequest& request, uint64 nowNs);
+		void								EnterOnUserShard(UserId userId, const EnterWorldRequest& request, Timestamp now);
 		void								LeaveOnUserShard(UserId userId, const LeaveWorldRequest& request);
 		
 		void								EnsureWorldAsync(const WorldInstanceRef& instance, WorldReadyFn completed);
@@ -143,8 +144,8 @@ namespace jam::net
 		std::atomic<uint64>						m_nextTransitionToken = 1;
 		std::atomic<uint64>						m_nextWorldSyncToken  = 1;
 
-		uint64									m_worldSyncTimeoutNs  = 15_s;
-		uint64									m_reconnectTimeoutNs  = 15_s;
+		Duration								m_worldSyncTimeoutNs  = 15_s;
+		Duration								m_reconnectTimeout  = 15_s;
 
 		ServerNetworkManager*					m_owner = nullptr;
 		WorldTemplateDatabase					m_templatesDB;

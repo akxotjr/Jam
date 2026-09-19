@@ -36,7 +36,7 @@ namespace jam::net
 
 	struct SessionInfo
 	{
-		static constexpr uint64		Timeout_ns = 30_s;
+		static constexpr Duration Timeout = 30_s;
 
 		enum State : uint8
 		{
@@ -46,14 +46,14 @@ namespace jam::net
 			DISCONNECTED	= 3
 		};
 
-		Session*					session				= nullptr;
-		uint64						connectedTime_ns	= 0_ns;
-		uint64						lastRecvTime_ns		= 0_ns;
-		uint64						lastSendTime_ns		= 0_ns;
-		State						state				= DISCONNECTED;
+		Session*					session			= nullptr;
+		Timestamp					connectedTime	= Timestamp::Zero();
+		Timestamp					lastRecvTime	= Timestamp::Zero();
+		Timestamp					lastSendTime	= Timestamp::Zero();
+		State						state			= DISCONNECTED;
 
 
-		static SessionInfo			FromSession(Session* session, uint64 now_ns);
+		static SessionInfo			FromSession(Session* session, Timestamp now);
 	};
 
 
@@ -121,35 +121,35 @@ namespace jam::net
 
 		struct OrderedPacket
 		{
-			uint16							orderSeq	= 0;
-			uint16							span		= 1;
-			uint64							recvTime_ns = 0_ns;
-			Packet							packet;
+			uint16		orderSeq = 0;
+			uint16		span	 = 1;
+			Timestamp	recvTime = Timestamp::Zero();
+			Packet		packet;
 		};
 
-		std::map<uint16, OrderedPacket>		pendings;
+		std::map<uint16, OrderedPacket>	pendings;
 
 
-		bool						StoreRecvPacket(uint16 orderSeq, uint16 span, Packet packet, uint64 now_ns);
+		bool						StoreRecvPacket(uint16 orderSeq, uint16 span, Packet packet, Timestamp now);
 		std::vector<OrderedPacket>	PopOrderedPackets(OUT uint16& expectedSeq);
 	};
 
 	struct RttState
 	{
-		uint64	latestRtt_ns		= 0;
-		uint64	minRtt_ns			= UINT64_MAX;
-		uint64	smoothedRtt_ns		= 0;
-		uint64	rttVariance_ns		= 0;
-		bool	hasReliableSample	= false;
+		Duration	latestRtt			= Duration::Zero();
+		Duration	minRtt				= Duration::Max();
+		Duration	smoothedRtt			= Duration::Zero();
+		Duration	rttVariance			= Duration::Zero();
+		bool		hasReliableSample	= false;
 
-		void	OnSample(uint64 sample_ns, uint64 peerDelay_ns = 0);
+		void		OnSample(Duration sample, Duration peerDelay = Duration::Zero());
 
 		// ACK samples drive RTO after the reliable path has produced its first unambiguous sample.
-		void	OnReliableSample(uint64 sample_ns, uint64 peerDelay_ns);
+		void		OnReliableSample(Duration sample, Duration peerDelay);
 		
 		// Ping/Pong provides only the initial RTO estimate; time synchronization still keeps its own window.
-		void	OnTimeSyncSample(uint64 sample_ns);
-		uint64	GetRetransmitTimeout(uint8 retryCount) const;
+		void		OnTimeSyncSample(Duration sample);
+		Duration	GetRetransmitTimeout(uint8 retryCount) const;
 	};
 
 
@@ -163,18 +163,18 @@ namespace jam::net
 	/// 신뢰성 상태 - RELIABLE_ORDERED, RELIABLE_UNORDERED 2개만 사용
 	struct ReliabilityState
 	{
-		static constexpr uint64 ReliableDeliveryTimeout_ns	= 30_s;
+		static constexpr Duration ReliableDeliveryTimeout	= 30_s;
 		static constexpr uint32 AckTrackSize				= 4096;
 		static constexpr uint8  FastRetransmitThreshold		= 3;
 		static constexpr uint32 AckElicitingPacketThreshold	= 2;
-		static constexpr uint64 DelayedAckTimeout_ns		= 20_ms;
+		static constexpr Duration DelayedAckTimeout		= 20_ms;
 
 		struct PendingPacket
 		{
 			uint16							reliabilitySeq			= 0;
 			eChannel						channel					= eChannel::UDP_DEFAULT;
-			uint64							sendTime_ns				= 0;
-			uint64							lastTransmitTime_ns		= 0;
+			Timestamp						sendTime				= Timestamp::Zero();
+			Timestamp						lastTransmitTime		= Timestamp::Zero();
 			uint8							retryCount				= 0;
 			bool							hasInitialSend			= false;
 			bool							retransmitQueued		= false;
@@ -199,21 +199,21 @@ namespace jam::net
 		bool                                ackDirty				= false;
 		AckData                             pendingAckData;
 		uint32                              pendingAckPacketCount	= 0;
-		uint64                              firstPendingAckTime_ns	= 0;
+		Timestamp                           firstPendingAckTime		= Timestamp::Zero();
 
-		bool							StoreSendPacket(eChannel ch, Packet packet, uint16 seq, uint64 now_ns);
-		std::vector<uint16>				GetRetransmitNeeded(uint64 now_ns, const RttState& rtt) const;
-		void							MarkInitialSend(uint16 seq, uint64 now_ns);
+		bool							StoreSendPacket(eChannel ch, Packet packet, uint16 seq, Timestamp now);
+		std::vector<uint16>				GetRetransmitNeeded(Timestamp now, const RttState& rtt) const;
+		void							MarkInitialSend(uint16 seq, Timestamp now);
 
 		PendingPacket*					TryGetPending(uint16 seq);
 		const PendingPacket*			TryGetPending(uint16 seq) const;
 		void							ErasePendingPacket(uint16 seq);
 
-		void							MarkReceived(uint16 seq, uint64 now_ns);
-		void							MarkAckPending(uint64 now_ns);
+		void							MarkReceived(uint16 seq, Timestamp now);
+		void							MarkAckPending(Timestamp now);
 		void							BuildPendingAck();
-		void							ProcessAck(const AckData& ack, uint64 ackRecvTime_ns, RttState& rtt);
-		bool							ShouldSendAck(uint64 now_ns) const;
+		void							ProcessAck(const AckData& ack, Timestamp ackRecvTime, RttState& rtt);
+		bool							ShouldSendAck(Timestamp now) const;
 		void							ClearPendingAck();
 
 	};
@@ -227,7 +227,7 @@ namespace jam::net
 		static constexpr uint16				MaxFragmentSize			= JAMNET_MTU;
 		static constexpr uint16				MaxFragmentPayloadSize	= MaxFragmentSize - PacketHeader::MAX_WIRE_SIZE;
 		static constexpr uint8				MaxFragments			= UINT8_MAX;
-		static constexpr uint64				Timeout_ns				= 5_s;
+		static constexpr Duration			Timeout					= 5_s;
 
 		struct Reassembly
 		{
@@ -238,19 +238,19 @@ namespace jam::net
 			std::bitset<256>				receivedMask;
 			std::vector<std::vector<BYTE>>	fragments;
 
-			uint64							startTime_ns	= 0_ns;
-			uint64							lastRecvTime_ns = 0_ns;
+			Timestamp						startTime	= Timestamp::Zero();
+			Timestamp						lastRecvTime = Timestamp::Zero();
 
 			PacketHeader					originalHeader  = {};
 			bool							headerSaved		= false;
 
-			Reassembly(uint16 id, uint8 total, uint64 now_ns)
-				: fragmentId(id), totalFragments(total), startTime_ns(now_ns), lastRecvTime_ns(now_ns)
+			Reassembly(uint16 id, uint8 total, Timestamp now)
+				: fragmentId(id), totalFragments(total), startTime(now), lastRecvTime(now)
 			{
 				fragments.resize(total);
 			}
 
-			bool					AddFragment(uint8 index, const BYTE* data, uint32 size, uint64 now_ns);
+			bool					AddFragment(uint8 index, const BYTE* data, uint32 size, Timestamp now);
 			std::vector<BYTE>		Assemble() const;
 			bool					IsComplete() const { return receivedCount == totalFragments; }
 		};
@@ -258,9 +258,9 @@ namespace jam::net
 		std::unordered_map<uint16, Reassembly>	reassemblies;
 		uint64									timeoutDrops = 0;
 
-		bool									AddFragment(uint16 fragmentId, uint8 totalFragments, uint8 index, const BYTE* data, uint32 size, uint64 now_ns);
+		bool									AddFragment(uint16 fragmentId, uint8 totalFragments, uint8 index, const BYTE* data, uint32 size, Timestamp now);
 		std::optional<std::vector<BYTE>>		PopCompleted(uint16 fragmentId);
-		void									CleanupTimeouts(uint64 now_ns);
+		void									CleanupTimeouts(Timestamp now);
 	};
 
 	// ============================================================
@@ -273,7 +273,7 @@ namespace jam::net
 		{
 			std::function<void(const BYTE*, size_t, Packet)>	onPayload	= nullptr;
 			std::function<void(bool)>							onDone		= nullptr;
-			uint64												deadline_ns = 0_ns;
+			Timestamp											deadline = Timestamp::Zero();
 			bool												hasDeadline = false;
 		};
 
@@ -283,7 +283,7 @@ namespace jam::net
 		uint32										GenerateRequestId();
 		bool										RegisterRequest(uint32 reqId, AwaitState&& state);
 		std::optional<AwaitState>					PopRequest(uint32 reqId);
-		std::vector<uint32>							GetTimedOutRequests(uint64 now_ns) const;
+		std::vector<uint32>							GetTimedOutRequests(Timestamp now) const;
 	};
 
 
@@ -293,17 +293,17 @@ namespace jam::net
 
 	struct TimeSyncState
 	{
-		static constexpr uint64 PingIntervalInitial_ns	= 250_ms;
-		static constexpr uint64 PingIntervalStable_ns	= 2_s;
-		static constexpr uint8  StabilizationThreshold	= 20;
-		static constexpr uint8	Window					= 32;
+		static constexpr Duration PingIntervalInitial	 = 250_ms;
+		static constexpr Duration PingIntervalStable	 = 2_s;
+		static constexpr uint8	  StabilizationThreshold = 20;
+		static constexpr uint8	  Window				 = 32;
 
 
 		int64						offset_ns				= 0;
 		double						drift_ppm				= 0.0;
 
-		uint64						lastPingSend_ns			= 0;
-		uint64						lastPongRecv_ns			= 0;
+		Timestamp					lastPingSend			= Timestamp::Zero();
+		Timestamp					lastPongRecv			= Timestamp::Zero();
 
 		uint64						lastSampleClient_ns		= 0;
 		uint64						lastSampleServer_ns		= 0;
@@ -313,18 +313,18 @@ namespace jam::net
 		uint64						lastT3ServerSend_ns		= 0;
 		uint64						lastT4ClientRecv_ns		= 0;
 
-		std::array<uint64, Window>	rwnd					= {};
+		std::array<Duration, Window> rwnd					= {};
 		std::array<int64, Window>	ownd					= {};
 		uint8						winCount				= 0;
 		uint8						winHead					= 0;
 		bool						bIsServerSide			= false;
 		bool						bIsStabilized			= false;
-		uint64						currentPingInterval_ns	= PingIntervalInitial_ns;
+		Duration					currentPingInterval	= PingIntervalInitial;
 
 
 		void						ProcessPingPong(uint64 t1, uint64 t2, uint64 t3, uint64 t4, RttState& rtt);
 		int64						GetServerTime(uint64 clientTime_ns) const;
-		bool						ShouldSendPing(uint64 now_ns) const;
+		bool						ShouldSendPing(Timestamp now) const;
 	};
 
 
@@ -335,7 +335,7 @@ namespace jam::net
 	struct TransmissionWaitingQueue
 	{
 		static constexpr uint32		MaxTransportBatch = 32;
-		static constexpr uint64		FlushInterval_ns  = 1_ms;
+		static constexpr Duration	FlushInterval  = 1_ms;
 
 		struct PendingPacket
 		{
@@ -344,12 +344,12 @@ namespace jam::net
 		};
 
 		std::deque<PendingPacket>		queue;
-		uint64							lastFlushTime_ns = 0;
+		Timestamp						lastFlushTime = Timestamp::Zero();
 		uint64							bytesQueued		 = 0;
 		bool							flushRequested	 = false;
 
 		void						Enqueue(Packet packet);
-		bool						ShouldFlush(uint64 now_ns) const;
+		bool						ShouldFlush(Timestamp now) const;
 		void						Clear();
 	};
 	using TxPendingPacket = TransmissionWaitingQueue::PendingPacket;

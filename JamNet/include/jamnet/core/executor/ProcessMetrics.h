@@ -11,7 +11,7 @@ namespace jam
 	{
 	public:
 		void Initialize(uint32 logicalProcessorCount, uint64 windowIndex);
-		void SubmitCompletedWindow(uint64 nowNs, MetricsAggregator& aggregator);
+		void SubmitCompletedWindow(Timestamp now, MetricsAggregator& aggregator);
 
 	private:
 		struct CpuTimes

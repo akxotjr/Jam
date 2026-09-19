@@ -23,7 +23,7 @@ namespace jam::net
 
 		PresentationFramePushedEvent snapshotEvent{};
 		snapshotEvent.frame.tick = currentTick;
-		snapshotEvent.frame.timestamp = static_cast<float>(NOW_NS());
+		snapshotEvent.frame.timestamp = static_cast<float>(NOW().Ns());
 		snapshotEvent.frame.sequence = currentTick;
 
 		if (auto* physicalWorld = m_world.ctx().find<ClientWorld*>())

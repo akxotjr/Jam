@@ -103,13 +103,13 @@ namespace jam
 	bool MetricsAggregator::Initialize(MetricsAggregatorConfig config)
 	{
 		std::scoped_lock lock(m_mutex);
-		if (config.windowPeriodNs == 0)
+		if (config.windowPeriod.IsZero())
 			return false;
 
 		m_config = std::move(config);
 		m_windows.clear();
 		m_startUnixNs = 0;
-		m_startMonotonicNs = 0;
+		m_startMonotonic = Timestamp::Zero();
 
 		if (m_output.is_open())
 			m_output.close();
@@ -227,10 +227,10 @@ namespace jam
 		m_config.enabled = false;
 	}
 
-	uint64 MetricsAggregator::WindowIndex(uint64 nowNs) const
+	uint64 MetricsAggregator::WindowIndex(Timestamp now) const
 	{
-		const uint64 period = m_config.windowPeriodNs;
-		return period != 0 ? nowNs / period : 0;
+		const Duration period = m_config.windowPeriod;
+		return period.IsZero() ? 0 : now.Ns() / period.Ns();
 	}
 
 	size_t MetricsAggregator::MetricKeyHash::operator()(const MetricKey& key) const
@@ -271,8 +271,9 @@ namespace jam
 		if (!EnsureOutputOpen())
 			return;
 
-		const uint64 windowStartNs = windowIndex * m_config.windowPeriodNs;
-		const uint64 windowEndNs   = windowStartNs + m_config.windowPeriodNs;
+		const Duration windowOffset = m_config.windowPeriod * windowIndex;
+		const Timestamp windowStart = Timestamp::FromNs(windowOffset.Ns());
+		const Timestamp windowEnd   = windowStart + m_config.windowPeriod;
 
 		std::vector<const std::pair<const MetricKey, AggregatedValue>*> rows;
 		rows.reserve(window.values.size());
@@ -287,8 +288,8 @@ namespace jam
 		for (const auto* row : rows)
 		{
 			m_output << windowIndex << ',' 
-					 << windowStartNs << ',' 
-					 << windowEndNs << ','
+					 << windowStart.Ns() << ','
+					 << windowEnd.Ns() << ','
 					 << row->first.scope << ',' 
 					 << row->first.shardIndex << ',' 
 					 << row->first.sourceId << ','
@@ -305,8 +306,9 @@ namespace jam
 
 	void MetricsAggregator::WriteHistogramLog(const uint64 windowIndex, const Window& window)
 	{
-		const uint64 windowStartNs = windowIndex * m_config.windowPeriodNs;
-		const uint64 windowEndNs   = windowStartNs + m_config.windowPeriodNs;
+		const Duration windowOffset = m_config.windowPeriod * windowIndex;
+		const Timestamp windowStart = Timestamp::FromNs(windowOffset.Ns());
+		const Timestamp windowEnd   = windowStart + m_config.windowPeriod;
 
 		std::vector<const std::pair<const MetricKey, MetricHistogram>*> rows;
 		rows.reserve(window.histograms.size());
@@ -325,8 +327,8 @@ namespace jam
 			const hdr_histogram* histogram = metric.m_impl->histogram;
 
 			m_output << windowIndex << ',' 
-					 << windowStartNs << ',' 
-					 << windowEndNs << ','
+					 << windowStart.Ns() << ','
+					 << windowEnd.Ns() << ','
 					 << key.scope << ',' 
 					 << key.shardIndex << ',' 
 					 << key.sourceId << ','
@@ -340,14 +342,14 @@ namespace jam
 
 			hdr_log_entry entry{};
 			entry.start_timestamp = {
-				.tv_sec = static_cast<long>(windowStartNs / 1'000'000'000ull),
-				.tv_nsec = static_cast<long>(windowStartNs % 1'000'000'000ull),
+				.tv_sec = static_cast<long>(windowStart.Sec()),
+				.tv_nsec = static_cast<long>(windowStart.Ns() % Timestamp::NsPerSec),
 			};
 
-			const uint64 intervalNs = windowEndNs - windowStartNs;
+			const Duration interval = windowEnd - windowStart;
 			entry.interval = {
-				.tv_sec = static_cast<long>(intervalNs / 1'000'000'000ull),
-				.tv_nsec = static_cast<long>(intervalNs % 1'000'000'000ull),
+				.tv_sec = static_cast<long>(interval.Sec()),
+				.tv_nsec = static_cast<long>(interval.Ns() % Duration::NsPerSec),
 			};
 
 			hdr_timespec_from_double(&entry.max, static_cast<double>(hdr_max(histogram)));
@@ -367,9 +369,8 @@ namespace jam
 			return false;
 		if (m_startUnixNs == 0)
 		{
-			m_startMonotonicNs = NOW_NS();
-			m_startUnixNs = static_cast<uint64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-				std::chrono::system_clock::now().time_since_epoch()).count());
+			m_startMonotonic = NOW();
+			m_startUnixNs = static_cast<uint64>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 		}
 
 		std::error_code error;
@@ -393,8 +394,8 @@ namespace jam
 		}
 
 		m_output << "# start_unix_ns="      << m_startUnixNs << '\n';
-		m_output << "# start_monotonic_ns=" << m_startMonotonicNs << '\n';
-		m_output << "# window_period_ns="   << m_config.windowPeriodNs << '\n';
+		m_output << "# start_monotonic_ns=" << m_startMonotonic.Ns() << '\n';
+		m_output << "# window_period_ns="   << m_config.windowPeriod.Ns() << '\n';
 		m_output << "window_index,window_start_ns,window_end_ns,scope,shard_index,source_id,metric,aggregation,value\n";
 
 		hdr_log_writer_init(&m_histogramLog->writer);
@@ -411,8 +412,8 @@ namespace jam
 			m_histogramLog.reset();
 			return false;
 		}
-		std::fprintf(m_histogramLog->file, "#[StartMonotonicNs: %llu]\n", static_cast<unsigned long long>(m_startMonotonicNs));
-		std::fprintf(m_histogramLog->file, "#[WindowPeriodNs: %llu]\n", static_cast<unsigned long long>(m_config.windowPeriodNs));
+		std::fprintf(m_histogramLog->file, "#[StartMonotonicNs: %llu]\n", static_cast<unsigned long long>(m_startMonotonic.Ns()));
+		std::fprintf(m_histogramLog->file, "#[WindowPeriodNs: %llu]\n", static_cast<unsigned long long>(m_config.windowPeriod.Ns()));
 		m_output.flush();
 		std::fflush(m_histogramLog->file);
 		

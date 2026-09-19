@@ -34,8 +34,8 @@ namespace jam::net
 		entt::entity                e;              // 대상 세션 엔티티
 		PacketHeaderView            view;           // 패킷 분석 결과
 		Packet                      packet;         // 원본 버퍼 (수명 관리)
-		uint64                      now_ns;         // 현재 타임스탬프
-		uint64                      ingressTime_ns; // IOCP ingress 시각(가능한 wire 근접)
+		Timestamp                   now;			// 현재 타임스탬프
+		Timestamp                   ingressTime;	// IOCP ingress 시각(가능한 wire 근접)
 
 		bool                        shouldDrop          = false;
 		bool                        isReassembling      = false;
@@ -78,7 +78,7 @@ namespace jam::net
 		entt::entity                        e;
 		PacketHeaderView                    header;
 		Packet                              packet;
-		uint64                              now_ns          = 0_ns;
+		Timestamp                           now_ns          = Timestamp::Zero();
 		bool                                bIsFragmentized = false;
 	};
 
@@ -95,25 +95,25 @@ namespace jam::net
 	// ============================================================
 
 	/// 타임아웃 체크 시스템
-	void SystemSessionTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemSessionTimeout(ShardLocal& L, Timestamp now, Duration dt);
 
 	/// Keepalive 시스템
-	void SystemSessionKeepalive(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemSessionKeepalive(ShardLocal& L, Timestamp now, Duration dt);
 
 	/// RPC 타임아웃 시스템
-	void SystemRpcTimeout(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemRpcTimeout(ShardLocal& L, Timestamp now, Duration dt);
 
 	/// 전송 대기열 플러시 시스템
-	void SystemTransportFlush(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemTransportFlush(ShardLocal& L, Timestamp now, Duration dt);
 
 	/// 재전송 시스템
-	void SystemRetransmit(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemRetransmit(ShardLocal& L, Timestamp now_ns, Duration dt);
 
 	/// Fragment 타임아웃 정리 시스템
-	void SystemFragmentCleanup(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemFragmentCleanup(ShardLocal& L, Timestamp now, Duration dt);
 
 	/// 통계 누적 시스템
-	void SystemNetworkStats(ShardLocal& L, uint64 now_ns, uint64 dt_ns);
+	void SystemNetworkStats(ShardLocal& L, Timestamp now, Duration dt);
 
 
 	// ============================================================
@@ -124,7 +124,7 @@ namespace jam::net
 	bool SendPacketToSession(entt::entity e, Packet packet);
 
 	/// 세션 수신 처리
-	void ProcessReceivedPacket(entt::entity e, Packet packet, uint64 ingressRecvTime_ns = 0_ns);
+	void ProcessReceivedPacket(entt::entity e, Packet packet, Timestamp ingressRecvTime = Timestamp::Zero());
 
 
 	// ============================================================
@@ -132,6 +132,6 @@ namespace jam::net
 	// ============================================================
 
 	/// 네트워크 도메인 시스템 등록 (NETWORK domain)
-	void RegisterNetworkDomain(ShardLocal& L, uint64 tickPeriod_ns = 1_ms);
+	void RegisterNetworkDomain(ShardLocal& L, Duration tickPeriod = 1_ms);
 
 } // namespace jam::net

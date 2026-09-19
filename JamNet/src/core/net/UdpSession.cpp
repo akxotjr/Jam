@@ -13,13 +13,13 @@ namespace jam::net
 {
 	namespace
 	{
-		inline constexpr uint64 kControlRetryDelayNs = 500_ms;
-		inline constexpr uint64 kControlRetryJitterNs = 50_ms;
-		inline constexpr uint64 kControlDeadlineNs = 10_s;
+		inline constexpr Duration kControlRetryDelay  = 500_ms;
+		inline constexpr Duration kControlRetryJitter = 50_ms;
+		inline constexpr Duration kControlDeadline	  = 10_s;
 
 		uint64 MakeTransactionId(const UdpSession& session)
 		{
-			uint64 value = NOW_NS() ^ session.GetEndpointId() ^ (session.GetAccountId() * 0x9e3779b97f4a7c15ull);
+			uint64 value = NOW().Ns() ^ session.GetEndpointId() ^ (session.GetAccountId() * 0x9e3779b97f4a7c15ull);
 			return value != 0 ? value : 1;
 		}
 
@@ -89,7 +89,7 @@ namespace jam::net
 
 
 
-	void UdpSession::ProcessRecv(int32 numOfBytes, Packet packet, uint64 ingressRecvTime_ns)
+	void UdpSession::ProcessRecv(int32 numOfBytes, Packet packet, Timestamp ingressRecvTime_ns)
 	{
 		(void)numOfBytes;
 		PacketHeaderView directView = PacketHeaderView::Parse(packet->Head(), packet->Size());
@@ -122,9 +122,9 @@ namespace jam::net
 		return RegisterSend(std::move(datagram));
 	}
 
-	bool UdpSession::RegisterSend(Datagram&& datagram, const std::span<const WireTimePatch> wireTimePatches, uint64* submitTime_ns)
+	bool UdpSession::RegisterSend(Datagram&& datagram, const std::span<const WireTimePatch> wireTimePatches, Timestamp* submitTime)
 	{
-		return GetService()->m_udpRouter->RegisterSend(std::move(datagram), GetRemoteNetAddress(), wireTimePatches, submitTime_ns);
+		return GetService()->m_udpRouter->RegisterSend(std::move(datagram), GetRemoteNetAddress(), wireTimePatches, submitTime);
 	}
 
 	void UdpSession::ProcessConnect()
@@ -147,7 +147,7 @@ namespace jam::net
 			return;
 
 		m_unbindTransactionId = MakeTransactionId(*this);
-		m_unbindDeadline_ns   = NOW_NS() + kControlDeadlineNs;
+		m_unbindDeadline_ns   = NOW() + kControlDeadline;
 		m_unbindRequestActive = true;
 		SendUnbindRequest();
 		ScheduleSessionUnbindRetry();
@@ -219,8 +219,8 @@ namespace jam::net
 				SendUnbindResponse();
 				if (!m_unbindTombstone)
 				{
-					m_unbindTombstone = true;
-					m_unbindDeadline_ns = NOW_NS() + kControlDeadlineNs;
+					m_unbindTombstone   = true;
+					m_unbindDeadline_ns = NOW() + kControlDeadline;
 					ScheduleUnbindTombstoneExpiry();
 				}
 			}
@@ -264,7 +264,7 @@ namespace jam::net
 			service->ReleaseUdpSession(this);
 	}
 
-	void UdpSession::ProcessSystemPacket(Packet packet, const PacketHeaderView& view, uint64 ingressRecvTime_ns)
+	void UdpSession::ProcessSystemPacket(Packet packet, const PacketHeaderView& view, Timestamp ingressRecvTime)
 	{
 		if (!view.IsValid() || view.Type() != ePacketType::SYSTEM)
 			return;
@@ -283,8 +283,8 @@ namespace jam::net
 				.e				= e,
 				.view			= view,
 				.packet			= std::move(packet),
-				.now_ns			= NOW_NS(),
-				.ingressTime_ns = ingressRecvTime_ns
+				.now			= NOW(),
+				.ingressTime    = ingressRecvTime
 			};
 
 			HandlePostBindSystemPacket(ctx);
@@ -301,10 +301,10 @@ namespace jam::net
 		if (m_accountId == 0 || m_userId == kInvalidRuntimeId)
 			return;
 
-		m_clientBind.active		= true;
-		m_clientBind.bound		= false;
+		m_clientBind.active	= true;
+		m_clientBind.bound	= false;
 		m_bindTransactionId = MakeTransactionId(*this);
-		m_bindDeadline_ns = NOW_NS() + kControlDeadlineNs;
+		m_bindDeadline_ns	= NOW() + kControlDeadline;
 		SendBindRequest();
 		ScheduleSessionBindingRetry();
 	}
@@ -322,7 +322,7 @@ namespace jam::net
 					return;
 				if (!self->m_clientBind.active || self->m_clientBind.bound || self->m_clientBind.timerToken != token)
 					return;
-				if (NOW_NS() >= self->m_bindDeadline_ns)
+				if (NOW() >= self->m_bindDeadline_ns)
 				{
 					self->m_clientBind.active = false;
 					self->m_clientBind.bound  = false;
@@ -333,7 +333,7 @@ namespace jam::net
 
 				self->SendBindRequest();
 				self->ScheduleSessionBindingRetry();
-			}, eJobPriority::Control), MakeRetryDelayNs(kControlRetryDelayNs, kControlRetryJitterNs, m_endpointId, token));
+			}, eJobPriority::Control), MakeRetryDelay(kControlRetryDelay, kControlRetryJitter, m_endpointId, token));
 	}
 
 	void UdpSession::ScheduleSessionUnbindRetry()
@@ -345,7 +345,7 @@ namespace jam::net
 				auto* self = selfRef.TryGet();
 				if (!self || !self->m_unbindRequestActive || self->m_unbindTimerToken != token)
 					return;
-				if (NOW_NS() >= self->m_unbindDeadline_ns)
+				if (NOW() >= self->m_unbindDeadline_ns)
 				{
 					JAM_LOG_WARN("[UdpSession] UDP unbind timed out. sessionId={}", self->m_sessionId);
 					self->AbortTransport("UDP unbind deadline exceeded");
@@ -353,7 +353,7 @@ namespace jam::net
 				}
 				self->SendUnbindRequest();
 				self->ScheduleSessionUnbindRetry();
-			}, eJobPriority::Control), MakeRetryDelayNs(kControlRetryDelayNs, kControlRetryJitterNs, m_endpointId, token));
+			}, eJobPriority::Control), MakeRetryDelay(kControlRetryDelay, kControlRetryJitter, m_endpointId, token));
 	}
 
 	void UdpSession::ScheduleUnbindTombstoneExpiry()
@@ -365,13 +365,13 @@ namespace jam::net
 				auto* self = selfRef.TryGet();
 				if (!self || !self->m_unbindTombstone || self->m_unbindTimerToken != token)
 					return;
-				if (NOW_NS() < self->m_unbindDeadline_ns)
+				if (NOW() < self->m_unbindDeadline_ns)
 				{
 					self->ScheduleUnbindTombstoneExpiry();
 					return;
 				}
 				self->CompleteProtocolDisconnect();
-			}, eJobPriority::Control), MakeRetryDelayNs(kControlRetryDelayNs, kControlRetryJitterNs, m_endpointId, token));
+			}, eJobPriority::Control), MakeRetryDelay(kControlRetryDelay, kControlRetryJitter, m_endpointId, token));
 	}
 
 	void UdpSession::SendBindRequest()

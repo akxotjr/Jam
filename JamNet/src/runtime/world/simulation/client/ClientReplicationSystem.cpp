@@ -127,7 +127,7 @@ namespace jam::net
 		}
 
 		if (m_estimatedServerTick)
-			m_estimatedServerTick->Update(batch.serverTick, batch.firstRecvNs, NOW_NS());
+			m_estimatedServerTick->Update(batch.serverTick, batch.firstRecvNs, NOW());
 
 		m_lastAppliedSnapshotTick = batch.serverTick;
 		m_lastServerTick = std::max(m_lastLifecycleTick, m_lastAppliedSnapshotTick);
@@ -147,7 +147,7 @@ namespace jam::net
 		});
 	}
 
-	void ClientReplicationSystem::EnqueueSnapshot(fb::fbSnapshotT snapshot, uint64 recvNs)
+	void ClientReplicationSystem::EnqueueSnapshot(fb::fbSnapshotT snapshot, Timestamp recvNs)
 	{
 		const auto* hdr = snapshot.header.get();
 		if (!hdr)

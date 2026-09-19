@@ -63,14 +63,14 @@ namespace jam::net
 
 	struct UdpRouter::BoundIngressState
 	{
-		static constexpr size_t kDrainBatchPacketCount = 512;
-		static constexpr size_t kDrainJobPacketBudget = 2048;
-		static constexpr uint64 kDrainJobTimeBudgetNs = 1_ms;
+		static constexpr size_t   kDrainBatchPacketCount = 512;
+		static constexpr size_t   kDrainJobPacketBudget = 2048;
+		static constexpr Duration kDrainJobTimeBudgetNs = 1_ms;
 
 		struct Item
 		{
 			int32				numOfBytes = 0;
-			uint64				ingressRecvTimeNs = 0;
+			Timestamp			ingressRecvTimeNs = Timestamp::Zero();
 			EndpointId			endpointId = kInvalidEndpointId;
 			SessionId			sessionId = kInvalidSessionId;
 			OwnedUdpRecvEvent	received;
@@ -232,8 +232,7 @@ namespace jam::net
 			const bool validReceiveStorage = m_service && ev->reservation.IsValid();
 			if (validReceiveStorage && numOfBytes > 0 && numOfBytes <= static_cast<int32>(ev->reservation.Capacity()))
 			{
-				const uint64 ingress = CaptureWireTimestampNow();
-				ProcessRecv(numOfBytes, ev->remoteAddr, ev, ingress);
+				ProcessRecv(numOfBytes, ev->remoteAddr, ev, NOW());
 			}
 			else
 			{
@@ -258,10 +257,10 @@ namespace jam::net
 		}
 	}
 
-	bool UdpRouter::RegisterSend(Datagram&& datagram, const NetAddress& to, const std::span<const WireTimePatch> wireTimePatches, uint64* submitTime_ns)
+	bool UdpRouter::RegisterSend(Datagram&& datagram, const NetAddress& to, const std::span<const WireTimePatch> wireTimePatches, Timestamp* submitTime)
 	{
-		if (submitTime_ns)
-			*submitTime_ns = 0;
+		if (submitTime)
+			*submitTime = Timestamp::Zero();
 
 		if (IsClosing() || datagram.Empty()) return false;
 
@@ -307,8 +306,8 @@ namespace jam::net
 			return false;
 		}
 
-		const uint64 wireTime_ns = CaptureWireTimestampNow();
-		ApplyWireTimePatches(wireTimePatches, wireTime_ns);
+		const Timestamp wireTime = NOW();
+		ApplyWireTimePatches(wireTimePatches, wireTime);
 
 		const int32 sendResult = ::WSASendTo(m_socket, ev->wsaBufs.data(), ev->wsaBufCount, nullptr, 0, ev->remoteAddr.GetSockAddrPtr(), sizeof(SOCKADDR_IN), ev, nullptr);
 		if (SOCKET_ERROR == sendResult)
@@ -325,8 +324,8 @@ namespace jam::net
 			}
 		}
 
-		if (submitTime_ns)
-			*submitTime_ns = wireTime_ns;
+		if (submitTime)
+			*submitTime = wireTime;
 		// Completion may already have recycled ev; do not access it after submission.
 		return true;
 	}
@@ -417,7 +416,7 @@ namespace jam::net
 
 	void UdpRouter::DrainBoundIngress(const uint16 shardIndex, const std::shared_ptr<BoundIngressState>& ingress)
 	{
-		const uint64 drainStartNs = NOW_NS();
+		const Timestamp drainStartNs = NOW();
 		size_t jobPacketCount = 0;
 		size_t remaining = ingress->pending.load(std::memory_order_acquire);
 		bool timeBudgetReached = false;
@@ -457,14 +456,14 @@ namespace jam::net
 			if (remaining == 0 || jobPacketCount == BoundIngressState::kDrainJobPacketBudget)
 				break;
 
-			timeBudgetReached = NOW_NS() - drainStartNs >= BoundIngressState::kDrainJobTimeBudgetNs;
+			timeBudgetReached = NOW() - drainStartNs >= BoundIngressState::kDrainJobTimeBudgetNs;
 		} while (!timeBudgetReached);
 
 		if (remaining > 0)
 			ScheduleBoundIngressDrain(shardIndex, ingress);
 	}
 
-	void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddr, UdpRecvEvent* recvEvent, uint64 ingressRecvTime_ns)
+	void UdpRouter::ProcessRecv(int32 numOfBytes, const NetAddress& remoteAddr, UdpRecvEvent* recvEvent, Timestamp ingressRecvTime)
 	{
 		OwnedUdpRecvEvent received(recvEvent);
 		if (numOfBytes == 0 || !m_service || !received)
@@ -504,7 +503,7 @@ namespace jam::net
 						const auto& ingress = m_boundIngress[targetShardIndex];
 						const bool scheduleDrain = ingress->Enqueue(BoundIngressState::Item{
 							.numOfBytes			= numOfBytes,
-							.ingressRecvTimeNs	= ingressRecvTime_ns,
+							.ingressRecvTimeNs	= ingressRecvTime,
 							.endpointId			= endpointId,
 							.sessionId			= ingressRoute.sessionId,
 							.received			= std::move(received),
@@ -516,7 +515,7 @@ namespace jam::net
 					}
 					else
 					{
-						boundShard->Submit(Job([numOfBytes, ingressRecvTime_ns, endpointId, targetShardIndex, sessionId = ingressRoute.sessionId, received = std::move(received)]() mutable
+						boundShard->Submit(Job([numOfBytes, ingressRecvTime, endpointId, targetShardIndex, sessionId = ingressRoute.sessionId, received = std::move(received)]() mutable
 							{
 								Packet packet = TakeReceivedDatagram(*received, static_cast<uint32>(numOfBytes));
 								if (!packet.IsValid())
@@ -525,7 +524,7 @@ namespace jam::net
 								auto& state = GetOrCreateSessionShardState(CurrentShardLocalChecked());
 
 								if (auto* forwarded = static_cast<UdpSession*>(state.FindSession(sessionId)))
-									forwarded->ProcessRecv(numOfBytes, std::move(packet), ingressRecvTime_ns);
+									forwarded->ProcessRecv(numOfBytes, std::move(packet), ingressRecvTime);
 								else
 									JAM_LOG_WARN("[UdpRouter] Bound UDP session lookup failed. endpointId={} sessionId={} targetShard={} localShard={}",
 										endpointId, sessionId, targetShardIndex, CurrentShardLocalChecked().shardIndex);
@@ -579,7 +578,7 @@ namespace jam::net
 		if (service->GetServiceType() == eServiceType::SERVER && !budget)
 			return;
 
-		shard->Submit(Job([service = std::move(service), endpointId, numOfBytes, received = std::move(received), ingressRecvTime_ns, lease = IngressLease(std::move(budget))]() mutable
+		shard->Submit(Job([service = std::move(service), endpointId, numOfBytes, received = std::move(received), ingressRecvTime, lease = IngressLease(std::move(budget))]() mutable
 			{
 				auto process = [&]()
 					{
@@ -593,7 +592,7 @@ namespace jam::net
 							session = nullptr;
 
 						if (session)
-							session->ProcessRecv(numOfBytes, std::move(packet), ingressRecvTime_ns);
+							session->ProcessRecv(numOfBytes, std::move(packet), ingressRecvTime);
 					};
 				process();
 

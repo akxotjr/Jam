@@ -23,7 +23,7 @@ namespace jam
 		std::thread::id						m_id		= {};
 		moodycamel::ConcurrentQueue<Job>	m_queue;
 		std::atomic<size_t>					m_pending	= 0;
-		std::atomic_bool						m_accepting = false;
+		std::atomic_bool					m_accepting = false;
 		std::mutex							m_lifecycleMutex;
 	};
 }

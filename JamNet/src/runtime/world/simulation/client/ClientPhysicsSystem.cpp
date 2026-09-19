@@ -505,7 +505,7 @@ namespace jam::net
         const uint64 awaitKey = inFiber && executor ? executor->AllocateAwaitKey() : 0;
 
         if (m_physics->BeginSimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
-            sched->Suspend(awaitKey, NOW_NS() + 1_s);
+            sched->Suspend(awaitKey, NOW() + 1_s);
 
         m_physics->EndSimulate();
         CommitPendingActorOps();
@@ -523,7 +523,7 @@ namespace jam::net
         const uint64 awaitKey = inFiber && executor ? executor->AllocateAwaitKey() : 0;
 
         if (m_physics->BeginResimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
-            sched->Suspend(awaitKey, NOW_NS() + 1_s);
+            sched->Suspend(awaitKey, NOW() + 1_s);
         
         m_physics->EndResimulate();
         CommitPendingActorOps();

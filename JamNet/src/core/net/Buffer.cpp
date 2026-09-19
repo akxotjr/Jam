@@ -389,7 +389,7 @@ namespace jam::net
 			JAM_ASSERT(block->m_inFreeList == false);
 
 			block->m_refCount.store(1, std::memory_order_relaxed);
-			block->m_globalFreeSinceNs = 0;
+			block->m_globalFreeSinceNs = Timestamp::Zero();
 			return block;
 		}
 
@@ -448,7 +448,7 @@ namespace jam::net
 			JAM_ASSERT(block->m_inFreeList == true);
 
 			block->m_inFreeList = false;
-			block->m_globalFreeSinceNs = 0;
+			block->m_globalFreeSinceNs = Timestamp::Zero();
 			return block;
 		}
 
@@ -476,7 +476,7 @@ namespace jam::net
 		block->m_inFreeList = freeList;
 		block->m_refCount.store(0, std::memory_order_relaxed);
 		block->Reset();
-		block->m_globalFreeSinceNs = freeList ? NOW_NS() : 0;
+		block->m_globalFreeSinceNs = freeList ? NOW() : Timestamp::Zero();
 		++m_liveBlockCount;
 
 		if (freeList)
@@ -516,7 +516,7 @@ namespace jam::net
 			local.push_back(block);
 		}
 
-		MaybeTrimGlobalLocked(NOW_NS(), globalLockSequence);
+		MaybeTrimGlobalLocked(NOW(), globalLockSequence);
 	}
 
 	void BufferPool::SpillLocalCache(TlsFreeList& local, uint32 keepCount)
@@ -547,11 +547,11 @@ namespace jam::net
 			JAM_ASSERT(block->m_refCount.load(std::memory_order_relaxed) == 0);
 
 			block->m_inFreeList = true;
-			block->m_globalFreeSinceNs = NOW_NS();
+			block->m_globalFreeSinceNs = NOW();
 			m_freeIndices.push_back(block->m_poolIndex);
 		}
 
-		MaybeTrimGlobalLocked(NOW_NS(), globalLockSequence);
+		MaybeTrimGlobalLocked(NOW(), globalLockSequence);
 	}
 
 	void BufferPool::RecycleGlobal(BufferBlock* block)
@@ -568,12 +568,12 @@ namespace jam::net
 		JAM_ASSERT(m_blocks[block->m_poolIndex] == block);
 
 		block->m_inFreeList = true;
-		block->m_globalFreeSinceNs = NOW_NS();
+		block->m_globalFreeSinceNs = NOW();
 		m_freeIndices.push_back(block->m_poolIndex);
 		MaybeTrimGlobalLocked(block->m_globalFreeSinceNs, globalLockSequence);
 	}
 
-	void BufferPool::MaybeTrimGlobalLocked(const uint64 nowNs, const uint64 globalLockSequence)
+	void BufferPool::MaybeTrimGlobalLocked(const Timestamp nowNs, const uint64 globalLockSequence)
 	{
 		if (m_config.retainedBlockLimit == 0
 			|| m_config.trimEveryGlobalLocks == 0
@@ -596,7 +596,10 @@ namespace jam::net
 			const uint32 index = m_freeIndices[candidatePos];
 			BufferBlock* block = index < m_blocks.size() ? m_blocks[index] : nullptr;
 			++scanned;
-			if (!block || block->m_globalFreeSinceNs == 0 || nowNs < block->m_globalFreeSinceNs
+
+			if (!block 
+				|| block->m_globalFreeSinceNs.IsZero() 
+				|| nowNs < block->m_globalFreeSinceNs
 				|| nowNs - block->m_globalFreeSinceNs < m_config.trimMinAgeNs)
 			{
 				++m_trimScanCursor;

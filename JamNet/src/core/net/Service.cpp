@@ -18,19 +18,19 @@ namespace jam::net
 {
 	namespace
 	{
-		inline constexpr uint64 kClientUdpCloseTimeout = 12_s;
+		inline constexpr Duration kClientUdpCloseTimeout = 12_s;
 	}
 
 
 	namespace
 	{
-		void WaitPendingIocpDrain(const char* name, IocpObject* object, const uint64 warningThreshold = 250_ms)
+		void WaitPendingIocpDrain(const char* name, const IocpObject* object, const Duration warningThreshold = 250_ms)
 		{
 			if (!object)
 				return;
 
-			const auto warningDeadline = NOW_NS() + warningThreshold;
-			while (object->GetPendingDispatchCount() > 0 && NOW_NS() < warningDeadline)
+			const auto warningDeadline = NOW() + warningThreshold;
+			while (object->GetPendingDispatchCount() > 0 && NOW() < warningDeadline)
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
 			if (object->GetPendingDispatchCount() > 0)
@@ -155,7 +155,7 @@ namespace jam::net
 				std::unique_ptr<Session> detached = GetOrCreateSessionShardState(L).ReleaseSession(sessionId, sessionPtr);
 				if (!detached)
 					return;
-				detached->OnSessionReleased();
+				detached->CompleteSessionRelease();
 
 				auto closing = std::shared_ptr<Session>(std::move(detached));
 				Mailbox* mailbox = closing->m_mailboxRef.mailbox;
@@ -197,7 +197,7 @@ namespace jam::net
 				std::unique_ptr<Session> detached = GetOrCreateSessionShardState(L).ReleaseSession(sessionId, sessionPtr);
 				if (!detached)
 					return;
-				detached->OnSessionReleased();
+				detached->CompleteSessionRelease();
 
 				auto closing = std::shared_ptr<Session>(std::move(detached));
 				Mailbox* mailbox = closing->m_mailboxRef.mailbox;
@@ -436,7 +436,7 @@ namespace jam::net
 			return;
 
 		auto owner = std::move(m_tcpSession);
-		owner->OnSessionReleased();
+		owner->CompleteSessionRelease();
 		DestroySessionEntity(*owner);
 
 		if (owner->m_mailboxRef.mailbox)
@@ -455,7 +455,7 @@ namespace jam::net
 			return;
 
 		auto owner = std::move(m_udpSession);
-		owner->OnSessionReleased();
+		owner->CompleteSessionRelease();
 		if (m_udpRouter)
 			m_udpRouter->ClearIngressRoute(owner->GetEndpointId());
 
@@ -594,7 +594,7 @@ namespace jam::net
 
 				for (auto& session : closing)
 				{
-					session->OnSessionReleased();
+					session->CompleteSessionRelease();
 					session->SetService(nullptr);
 					session->Disconnect();
 					WaitPendingIocpDrain("ServerSession", session.get());

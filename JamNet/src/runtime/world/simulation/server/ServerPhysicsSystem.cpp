@@ -152,7 +152,7 @@ namespace jam::net
 
 		if (m_physics->BeginSimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
 		{
-			sched->Suspend(awaitKey, NOW_NS() + 2_s);
+			sched->Suspend(awaitKey, NOW() + 2_s);
 		}
 
 		m_physics->EndSimulate();
