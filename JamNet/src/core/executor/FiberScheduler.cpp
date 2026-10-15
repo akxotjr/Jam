@@ -473,7 +473,7 @@ namespace jam
 	{
 		while (!m_sleepPQ.empty() && m_sleepPQ.top().wakeup <= wakeup)
 		{
-			const auto& [wake, id, gen] = m_sleepPQ.top();
+			const auto [wake, id, gen] = m_sleepPQ.top();
 
 			m_sleepPQ.pop();
 

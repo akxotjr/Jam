@@ -181,7 +181,7 @@ namespace jam
 		mutable std::condition_variable							m_fiberWakeCv;
 		mutable std::atomic<uint64>								m_fiberWakeEpoch			= 0;
 
-		std::atomic<uint64>										m_nextAwaitSeq				= 0;
+		std::atomic<uint64>										m_nextAwaitSeq				= 1;
 		mutable std::atomic<uint32>								m_nextIocpDomain			= 0;
 
 		std::atomic<uint32>										m_nextOffloadWorkerSlot		= 0;
