@@ -15,6 +15,11 @@ namespace jam::net
 		void			RecordAoiNeighbors(uint64 visibleActorCount);
 		void			RecordAoiEnteredActor();
 		void			RecordAoiLeftActor();
+		void            RecordAoiEnqueueAttempt();
+		void            RecordAoiUniqueRelation();
+		void            RecordAoiCertificateEarlyReturn();
+		void            RecordAoiCertificatePrecheck();
+		void            RecordAoiCertificatePrecheckHit();
 		void			RecordSnapshotPacket(uint64 bytes, uint64 actorCount, uint64 fullActorCount);
 		void			RecordLifecyclePacket(uint64 bytes, uint64 eventCount);
 		void			RecordLifecyclePacketSplit();

@@ -39,7 +39,12 @@ namespace jam::net
 		{
 			eNeighborsPerUserOverflow, 
 			eEnteredActors, 
-			eLeftActors
+			eLeftActors,
+			eEnqueueAttempts,
+			eUniqueRelations,
+			eCertificateEarlyReturns,
+			eCertificatePrechecks,
+			eCertificatePrecheckHits,
 		};
 
 		enum eReplicationValue : size_t
@@ -99,6 +104,31 @@ namespace jam::net
 	void WorldMetrics::RecordAoiLeftActor()
 	{
 		++m_aoiSnapshot.values[eLeftActors].value;
+	}
+
+	void WorldMetrics::RecordAoiEnqueueAttempt()
+	{
+		++m_aoiSnapshot.values[eEnqueueAttempts].value;
+	}
+
+	void WorldMetrics::RecordAoiUniqueRelation()
+	{
+		++m_aoiSnapshot.values[eUniqueRelations].value;
+	}
+
+	void WorldMetrics::RecordAoiCertificateEarlyReturn()
+	{
+		++m_aoiSnapshot.values[eCertificateEarlyReturns].value;
+	}
+
+	void WorldMetrics::RecordAoiCertificatePrecheck()
+	{
+		++m_aoiSnapshot.values[eCertificatePrechecks].value;
+	}
+
+	void WorldMetrics::RecordAoiCertificatePrecheckHit()
+	{
+		++m_aoiSnapshot.values[eCertificatePrecheckHits].value;
 	}
 
 	void WorldMetrics::RecordSnapshotPacket(uint64 bytes, uint64 actorCount, uint64 fullActorCount)
@@ -209,7 +239,12 @@ namespace jam::net
 		m_aoiSnapshot.values	 = { 
 			{ .name = "neighbors_per_user_overflow" }, 
 			{ .name = "entered_actors" }, 
-			{ .name = "left_actors" } 
+			{ .name = "left_actors" },
+			{ .name = "enqueue_attempts" },
+			{ .name = "unique_relations" },
+			{ .name = "certificate_early_returns" },
+			{ .name = "certificate_prechecks" },
+			{ .name = "certificate_precheck_hits" },
 		};
 		m_aoiSnapshot.histograms.emplace_back("neighbors_per_user", 
 			MetricHistogramConfig{ 
