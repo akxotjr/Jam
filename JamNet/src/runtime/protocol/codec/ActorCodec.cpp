@@ -4,6 +4,7 @@
 #include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/runtime/protocol/codec/RuntimePacketCodec.h"
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
+#include "jamnet/runtime/world/simulation/server/ActorLifecycleTypes.h"
 
 namespace jam::net::codec
 {
@@ -106,7 +107,7 @@ namespace jam::net::codec
 		auto& fbb = ResetRuntimePacketBuilder(CurrentShardLocalChecked());
 		const SpawnWireValues values(params);
 		const auto root = fb::CreatefbSpawnActorReq(fbb, world.worldId, world.instance.instanceId.value,
-			params.clientRequestId, params.owner, params.controller, params.actorArchetypeKey.v, &values.pos, &values.rot,
+			params.clientRequestId, params.actorArchetypeKey.v, &values.pos, &values.rot,
 			static_cast<uint32>(params.desc.spawnSrc),
 			values.overrideMask, values.linearVelocityPtr, values.angularVelocityPtr, values.linearDamping,
 			values.angularDamping, values.yaw, values.pitch, params.targetActorId.Value());
@@ -143,10 +144,10 @@ namespace jam::net::codec
 		return Finish(fbb);
 	}
 
-	FlatBufferPayload EncodeSpawnActorResponse(bool success, fb::fbSpawnActorFailure failure, ClientRequestId clientRequestId, ActorId actorId)
+	FlatBufferPayload EncodeSpawnActorResponse(fb::fbSpawnActorResult result, ClientRequestId clientRequestId, ActorId actorId)
 	{
 		auto& fbb = ResetRuntimePacketBuilder(CurrentShardLocalChecked());
-		fbb.Finish(fb::CreatefbSpawnActorRes(fbb, success, failure, clientRequestId, actorId.Value()));
+		fbb.Finish(fb::CreatefbSpawnActorRes(fbb, result, clientRequestId, actorId.Value()));
 		return Finish(fbb);
 	}
 
@@ -173,29 +174,30 @@ namespace jam::net::codec
 
 	bool DecodeSpawnActorRequest(const fb::fbSpawnActorReq& wire, SpawnParams& out)
 	{
-		if (!DecodeSpawn(wire, out)) return false;
-		out.owner = wire.owner_user_id();
-		out.controller = wire.controller_user_id();
-		return true;
+		return DecodeSpawn(wire, out);
 	}
 
-	bool DecodeSpawnPlayerRequest(const fb::fbSpawnPlayerReq& wire, UserId userId, SpawnParams& out)
+	bool DecodeSpawnPlayerRequest(const fb::fbSpawnPlayerReq& wire, SpawnParams& out)
 	{
-		if (!DecodeSpawn(wire, out)) return false;
-		out.owner = userId;
-		out.controller = userId;
-		return true;
+		return DecodeSpawn(wire, out);
 	}
 
 	ActorActionResult DecodeSpawnActorResponse(const fb::fbSpawnActorRes& wire)
 	{
+		const bool succeeded = wire.result() == fb::fbSpawnActorResult_Succeeded && wire.actor_id() != 0;
+		eActorActionReason reason = eActorActionReason::Rejected;
+		if (succeeded)
+			reason = eActorActionReason::None;
+		else if (wire.result() == fb::fbSpawnActorResult_InvalidCorrelation || wire.result() == fb::fbSpawnActorResult_StaleRevision)
+			reason = eActorActionReason::WorldUnavailable;
+		else if (wire.result() == fb::fbSpawnActorResult_InvalidArgument)
+			reason = eActorActionReason::InvalidArgument;
+
 		return {
-			.status = wire.success() ? eActorActionStatus::Succeeded : eActorActionStatus::Failed,
-			.reason = wire.success() ? eActorActionReason::None
-				: ((wire.failure() == fb::fbSpawnActorFailure_InvalidCorrelation || wire.failure() == fb::fbSpawnActorFailure_StaleRevision)
-					? eActorActionReason::WorldUnavailable : eActorActionReason::Rejected),
+			.status = succeeded ? eActorActionStatus::Succeeded : eActorActionStatus::Failed,
+			.reason = reason,
 			.action = eActorAction::Spawn,
-			.actorId = ActorId(wire.actor_id()),
+			.actorId = succeeded ? ActorId(wire.actor_id()) : ActorId::Invalid(),
 		};
 	}
 
@@ -231,16 +233,17 @@ namespace jam::net::codec
 		};
 	}
 
-	fb::fbSpawnActorFailure EncodeSpawnActorFailure(ePlayerSpawnFailure failure)
+	fb::fbLifecycleOp EncodeActorLifecycleOp(eActorLifecycleOp op)
 	{
-		switch (failure)
+		switch (op)
 		{
-		case ePlayerSpawnFailure::None: return fb::fbSpawnActorFailure_None;
-		case ePlayerSpawnFailure::InvalidCorrelation: return fb::fbSpawnActorFailure_InvalidCorrelation;
-		case ePlayerSpawnFailure::AlreadySpawned: return fb::fbSpawnActorFailure_AlreadySpawned;
-		case ePlayerSpawnFailure::SpawnFailed: return fb::fbSpawnActorFailure_SpawnFailed;
+		case eActorLifecycleOp::Created: return fb::fbLifecycleOp_Created;
+		case eActorLifecycleOp::AoiEntered: return fb::fbLifecycleOp_AoiEntered;
+		case eActorLifecycleOp::AoiLeft: return fb::fbLifecycleOp_AoiLeft;
+		case eActorLifecycleOp::Destroyed: return fb::fbLifecycleOp_Destroyed;
 		}
-		return fb::fbSpawnActorFailure_SpawnFailed;
+		JAM_CRASH("[EncodeActorLifecycleOp] : Invalid lifecycle op.");
+		return fb::fbLifecycleOp_Destroyed;
 	}
 
 	fb::fbSpawnPlayerFailure EncodeSpawnPlayerFailure(ePlayerSpawnFailure failure)

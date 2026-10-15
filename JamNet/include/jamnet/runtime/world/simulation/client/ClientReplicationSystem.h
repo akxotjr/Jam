@@ -53,51 +53,8 @@ namespace jam::net
         uint64                          serverTick = 0;
         uint32                          inputAck = 0;
         uint32                          inputEpoch = 0;
-        uint16                          expectedChunkCount = 1;
         Timestamp                       firstRecvNs = Timestamp::Zero();
-        Timestamp                       lastRecvNs  = Timestamp::Zero();
-        std::vector<std::optional<PendingSnapshot>> chunks;
-
-        bool IsComplete() const
-        {
-            if (expectedChunkCount == 0 || chunks.size() < expectedChunkCount)
-                return false;
-
-            for (uint16 i = 0; i < expectedChunkCount; ++i)
-            {
-                if (!chunks[i].has_value())
-                    return false;
-            }
-            return true;
-        }
-
-        uint16 ReceivedChunkCount() const
-        {
-            const uint16 maxCount = std::min<uint16>(expectedChunkCount, static_cast<uint16>(chunks.size()));
-            uint16 count = 0;
-            for (uint16 i = 0; i < maxCount; ++i)
-            {
-                if (chunks[i].has_value())
-                    ++count;
-            }
-            return count;
-        }
-
-        bool ContainsActorId(uint32 rawActorId) const
-        {
-            for (const auto& chunk : chunks)
-            {
-                if (!chunk.has_value())
-                    continue;
-
-                for (const auto& entPtr : chunk->snapshot.entities)
-                {
-                    if (entPtr && entPtr->actor_id == rawActorId)
-                        return true;
-                }
-            }
-            return false;
-        }
+        std::vector<PendingSnapshot>     packets;
     };
 
     struct DeferredBaselineSnapshot
@@ -171,6 +128,12 @@ namespace jam::net
 
         uint64                              m_userId            = 0;
 
+        struct CachedActorMeta
+        {
+            fb::fbActorMetaT meta;
+            bool prepared = false;
+        };
+        std::unordered_map<ActorId, CachedActorMeta> m_actorMetaCache; // Created -> Destroyed; retained across AoiLeft.
         std::unordered_map<ActorId, Replica>  m_replicas;
         std::unordered_map<ActorId, DeferredBaselineSnapshot> m_deferredBaselineSnapshots;
         std::deque<PendingLifecycleBatch>   m_pendingLifecycle;

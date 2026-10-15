@@ -163,7 +163,11 @@ namespace jam::net
 		if (!inserted)
 			return false;
 
-		OnUserEntered(user.userId);
+		if (!OnUserEntered(user.userId))
+		{
+			RemoveMember(user.userId);
+			return false;
+		}
 		return true;
 	}
 

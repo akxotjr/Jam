@@ -70,6 +70,9 @@ namespace jam::net
 		TransportUnavailable,
 		Rejected,
 		Shutdown,
+		// The request may have committed on the server, but its RPC response was
+		// not observed. Callers must not interpret this as a server-side rejection.
+		OutcomeUnknown,
 	};
 
 	struct ActorActionResult

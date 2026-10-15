@@ -13,11 +13,13 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
-#include "snapshot_generated.h"
-
 namespace jam {
 namespace net {
 namespace fb {
+
+struct fbActorMeta;
+struct fbActorMetaBuilder;
+struct fbActorMetaT;
 
 struct fbLifecycleActor;
 struct fbLifecycleActorBuilder;
@@ -28,44 +30,132 @@ struct fbLifecycleBatchBuilder;
 struct fbLifecycleBatchT;
 
 enum fbLifecycleOp : uint8_t {
-  fbLifecycleOp_Create = 0,
-  fbLifecycleOp_Meta = 1,
-  fbLifecycleOp_Remove = 2,
-  fbLifecycleOp_MIN = fbLifecycleOp_Create,
-  fbLifecycleOp_MAX = fbLifecycleOp_Remove
+  fbLifecycleOp_Created = 0,
+  fbLifecycleOp_AoiEntered = 1,
+  fbLifecycleOp_AoiLeft = 2,
+  fbLifecycleOp_Destroyed = 3,
+  fbLifecycleOp_MIN = fbLifecycleOp_Created,
+  fbLifecycleOp_MAX = fbLifecycleOp_Destroyed
 };
 
-inline const fbLifecycleOp (&EnumValuesfbLifecycleOp())[3] {
+inline const fbLifecycleOp (&EnumValuesfbLifecycleOp())[4] {
   static const fbLifecycleOp values[] = {
-    fbLifecycleOp_Create,
-    fbLifecycleOp_Meta,
-    fbLifecycleOp_Remove
+    fbLifecycleOp_Created,
+    fbLifecycleOp_AoiEntered,
+    fbLifecycleOp_AoiLeft,
+    fbLifecycleOp_Destroyed
   };
   return values;
 }
 
 inline const char * const *EnumNamesfbLifecycleOp() {
-  static const char * const names[4] = {
-    "Create",
-    "Meta",
-    "Remove",
+  static const char * const names[5] = {
+    "Created",
+    "AoiEntered",
+    "AoiLeft",
+    "Destroyed",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamefbLifecycleOp(fbLifecycleOp e) {
-  if (::flatbuffers::IsOutRange(e, fbLifecycleOp_Create, fbLifecycleOp_Remove)) return "";
+  if (::flatbuffers::IsOutRange(e, fbLifecycleOp_Created, fbLifecycleOp_Destroyed)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesfbLifecycleOp()[index];
 }
 
+struct fbActorMetaT : public ::flatbuffers::NativeTable {
+  typedef fbActorMeta TableType;
+  bool owned = false;
+  bool controlled = false;
+  uint64_t actor_archetype_key = 0;
+  uint8_t body_type = 0;
+};
+
+struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef fbActorMetaT NativeTableType;
+  typedef fbActorMetaBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OWNED = 4,
+    VT_CONTROLLED = 6,
+    VT_ACTOR_ARCHETYPE_KEY = 8,
+    VT_BODY_TYPE = 10
+  };
+  bool owned() const {
+    return GetField<uint8_t>(VT_OWNED, 0) != 0;
+  }
+  bool controlled() const {
+    return GetField<uint8_t>(VT_CONTROLLED, 0) != 0;
+  }
+  uint64_t actor_archetype_key() const {
+    return GetField<uint64_t>(VT_ACTOR_ARCHETYPE_KEY, 0);
+  }
+  uint8_t body_type() const {
+    return GetField<uint8_t>(VT_BODY_TYPE, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_OWNED, 1) &&
+           VerifyField<uint8_t>(verifier, VT_CONTROLLED, 1) &&
+           VerifyField<uint64_t>(verifier, VT_ACTOR_ARCHETYPE_KEY, 8) &&
+           VerifyField<uint8_t>(verifier, VT_BODY_TYPE, 1) &&
+           verifier.EndTable();
+  }
+  fbActorMetaT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<fbActorMeta> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct fbActorMetaBuilder {
+  typedef fbActorMeta Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_owned(bool owned) {
+    fbb_.AddElement<uint8_t>(fbActorMeta::VT_OWNED, static_cast<uint8_t>(owned), 0);
+  }
+  void add_controlled(bool controlled) {
+    fbb_.AddElement<uint8_t>(fbActorMeta::VT_CONTROLLED, static_cast<uint8_t>(controlled), 0);
+  }
+  void add_actor_archetype_key(uint64_t actor_archetype_key) {
+    fbb_.AddElement<uint64_t>(fbActorMeta::VT_ACTOR_ARCHETYPE_KEY, actor_archetype_key, 0);
+  }
+  void add_body_type(uint8_t body_type) {
+    fbb_.AddElement<uint8_t>(fbActorMeta::VT_BODY_TYPE, body_type, 0);
+  }
+  explicit fbActorMetaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<fbActorMeta> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<fbActorMeta>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    bool owned = false,
+    bool controlled = false,
+    uint64_t actor_archetype_key = 0,
+    uint8_t body_type = 0) {
+  fbActorMetaBuilder builder_(_fbb);
+  builder_.add_actor_archetype_key(actor_archetype_key);
+  builder_.add_body_type(body_type);
+  builder_.add_controlled(controlled);
+  builder_.add_owned(owned);
+  return builder_.Finish();
+}
+
+::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct fbLifecycleActorT : public ::flatbuffers::NativeTable {
   typedef fbLifecycleActor TableType;
-  jam::net::fb::fbLifecycleOp op = jam::net::fb::fbLifecycleOp_Create;
+  jam::net::fb::fbLifecycleOp op = jam::net::fb::fbLifecycleOp_Created;
   uint32_t actor_id = 0;
   std::unique_ptr<jam::net::fb::fbActorMetaT> meta{};
-  jam::net::fb::fbRemovalReason remove_reason = jam::net::fb::fbRemovalReason_AoiLeft;
   fbLifecycleActorT() = default;
   fbLifecycleActorT(const fbLifecycleActorT &o);
   fbLifecycleActorT(fbLifecycleActorT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -78,8 +168,7 @@ struct fbLifecycleActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_OP = 4,
     VT_ACTOR_ID = 6,
-    VT_META = 8,
-    VT_REMOVE_REASON = 10
+    VT_META = 8
   };
   jam::net::fb::fbLifecycleOp op() const {
     return static_cast<jam::net::fb::fbLifecycleOp>(GetField<uint8_t>(VT_OP, 0));
@@ -90,9 +179,6 @@ struct fbLifecycleActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const jam::net::fb::fbActorMeta *meta() const {
     return GetPointer<const jam::net::fb::fbActorMeta *>(VT_META);
   }
-  jam::net::fb::fbRemovalReason remove_reason() const {
-    return static_cast<jam::net::fb::fbRemovalReason>(GetField<uint8_t>(VT_REMOVE_REASON, 0));
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -100,7 +186,6 @@ struct fbLifecycleActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_ACTOR_ID, 4) &&
            VerifyOffset(verifier, VT_META) &&
            verifier.VerifyTable(meta()) &&
-           VerifyField<uint8_t>(verifier, VT_REMOVE_REASON, 1) &&
            verifier.EndTable();
   }
   fbLifecycleActorT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -121,9 +206,6 @@ struct fbLifecycleActorBuilder {
   void add_meta(::flatbuffers::Offset<jam::net::fb::fbActorMeta> meta) {
     fbb_.AddOffset(fbLifecycleActor::VT_META, meta);
   }
-  void add_remove_reason(jam::net::fb::fbRemovalReason remove_reason) {
-    fbb_.AddElement<uint8_t>(fbLifecycleActor::VT_REMOVE_REASON, static_cast<uint8_t>(remove_reason), 0);
-  }
   explicit fbLifecycleActorBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -137,14 +219,12 @@ struct fbLifecycleActorBuilder {
 
 inline ::flatbuffers::Offset<fbLifecycleActor> CreatefbLifecycleActor(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    jam::net::fb::fbLifecycleOp op = jam::net::fb::fbLifecycleOp_Create,
+    jam::net::fb::fbLifecycleOp op = jam::net::fb::fbLifecycleOp_Created,
     uint32_t actor_id = 0,
-    ::flatbuffers::Offset<jam::net::fb::fbActorMeta> meta = 0,
-    jam::net::fb::fbRemovalReason remove_reason = jam::net::fb::fbRemovalReason_AoiLeft) {
+    ::flatbuffers::Offset<jam::net::fb::fbActorMeta> meta = 0) {
   fbLifecycleActorBuilder builder_(_fbb);
   builder_.add_meta(meta);
   builder_.add_actor_id(actor_id);
-  builder_.add_remove_reason(remove_reason);
   builder_.add_op(op);
   return builder_.Finish();
 }
@@ -245,18 +325,51 @@ inline ::flatbuffers::Offset<fbLifecycleBatch> CreatefbLifecycleBatchDirect(
 
 ::flatbuffers::Offset<fbLifecycleBatch> CreatefbLifecycleBatch(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleBatchT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+inline fbActorMetaT *fbActorMeta::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<fbActorMetaT>(new fbActorMetaT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void fbActorMeta::UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = owned(); _o->owned = _e; }
+  { auto _e = controlled(); _o->controlled = _e; }
+  { auto _e = actor_archetype_key(); _o->actor_archetype_key = _e; }
+  { auto _e = body_type(); _o->body_type = _e; }
+}
+
+inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return fbActorMeta::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbActorMetaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _owned = _o->owned;
+  auto _controlled = _o->controlled;
+  auto _actor_archetype_key = _o->actor_archetype_key;
+  auto _body_type = _o->body_type;
+  return jam::net::fb::CreatefbActorMeta(
+      _fbb,
+      _owned,
+      _controlled,
+      _actor_archetype_key,
+      _body_type);
+}
+
 inline fbLifecycleActorT::fbLifecycleActorT(const fbLifecycleActorT &o)
       : op(o.op),
         actor_id(o.actor_id),
-        meta((o.meta) ? new jam::net::fb::fbActorMetaT(*o.meta) : nullptr),
-        remove_reason(o.remove_reason) {
+        meta((o.meta) ? new jam::net::fb::fbActorMetaT(*o.meta) : nullptr) {
 }
 
 inline fbLifecycleActorT &fbLifecycleActorT::operator=(fbLifecycleActorT o) FLATBUFFERS_NOEXCEPT {
   std::swap(op, o.op);
   std::swap(actor_id, o.actor_id);
   std::swap(meta, o.meta);
-  std::swap(remove_reason, o.remove_reason);
   return *this;
 }
 
@@ -272,7 +385,6 @@ inline void fbLifecycleActor::UnPackTo(fbLifecycleActorT *_o, const ::flatbuffer
   { auto _e = op(); _o->op = _e; }
   { auto _e = actor_id(); _o->actor_id = _e; }
   { auto _e = meta(); if (_e) { if(_o->meta) { _e->UnPackTo(_o->meta.get(), _resolver); } else { _o->meta = std::unique_ptr<jam::net::fb::fbActorMetaT>(_e->UnPack(_resolver)); } } else if (_o->meta) { _o->meta.reset(); } }
-  { auto _e = remove_reason(); _o->remove_reason = _e; }
 }
 
 inline ::flatbuffers::Offset<fbLifecycleActor> CreatefbLifecycleActor(::flatbuffers::FlatBufferBuilder &_fbb, const fbLifecycleActorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -286,13 +398,11 @@ inline ::flatbuffers::Offset<fbLifecycleActor> fbLifecycleActor::Pack(::flatbuff
   auto _op = _o->op;
   auto _actor_id = _o->actor_id;
   auto _meta = _o->meta ? CreatefbActorMeta(_fbb, _o->meta.get(), _rehasher) : 0;
-  auto _remove_reason = _o->remove_reason;
   return jam::net::fb::CreatefbLifecycleActor(
       _fbb,
       _op,
       _actor_id,
-      _meta,
-      _remove_reason);
+      _meta);
 }
 
 inline fbLifecycleBatchT::fbLifecycleBatchT(const fbLifecycleBatchT &o)

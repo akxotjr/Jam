@@ -31,17 +31,9 @@ struct fbCharacterDelta128;
 
 struct fbKinematicState;
 
-struct fbRemovedActor;
-struct fbRemovedActorBuilder;
-struct fbRemovedActorT;
-
 struct fbSnapshotHeader;
 struct fbSnapshotHeaderBuilder;
 struct fbSnapshotHeaderT;
-
-struct fbActorMeta;
-struct fbActorMetaBuilder;
-struct fbActorMetaT;
 
 struct fbActorEntity;
 struct fbActorEntityBuilder;
@@ -50,36 +42,6 @@ struct fbActorEntityT;
 struct fbSnapshot;
 struct fbSnapshotBuilder;
 struct fbSnapshotT;
-
-enum fbRemovalReason : uint8_t {
-  fbRemovalReason_AoiLeft = 0,
-  fbRemovalReason_Destroyed = 1,
-  fbRemovalReason_MIN = fbRemovalReason_AoiLeft,
-  fbRemovalReason_MAX = fbRemovalReason_Destroyed
-};
-
-inline const fbRemovalReason (&EnumValuesfbRemovalReason())[2] {
-  static const fbRemovalReason values[] = {
-    fbRemovalReason_AoiLeft,
-    fbRemovalReason_Destroyed
-  };
-  return values;
-}
-
-inline const char * const *EnumNamesfbRemovalReason() {
-  static const char * const names[3] = {
-    "AoiLeft",
-    "Destroyed",
-    nullptr
-  };
-  return names;
-}
-
-inline const char *EnumNamefbRemovalReason(fbRemovalReason e) {
-  if (::flatbuffers::IsOutRange(e, fbRemovalReason_AoiLeft, fbRemovalReason_Destroyed)) return "";
-  const size_t index = static_cast<size_t>(e);
-  return EnumNamesfbRemovalReason()[index];
-}
 
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) fbTransformDelta FLATBUFFERS_FINAL_CLASS {
  private:
@@ -309,77 +271,11 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) fbKinematicState FLATBUFFERS_FINAL_CLASS 
 };
 FLATBUFFERS_STRUCT_END(fbKinematicState, 32);
 
-struct fbRemovedActorT : public ::flatbuffers::NativeTable {
-  typedef fbRemovedActor TableType;
-  uint32_t actor_id = 0;
-  jam::net::fb::fbRemovalReason reason = jam::net::fb::fbRemovalReason_AoiLeft;
-};
-
-struct fbRemovedActor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbRemovedActorT NativeTableType;
-  typedef fbRemovedActorBuilder Builder;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_ACTOR_ID = 4,
-    VT_REASON = 6
-  };
-  uint32_t actor_id() const {
-    return GetField<uint32_t>(VT_ACTOR_ID, 0);
-  }
-  jam::net::fb::fbRemovalReason reason() const {
-    return static_cast<jam::net::fb::fbRemovalReason>(GetField<uint8_t>(VT_REASON, 0));
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_ACTOR_ID, 4) &&
-           VerifyField<uint8_t>(verifier, VT_REASON, 1) &&
-           verifier.EndTable();
-  }
-  fbRemovedActorT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbRemovedActorT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbRemovedActor> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct fbRemovedActorBuilder {
-  typedef fbRemovedActor Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_actor_id(uint32_t actor_id) {
-    fbb_.AddElement<uint32_t>(fbRemovedActor::VT_ACTOR_ID, actor_id, 0);
-  }
-  void add_reason(jam::net::fb::fbRemovalReason reason) {
-    fbb_.AddElement<uint8_t>(fbRemovedActor::VT_REASON, static_cast<uint8_t>(reason), 0);
-  }
-  explicit fbRemovedActorBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<fbRemovedActor> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbRemovedActor>(end);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<fbRemovedActor> CreatefbRemovedActor(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t actor_id = 0,
-    jam::net::fb::fbRemovalReason reason = jam::net::fb::fbRemovalReason_AoiLeft) {
-  fbRemovedActorBuilder builder_(_fbb);
-  builder_.add_actor_id(actor_id);
-  builder_.add_reason(reason);
-  return builder_.Finish();
-}
-
-::flatbuffers::Offset<fbRemovedActor> CreatefbRemovedActor(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
 struct fbSnapshotHeaderT : public ::flatbuffers::NativeTable {
   typedef fbSnapshotHeader TableType;
   uint32_t server_tick = 0;
   uint32_t input_ack = 0;
   uint32_t input_epoch = 0;
-  uint16_t chunk_index = 0;
-  uint16_t chunk_count = 1;
   bool global_keyframe = false;
 };
 
@@ -390,9 +286,7 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_SERVER_TICK = 4,
     VT_INPUT_ACK = 6,
     VT_INPUT_EPOCH = 8,
-    VT_CHUNK_INDEX = 10,
-    VT_CHUNK_COUNT = 12,
-    VT_GLOBAL_KEYFRAME = 14
+    VT_GLOBAL_KEYFRAME = 10
   };
   uint32_t server_tick() const {
     return GetField<uint32_t>(VT_SERVER_TICK, 0);
@@ -403,12 +297,6 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t input_epoch() const {
     return GetField<uint32_t>(VT_INPUT_EPOCH, 0);
   }
-  uint16_t chunk_index() const {
-    return GetField<uint16_t>(VT_CHUNK_INDEX, 0);
-  }
-  uint16_t chunk_count() const {
-    return GetField<uint16_t>(VT_CHUNK_COUNT, 1);
-  }
   bool global_keyframe() const {
     return GetField<uint8_t>(VT_GLOBAL_KEYFRAME, 0) != 0;
   }
@@ -418,8 +306,6 @@ struct fbSnapshotHeader FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_SERVER_TICK, 4) &&
            VerifyField<uint32_t>(verifier, VT_INPUT_ACK, 4) &&
            VerifyField<uint32_t>(verifier, VT_INPUT_EPOCH, 4) &&
-           VerifyField<uint16_t>(verifier, VT_CHUNK_INDEX, 2) &&
-           VerifyField<uint16_t>(verifier, VT_CHUNK_COUNT, 2) &&
            VerifyField<uint8_t>(verifier, VT_GLOBAL_KEYFRAME, 1) &&
            verifier.EndTable();
   }
@@ -441,12 +327,6 @@ struct fbSnapshotHeaderBuilder {
   void add_input_epoch(uint32_t input_epoch) {
     fbb_.AddElement<uint32_t>(fbSnapshotHeader::VT_INPUT_EPOCH, input_epoch, 0);
   }
-  void add_chunk_index(uint16_t chunk_index) {
-    fbb_.AddElement<uint16_t>(fbSnapshotHeader::VT_CHUNK_INDEX, chunk_index, 0);
-  }
-  void add_chunk_count(uint16_t chunk_count) {
-    fbb_.AddElement<uint16_t>(fbSnapshotHeader::VT_CHUNK_COUNT, chunk_count, 1);
-  }
   void add_global_keyframe(bool global_keyframe) {
     fbb_.AddElement<uint8_t>(fbSnapshotHeader::VT_GLOBAL_KEYFRAME, static_cast<uint8_t>(global_keyframe), 0);
   }
@@ -466,117 +346,16 @@ inline ::flatbuffers::Offset<fbSnapshotHeader> CreatefbSnapshotHeader(
     uint32_t server_tick = 0,
     uint32_t input_ack = 0,
     uint32_t input_epoch = 0,
-    uint16_t chunk_index = 0,
-    uint16_t chunk_count = 1,
     bool global_keyframe = false) {
   fbSnapshotHeaderBuilder builder_(_fbb);
   builder_.add_input_epoch(input_epoch);
   builder_.add_input_ack(input_ack);
   builder_.add_server_tick(server_tick);
-  builder_.add_chunk_count(chunk_count);
-  builder_.add_chunk_index(chunk_index);
   builder_.add_global_keyframe(global_keyframe);
   return builder_.Finish();
 }
 
 ::flatbuffers::Offset<fbSnapshotHeader> CreatefbSnapshotHeader(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotHeaderT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
-struct fbActorMetaT : public ::flatbuffers::NativeTable {
-  typedef fbActorMeta TableType;
-  uint64_t owner_user_id = 0;
-  uint64_t controller_user_id = 0;
-  uint64_t actor_archetype_key = 0;
-  uint32_t client_request_id = 0;
-  uint8_t body_type = 0;
-};
-
-struct fbActorMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef fbActorMetaT NativeTableType;
-  typedef fbActorMetaBuilder Builder;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_OWNER_USER_ID = 4,
-    VT_CONTROLLER_USER_ID = 6,
-    VT_ACTOR_ARCHETYPE_KEY = 8,
-    VT_CLIENT_REQUEST_ID = 10,
-    VT_BODY_TYPE = 12
-  };
-  uint64_t owner_user_id() const {
-    return GetField<uint64_t>(VT_OWNER_USER_ID, 0);
-  }
-  uint64_t controller_user_id() const {
-    return GetField<uint64_t>(VT_CONTROLLER_USER_ID, 0);
-  }
-  uint64_t actor_archetype_key() const {
-    return GetField<uint64_t>(VT_ACTOR_ARCHETYPE_KEY, 0);
-  }
-  uint32_t client_request_id() const {
-    return GetField<uint32_t>(VT_CLIENT_REQUEST_ID, 0);
-  }
-  uint8_t body_type() const {
-    return GetField<uint8_t>(VT_BODY_TYPE, 0);
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
-           VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
-           VerifyField<uint64_t>(verifier, VT_ACTOR_ARCHETYPE_KEY, 8) &&
-           VerifyField<uint32_t>(verifier, VT_CLIENT_REQUEST_ID, 4) &&
-           VerifyField<uint8_t>(verifier, VT_BODY_TYPE, 1) &&
-           verifier.EndTable();
-  }
-  fbActorMetaT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<fbActorMeta> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct fbActorMetaBuilder {
-  typedef fbActorMeta Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_owner_user_id(uint64_t owner_user_id) {
-    fbb_.AddElement<uint64_t>(fbActorMeta::VT_OWNER_USER_ID, owner_user_id, 0);
-  }
-  void add_controller_user_id(uint64_t controller_user_id) {
-    fbb_.AddElement<uint64_t>(fbActorMeta::VT_CONTROLLER_USER_ID, controller_user_id, 0);
-  }
-  void add_actor_archetype_key(uint64_t actor_archetype_key) {
-    fbb_.AddElement<uint64_t>(fbActorMeta::VT_ACTOR_ARCHETYPE_KEY, actor_archetype_key, 0);
-  }
-  void add_client_request_id(uint32_t client_request_id) {
-    fbb_.AddElement<uint32_t>(fbActorMeta::VT_CLIENT_REQUEST_ID, client_request_id, 0);
-  }
-  void add_body_type(uint8_t body_type) {
-    fbb_.AddElement<uint8_t>(fbActorMeta::VT_BODY_TYPE, body_type, 0);
-  }
-  explicit fbActorMetaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<fbActorMeta> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<fbActorMeta>(end);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint64_t owner_user_id = 0,
-    uint64_t controller_user_id = 0,
-    uint64_t actor_archetype_key = 0,
-    uint32_t client_request_id = 0,
-    uint8_t body_type = 0) {
-  fbActorMetaBuilder builder_(_fbb);
-  builder_.add_actor_archetype_key(actor_archetype_key);
-  builder_.add_controller_user_id(controller_user_id);
-  builder_.add_owner_user_id(owner_user_id);
-  builder_.add_client_request_id(client_request_id);
-  builder_.add_body_type(body_type);
-  return builder_.Finish();
-}
-
-::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct fbActorEntityT : public ::flatbuffers::NativeTable {
   typedef fbActorEntity TableType;
@@ -796,35 +575,6 @@ inline ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshotDirect(
 
 ::flatbuffers::Offset<fbSnapshot> CreatefbSnapshot(::flatbuffers::FlatBufferBuilder &_fbb, const fbSnapshotT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-inline fbRemovedActorT *fbRemovedActor::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbRemovedActorT>(new fbRemovedActorT());
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void fbRemovedActor::UnPackTo(fbRemovedActorT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = actor_id(); _o->actor_id = _e; }
-  { auto _e = reason(); _o->reason = _e; }
-}
-
-inline ::flatbuffers::Offset<fbRemovedActor> CreatefbRemovedActor(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbRemovedActor::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<fbRemovedActor> fbRemovedActor::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbRemovedActorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbRemovedActorT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _actor_id = _o->actor_id;
-  auto _reason = _o->reason;
-  return jam::net::fb::CreatefbRemovedActor(
-      _fbb,
-      _actor_id,
-      _reason);
-}
-
 inline fbSnapshotHeaderT *fbSnapshotHeader::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::unique_ptr<fbSnapshotHeaderT>(new fbSnapshotHeaderT());
   UnPackTo(_o.get(), _resolver);
@@ -837,8 +587,6 @@ inline void fbSnapshotHeader::UnPackTo(fbSnapshotHeaderT *_o, const ::flatbuffer
   { auto _e = server_tick(); _o->server_tick = _e; }
   { auto _e = input_ack(); _o->input_ack = _e; }
   { auto _e = input_epoch(); _o->input_epoch = _e; }
-  { auto _e = chunk_index(); _o->chunk_index = _e; }
-  { auto _e = chunk_count(); _o->chunk_count = _e; }
   { auto _e = global_keyframe(); _o->global_keyframe = _e; }
 }
 
@@ -853,55 +601,13 @@ inline ::flatbuffers::Offset<fbSnapshotHeader> fbSnapshotHeader::Pack(::flatbuff
   auto _server_tick = _o->server_tick;
   auto _input_ack = _o->input_ack;
   auto _input_epoch = _o->input_epoch;
-  auto _chunk_index = _o->chunk_index;
-  auto _chunk_count = _o->chunk_count;
   auto _global_keyframe = _o->global_keyframe;
   return jam::net::fb::CreatefbSnapshotHeader(
       _fbb,
       _server_tick,
       _input_ack,
       _input_epoch,
-      _chunk_index,
-      _chunk_count,
       _global_keyframe);
-}
-
-inline fbActorMetaT *fbActorMeta::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::unique_ptr<fbActorMetaT>(new fbActorMetaT());
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void fbActorMeta::UnPackTo(fbActorMetaT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = owner_user_id(); _o->owner_user_id = _e; }
-  { auto _e = controller_user_id(); _o->controller_user_id = _e; }
-  { auto _e = actor_archetype_key(); _o->actor_archetype_key = _e; }
-  { auto _e = client_request_id(); _o->client_request_id = _e; }
-  { auto _e = body_type(); _o->body_type = _e; }
-}
-
-inline ::flatbuffers::Offset<fbActorMeta> CreatefbActorMeta(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return fbActorMeta::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<fbActorMeta> fbActorMeta::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const fbActorMetaT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbActorMetaT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _owner_user_id = _o->owner_user_id;
-  auto _controller_user_id = _o->controller_user_id;
-  auto _actor_archetype_key = _o->actor_archetype_key;
-  auto _client_request_id = _o->client_request_id;
-  auto _body_type = _o->body_type;
-  return jam::net::fb::CreatefbActorMeta(
-      _fbb,
-      _owner_user_id,
-      _controller_user_id,
-      _actor_archetype_key,
-      _client_request_id,
-      _body_type);
 }
 
 inline fbActorEntityT::fbActorEntityT(const fbActorEntityT &o)

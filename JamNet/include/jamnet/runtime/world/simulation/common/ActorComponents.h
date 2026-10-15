@@ -50,12 +50,6 @@ namespace jam::net
 	/// @brief	Tag of successful spawned in PhysicsFacade
 	struct PhysicsSpawnedTag{};
 
-	/// @brief Client request correlation replicated in lifecycle metadata.
-	struct ClientRequestCorrelation
-	{
-		ClientRequestId			requestId = kInvalidClientRequestId;
-	};
-
 	/// @brief 새로 생성된 액터 표시
 	struct NewlyCreatedTag {};
 

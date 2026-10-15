@@ -11,7 +11,6 @@
 
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
 #include "jamnet/runtime/world/simulation/common/WorldContext.h"
-#include "jamnet/runtime/world/simulation/common/ShardJobBridge.h"
 
 #include "jamnet/runtime/world/simulation/client/ClientInputSystem.h"
 #include "jamnet/runtime/world/simulation/client/ClientCharacterControlCoordinator.h"
@@ -41,13 +40,9 @@ namespace jam::net
 
 		if (!m_headless)
 		{
-			if (auto shard = m_shard.lock())
-				m_bridge = std::make_unique<ShardJobBridge>(*shard);
-			else
-				return false;
-
-			m_physics->SetConfig(px::PhysicsConfig{ .enableReplay = true });
-			m_physics->SetJobBridge(m_bridge.get());
+			m_physics->SetConfig(px::PhysicsConfig{
+				.enableReplay = true,
+			});
 			m_physics->Init();
 		}
 
@@ -73,7 +68,7 @@ namespace jam::net
 
 	void ClientWorld::Start(Duration dt)
 	{
-		StartTickPipeline({ DOMAIN_PHYSICS, m_pipelineSubtype }, dt);
+		StartDomainTick({ DOMAIN_PHYSICS, m_pipelineSubtype }, dt);
 	}
 
 	void ClientWorld::Resume(Duration dt)
@@ -83,13 +78,13 @@ namespace jam::net
 
 	void ClientWorld::Stop()
 	{
-		StopTickPipeline();
+		StopDomainTick();
 	}
 
 	void ClientWorld::OnCloseStarted()
 	{
 		Stop();
-		ShutdownPhysicsWhenPipelineStops();
+		ShutdownPhysicsAfterTick();
 	}
 
  
@@ -134,21 +129,15 @@ namespace jam::net
 		}
 	}
 
-	bool ClientWorld::AddMember(WorldUserContext user)
+	bool ClientWorld::OnUserEntered(UserId userId)
 	{
-		const uint64 participantUserId = user.userId;
-		const bool added = WorldMembershipHost::AddMember(user);
-		if (added)
-			PublishWorldParticipantEvent(participantUserId, eWorldParticipantChange::Joined);
-		return added;
+		PublishWorldParticipantEvent(userId, eWorldParticipantChange::Joined);
+		return true;
 	}
 
-	bool ClientWorld::RemoveMember(uint64 userId)
+	void ClientWorld::OnUserLeft(UserId userId)
 	{
-		const bool removed = WorldMembershipHost::RemoveMember(userId);
-		if (removed)
-			PublishWorldParticipantEvent(userId, eWorldParticipantChange::Left);
-		return removed;
+		PublishWorldParticipantEvent(userId, eWorldParticipantChange::Left);
 	}
 
 	void ClientWorld::SubmitActorAction(const ActorActionCommand& command, const WorldEventCorrelation& correlation)
@@ -198,8 +187,7 @@ namespace jam::net
 						return;
 					}
 
-					const auto* control = m_registry.try_get<ControlTag>(entity);
-					if (control && control->userId == GetUserId())
+					if (m_registry.all_of<ControlTag>(entity))
 						RequestDespawnPlayer(request);
 					else
 						RequestDespawnActor(request);
@@ -390,7 +378,7 @@ namespace jam::net
 
 		m_registry.remove<OutOfAoiTag>(e);
 		m_registry.remove<LocallyHiddenTag>(e);
-		PublishActorSpawned(e, 0, isLocal, eActorLifecycleReason::AoiEntered);
+		PublishActorSpawned(e, isLocal, eActorLifecycleReason::AoiEntered);
 	}
 
 	void ClientWorld::DestroyReplicatedActor(ActorId actorId)
@@ -408,7 +396,7 @@ bool ClientWorld::TryResolvePhysicsArchetypeKey(ActorArchetypeKey actorArchetype
 	return true;
 }
 
-entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeKey actorArchetypeKey, uint64 owner, uint64 controller, px::eBodyType bodyType, bool* outCreated)
+entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeKey actorArchetypeKey, px::eBodyType bodyType, bool* outCreated)
 {
 	if (!actorId.IsValid())
 	{
@@ -461,8 +449,6 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 	m_registry.emplace<ActorId>(e, actorId);
 	m_registry.emplace<ActorArchetypeRef>(e, ActorArchetypeRef{ actorArchetypeKey });
 	m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ physicsArchetypeKey });
-	m_registry.emplace<OwnershipTag>(e, OwnershipTag{ owner });
-	m_registry.emplace<ControlTag>(e, ControlTag{ controller });
 	m_registry.emplace<ActorBodyType>(e, ActorBodyType{ bodyType });
 	if (bodyType == px::eBodyType::Rigid)
 	{
@@ -561,17 +547,19 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		if (!res)
 		{
 			JAM_LOG_WARN_LOC("Spawn RPC timeout or connection lost\n");
-			PublishActorActionResult(requestId, ActorActionResult{ .reason = eActorActionReason::TransportUnavailable, .action = eActorAction::Spawn });
+			PublishActorActionResult(requestId, ActorActionResult{ .reason = eActorActionReason::OutcomeUnknown, .action = eActorAction::Spawn });
+			return;
+		}
+		if ((*res)->client_request_id() != requestId)
+		{
+			JAM_LOG_WARN_LOC("Spawn RPC response correlation mismatch\n");
+			PublishActorActionResult(requestId, ActorActionResult{ .reason = eActorActionReason::OutcomeUnknown, .action = eActorAction::Spawn });
 			return;
 		}
 
-		ActorActionResult result = codec::DecodeSpawnActorResponse(**res);
-		if (const entt::entity entity = ResolveActor(result.actorId); entity != entt::null && m_registry.valid(entity))
-		{
-			result.actorId = GetActorId(entity);
-		}
-
-		PublishActorActionResult(requestId, result);
+		// RPC completion and replica materialization are independent. The response
+		// carries the canonical server ActorId; lifecycle Create owns local entity creation.
+		PublishActorActionResult(requestId, codec::DecodeSpawnActorResponse(**res));
 
 	}
 
@@ -634,7 +622,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		GLOBAL_EVENTBUS_PUBLISH(event);
 	}
 
-	void ClientWorld::PublishActorSpawned(entt::entity e, ClientRequestId requestId, bool isLocal, eActorLifecycleReason reason)
+	void ClientWorld::PublishActorSpawned(entt::entity e, bool isLocal, eActorLifecycleReason reason)
 	{
 		if (!m_registry.valid(e) || !m_registry.all_of<ActorId>(e))
 			return;
@@ -643,7 +631,6 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 		event.accountId		= GetAccountId();
 		event.userId		= GetUserId();
 		event.worldId		= m_config.GetWorldRef().worldId;
-		event.clientRequestId = requestId;
 		event.actorId		= GetActorId(e);
 		event.isLocal		= isLocal;
 		event.reason		= reason;
@@ -721,8 +708,6 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 			m_registry.emplace<ActorId>(e, actorId);
 			m_registry.emplace<ActorArchetypeRef>(e, ActorArchetypeRef{ actorArchetype->key });
 			m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ physicsArchetypeKey });
-			m_registry.emplace<OwnershipTag>(e);
-			m_registry.emplace<ControlTag>(e);
 			m_registry.emplace<ActorBodyType>(e, ActorBodyType{ bodyType });
 			if (m_physics->FindMotionType(physicsArchetypeKey) == px::eMotionType::Static)
 				m_registry.emplace<ReplicationStaticTag>(e);
@@ -757,7 +742,7 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 				continue;
 			}
 
-			if (!m_registry.all_of<PhysicsSpawnedTag>(e) && !m_physics->IsStepPending())
+			if (!m_registry.all_of<PhysicsSpawnedTag>(e))
 			{
 				ReleaseActorId(e);
 				m_registry.destroy(e);
@@ -818,20 +803,6 @@ entt::entity ClientWorld::EnsureReplicatedActor(ActorId actorId, ActorArchetypeK
 
 		ReleaseActorId(e);
 		m_registry.destroy(e);
-		JAM_ASSERT(ValidateActorIdentities());
-	}
-
-	void ClientWorld::RollbackPhysicsSpawn(entt::entity entity)
-	{
-		if (!m_registry.valid(entity))
-			return;
-
-		const auto* actorId = m_registry.try_get<ActorId>(entity);
-		if (actorId && *actorId == m_localActorId)
-			m_localActorId = ActorId::Invalid();
-
-		ReleaseActorId(entity);
-		m_registry.destroy(entity);
 		JAM_ASSERT(ValidateActorIdentities());
 	}
 

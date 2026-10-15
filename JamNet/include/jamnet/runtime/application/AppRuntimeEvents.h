@@ -73,7 +73,6 @@ namespace jam::net
 		uint64					accountId = 0;
 		uint64					userId	  = 0;
 		WorldId					worldId   = kInvalidWorldId;
-		ClientRequestId			clientRequestId = kInvalidClientRequestId;
 		ActorId					actorId   = ActorId::Invalid();
 		bool					isLocal	  = false;
 		eActorLifecycleReason	reason	  = eActorLifecycleReason::Spawned;
@@ -94,7 +93,7 @@ namespace jam::net
 	};
 
 	// Internal completion event for a client-originated Actor Action RPC.
-	// requestId is client-local and is never sent to the server.
+	// Spawn carries requestId on the wire for server-side idempotency.
 	struct ActorActionResultEvent
 	{
 		uint64				accountId	= 0;

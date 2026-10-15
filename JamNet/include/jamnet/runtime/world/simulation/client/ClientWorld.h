@@ -43,9 +43,6 @@ namespace jam::net
 		uint64								GetAccountId() const { return m_principal ? m_principal->accountId : kInvalidAccountId; }
 		uint64								GetUserId()	   const { return m_principal ? m_principal->userId : kInvalidUserId; }
 		
-		bool								AddMember(WorldUserContext user) override;
-		bool								RemoveMember(uint64 userId) override;
-
 		void								Send(Packet packet) override;
 		void								HandleWorldPacket(uint64 callerUserId, Packet pkt) override;
 
@@ -59,12 +56,14 @@ namespace jam::net
 		void								ReactivateReplicatedActor(ActorId actorId, bool isLocal);
 		void								DestroyReplicatedActor(ActorId actorId);
 
-		entt::entity						EnsureReplicatedActor(ActorId actorId, ActorArchetypeKey actorArchetypeKey, uint64 owner, uint64 controller, px::eBodyType bodyType, bool* outCreated = nullptr);
+		entt::entity						EnsureReplicatedActor(ActorId actorId, ActorArchetypeKey actorArchetypeKey, px::eBodyType bodyType, bool* outCreated = nullptr);
 	
 
 	private:
 		bool								OnInitialize() override;
 		void								OnCloseStarted() override;
+		bool								OnUserEntered(UserId userId) override;
+		void								OnUserLeft(UserId userId) override;
 
 		void								Tick() override;
 		
@@ -73,9 +72,8 @@ namespace jam::net
 
 		bool								BuildSpawnParams(const FrontendSpawnActorSpec& spec, ClientRequestId requestId, OUT SpawnParams& outParams) const;
 		void								DespawnActorImpl(ActorId actorId);
-		void								RollbackPhysicsSpawn(entt::entity entity);
 		void								SetActorDormantImpl(ActorId actorId);
-		void								PublishActorSpawned(entt::entity e, ClientRequestId requestId, bool isLocal, eActorLifecycleReason reason = eActorLifecycleReason::Spawned);
+		void								PublishActorSpawned(entt::entity e, bool isLocal, eActorLifecycleReason reason = eActorLifecycleReason::Spawned);
 		void								PublishActorDespawned(entt::entity e, eActorLifecycleReason reason = eActorLifecycleReason::Despawned);
 		void								PublishWorldParticipantEvent(uint64 participantUserId, eWorldParticipantChange change);
 

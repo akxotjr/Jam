@@ -53,18 +53,6 @@ struct fbKinematicState
 	kine_type	: ubyte;
 }
 
-enum fbRemovalReason : ubyte
-{
-	AoiLeft = 0,
-	Destroyed = 1
-}
-
-table fbRemovedActor
-{
-	actor_id				: uint;
-	reason				: fbRemovalReason = AoiLeft;
-}
-
 
 // --- Snapshot --- 
 
@@ -73,26 +61,13 @@ table fbSnapshotHeader
 	server_tick			: uint;
 	input_ack			: uint;
 	input_epoch			: uint;
-	chunk_index			: ushort = 0;
-	chunk_count			: ushort = 1;
 	global_keyframe		: bool = false;
-}
-
-
-
-table fbActorMeta
-{
-	owner_user_id		: ulong = 0;		
-	controller_user_id	: ulong = 0;		
-	actor_archetype_key	: ulong = 0;
-	client_request_id	: uint  = 0;
-	body_type			: ubyte = 0;
 }
 
 
 table fbActorEntity
 {
-	actor_id				: uint;
+	actor_id			: uint;
 	baseline_rev		: uint;
 
 	transform_full		: fbTransformFull;

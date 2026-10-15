@@ -5,14 +5,12 @@ namespace jam.net.fb;
 
 
 
-// UDP: 일반 actor 생성. World runtime identity와 membership만 검증한다.
+// UDP: 일반 actor 생성. 소유자는 인증된 요청자로 결정하며 control은 부여하지 않는다.
 table fbSpawnActorReq
 {
 	world_id				: ulong;
 	world_instance_id		: ulong;
 	client_request_id		: uint;
-	owner_user_id			: ulong;
-	controller_user_id		: ulong;
 
 	actor_archetype_key		: ulong;
 	pos						: fbVec3;
@@ -29,20 +27,21 @@ table fbSpawnActorReq
 	target_actor_id			: uint;
 }
 
-enum fbSpawnActorFailure : byte
+enum fbSpawnActorResult : byte
 {
-	None,
+	Succeeded,
 	InvalidCorrelation,
 	StaleRevision,
 	AlreadySpawned,
-	SpawnFailed
+	SpawnFailed,
+	InvalidArgument,
+	Rejected
 }
 
 table fbSpawnActorRes
 {
-	success				: bool;
-	failure				: fbSpawnActorFailure;
-	client_request_id	: uint;
+	result					: fbSpawnActorResult;
+	client_request_id		: uint;
 	actor_id				: uint;
 }
 

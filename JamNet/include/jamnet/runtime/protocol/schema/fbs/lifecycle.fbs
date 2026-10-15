@@ -1,25 +1,31 @@
-include "snapshot.fbs";
-
 namespace jam.net.fb;
 
 enum fbLifecycleOp : ubyte
 {
-	Create = 0,
-	Meta   = 1,
-	Remove = 2
+	Created    = 0,
+	AoiEntered = 1,
+	AoiLeft    = 2,
+	Destroyed  = 3
+}
+
+table fbActorMeta
+{
+	owned				: bool		= false;
+	controlled			: bool		= false;
+	actor_archetype_key	: ulong		= 0;
+	body_type			: ubyte		= 0;
 }
 
 table fbLifecycleActor
 {
-	op				: fbLifecycleOp = Create;
-	actor_id			: uint;
-	meta			: fbActorMeta;
-	remove_reason	: fbRemovalReason = AoiLeft;
+	op				: fbLifecycleOp = Created;
+	actor_id		: uint;
+	meta			: fbActorMeta; // Present only for Created; immutable until Destroyed.
 }
 
 table fbLifecycleBatch
 {
-	world_id			: ulong;
+	world_id		: ulong;
 	server_tick		: uint;
 	actors			: [fbLifecycleActor];
 }

@@ -52,43 +52,49 @@ struct fbDespawnPlayerRes;
 struct fbDespawnPlayerResBuilder;
 struct fbDespawnPlayerResT;
 
-enum fbSpawnActorFailure : int8_t {
-  fbSpawnActorFailure_None = 0,
-  fbSpawnActorFailure_InvalidCorrelation = 1,
-  fbSpawnActorFailure_StaleRevision = 2,
-  fbSpawnActorFailure_AlreadySpawned = 3,
-  fbSpawnActorFailure_SpawnFailed = 4,
-  fbSpawnActorFailure_MIN = fbSpawnActorFailure_None,
-  fbSpawnActorFailure_MAX = fbSpawnActorFailure_SpawnFailed
+enum fbSpawnActorResult : int8_t {
+  fbSpawnActorResult_Succeeded = 0,
+  fbSpawnActorResult_InvalidCorrelation = 1,
+  fbSpawnActorResult_StaleRevision = 2,
+  fbSpawnActorResult_AlreadySpawned = 3,
+  fbSpawnActorResult_SpawnFailed = 4,
+  fbSpawnActorResult_InvalidArgument = 5,
+  fbSpawnActorResult_Rejected = 6,
+  fbSpawnActorResult_MIN = fbSpawnActorResult_Succeeded,
+  fbSpawnActorResult_MAX = fbSpawnActorResult_Rejected
 };
 
-inline const fbSpawnActorFailure (&EnumValuesfbSpawnActorFailure())[5] {
-  static const fbSpawnActorFailure values[] = {
-    fbSpawnActorFailure_None,
-    fbSpawnActorFailure_InvalidCorrelation,
-    fbSpawnActorFailure_StaleRevision,
-    fbSpawnActorFailure_AlreadySpawned,
-    fbSpawnActorFailure_SpawnFailed
+inline const fbSpawnActorResult (&EnumValuesfbSpawnActorResult())[7] {
+  static const fbSpawnActorResult values[] = {
+    fbSpawnActorResult_Succeeded,
+    fbSpawnActorResult_InvalidCorrelation,
+    fbSpawnActorResult_StaleRevision,
+    fbSpawnActorResult_AlreadySpawned,
+    fbSpawnActorResult_SpawnFailed,
+    fbSpawnActorResult_InvalidArgument,
+    fbSpawnActorResult_Rejected
   };
   return values;
 }
 
-inline const char * const *EnumNamesfbSpawnActorFailure() {
-  static const char * const names[6] = {
-    "None",
+inline const char * const *EnumNamesfbSpawnActorResult() {
+  static const char * const names[8] = {
+    "Succeeded",
     "InvalidCorrelation",
     "StaleRevision",
     "AlreadySpawned",
     "SpawnFailed",
+    "InvalidArgument",
+    "Rejected",
     nullptr
   };
   return names;
 }
 
-inline const char *EnumNamefbSpawnActorFailure(fbSpawnActorFailure e) {
-  if (::flatbuffers::IsOutRange(e, fbSpawnActorFailure_None, fbSpawnActorFailure_SpawnFailed)) return "";
+inline const char *EnumNamefbSpawnActorResult(fbSpawnActorResult e) {
+  if (::flatbuffers::IsOutRange(e, fbSpawnActorResult_Succeeded, fbSpawnActorResult_Rejected)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesfbSpawnActorFailure()[index];
+  return EnumNamesfbSpawnActorResult()[index];
 }
 
 enum fbSpawnPlayerFailure : int8_t {
@@ -135,8 +141,6 @@ struct fbSpawnActorReqT : public ::flatbuffers::NativeTable {
   uint64_t world_id = 0;
   uint64_t world_instance_id = 0;
   uint32_t client_request_id = 0;
-  uint64_t owner_user_id = 0;
-  uint64_t controller_user_id = 0;
   uint64_t actor_archetype_key = 0;
   std::unique_ptr<jam::net::fb::fbVec3> pos{};
   std::unique_ptr<jam::net::fb::fbQuat> rot{};
@@ -162,20 +166,18 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_WORLD_ID = 4,
     VT_WORLD_INSTANCE_ID = 6,
     VT_CLIENT_REQUEST_ID = 8,
-    VT_OWNER_USER_ID = 10,
-    VT_CONTROLLER_USER_ID = 12,
-    VT_ACTOR_ARCHETYPE_KEY = 14,
-    VT_POS = 16,
-    VT_ROT = 18,
-    VT_SPAWN_SRC = 20,
-    VT_OVERRIDE_MASK = 22,
-    VT_LINEAR_VEL = 24,
-    VT_ANGULAR_VEL = 26,
-    VT_LINEAR_DAMPING = 28,
-    VT_ANGULAR_DAMPING = 30,
-    VT_YAW = 32,
-    VT_PITCH = 34,
-    VT_TARGET_ACTOR_ID = 36
+    VT_ACTOR_ARCHETYPE_KEY = 10,
+    VT_POS = 12,
+    VT_ROT = 14,
+    VT_SPAWN_SRC = 16,
+    VT_OVERRIDE_MASK = 18,
+    VT_LINEAR_VEL = 20,
+    VT_ANGULAR_VEL = 22,
+    VT_LINEAR_DAMPING = 24,
+    VT_ANGULAR_DAMPING = 26,
+    VT_YAW = 28,
+    VT_PITCH = 30,
+    VT_TARGET_ACTOR_ID = 32
   };
   uint64_t world_id() const {
     return GetField<uint64_t>(VT_WORLD_ID, 0);
@@ -185,12 +187,6 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   }
   uint32_t client_request_id() const {
     return GetField<uint32_t>(VT_CLIENT_REQUEST_ID, 0);
-  }
-  uint64_t owner_user_id() const {
-    return GetField<uint64_t>(VT_OWNER_USER_ID, 0);
-  }
-  uint64_t controller_user_id() const {
-    return GetField<uint64_t>(VT_CONTROLLER_USER_ID, 0);
   }
   uint64_t actor_archetype_key() const {
     return GetField<uint64_t>(VT_ACTOR_ARCHETYPE_KEY, 0);
@@ -234,8 +230,6 @@ struct fbSpawnActorReq FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint64_t>(verifier, VT_WORLD_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_WORLD_INSTANCE_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_CLIENT_REQUEST_ID, 4) &&
-           VerifyField<uint64_t>(verifier, VT_OWNER_USER_ID, 8) &&
-           VerifyField<uint64_t>(verifier, VT_CONTROLLER_USER_ID, 8) &&
            VerifyField<uint64_t>(verifier, VT_ACTOR_ARCHETYPE_KEY, 8) &&
            VerifyField<jam::net::fb::fbVec3>(verifier, VT_POS, 4) &&
            VerifyField<jam::net::fb::fbQuat>(verifier, VT_ROT, 4) &&
@@ -267,12 +261,6 @@ struct fbSpawnActorReqBuilder {
   }
   void add_client_request_id(uint32_t client_request_id) {
     fbb_.AddElement<uint32_t>(fbSpawnActorReq::VT_CLIENT_REQUEST_ID, client_request_id, 0);
-  }
-  void add_owner_user_id(uint64_t owner_user_id) {
-    fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_OWNER_USER_ID, owner_user_id, 0);
-  }
-  void add_controller_user_id(uint64_t controller_user_id) {
-    fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_CONTROLLER_USER_ID, controller_user_id, 0);
   }
   void add_actor_archetype_key(uint64_t actor_archetype_key) {
     fbb_.AddElement<uint64_t>(fbSpawnActorReq::VT_ACTOR_ARCHETYPE_KEY, actor_archetype_key, 0);
@@ -326,8 +314,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     uint64_t world_id = 0,
     uint64_t world_instance_id = 0,
     uint32_t client_request_id = 0,
-    uint64_t owner_user_id = 0,
-    uint64_t controller_user_id = 0,
     uint64_t actor_archetype_key = 0,
     const jam::net::fb::fbVec3 *pos = nullptr,
     const jam::net::fb::fbQuat *rot = nullptr,
@@ -342,8 +328,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
     uint32_t target_actor_id = 0) {
   fbSpawnActorReqBuilder builder_(_fbb);
   builder_.add_actor_archetype_key(actor_archetype_key);
-  builder_.add_controller_user_id(controller_user_id);
-  builder_.add_owner_user_id(owner_user_id);
   builder_.add_world_instance_id(world_instance_id);
   builder_.add_world_id(world_id);
   builder_.add_target_actor_id(target_actor_id);
@@ -365,8 +349,7 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> CreatefbSpawnActorReq(
 
 struct fbSpawnActorResT : public ::flatbuffers::NativeTable {
   typedef fbSpawnActorRes TableType;
-  bool success = false;
-  jam::net::fb::fbSpawnActorFailure failure = jam::net::fb::fbSpawnActorFailure_None;
+  jam::net::fb::fbSpawnActorResult result = jam::net::fb::fbSpawnActorResult_Succeeded;
   uint32_t client_request_id = 0;
   uint32_t actor_id = 0;
 };
@@ -375,16 +358,12 @@ struct fbSpawnActorRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef fbSpawnActorResT NativeTableType;
   typedef fbSpawnActorResBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SUCCESS = 4,
-    VT_FAILURE = 6,
-    VT_CLIENT_REQUEST_ID = 8,
-    VT_ACTOR_ID = 10
+    VT_RESULT = 4,
+    VT_CLIENT_REQUEST_ID = 6,
+    VT_ACTOR_ID = 8
   };
-  bool success() const {
-    return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
-  }
-  jam::net::fb::fbSpawnActorFailure failure() const {
-    return static_cast<jam::net::fb::fbSpawnActorFailure>(GetField<int8_t>(VT_FAILURE, 0));
+  jam::net::fb::fbSpawnActorResult result() const {
+    return static_cast<jam::net::fb::fbSpawnActorResult>(GetField<int8_t>(VT_RESULT, 0));
   }
   uint32_t client_request_id() const {
     return GetField<uint32_t>(VT_CLIENT_REQUEST_ID, 0);
@@ -395,8 +374,7 @@ struct fbSpawnActorRes FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint8_t>(verifier, VT_SUCCESS, 1) &&
-           VerifyField<int8_t>(verifier, VT_FAILURE, 1) &&
+           VerifyField<int8_t>(verifier, VT_RESULT, 1) &&
            VerifyField<uint32_t>(verifier, VT_CLIENT_REQUEST_ID, 4) &&
            VerifyField<uint32_t>(verifier, VT_ACTOR_ID, 4) &&
            verifier.EndTable();
@@ -410,11 +388,8 @@ struct fbSpawnActorResBuilder {
   typedef fbSpawnActorRes Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_success(bool success) {
-    fbb_.AddElement<uint8_t>(fbSpawnActorRes::VT_SUCCESS, static_cast<uint8_t>(success), 0);
-  }
-  void add_failure(jam::net::fb::fbSpawnActorFailure failure) {
-    fbb_.AddElement<int8_t>(fbSpawnActorRes::VT_FAILURE, static_cast<int8_t>(failure), 0);
+  void add_result(jam::net::fb::fbSpawnActorResult result) {
+    fbb_.AddElement<int8_t>(fbSpawnActorRes::VT_RESULT, static_cast<int8_t>(result), 0);
   }
   void add_client_request_id(uint32_t client_request_id) {
     fbb_.AddElement<uint32_t>(fbSpawnActorRes::VT_CLIENT_REQUEST_ID, client_request_id, 0);
@@ -435,15 +410,13 @@ struct fbSpawnActorResBuilder {
 
 inline ::flatbuffers::Offset<fbSpawnActorRes> CreatefbSpawnActorRes(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    bool success = false,
-    jam::net::fb::fbSpawnActorFailure failure = jam::net::fb::fbSpawnActorFailure_None,
+    jam::net::fb::fbSpawnActorResult result = jam::net::fb::fbSpawnActorResult_Succeeded,
     uint32_t client_request_id = 0,
     uint32_t actor_id = 0) {
   fbSpawnActorResBuilder builder_(_fbb);
   builder_.add_actor_id(actor_id);
   builder_.add_client_request_id(client_request_id);
-  builder_.add_failure(failure);
-  builder_.add_success(success);
+  builder_.add_result(result);
   return builder_.Finish();
 }
 
@@ -1028,8 +1001,6 @@ inline fbSpawnActorReqT::fbSpawnActorReqT(const fbSpawnActorReqT &o)
       : world_id(o.world_id),
         world_instance_id(o.world_instance_id),
         client_request_id(o.client_request_id),
-        owner_user_id(o.owner_user_id),
-        controller_user_id(o.controller_user_id),
         actor_archetype_key(o.actor_archetype_key),
         pos((o.pos) ? new jam::net::fb::fbVec3(*o.pos) : nullptr),
         rot((o.rot) ? new jam::net::fb::fbQuat(*o.rot) : nullptr),
@@ -1048,8 +1019,6 @@ inline fbSpawnActorReqT &fbSpawnActorReqT::operator=(fbSpawnActorReqT o) FLATBUF
   std::swap(world_id, o.world_id);
   std::swap(world_instance_id, o.world_instance_id);
   std::swap(client_request_id, o.client_request_id);
-  std::swap(owner_user_id, o.owner_user_id);
-  std::swap(controller_user_id, o.controller_user_id);
   std::swap(actor_archetype_key, o.actor_archetype_key);
   std::swap(pos, o.pos);
   std::swap(rot, o.rot);
@@ -1077,8 +1046,6 @@ inline void fbSpawnActorReq::UnPackTo(fbSpawnActorReqT *_o, const ::flatbuffers:
   { auto _e = world_id(); _o->world_id = _e; }
   { auto _e = world_instance_id(); _o->world_instance_id = _e; }
   { auto _e = client_request_id(); _o->client_request_id = _e; }
-  { auto _e = owner_user_id(); _o->owner_user_id = _e; }
-  { auto _e = controller_user_id(); _o->controller_user_id = _e; }
   { auto _e = actor_archetype_key(); _o->actor_archetype_key = _e; }
   { auto _e = pos(); if (_e) _o->pos = std::unique_ptr<jam::net::fb::fbVec3>(new jam::net::fb::fbVec3(*_e)); }
   { auto _e = rot(); if (_e) _o->rot = std::unique_ptr<jam::net::fb::fbQuat>(new jam::net::fb::fbQuat(*_e)); }
@@ -1104,8 +1071,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
   auto _world_id = _o->world_id;
   auto _world_instance_id = _o->world_instance_id;
   auto _client_request_id = _o->client_request_id;
-  auto _owner_user_id = _o->owner_user_id;
-  auto _controller_user_id = _o->controller_user_id;
   auto _actor_archetype_key = _o->actor_archetype_key;
   auto _pos = _o->pos ? _o->pos.get() : nullptr;
   auto _rot = _o->rot ? _o->rot.get() : nullptr;
@@ -1123,8 +1088,6 @@ inline ::flatbuffers::Offset<fbSpawnActorReq> fbSpawnActorReq::Pack(::flatbuffer
       _world_id,
       _world_instance_id,
       _client_request_id,
-      _owner_user_id,
-      _controller_user_id,
       _actor_archetype_key,
       _pos,
       _rot,
@@ -1148,8 +1111,7 @@ inline fbSpawnActorResT *fbSpawnActorRes::UnPack(const ::flatbuffers::resolver_f
 inline void fbSpawnActorRes::UnPackTo(fbSpawnActorResT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = success(); _o->success = _e; }
-  { auto _e = failure(); _o->failure = _e; }
+  { auto _e = result(); _o->result = _e; }
   { auto _e = client_request_id(); _o->client_request_id = _e; }
   { auto _e = actor_id(); _o->actor_id = _e; }
 }
@@ -1162,14 +1124,12 @@ inline ::flatbuffers::Offset<fbSpawnActorRes> fbSpawnActorRes::Pack(::flatbuffer
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const fbSpawnActorResT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _success = _o->success;
-  auto _failure = _o->failure;
+  auto _result = _o->result;
   auto _client_request_id = _o->client_request_id;
   auto _actor_id = _o->actor_id;
   return jam::net::fb::CreatefbSpawnActorRes(
       _fbb,
-      _success,
-      _failure,
+      _result,
       _client_request_id,
       _actor_id);
 }

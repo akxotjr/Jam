@@ -23,6 +23,8 @@ namespace jam::net
 	class ServerTcpSession;
 	class ServerUdpSession;
 
+	// Member is a User viewed from the World it belongs to, not a separate identity.
+	// This context holds the World's view of that User; a Member may have no Player yet.
 	struct WorldUserContext
 	{
 		AccountId				accountId	 = kInvalidAccountId;
@@ -68,13 +70,16 @@ namespace jam::net
 		MailboxRef						m_mailboxRef = {};
 	};
 
+	// Membership is the relationship between a User and a World.
+	// AddMember/RemoveMember manage local attachment; the transition system commits
+	// the User's single World membership. Temporary attachments may exist during a transition.
 	class WorldMembershipHost : public WorldBase
 	{
 	public:
 		using WorldBase::WorldBase;
 
-		virtual bool					AddMember(WorldUserContext user);
-		virtual bool					RemoveMember(UserId userId);
+		bool							AddMember(WorldUserContext user);
+		bool							RemoveMember(UserId userId);
 		virtual void					UpdateMemberContext(WorldUserContext user);
 
 		virtual void					Send(Packet packet) { (void)packet; }
@@ -87,7 +92,8 @@ namespace jam::net
 
 	protected:
 		bool							OnInitialize() override;
-		virtual void					OnUserEntered(UserId userId) { (void)userId; }
+		// A failed enter is rolled back through RemoveMember and OnUserLeft.
+		virtual bool					OnUserEntered(UserId userId) { (void)userId; return true; }
 		virtual void					OnUserLeft(UserId userId) { (void)userId; }
 
 	protected:
