@@ -20,13 +20,20 @@ namespace
 
 	void PrintUsage()
 	{
-		std::cout << "Usage: M1_Bot.exe baseline [--long]\n";
-		std::cout << "Usage: M1_Bot.exe <target|peak|stress|aoi-hotspot|portal-burst> <botCount>\n";
-		std::cout << "Usage: M1_Bot.exe target <botCount> --fast\n";
-		std::cout << "  baseline: 300 bots, 3-minute measurement\n";
-		std::cout << "  baseline --long: 300 bots, 10-minute measurement\n";
-		std::cout << "  --fast: 1-minute warm-up, 3-minute measurement\n";
-		std::cout << "  botCount: 1-4000\n";
+		std::cout << "Usage: M1_Bot.exe <profile> [options]\n";
+		std::cout << "  profile: baseline|target|peak|stress|aoi-hotspot|portal-burst\n";
+		std::cout << "  --ip <address>          Server IP (default: 127.0.0.1)\n";
+		std::cout << "  --tcp_port <port>       TCP port, 1-65535 (default: 7777)\n";
+		std::cout << "  --udp_port <port>       UDP port, 1-65535 (default: 8888)\n";
+		std::cout << "  --ccu <count>           Bots, 1-4000 (default: baseline 300, others 1000)\n";
+		std::cout << "  --warm_up <minutes>     Warm-up duration, 0 or more (default: 3)\n";
+		std::cout << "  --measurement <minutes> Measurement duration, 1 or more (default: 10)\n";
+		std::cout << "  --data_root <path>      Shared data root (default: ../M1_Shared/Data)\n";
+		std::cout << "  --output_dir <path>     Log directory\n";
+		std::cout << "  --seed <number>         Random seed (default: 1)\n";
+		std::cout << "  --connect_per_second <count> Connection starts per second (default: 50)\n";
+		std::cout << "  --stats_interval <seconds> Automatic stats period, 0 disables (default: 5)\n";
+		std::cout << "  --stop_file <path>      Create this file to abort gracefully\n";
 	}
 
 	enum class eValidationPhase
@@ -71,11 +78,16 @@ namespace
 		return std::nullopt;
 	}
 
-	void PrintStats(const BotRunnerStats& stats)
+	void PrintStats(const BotRunnerStats& stats, eValidationPhase phase,
+		std::chrono::steady_clock::duration elapsed, std::chrono::steady_clock::duration phaseElapsed)
 	{
 		JAM_LOG_INFO(
-			"[M1BotStats] started={}/{}, connectRejected={}, connecting={}, ready={}, inWorld={}, running={}, failed={}, "
+			"[M1BotStats] phase={}, elapsedSec={}, phaseElapsedSec={}, "
+			"started={}/{}, connectRejected={}, connecting={}, ready={}, inWorld={}, running={}, failed={}, "
 			"chatTx={}, chatRx={}, chatRejected={}, portal={}, portalTimeout={}, unexpectedWorld={}",
+			PhaseName(phase),
+			std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(),
+			std::chrono::duration_cast<std::chrono::seconds>(phaseElapsed).count(),
 			stats.connectStarted,
 			stats.total,
 			stats.connectRejected,
@@ -97,29 +109,95 @@ namespace
 int main(int argc, char* argv[])
 {
 	BotRunnerConfig botConfig{};
-	const bool standardBaseline = argc == 2 && std::string_view(argv[1]) == "baseline";
-	const bool longBaseline = argc == 3 && std::string_view(argv[1]) == "baseline" && std::string_view(argv[2]) == "--long";
-	const bool baseline = standardBaseline || longBaseline;
-	const bool fast = argc == 4 && std::string_view(argv[1]) == "target" && std::string_view(argv[3]) == "--fast";
-	const auto profile = (standardBaseline || longBaseline || argc == 3 || fast) ? ParseProfile(argv[1]) : std::nullopt;
-	if (baseline)
-		botConfig.botCount = 300;
-	else if ((argc == 3 || fast) && !ParseUInt32(argv[2], botConfig.botCount))
-	{
-		PrintUsage();
-		return -1;
-	}
-	if (!profile
-		|| botConfig.botCount == 0 || botConfig.botCount > 4000)
+	uint32 warmUpMinutes = 3;
+	uint32 measurementMinutes = 10;
+	uint32 statsIntervalSeconds = 5;
+	std::filesystem::path outputDirectory;
+	std::filesystem::path stopFile;
+	if (argc == 2 && std::string_view(argv[1]) == "--help") { PrintUsage(); return 0; }
+	const auto profile = argc >= 2 ? ParseProfile(argv[1]) : std::nullopt;
+	if (!profile)
 	{
 		PrintUsage();
 		return -1;
 	}
 	botConfig.profile = *profile;
-	botConfig.connectPerSecond = 30;
-	botConfig.randomSeed = 1;
+	botConfig.botCount = *profile == eBotProfile::Baseline ? 300 : 1000;
+	for (int i = 2; i < argc; i += 2)
+	{
+		const std::string_view option(argv[i]);
+		if (i + 1 >= argc)
+		{
+			std::cerr << "Missing value for option: " << option << '\n';
+			PrintUsage();
+			return -1;
+		}
 
-	//botConfig.serverIp = "112.185.51.192";
+		const char* value = argv[i + 1];
+		bool valid = false;
+		if (option == "--ip" || option == "--data_root" || option == "--output_dir" || option == "--stop_file")
+		{
+			valid = *value != '\0' && !std::string_view(value).starts_with("--");
+			if (valid && option == "--ip")
+				botConfig.serverIp = value;
+			else if (valid && option == "--data_root")
+				botConfig.sharedDataManifestPath = (std::filesystem::path(value) / "shared_data_manifest.json").string();
+			else if (valid && option == "--output_dir") outputDirectory = value;
+			else if (valid) stopFile = value;
+		}
+		else
+		{
+			uint32 number = 0;
+			if (ParseUInt32(value, number))
+			{
+				if (option == "--tcp_port" || option == "--udp_port")
+				{
+					valid = number > 0 && number <= 65535;
+					if (valid && option == "--tcp_port")
+						botConfig.tcpPort = static_cast<uint16>(number);
+					else if (valid)
+						botConfig.udpPort = static_cast<uint16>(number);
+				}
+				else if (option == "--ccu")
+				{
+					valid = number > 0 && number <= 4000;
+					if (valid)
+						botConfig.botCount = number;
+				}
+				else if (option == "--warm_up")
+				{
+					valid = true;
+					warmUpMinutes = number;
+				}
+				else if (option == "--measurement")
+				{
+					valid = number > 0;
+					if (valid)
+						measurementMinutes = number;
+				}
+				else if (option == "--seed") { valid = true; botConfig.randomSeed = number; }
+				else if (option == "--stats_interval") { valid = true; statsIntervalSeconds = number; }
+				else if (option == "--connect_per_second")
+				{
+					valid = number > 0 && number <= 4000;
+					if (valid) botConfig.connectPerSecond = number;
+				}
+			}
+		}
+		if (!valid)
+		{
+			std::cerr << "Invalid option or value: " << option << ' ' << value << '\n';
+			PrintUsage();
+			return -1;
+		}
+	}
+	try
+	{
+		if (!stopFile.empty() && std::filesystem::exists(stopFile))
+			throw std::runtime_error("stop file already exists; use a fresh per-run path");
+		if (!outputDirectory.empty()) std::filesystem::create_directories(outputDirectory);
+	}
+	catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 
 	jam::net::RuntimeConfig runtimeConfig{
 		.geConfig = {
@@ -131,6 +209,8 @@ int main(int argc, char* argv[])
 			},
 		},
 	};
+	if (!outputDirectory.empty())
+		runtimeConfig.logFilePath = (outputDirectory / (jam::detail::TimestampedStem() + ".log")).string();
 	jam::net::NetRuntime runtime(runtimeConfig);
 	if (!runtime.IsInitialized())
 	{
@@ -149,10 +229,8 @@ int main(int argc, char* argv[])
 
 	constexpr auto kRampSettleTimeout = std::chrono::minutes(5);
 
-	const auto warmUpDuration		 = (baseline || fast) ? std::chrono::minutes(1) : std::chrono::minutes(5);
-	const auto measurementDuration	 = longBaseline ? std::chrono::minutes(10)
-		: (baseline || fast) ? std::chrono::minutes(3)
-		: std::chrono::minutes(30);
+	const auto warmUpDuration		 = std::chrono::minutes(warmUpMinutes);
+	const auto measurementDuration	 = std::chrono::minutes(measurementMinutes);
 	const auto runStartedAt			 = std::chrono::steady_clock::now();
 	const auto scheduledRampDuration = std::chrono::seconds((botConfig.botCount + botConfig.connectPerSecond - 1) / botConfig.connectPerSecond);
 	const auto rampDeadline			 = runStartedAt + scheduledRampDuration + kRampSettleTimeout;
@@ -166,33 +244,73 @@ int main(int argc, char* argv[])
 
 	JAM_LOG_INFO("M1_Bot started: profile={}, bots={}, connectPerSecond={}, seed={}",
 		argv[1], botConfig.botCount, botConfig.connectPerSecond, botConfig.randomSeed);
+	JAM_LOG_INFO("M1_Bot configuration: ip={}, tcpPort={}, udpPort={}, warmUpMinutes={}, measurementMinutes={}",
+		botConfig.serverIp, botConfig.tcpPort, botConfig.udpPort, warmUpMinutes, measurementMinutes);
 
-	JAM_LOG_INFO("Press [q] to abort");
+	JAM_LOG_INFO("Commands: /stat + Enter to print stats, [q] to abort");
 
-	auto nextReport = std::chrono::steady_clock::now();
+	auto nextPhaseCheck = std::chrono::steady_clock::now();
+	auto nextStats = nextPhaseCheck;
+	DWORD consoleMode = 0;
+	const bool interactive = GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &consoleMode) != 0;
+	bool stopRequested = false;
+	std::string command;
 	bool allFailed = false;
 	bool phaseFailed = false;
 	bool aborted = false;
 	while (true)
 	{
-		if (_kbhit())
+		bool statsRequested = false;
+		while (interactive && _kbhit())
 		{
 			const char input = static_cast<char>(_getch());
-			if (input == 'q' || input == 'Q')
+			if (input == '\0' || input == static_cast<char>(0xE0))
+			{
+				_getch();
+				continue;
+			}
+			if (command.empty() && (input == 'q' || input == 'Q'))
 			{
 				aborted = true;
 				break;
 			}
+			if (input == '\r')
+			{
+				std::cout << '\n';
+				if (command == "/stat")
+					statsRequested = true;
+				else if (!command.empty())
+					JAM_LOG_WARN("Unknown command: {} (use /stat)", command);
+				command.clear();
+			}
+			else if (input == '\b' && !command.empty())
+			{
+				command.pop_back();
+				std::cout << "\b \b" << std::flush;
+			}
+			else if (input >= ' ' && input <= '~' && command.size() < 64)
+			{
+				command.push_back(input);
+				std::cout << input << std::flush;
+			}
 		}
+		if (aborted)
+			break;
 
 		runner.Update();
 
 		const auto now = std::chrono::steady_clock::now();
-		if (now >= nextReport)
+		if (now >= nextPhaseCheck)
 		{
+			if (!stopFile.empty())
+			{
+				std::error_code error;
+				stopRequested = std::filesystem::exists(stopFile, error);
+				if (error) { JAM_LOG_ERROR("Failed to inspect stop file: {}", error.message()); phaseFailed = true; break; }
+				if (stopRequested) { aborted = true; break; }
+			}
 			const BotRunnerStats stats = runner.GetStats();
-			PrintStats(stats);
-			nextReport = now + std::chrono::seconds(1);
+			nextPhaseCheck = now + std::chrono::seconds(1);
 
 			if (runner.HasStartedAll() && stats.total != 0 && stats.failed == stats.total)
 			{
@@ -242,6 +360,11 @@ int main(int argc, char* argv[])
 				break;
 			}
 		}
+		if (statsRequested || (statsIntervalSeconds != 0 && now >= nextStats))
+		{
+			PrintStats(runner.GetStats(), phase, now - runStartedAt, now - phaseStartedAt);
+			nextStats = now + std::chrono::seconds(statsIntervalSeconds);
+		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
@@ -250,7 +373,7 @@ int main(int argc, char* argv[])
 	if (aborted || allFailed || phaseFailed || phase != eValidationPhase::CoolDown)
 	{
 		JAM_LOG_WARN("M1_Bot phase aborted: phase={} reason={} running={} failed={}",
-			PhaseName(phase), allFailed ? "all-failed" : (aborted ? "user" : "ramp-timeout"), finalStats.running, finalStats.failed);
+			PhaseName(phase), allFailed ? "all-failed" : (aborted ? (stopRequested ? "stop-file" : "user") : "phase-failure"), finalStats.running, finalStats.failed);
 		LogPhase(phase, "end");
 		
 		phase = eValidationPhase::CoolDown;
