@@ -334,6 +334,7 @@
     <ClInclude Include="include\jamnet\runtime\world\simulation\common\ReplicationTypes.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\common\WorldContext.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerAoiSystem.h" />
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerAoiTypes.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerInputSystem.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerPhysicsSystem.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerReplicationSystem.h" />

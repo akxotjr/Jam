@@ -3,7 +3,10 @@
 #include <jampx/PhysicsTypes.h>
 #include <entt/container/dense_set.hpp>
 #include <entt/entity/sparse_set.hpp>
+#include "jamnet/runtime/world/simulation/server/ServerAoiTypes.h"
 
+
+#include "jamnet/runtime/session/UserContext.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
 
 namespace jam::px
@@ -11,10 +14,9 @@ namespace jam::px
 	class PhysicsFacade;
 }
 
-	namespace jam::net
+namespace jam::net
 {
 	class ServerWorld;
-	class ServerPhysicsSystem;
 	class WorldMetrics;
 	struct TickCounter;
 
@@ -57,45 +59,50 @@ namespace jam::px
 		}
 	};
 
-	struct AoiActorCellState
-	{
-		px::Vec3                   lastPos         = px::Vec3::Zero();
-		double                     travelX         = 0.0;
-		double                     travelZ         = 0.0;
-		AoiCellCoord               anchorCell      = {};
-		bool                       initialized     = false;
-	};
-
-	struct AoiUserCellState
-	{
-		px::Vec3                   lastPos        = px::Vec3::Zero();
-		double                     travelX        = 0.0;
-		double                     travelZ        = 0.0;
-		AoiCellCoord               anchorCell     = {};
-		std::vector<AoiCellCoord>  interestCells;
-		bool                       initialized    = false;
-	};
-
-	struct AoiActorSlot
-	{
-		entt::entity                actor   = entt::null;
-		bool                        alive   = false;
-	};
-
-	struct AoiSubscriberSlot
-	{
-		uint64                      userId  = 0;
-		bool                        alive   = false;
-	};
-
 	struct AoiVisibleUserSlot
 	{
 		uint64                      userId  = 0;
 	};
 
-	struct AoiVisibleActorSlot
+	struct AoiActorState
+	{
+		px::Vec3                   lastPos         = px::Vec3::Zero();
+		double                     travelX         = 0.0;
+		double                     travelZ         = 0.0;
+		AoiCellCoord               anchorCell      = {};
+		size_t                     cellActorIndex  = 0;
+		bool                       initialized     = false;
+		std::vector<AoiVisibleUserSlot> visibleUsers;
+	};
+
+	struct AoiUserState
+	{
+		UserAoiState               aoi;
+		px::Vec3                   lastPos        = px::Vec3::Zero();
+		double                     travelX        = 0.0;
+		double                     travelZ        = 0.0;
+		AoiCellCoord               anchorCell     = {};
+		std::vector<AoiCellCoord>  interestCells;
+		std::unordered_map<uint64, size_t> subscriberIndices; // Cell key -> subscriber slot.
+		bool                       initialized    = false;
+		bool                       visibilityQueued = false;
+	};
+
+	struct AoiActorSlot
 	{
 		entt::entity                actor   = entt::null;
+	};
+
+	struct AoiSubscriberSlot
+	{
+		uint64                      userId  = 0;
+	};
+
+
+	struct AoiCellState
+	{
+		std::vector<AoiActorSlot>		actors;
+		std::vector<AoiSubscriberSlot>	subscribers;
 	};
 
 	struct AoiPendingVisibility
@@ -103,6 +110,7 @@ namespace jam::px
 		uint64                      userId  = 0;
 		entt::entity                actor   = entt::null;
 		uint32                      userGeneration  = 0;
+		bool                        certificateChecked = false;
 	};
 
 	struct AoiVisibilityKey
@@ -135,7 +143,6 @@ namespace jam::px
 	struct AoiVisibleMembershipEntry
 	{
 		size_t actorUserIndex    = 0;
-		size_t userActorIndex    = 0;
 		double lastAbsDx         = 0.0;
 		double lastAbsDz         = 0.0;
 		double userTravelX       = 0.0;
@@ -145,12 +152,6 @@ namespace jam::px
 		bool   certificateValid  = false;
 	};
 
-	struct UserAoiState
-	{
-		entt::basic_sparse_set<entt::entity>	visible{ entt::type_id<void>() };	// currently visible actors
-		std::vector<ActorId>		entered;		// actors entered this tick
-		std::vector<ActorId>		left;			// actors left this tick
-	};
 
 	struct AoiConfig
 	{
@@ -170,38 +171,40 @@ namespace jam::px
 		float           losChestOffset        = 0.6f;       // target(to)   chest  offset (+y)
 		float           losPelvisOffset       = 0.3f;       // target(to)   pelvis offset (+y). (optional)
 
-		float           compactDeadRatio      = 0.35f;
-		uint32          compactMinDeadCount   = 32;
 	};
 
 	class ServerAoiSystem
 	{
 	public:
-		explicit ServerAoiSystem(entt::registry& world, px::PhysicsFacade* physics, WorldMetrics& metrics, ServerWorld& serverWorld, ServerPhysicsSystem& serverPhysics, TickCounter& tickCounter);
+		explicit ServerAoiSystem(ServerWorld& world, entt::registry& registry, px::PhysicsFacade* physics, WorldMetrics& metrics, TickCounter& tickCounter);
 
 		void									Init(const AoiConfig& cfg = {});
-		void									Tick();
+		void									Tick(std::span<const entt::entity> activeEntities);
 
-		void									OnUserEnter(uint64 userId);
-		void									OnUserLeave(uint64 userId);
-		void                                    OnControlledActorChanged(uint64 userId);
+		void									RegisterSubscription(UserId userId);
+		void									UnregisterSubscription(UserId userId);
 
 		void									OnActorSpawned(entt::entity actor);
 		void									OnActorDestroyed(entt::entity actor);
+		// Prepare one user's initial visibility without clearing tick events or resolving other users.
+		bool									PreparePlayer(UserId userId, entt::entity actor);
 		bool									IsUserReady(uint64 userId) const;
 		bool									IsActorRegistered(entt::entity actor) const;
 
 		bool									IsVisible(uint64 userId, ActorId actorId) const;
 		const UserAoiState*						GetState(uint64 userId) const;
-		const std::vector<AoiVisibleActorSlot>* GetVisibleActors(uint64 userId) const;
 
-	private:
+		// Close the transition interval after the world's replication pass has consumed it.
 		void                            ClearTransientEvents();
 
-		void                            CollectDirtyActorsFromPhysics();
+	private:
+		void                            CollectDirtyActorsFromPhysics(std::span<const entt::entity> activeEntities);
 
 		void                            UpdateDirtyUserSubscriptions();
 		void                            UpdateDirtyActorMembership();
+		void                            EnqueuePendingActorVisibility();
+		void                            QueueUserVisibility(uint64 userId, AoiUserState& state);
+		void                            EnqueuePendingUserVisibility();
 		void                            ResolvePendingVisibility();
 
 		void                            UpdateUserAnchorAndInterestCells(uint64 userId, const px::Vec3& userPos);
@@ -215,11 +218,15 @@ namespace jam::px
 		void                            EnqueueVisibilityForVisibleUsers(entt::entity actor);
 
 		void                            EvaluateVisibility(uint64 userId, entt::entity actor);
+		// Caller supplies a live user state and an ActorId from a valid actor entity.
+		void                            EvaluateVisibility(uint64 userId, AoiUserState& userState, entt::entity actor, ActorId actorId, bool certificateChecked = false);
+		bool                            PassesVisibilityCertificate(const AoiVisibleMembershipEntry& certificate, const AoiUserState& user, const AoiActorState& actor) const;
+		void                            EnqueueVisibleRelation(uint64 userId, const AoiUserState& user, entt::entity actor, const AoiActorState* actorState);
 		bool                            PassesVisibilityTests(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible);
 		bool                            PassesLos(uint64 userId, entt::entity actor, const px::Vec3& userPos, const px::Vec3& actorPos, bool wasVisible);
 
 		px::Vec3                        ResolveActorPosition(entt::entity actor) const;
-		px::Vec3                        ResolveUserPosition(uint64 userId) const;
+		bool                            TryResolvePlayerAnchorPosition(uint64 userId, px::Vec3& position) const;
 
 		AoiCellCoord                    WorldToCell(const px::Vec3& pos) const;
 		AoiCellRect                     BuildInterestRect(const px::Vec3& origin) const;
@@ -232,41 +239,32 @@ namespace jam::px
 		void                            AddSubscriberToCell(const AoiCellCoord& cell, uint64 userId);
 		void                            RemoveSubscriberFromCell(const AoiCellCoord& cell, uint64 userId);
 
-		void                            EnqueueVisibilityEval(uint64 userId, entt::entity actor);
+		void                            EnqueueVisibilityEval(uint64 userId, entt::entity actor, bool certificateChecked = false);
 		void                            RemoveLosForUser(uint64 userId);
 		void                            RemoveLosForActor(entt::entity actor);
 		void                            MarkUserDirty(uint64 userId);
 		void                            MarkActorDirty(entt::entity actor);
 		bool                            RemoveVisibleMembership(uint64 userId, entt::entity actor);
 
-		void                            CompactCellActorsIfNeeded(uint64 cellKey);
-		void                            CompactCellSubscribersIfNeeded(uint64 cellKey);
-		void                            FlushPendingCompactions();
 		AoiVisibilityKey                MakeVisibilityKey(uint64 userId, entt::entity actor) const;
 
 	private:
+		ServerWorld&					m_world;
 		entt::registry&														m_registry;
 		px::PhysicsFacade*													m_physics          = nullptr;
-		ServerWorld&														m_world;
-		ServerPhysicsSystem&												m_serverPhysics;
 		TickCounter&														m_tickCounter;
 		WorldMetrics&														m_metrics;
 		AoiConfig															m_cfg              = {};
 
-		std::unordered_map<uint64, UserAoiState>							m_states;
-		std::unordered_map<entt::entity, AoiActorCellState>					m_actorStates;
-		std::unordered_map<uint64, AoiUserCellState>						m_userStates;
-
-		std::unordered_map<uint64, std::vector<AoiActorSlot>>				m_cellActors;
-		std::unordered_map<uint64, std::vector<AoiSubscriberSlot>>			m_cellSubscribers;
-		std::unordered_map<entt::entity, std::vector<AoiVisibleUserSlot>>	m_actorVisibleUsers;
-		std::unordered_map<uint64, std::vector<AoiVisibleActorSlot>>		m_userVisibleActors;
-
-		std::unordered_map<entt::entity, px::Vec3>							m_entityPositions;
+		std::unordered_map<entt::entity, AoiActorState>						m_actorStates;
+		std::unordered_map<UserId, AoiUserState>							m_userStates;
+		std::unordered_map<uint64, AoiCellState>							m_cellStates;
 
 		std::vector<uint64>													m_dirtyUsers;
-		std::vector<entt::entity>											m_dirtyActors;
+		entt::sparse_set													m_dirtyActors;
 		std::vector<AoiPendingVisibility>									m_pendingVisibility;
+		std::vector<uint64>                                                      m_pendingVisibilityUsers;
+		entt::sparse_set                                                         m_pendingVisibilityActors;
 
 		AoiVisibilityMap<AoiLosCacheEntry>									m_losCache;
 		AoiVisibilityMap<AoiVisibleMembershipEntry>							m_visibleMembership;
@@ -275,9 +273,6 @@ namespace jam::px
 		std::unordered_map<uint64, uint32>									m_userGenerations;
 
 		entt::dense_set<uint64>												m_dirtyUserDedup;
-		entt::dense_set<entt::entity>										m_dirtyActorDedup;
 		std::unordered_set<AoiVisibilityKey, AoiVisibilityKeyHash>			m_pendingVisibilityDedup;
-		std::unordered_set<uint64>											m_pendingCellActorCompactions;
-		std::unordered_set<uint64>											m_pendingCellSubscriberCompactions;
 	};
 }

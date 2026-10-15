@@ -480,6 +480,9 @@
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerAoiSystem.h">
       <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerAoiTypes.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerInputSystem.h">
       <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>

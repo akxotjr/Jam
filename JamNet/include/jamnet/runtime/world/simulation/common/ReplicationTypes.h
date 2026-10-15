@@ -22,21 +22,4 @@ namespace jam::net
 	};
 
 
-	enum class eBucket : uint8
-	{
-		B0_MustSendFull		= 0,
-		B1_HighDelta		= 1,
-		B2_NormalDelta		= 2,
-		B3_LowPriority		= 3,
-
-		Count
-	};
-
-	struct Candidate
-	{
-		entt::entity	e			= entt::null;
-		ActorId			actorId		= ActorId::Invalid();
-		bool			useFull		= false;
-	};
-
 }
