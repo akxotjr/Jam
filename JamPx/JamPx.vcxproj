@@ -44,7 +44,6 @@
     <ClCompile Include="src\jampx\geometry\BSpline.cpp" />
     <ClCompile Include="src\jampx\geometry\CatmullRom.cpp" />
     <ClCompile Include="src\jampx\geometry\Curve.cpp" />
-    <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp" />
     <ClCompile Include="src\jampx\PhysicsCore.cpp" />
     <ClCompile Include="src\jampx\PhysicsFacade.cpp" />
     <ClCompile Include="src\jampx\PhysicsWorld.cpp" />
@@ -52,7 +51,7 @@
     <ClCompile Include="src\jampx\prefab\PhysicsArchetypeRegistry.cpp" />
     <ClCompile Include="src\jampx\prefab\PxCooker.cpp" />
     <ClCompile Include="src\jampx\prefab\PxCreator.cpp" />
-    <ClCompile Include="src\jampx\ShardPxCpuDispatcher.cpp" />
+    <ClCompile Include="src\jampx\InlinePxCpuDispatcher.cpp" />
     <ClCompile Include="src\jampx\third_party\tinygltf_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -84,9 +83,7 @@
     <ClInclude Include="include\jampx\geometry\BSpline.h" />
     <ClInclude Include="include\jampx\geometry\CatmullRom.h" />
     <ClInclude Include="include\jampx\geometry\Curve.h" />
-    <ClInclude Include="include\jampx\IPhysicsJobBridge.h" />
     <ClInclude Include="include\jampx\PhysicsDatabase.h" />
-    <ClInclude Include="include\jampx\PhysicsCompletionTask.h" />
     <ClInclude Include="include\jampx\PhysicsCore.h" />
     <ClInclude Include="include\jampx\PhysicsFacade.h" />
     <ClInclude Include="include\jampx\PhysicsFilter.h" />
@@ -102,7 +99,7 @@
     <ClInclude Include="include\jampx\prefab\PhysicsArchetypeRegistry.h" />
     <ClInclude Include="include\jampx\prefab\PxCooker.h" />
     <ClInclude Include="include\jampx\prefab\PxCreator.h" />
-    <ClInclude Include="include\jampx\ShardPxCpuDispatcher.h" />
+    <ClInclude Include="include\jampx\InlinePxCpuDispatcher.h" />
     <ClInclude Include="include\jampx\third_party\tinygltf_impl.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>

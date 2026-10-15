@@ -3,10 +3,9 @@
 
 #include <jambase/JamAssert.h>
 
-#include "jampx/PhysicsCompletionTask.h"
 #include "jampx/PhysicsWorld.h"
 #include "jampx/PhysicsSceneSlot.h"
-#include "jampx/ShardPxCpuDispatcher.h"
+#include "jampx/InlinePxCpuDispatcher.h"
 #include "jampx/actor/ActorFactory.h"
 #include "jampx/actor/character/CharacterBody.h"
 #include "jampx/actor/rigid/RigidBody.h"
@@ -41,11 +40,8 @@ namespace jam::px
 		PhysicsConfig								m_config = {};
 		std::unique_ptr<PhysicsWorld>				m_world;
 		PhysicsArchetypeRegistry					m_registry;
-		PxTaskManager*								m_taskManager = nullptr;
-		IPhysicsJobBridge*							m_bridge = nullptr;
 		std::string									m_physicsAssetPath;
-		std::unique_ptr<ShardPxCpuDispatcher>		m_dispacter;
-		PhysicsCompletionTask						m_completionTask;
+		std::unique_ptr<InlinePxCpuDispatcher>		m_dispacter;
 		bool										m_stepPending = false;
 		std::vector<PendingSceneOp>					m_pendingSceneOps;
 		std::unordered_map<ActorId, RigidBody>		m_rigidMap;
@@ -77,10 +73,9 @@ namespace jam::px
 
 		m_impl->m_registry.Init(m_impl->m_physicsAssetPath);
 
+		m_impl->m_dispacter = std::make_unique<InlinePxCpuDispatcher>();
 		m_impl->m_world = std::make_unique<PhysicsWorld>();
 		m_impl->m_world->Init(&m_impl->m_registry, m_impl->m_dispacter.get(), m_impl->m_config.enableReplay);
-
-		m_impl->m_taskManager = m_impl->m_world->GetTaskManager();
 
 		m_impl->m_inited.store(true, std::memory_order_relaxed);
 	}
@@ -117,20 +112,10 @@ namespace jam::px
 		if (m_impl->m_world) m_impl->m_world->Destroy();
 		m_impl->m_world.reset();
 		m_impl->m_registry.Shutdown();
-		m_impl->m_taskManager = nullptr;
 		m_impl->m_stepPending = false;
 		m_impl->m_dispacter.reset();
-		m_impl->m_bridge = nullptr;
 
 		m_impl->m_inited.store(false, std::memory_order_relaxed);
-	}
-
-	void PhysicsFacade::SetJobBridge(IPhysicsJobBridge* bridge)
-	{
-		JAM_ASSERT(!m_impl->m_inited.load());
-		m_impl->m_bridge = bridge;
-		if (bridge)
-			m_impl->m_dispacter = std::make_unique<ShardPxCpuDispatcher>(*bridge);
 	}
 
 	void PhysicsFacade::SetConfig(const PhysicsConfig& config)
@@ -158,42 +143,8 @@ namespace jam::px
 		StepKinematics(ePxSceneSlot::Main, dt);
 		StepProjectiles(ePxSceneSlot::Main, dt);
 		m_impl->m_world->Simulate(ePxSceneSlot::Main, dt);
-	}
-
-	bool PhysicsFacade::BeginSimulate(float dt, uint64 awaitKey)
-	{
-		if (!m_impl->m_world) return false;
-
-		StepCharacters(ePxSceneSlot::Main, dt);
-		StepKinematics(ePxSceneSlot::Main, dt);
-		StepProjectiles(ePxSceneSlot::Main, dt);
-
-		if (!m_impl->m_dispacter || awaitKey == 0)
-		{
-			m_impl->m_world->Simulate(ePxSceneSlot::Main, dt);
-			return false;
-		}
-
-		m_impl->m_completionTask.SetPhysicsJobBridge(m_impl->m_bridge);
-		m_impl->m_completionTask.SetAwaitKey(awaitKey);
-		m_impl->m_completionTask.setContinuation(*m_impl->m_taskManager, nullptr);
-
-		m_impl->m_world->BeginSimulate(ePxSceneSlot::Main, dt, &m_impl->m_completionTask);
-
-		m_impl->m_completionTask.removeReference();
-
-		m_impl->m_stepPending = true;
-		return true; // Suspend 해야 함을 알림
-	}
-
-	void PhysicsFacade::EndSimulate()
-	{
-		if (!m_impl->m_world || !m_impl->m_stepPending) return;
-		m_impl->m_world->EndSimulate(ePxSceneSlot::Main);
-		m_impl->m_stepPending = false;
 
 		FlushPendingSceneOps();
-
 		SyncKinematics(ePxSceneSlot::Main);
 		SyncProjectiles(ePxSceneSlot::Main);
 	}
@@ -207,42 +158,8 @@ namespace jam::px
 		StepProjectiles(ePxSceneSlot::Replay, dt);
 
 		m_impl->m_world->Simulate(ePxSceneSlot::Replay, dt);
-	}
-
-	bool PhysicsFacade::BeginResimulate(float dt, uint64 awaitKey)
-	{
-		if (!m_impl->m_config.enableReplay || !m_impl->m_world) return false;
-
-		StepCharacters(ePxSceneSlot::Replay, dt);
-		StepKinematics(ePxSceneSlot::Replay, dt);
-		StepProjectiles(ePxSceneSlot::Replay, dt);
-
-		if (!m_impl->m_dispacter || awaitKey == 0)
-		{
-			m_impl->m_world->Simulate(ePxSceneSlot::Replay, dt);
-			return false;
-		}
-
-		m_impl->m_completionTask.SetPhysicsJobBridge(m_impl->m_bridge);
-		m_impl->m_completionTask.SetAwaitKey(awaitKey);
-		m_impl->m_completionTask.setContinuation(*m_impl->m_taskManager, nullptr);
-
-		m_impl->m_world->BeginSimulate(ePxSceneSlot::Replay, dt, &m_impl->m_completionTask);
-
-		m_impl->m_completionTask.removeReference();
-
-		m_impl->m_stepPending = true;
-		return true;
-	}
-
-	void PhysicsFacade::EndResimulate()
-	{
-		if (!m_impl->m_config.enableReplay || !m_impl->m_world || !m_impl->m_stepPending) return;
-		m_impl->m_world->EndSimulate(ePxSceneSlot::Replay);
-		m_impl->m_stepPending = false;
 
 		FlushPendingSceneOps();
-
 		SyncKinematics(ePxSceneSlot::Replay);
 		SyncProjectiles(ePxSceneSlot::Replay);
 	}

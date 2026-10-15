@@ -72,10 +72,7 @@
     <ClCompile Include="pch.cpp">
       <Filter>99. pch</Filter>
     </ClCompile>
-    <ClCompile Include="src\jampx\PhysicsCompletionTask.cpp">
-      <Filter>01. core</Filter>
-    </ClCompile>
-    <ClCompile Include="src\jampx\ShardPxCpuDispatcher.cpp">
+    <ClCompile Include="src\jampx\InlinePxCpuDispatcher.cpp">
       <Filter>01. core</Filter>
     </ClCompile>
     <ClCompile Include="src\jampx\geometry\Curve.cpp">
@@ -173,10 +170,7 @@
     <ClInclude Include="include\jampx\PhysicsUtils.h">
       <Filter>01. core</Filter>
     </ClInclude>
-    <ClInclude Include="include\jampx\PhysicsCompletionTask.h">
-      <Filter>01. core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\ShardPxCpuDispatcher.h">
+    <ClInclude Include="include\jampx\InlinePxCpuDispatcher.h">
       <Filter>01. core</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\PhysicsSimFilter.h">
@@ -273,9 +267,6 @@
       <Filter>02. actor</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\PhysicsTypes.h">
-      <Filter>01. core</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jampx\IPhysicsJobBridge.h">
       <Filter>01. core</Filter>
     </ClInclude>
     <ClInclude Include="include\jampx\PhysXIncludes.h">

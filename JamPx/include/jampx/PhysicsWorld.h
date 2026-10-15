@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PhysicsDatabase.h"
-#include "jampx/ShardPxCpuDispatcher.h"
+#include "jampx/InlinePxCpuDispatcher.h"
 #include "jampx/PhysicsSceneSlot.h"
 
 namespace physx
@@ -20,7 +20,7 @@ namespace jam::px
 		PhysicsWorld() = default;
 		~PhysicsWorld() = default;
 
-		void							Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter, bool enableReplay);
+		void							Init(PhysicsArchetypeRegistry* registry, InlinePxCpuDispatcher* dispacter, bool enableReplay);
 		void							Destroy();
 		PhysicsArchetypeRegistry&		Registry() const;
 		bool							IsReplayEnabled() const { return GetScene(ePxSceneSlot::Replay) != nullptr; }

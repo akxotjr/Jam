@@ -1,5 +1,6 @@
 #pragma once
 
+#include "jambase/JamMacro.h"
 #include "jampx/PhysicsTypes.h"
 
 #include <memory>
@@ -9,7 +10,6 @@
 namespace jam::px
 {
 	enum class ePxSceneSlot : uint8;
-	class IPhysicsJobBridge;
 
 	struct PhysicsConfig
 	{
@@ -28,18 +28,13 @@ namespace jam::px
 		void								Init();
 		void								Shutdown();
 
-		void								SetJobBridge(IPhysicsJobBridge* bridge);
 		void								SetConfig(const PhysicsConfig& config);
 		void								SetPhysicsAssetPath(const std::string& path);
 		bool								IsStepPending() const;
 
 		void								Simulate(float dt);
-		bool								BeginSimulate(float dt, uint64 awaitKey);
-		void								EndSimulate();
 
 		void								Resimulate(float dt);
-		bool								BeginResimulate(float dt, uint64 awaitKey);
-		void								EndResimulate();
 
 		bool								Spawn(ActorId id, const SpawnDesc& desc);
 		bool								Despawn(ActorId id);

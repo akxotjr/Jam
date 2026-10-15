@@ -7,7 +7,7 @@
 
 namespace jam::px
 {
-	void PhysicsWorld::Init(PhysicsArchetypeRegistry* registry, ShardPxCpuDispatcher* dispacter, bool enableReplay)
+	void PhysicsWorld::Init(PhysicsArchetypeRegistry* registry, InlinePxCpuDispatcher* dispacter, bool enableReplay)
 	{
 		if (m_scenes[0]) return;
 		m_registry = registry;
