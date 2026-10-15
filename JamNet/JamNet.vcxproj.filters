@@ -468,9 +468,6 @@
     <ClInclude Include="include\jamnet\runtime\world\simulation\common\ReplicationTypes.h">
       <Filter>runtime\world\simulation\common</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\simulation\common\ShardJobBridge.h">
-      <Filter>runtime\world\simulation\common</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerWorld.h">
       <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>
@@ -777,9 +774,6 @@
       <Filter>runtime\world\simulation\common</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\simulation\common\PhysicalWorld.cpp">
-      <Filter>runtime\world\simulation\common</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\simulation\common\ShardJobBridge.cpp">
       <Filter>runtime\world\simulation\common</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\simulation\server\ServerWorld.cpp">

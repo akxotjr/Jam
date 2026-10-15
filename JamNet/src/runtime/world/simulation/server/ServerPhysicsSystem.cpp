@@ -1,15 +1,13 @@
 #include "pch.h"
 #include "jamnet/runtime/world/simulation/server/ServerPhysicsSystem.h"
 
-#include "jamnet/core/executor/ThreadContext.h"
-#include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
-#include "jamnet/runtime/world/simulation/server/ServerInputSystem.h"
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
 #include "jamnet/runtime/world/simulation/common/WorldContext.h"
 
 #include "jampx/PhysicsFacade.h"
 
+#include <type_traits>
 
 namespace jam::net
 {
@@ -38,131 +36,106 @@ namespace jam::net
 		}
 	}
 
-	ServerPhysicsSystem::ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics, ServerWorld& serverWorld, ServerInputSystem& inputSystem)
-		: m_world(world), m_physics(physics), m_serverWorld(serverWorld), m_inputSystem(inputSystem)
+	ServerPhysicsSystem::ServerPhysicsSystem(ServerWorld& world, entt::registry& registry, px::PhysicsFacade* physics)
+		: m_world(world), m_registry(registry), m_physics(physics)
 	{
 	}
 
 	void ServerPhysicsSystem::Init()
 	{
 		m_completedTickCount = 0;
-		m_tickFiberRunning = false;
 		m_lastActiveEntities.clear();
+		m_lastAppliedInputUsers.clear();
 	}
 
 	void ServerPhysicsSystem::Tick()
 	{
+		m_lastAppliedInputUsers.clear();
+		m_lastActiveEntities.clear();
 		if (!m_physics) return;
 
-		m_tickFiberRunning = true;
-		try
-		{
-			ApplyInputs();
-			Simulate();
-			SyncActiveTransforms();
-			HandlePhysicsEvents();
-			++m_completedTickCount;
-		}
-		catch (...)
-		{
-			m_tickFiberRunning = false;
-			throw;
-		}
-		m_tickFiberRunning = false;
+		ApplyInputs();
+		Simulate();
+		SyncActiveTransforms();
+		HandlePhysicsEvents();
+		++m_completedTickCount;
 	}
 
-	void ServerPhysicsSystem::SpawnActor(entt::entity e, const px::SpawnDesc& desc) const
+	bool ServerPhysicsSystem::SpawnActor(entt::entity e, const px::SpawnDesc& desc) const
 	{
-		if (!m_physics || !m_world.valid(e))
-			return;
-
-		const bool isSafePoint = !m_physics->IsStepPending();
-		JAM_ASSERT(isSafePoint && "Server actor spawn must run at the World pipeline safe point");
-		if (!isSafePoint)
-			return;
-
-		const px::ActorId physicsActorId = GetPhysicsActorId(m_world, e);
+		const px::ActorId physicsActorId = GetPhysicsActorId(m_registry, e);
 		if (!m_physics->Spawn(physicsActorId, desc))
-			return;
+			return false;
 
-		m_world.emplace<PhysicsSpawnedTag>(e);
+		m_registry.emplace<PhysicsSpawnedTag>(e);
 
-		if (auto* cs = m_world.try_get<CharAuthorityState>(e))
+		if (auto* cs = m_registry.try_get<CharAuthorityState>(e))
 		{
 			if (!TryReadValidatedCharacterState(m_physics, physicsActorId, cs->state))
 			{
-				m_world.remove<PhysicsSpawnedTag>(e);
+				m_registry.remove<PhysicsSpawnedTag>(e);
 				m_physics->Despawn(physicsActorId);
-				return;
+				return false;
 			}
 		}
-		else if (auto* rs = m_world.try_get<RigidAuthorityState>(e))
+		else if (auto* rs = m_registry.try_get<RigidAuthorityState>(e))
 		{
 			if (!TryReadValidatedRigidState(m_physics, physicsActorId, rs->state))
 			{
-				m_world.remove<PhysicsSpawnedTag>(e);
+				m_registry.remove<PhysicsSpawnedTag>(e);
 				m_physics->Despawn(physicsActorId);
-				return;
+				return false;
 			}
 		}
+		return true;
 	}
 
-	void ServerPhysicsSystem::DespawnActor(entt::entity e) const
+	bool ServerPhysicsSystem::DespawnActor(entt::entity e) const
 	{
-		if (!m_physics || !m_world.valid(e))
-			return;
+		if (!m_physics || !m_registry.valid(e))
+			return false;
+
+		if (!m_registry.all_of<PhysicsSpawnedTag>(e))
+			return true;
 
 		const bool isSafePoint = !m_physics->IsStepPending();
 		JAM_ASSERT(isSafePoint && "Server actor despawn must run at the World pipeline safe point");
 		if (!isSafePoint)
-			return;
+			return false;
 
-		const px::ActorId id = GetPhysicsActorId(m_world, e);
+		const px::ActorId id = GetPhysicsActorId(m_registry, e);
 		if (!m_physics->Despawn(id))
-			return;
+			return false;
 
-		m_world.erase<PhysicsSpawnedTag>(e);
+		m_registry.erase<PhysicsSpawnedTag>(e);
+		return true;
 	}
 
-	void ServerPhysicsSystem::ApplyInputs() const
+	void ServerPhysicsSystem::ApplyInputs()
 	{
-		auto view = m_world.view<ControlTag, px::CharacterMotorInput>();
+		auto view = m_registry.view<ControlTag, px::CharacterMotorInput>();
 		for (auto e : view)
 		{
 			const auto& control = view.get<ControlTag>(e);
 			auto& input = view.get<px::CharacterMotorInput>(e);
-			m_physics->ApplyCharacterMotorInput(GetPhysicsActorId(m_world, e), input);
+			m_physics->ApplyCharacterMotorInput(GetPhysicsActorId(m_registry, e), input);
 
 			if (control.userId != 0)
-				m_inputSystem.MarkInputApplied(control.userId);
+				m_lastAppliedInputUsers.push_back(control.userId);
 		}
 	}
 
 	void ServerPhysicsSystem::Simulate()
 	{
 		if (!m_physics) return;
-		
-		auto& shard = CurrentShardLocalChecked();
-		auto* sched = shard.scheduler;
-
-		const bool inFiber = sched && (sched->Current() != 0);
-
-		auto* executor = static_cast<ShardExecutor*>(CurrentExecutor());
-		const uint64 awaitKey = inFiber && executor ? executor->AllocateAwaitKey() : 0;
-
-		if (m_physics->BeginSimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
-		{
-			sched->Suspend(awaitKey, NOW() + 2_s);
-		}
-
-		m_physics->EndSimulate();
+		m_physics->Simulate(SIMULATION_TICK_SEC);
 	}
 
-	void ServerPhysicsSystem::SyncActiveTransforms() const
+	void ServerPhysicsSystem::SyncActiveTransforms()
 	{
 		if (!m_physics) return;
 
-		m_world.clear<ReplicationActiveTag>();
+		m_registry.clear<ReplicationActiveTag>();
 		m_lastActiveEntities.clear();
 
 		// PopActiveList = onAdvance(dynamic) + dirty set(kinematic / character move / setGlobalPose)
@@ -174,24 +147,24 @@ namespace jam::net
 
 		for (const px::ActorId id : activeList)
 		{
-			const entt::entity e = m_serverWorld.ResolveActor(ActorId(id));
-			if (e == entt::null || !m_world.valid(e)) continue;
+			const entt::entity e = m_world.ResolveActor(ActorId(id));
+			if (e == entt::null || !m_registry.valid(e)) continue;
 
-			if (auto* cs = m_world.try_get<CharAuthorityState>(e))
+			if (auto* cs = m_registry.try_get<CharAuthorityState>(e))
 			{
 				if (TryReadValidatedCharacterState(m_physics, id, csBuf))
 				{
 					cs->state = csBuf;
-					m_world.emplace<ReplicationActiveTag>(e);
+					m_registry.emplace<ReplicationActiveTag>(e);
 					m_lastActiveEntities.push_back(e);
 				}
 			}
-			else if (auto* rs = m_world.try_get<RigidAuthorityState>(e))
+			else if (auto* rs = m_registry.try_get<RigidAuthorityState>(e))
 			{
 				if (TryReadValidatedRigidState(m_physics, id, rsBuf))
 				{
 					rs->state = rsBuf;
-					m_world.emplace<ReplicationActiveTag>(e);
+					m_registry.emplace<ReplicationActiveTag>(e);
 					m_lastActiveEntities.push_back(e);
 				}
 			}
@@ -202,11 +175,11 @@ namespace jam::net
 	{
 		if (!m_physics) return;
 
-		auto view = m_world.view<ActorId, ActorBodyType, PhysicsSpawnedTag>();
+		auto view = m_registry.view<ActorId, ActorBodyType, PhysicsSpawnedTag>();
 
 		for (auto e : view)
 		{
-			const px::ActorId physicsActorId = GetPhysicsActorId(m_world, e);
+			const px::ActorId physicsActorId = GetPhysicsActorId(m_registry, e);
 			const auto bodyType = view.get<ActorBodyType>(e).body;
 
 			if (bodyType == px::eBodyType::Character)
@@ -214,7 +187,7 @@ namespace jam::net
 				px::CharacterState cs{};
 				if (TryReadValidatedCharacterState(m_physics, physicsActorId, cs))
 				{
-					if (auto* state = m_world.try_get<CharAuthorityState>(e))
+					if (auto* state = m_registry.try_get<CharAuthorityState>(e))
 						state->state = cs;
 				}
 			}
@@ -223,7 +196,7 @@ namespace jam::net
 				px::RigidState rs{};
 				if (TryReadValidatedRigidState(m_physics, physicsActorId, rs))
 				{
-					if (auto* state = m_world.try_get<RigidAuthorityState>(e))
+					if (auto* state = m_registry.try_get<RigidAuthorityState>(e))
 						state->state = rs;
 				}
 			}
@@ -246,20 +219,23 @@ namespace jam::net
 				continue;
 			}
 
-			const entt::entity e = m_serverWorld.ResolveActor(ActorId(evt.sourceActorId));
-			if (e == entt::null || !m_world.valid(e))
+			const entt::entity e = m_world.ResolveActor(ActorId(evt.sourceActorId));
+			if (e == entt::null || !m_registry.valid(e))
 				continue;
 
-			const auto* actorId = m_world.try_get<ActorId>(e);
+			const auto* actorId = m_registry.try_get<ActorId>(e);
 			if (!actorId || !actorId->IsValid())
 				continue;
 
 			if (!pending.insert(actorId->Value()).second)
 				continue;
 
-			m_serverWorld.DespawnActor(*actorId);
+			m_world.Post(Job([world = &m_world, actorId = *actorId]()
+				{
+					world->DespawnActorAsync(kInvalidUserId, actorId);
+				}));
 		}
 
-		m_serverWorld.DispatchPhysicsEvents(events);
+		m_world.DispatchPhysicsEvents(events);
 	}
 }

@@ -20,9 +20,6 @@ namespace jam::net
         void                                Init();
         void                                Tick();
 
-        uint32                              GetCompletedTickCount() const { return m_completedTickCount; }
-        bool                                IsTickFiberRunning() const { return m_tickFiberRunning; }
-
 		void                                SpawnActor(entt::entity e, bool isLocal) const;
         void                                DespawnActor(entt::entity e) const;
 
@@ -46,24 +43,6 @@ namespace jam::net
         void                                Resimulate();
         void                                HandleProjectileLifecycleEvents();
 
-        void                                CommitPendingActorOps() const;
-
-	private:
-
-        struct PendingActorOp
-        {
-            enum class eType
-            {
-                Spawn,
-                Despawn,
-            };
-
-            eType           type    = eType::Spawn;
-            entt::entity    e       = entt::null;
-            bool            isLocal = false;
-            bool            isRigid = false;
-        };
-
     private:
         entt::registry&                     m_world;
         px::PhysicsFacade*                  m_physics           = nullptr;
@@ -73,13 +52,7 @@ namespace jam::net
         ReconcileConfig                     m_config            = {};
 		CharacterControlResolveConfig		m_controlResolveConfig = {};
 
-        bool                                m_tickFiberRunning  = false;
-
-        uint32                              m_completedTickCount = 0;
-
         std::vector<px::ActorContext>       m_pushContexts;
         std::vector<px::ActorContext>       m_pullContexts;
-
-        mutable std::vector<PendingActorOp> m_pendingActorOps;
     };
 }

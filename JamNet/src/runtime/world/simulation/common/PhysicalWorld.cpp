@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "jamnet/runtime/world/simulation/common/PhysicalWorld.h"
-#include "jamnet/runtime/world/simulation/common/ShardJobBridge.h"
 #include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/core/executor/ThreadContext.h"
 
@@ -46,78 +45,57 @@ namespace jam::net
 			Stop();
 	}
 
-	void PhysicalWorld::StartTickPipeline(ShardDomain domain, Duration dt)
+	void PhysicalWorld::StartDomainTick(ShardDomain domain, Duration dt)
 	{
-		auto& local = CurrentShardLocalChecked();
-		auto* scheduler = local.scheduler;
-		auto shard = m_shard.lock();
-		if (!scheduler || !shard)
-			throw std::runtime_error("PhysicalWorld tick pipeline requires a fiber scheduler");
+		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!m_tickInProgress);
+		if (m_tickActive)
+			StopDomainTick();
 
-		m_pipelineDomain = domain;
-		m_pipelineScheduler = scheduler;
-		m_pipelineExecutor = shard.get();
-		m_pipelineActive = true;
-
-		RegisterShardSystemFn(local, domain, dt,
+		m_tickDomain = domain;
+		m_tickActive = true;
+		RegisterShardSystemFn(CurrentShardLocalChecked(), domain, dt,
 			[this](ShardLocal&, Timestamp, Duration)
 			{
-				RequestPipelineTick();
-			},
-			250_us);
+				if (!m_tickActive || !m_alive.load(std::memory_order_acquire))
+					return;
 
-		if (m_pipelineFiberId == 0)
-		{
-			m_pipelineFiberId = scheduler->SpawnFiber(
-				[this]
+				JAM_ASSERT(!m_tickInProgress);
+				struct TickScope
 				{
-					RunTickPipeline();
-				},
-				FiberDesc{ .name = "PhysicalWorld.TickPipeline" });
-		}
-		else if (m_pipelineIdleAwaitKey != 0)
-		{
-			if (scheduler->Resume(m_pipelineIdleAwaitKey))
-				m_pipelineIdleAwaitKey = 0;
-		}
+					bool& inProgress;
+					~TickScope() { inProgress = false; }
+				};
+				m_tickInProgress = true;
+				TickScope scope{ m_tickInProgress };
+				Tick();
+			});
 	}
 
-	void PhysicalWorld::StopTickPipeline()
+	void PhysicalWorld::StopDomainTick()
 	{
-		auto& local = CurrentShardLocalChecked();
-		local.domainGroups.erase(m_pipelineDomain);
+		JAM_ASSERT(IsCurrentShardContext());
+		if (!m_tickActive)
+			return;
 
-		m_pipelineActive = false;
-		m_pipelineTickDebt = 0;
-
-		if (m_pipelineScheduler && m_pipelineIdleAwaitKey != 0)
-		{
-			if (m_pipelineScheduler->Resume(m_pipelineIdleAwaitKey))
-				m_pipelineIdleAwaitKey = 0;
-		}
+		m_tickActive = false;
+		CurrentShardLocalChecked().domainGroups.erase(m_tickDomain);
 	}
 
-	void PhysicalWorld::ShutdownPhysicsWhenPipelineStops()
+	void PhysicalWorld::ShutdownPhysicsAfterTick()
 	{
 		if (!m_physics)
 			return;
 
-		if (m_pipelineFiberId == 0)
+		if (m_tickInProgress)
 		{
-			m_physics->Shutdown();
-			return;
+			if (auto shard = m_shard.lock())
+			{
+				shard->Submit(Job([this] { m_physics->Shutdown(); }, eJobPriority::Control));
+				return;
+			}
 		}
-
-		m_shutdownPhysicsOnPipelineStop = true;
-	}
-
-	bool PhysicalWorld::DeferUntilPipelineSafePoint(std::function<void()> mutation)
-	{
-		if (!mutation || !m_pipelineActive || !m_pipelineTickInProgress)
-			return false;
-
-		m_pendingPipelineMutations.push_back(std::move(mutation));
-		return true;
+		m_physics->Shutdown();
 	}
 
 	void PhysicalWorld::BeginCloseBarrier(std::function<void()> completion)
@@ -125,128 +103,11 @@ namespace jam::net
 		if (!completion)
 			return;
 
-		JAM_ASSERT(!m_pipelineShutdownCompletion);
-		if (m_pipelineFiberId != 0)
-		{
-			m_pipelineShutdownCompletion = std::move(completion);
-			return;
-		}
-
+		// Finalization must run after a domain tick and its callback have returned.
 		if (auto shard = m_shard.lock())
 			shard->Submit(Job(std::move(completion), eJobPriority::Control));
 		else
 			completion();
-	}
-
-	void PhysicalWorld::RequestPipelineTick()
-	{
-		if (!m_pipelineActive)
-			return;
-
-		if (m_pipelineTickDebt < m_pipelineTickDebtCap)
-			++m_pipelineTickDebt;
-
-		if (m_pipelineScheduler && m_pipelineIdleAwaitKey != 0)
-		{
-			if (m_pipelineScheduler->Resume(m_pipelineIdleAwaitKey))
-				m_pipelineIdleAwaitKey = 0;
-		}
-	}
-
-	void PhysicalWorld::RunTickPipeline()
-	{
-		try
-		{
-			while (m_pipelineActive)
-			{
-				if (m_pipelineTickDebt == 0)
-				{
-					m_pipelineIdleAwaitKey = m_pipelineExecutor->AllocateAwaitKey();
-					m_pipelineScheduler->Suspend(m_pipelineIdleAwaitKey, Timestamp::Zero());
-					m_pipelineIdleAwaitKey = 0;
-					continue;
-				}
-
-				uint32 burst = 0;
-				while (m_pipelineActive
-					&& m_pipelineTickDebt > 0
-					&& burst < m_pipelineTickBurstBudget)
-				{
-					--m_pipelineTickDebt;
-					m_pipelineTickInProgress = true;
-					try
-					{
-						Tick();
-					}
-					catch (...)
-					{
-						m_pipelineTickInProgress = false;
-						throw;
-					}
-					m_pipelineTickInProgress = false;
-					DrainPipelineMutations();
-					++burst;
-				}
-
-				m_pipelineLastBurstCount = burst;
-				if (m_pipelineActive && m_pipelineTickDebt > 0)
-					m_pipelineScheduler->YieldFiber();
-			}
-		}
-		catch (...)
-		{
-			FinishTickPipeline();
-			throw;
-		}
-
-		FinishTickPipeline();
-	}
-
-	void PhysicalWorld::DrainPipelineMutations()
-	{
-		if (m_pendingPipelineMutations.empty())
-			return;
-
-		auto mutations = std::move(m_pendingPipelineMutations);
-		m_pendingPipelineMutations.clear();
-
-		const size_t count = std::min<size_t>(mutations.size(), m_pipelineMutationBudget);
-		if (count < mutations.size())
-		{
-			m_pendingPipelineMutations.reserve(mutations.size() - count);
-			for (size_t i = count; i < mutations.size(); ++i)
-				m_pendingPipelineMutations.push_back(std::move(mutations[i]));
-		}
-
-		for (size_t i = 0; i < count; ++i)
-			mutations[i]();
-	}
-
-	void PhysicalWorld::FinishTickPipeline()
-	{
-		ShardExecutor* pipelineExecutor = m_pipelineExecutor;
-		m_pipelineIdleAwaitKey = 0;
-		m_pipelineFiberId = 0;
-		m_pipelineTickDebt = 0;
-		m_pipelineLastBurstCount = 0;
-		m_pipelineTickInProgress = false;
-		m_pipelineScheduler = nullptr;
-		m_pipelineExecutor = nullptr;
-
-		if (m_shutdownPhysicsOnPipelineStop && m_physics)
-		{
-			m_shutdownPhysicsOnPipelineStop = false;
-			m_physics->Shutdown();
-		}
-
-		if (m_pipelineShutdownCompletion)
-		{
-			auto completion = std::move(m_pipelineShutdownCompletion);
-			if (pipelineExecutor)
-				pipelineExecutor->Submit(Job(std::move(completion), eJobPriority::Control));
-			else
-				completion();
-		}
 	}
 
 	ActorId PhysicalWorld::AllocateActorId(entt::entity entity)

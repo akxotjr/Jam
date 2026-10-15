@@ -1,6 +1,11 @@
 #pragma once
 
+
 #include <jampx/PhysicsTypes.h>
+#include <entt/fwd.hpp>
+#include <vector>
+#include <span>
+
 
 namespace jam::px
 {
@@ -9,41 +14,37 @@ namespace jam::px
 
 namespace jam::net
 {
-	class ServerInputSystem;
 	class ServerWorld;
 
 	class ServerPhysicsSystem
 	{
     public:
-		ServerPhysicsSystem(entt::registry& world, px::PhysicsFacade* physics, ServerWorld& serverWorld, ServerInputSystem& inputSystem);
+		ServerPhysicsSystem(ServerWorld& world, entt::registry& registry, px::PhysicsFacade* physics);
 
-        void                    Init();
-        void                    Tick();
+        void							Init();
+        void							Tick();
 
-        uint32                  GetCompletedTickCount() const { return m_completedTickCount; }
-        bool                    IsTickFiberRunning() const { return m_tickFiberRunning; }
-
-        void                    SpawnActor(entt::entity e, const px::SpawnDesc& desc) const;
-        void                    DespawnActor(entt::entity e) const;
-        const std::vector<entt::entity>& GetLastActiveEntities() const { return m_lastActiveEntities; }
+        bool							SpawnActor(entt::entity e, const px::SpawnDesc& desc) const;
+        bool							DespawnActor(entt::entity e) const;
+        std::span<const entt::entity>	GetLastActiveEntities()    const { return m_lastActiveEntities; }
+        std::span<const uint64>			GetLastAppliedInputUsers() const { return m_lastAppliedInputUsers; }
 
     private:
-        void                    ApplyInputs() const;
-		void                    Simulate();
+        void							ApplyInputs();
+		void							Simulate();
 
-        void                    SyncActiveTransforms() const;
-        void                    SyncTransforms() const;
-        void                    HandlePhysicsEvents() const;
+        void							SyncActiveTransforms();
+        void							SyncTransforms() const;
+        void							HandlePhysicsEvents() const;
 
     private:
-        entt::registry&                     m_world;
+		ServerWorld&						m_world;
+        entt::registry&                     m_registry;
         px::PhysicsFacade*                  m_physics           = nullptr;
-		ServerWorld&                        m_serverWorld;
-		ServerInputSystem&                  m_inputSystem;
 
-        bool                                m_tickFiberRunning  = false;
 		uint32                              m_completedTickCount = 0;
 
-        mutable std::vector<entt::entity>   m_lastActiveEntities;
+        std::vector<entt::entity>			m_lastActiveEntities;
+        std::vector<uint64>                 m_lastAppliedInputUsers;
 	};
 }

@@ -4,8 +4,6 @@
 #include "jamnet/runtime/world/simulation/common/WorldContext.h"
 #include "jamnet/runtime/world/simulation/common/CorrectionReplayRunner.h"
 #include "jamnet/runtime/world/simulation/client/ClientWorld.h"
-#include "jamnet/core/executor/ThreadContext.h"
-#include "jamnet/core/executor/ShardExecutor.h"
 
 #include <jampx/PhysicsTypes.h>
 #include <jampx/PhysicsFacade.h>
@@ -98,7 +96,6 @@ namespace jam::net
 
     void ClientPhysicsSystem::Init()
     {
-        m_completedTickCount = 0;
         m_replayRunner = std::make_unique<CorrectionReplayRunner>(m_physics);
 
         if (auto* nw = m_world.ctx().find<ClientWorld*>())
@@ -109,22 +106,11 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        m_tickFiberRunning = true;
-        try
-        {
-            Reconcile();
-            PushAuthorityStates();
-            LivePredict();
-            PullProxyStates();
-            HandleProjectileLifecycleEvents();
-            ++m_completedTickCount;
-        }
-        catch (...)
-        {
-            m_tickFiberRunning = false;
-            throw;
-        }
-        m_tickFiberRunning = false;
+        Reconcile();
+        PushAuthorityStates();
+        LivePredict();
+        PullProxyStates();
+        HandleProjectileLifecycleEvents();
     }
 
     void ClientPhysicsSystem::SpawnActor(entt::entity e, bool isLocal) const
@@ -168,17 +154,6 @@ namespace jam::net
 
         if (!m_physics->Spawn(id, desc)) return;
 
-        if (m_physics->IsStepPending())
-        {
-            m_pendingActorOps.push_back(PendingActorOp{
-                .type    = PendingActorOp::eType::Spawn,
-                .e       = e,
-                .isLocal = isLocal,
-                .isRigid = isRigid
-            });
-            return;
-        }
-
         m_world.emplace_or_replace<PhysicsSpawnedTag>(e);
 
         if (isLocal)
@@ -200,15 +175,6 @@ namespace jam::net
         const px::ActorId id = GetPhysicsActorId(m_world, e);
         if (!m_physics->Despawn(id))
             return;
-
-        if (m_physics->IsStepPending())
-        {
-            m_pendingActorOps.push_back(PendingActorOp{
-                .type = PendingActorOp::eType::Despawn,
-                .e    = e
-            });
-            return;
-        }
 
         m_world.erase<PhysicsSpawnedTag>(e);
     }
@@ -497,77 +463,14 @@ namespace jam::net
     {
         if (!m_physics) return;
 
-        auto& shard = CurrentShardLocalChecked();
-        auto* sched = shard.scheduler;
-
-        const bool inFiber  = sched && (sched->Current() != 0);
-        auto* executor = static_cast<ShardExecutor*>(CurrentExecutor());
-        const uint64 awaitKey = inFiber && executor ? executor->AllocateAwaitKey() : 0;
-
-        if (m_physics->BeginSimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
-            sched->Suspend(awaitKey, NOW() + 1_s);
-
-        m_physics->EndSimulate();
-        CommitPendingActorOps();
+        m_physics->Simulate(SIMULATION_TICK_SEC);
     }
 
     void ClientPhysicsSystem::Resimulate()
     {
         if (!m_physics) return;
 
-        auto& shard = CurrentShardLocalChecked();
-        auto* sched = shard.scheduler;
-
-        const bool inFiber = sched && (sched->Current() != 0);
-        auto* executor = static_cast<ShardExecutor*>(CurrentExecutor());
-        const uint64 awaitKey = inFiber && executor ? executor->AllocateAwaitKey() : 0;
-
-        if (m_physics->BeginResimulate(SIMULATION_TICK_SEC, awaitKey) && inFiber)
-            sched->Suspend(awaitKey, NOW() + 1_s);
-        
-        m_physics->EndResimulate();
-        CommitPendingActorOps();
-    }
-
-    void ClientPhysicsSystem::CommitPendingActorOps() const
-    {
-        if (m_pendingActorOps.empty())
-            return;
-
-        auto ops = std::move(m_pendingActorOps);
-        m_pendingActorOps.clear();
-
-        for (const auto& op : ops)
-        {
-            if (!m_world.valid(op.e)) continue;
-
-            if (op.type == PendingActorOp::eType::Spawn)
-            {
-				const px::ActorId physicsActorId = GetPhysicsActorId(m_world, op.e);
-				if (m_physics->GetBodyType(physicsActorId) == px::eBodyType::None)
-				{
-					if (auto* clientWorld = m_world.ctx().find<ClientWorld*>(); clientWorld && *clientWorld)
-						(*clientWorld)->RollbackPhysicsSpawn(op.e);
-					continue;
-				}
-
-                m_world.emplace_or_replace<PhysicsSpawnedTag>(op.e);
-
-                if (op.isLocal)
-                {
-                    if (!op.isRigid)
-                        m_world.emplace_or_replace<LocalActorTag>(op.e);
-                }
-                else
-                {
-                    m_world.emplace_or_replace<RemoteActorTag>(op.e);
-                }
-            }
-            else
-            {
-                m_world.erase<PhysicsSpawnedTag>(op.e);
-            }
-        }
+        m_physics->Resimulate(SIMULATION_TICK_SEC);
     }
 
     void ClientPhysicsSystem::HandleProjectileLifecycleEvents()
@@ -590,12 +493,9 @@ namespace jam::net
             if (e == entt::null || !m_world.valid(e))
                 continue;
 
-            const auto* owner = m_world.try_get<OwnershipTag>(e);
+            const bool owned = m_world.all_of<OwnershipTag>(e);
             const auto* actorId = m_world.try_get<ActorId>(e);
-            if (!owner || !actorId || !actorId->IsValid())
-                continue;
-
-            if (owner->userId == 0 || owner->userId != m_userId)
+            if (!owned || !actorId || !actorId->IsValid())
                 continue;
 
             physicalWorld->HideReplicatedActorUntilConfirmed(*actorId);

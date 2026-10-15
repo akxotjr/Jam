@@ -7,7 +7,6 @@
 #include "jamnet/runtime/world/lifecycle/WorldTransitionTypes.h"
 #include "jamnet/runtime/world/simulation/common/ReplicationTypes.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
-#include "jamnet/core/executor/FiberCommon.h"
 #include "jamnet/core/executor/ShardDomain.h"
 
 #include <jampx/PhysicsTypes.h>
@@ -22,15 +21,8 @@ namespace jam::px
 	class PhysicsFacade;
 }
 
-namespace jam
-{
-	class FiberScheduler;
-	class ShardExecutor;
-}
-
 namespace jam::net
 {
-	class ShardJobBridge;
 
 	struct SpawnParams
 	{
@@ -62,9 +54,6 @@ namespace jam::net
 		void								SetTickIntervalNs(Duration dt) { m_tickIntervalNs = dt; }
 		void								SetActorArchetypeDatabase(ActorArchetypeDatabase database) { m_actorArchetypes = std::move(database); }
 		void								SetActorLevelDatabase(ActorLevelDatabase database) { m_actorLevels = std::move(database); }
-		uint32								GetPipelineTickDebt() const { return m_pipelineTickDebt; }
-		uint32								GetPipelineLastBurstCount() const { return m_pipelineLastBurstCount; }
-		bool								IsPipelineFiberRunning() const { return m_pipelineFiberId != 0; }
 
 		entt::registry&						GetRegistry() { return m_registry; }
 		ActorId								GetActorId(entt::entity entity) const;
@@ -75,25 +64,17 @@ namespace jam::net
 		ActorId								AllocateActorId(entt::entity entity);
 		bool								ReleaseActorId(entt::entity entity);
 		void								ClearActorDirectory();
-		void								StartTickPipeline(ShardDomain domain, Duration dt);
-		void								StopTickPipeline();
-		void								ShutdownPhysicsWhenPipelineStops();
-		bool								IsPipelineTickInProgress() const { return m_pipelineActive && m_pipelineTickInProgress; }
-		bool								DeferUntilPipelineSafePoint(std::function<void()> mutation);
+		void								StartDomainTick(ShardDomain domain, Duration dt);
+		void								StopDomainTick();
+		void								ShutdownPhysicsAfterTick();
+		bool								IsTickInProgress() const { return m_tickInProgress; }
 		void								BeginCloseBarrier(std::function<void()> completion) override;
 
 		virtual void						Tick() = 0;
 
-	private:
-		void								RequestPipelineTick();
-		void								RunTickPipeline();
-		void								DrainPipelineMutations();
-		void								FinishTickPipeline();
-
 	protected:
 		entt::registry						m_registry;
 		ActorDirectory						m_actorDirectory;
-		std::unique_ptr<ShardJobBridge>		m_bridge;
 		std::unique_ptr<px::PhysicsFacade>	m_physics;
 		ActorArchetypeDatabase				m_actorArchetypes;
 		ActorLevelDatabase					m_actorLevels;
@@ -102,20 +83,8 @@ namespace jam::net
 		Duration							m_tickIntervalNs = SIMULATION_TICK_NS;
 
 	private:
-		FiberScheduler*						m_pipelineScheduler = nullptr;
-		ShardExecutor*						m_pipelineExecutor = nullptr;
-		ShardDomain							m_pipelineDomain = {};
-		FiberAwaitKey						m_pipelineIdleAwaitKey = 0;
-		uint32								m_pipelineFiberId = 0;
-		uint32								m_pipelineTickDebt = 0;
-		uint32								m_pipelineTickDebtCap = 8;
-		uint32								m_pipelineTickBurstBudget = 1;
-		uint32								m_pipelineMutationBudget = 8;
-		uint32								m_pipelineLastBurstCount = 0;
-		bool								m_pipelineActive = false;
-		bool								m_pipelineTickInProgress = false;
-		bool								m_shutdownPhysicsOnPipelineStop = false;
-		std::vector<std::function<void()>>	m_pendingPipelineMutations;
-		std::function<void()>				m_pipelineShutdownCompletion;
+		ShardDomain							m_tickDomain = {};
+		bool								m_tickActive = false;
+		bool								m_tickInProgress = false;
 	};
 }
