@@ -34,6 +34,27 @@ namespace jam::net
 				|| id == eSystemPacketId::UDP_UNBIND_REQ
 				|| id == eSystemPacketId::UDP_UNBIND_RES;
 		}
+
+		UdpSession* FindScheduledUdpSession(const std::shared_ptr<Service>& service, SessionId sessionId, EndpointId endpointId)
+		{
+			if (!service || sessionId == kInvalidSessionId)
+				return nullptr;
+
+			Session* session = nullptr;
+			if (service->GetServiceType() == eServiceType::CLIENT)
+				session = static_cast<ClientService*>(service.get())->FindUdpSession();
+			else if (service->GetServiceType() == eServiceType::SERVER)
+			{
+				auto& L = CurrentShardLocalChecked();
+				if (L.sessionState)
+					session = L.sessionState->FindSession(sessionId);
+			}
+
+			if (!session || !session->IsUdp() || session->GetService() != service.get()
+				|| session->GetSessionId() != sessionId || !session->MatchesEndpoint(endpointId))
+				return nullptr;
+			return static_cast<UdpSession*>(session);
+		}
 	}
 
 
@@ -339,10 +360,12 @@ namespace jam::net
 	void UdpSession::ScheduleSessionUnbindRetry()
 	{
 		const uint32 token = ++m_unbindTimerToken;
-		const SessionRef<UdpSession> selfRef(this);
-		SubmitAfter(Job([selfRef, token]()
+		const SessionId sessionId = GetSessionId();
+		const EndpointId endpointId = GetEndpointId();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, sessionId, endpointId, token]()
 			{
-				auto* self = selfRef.TryGet();
+				auto* self = FindScheduledUdpSession(service, sessionId, endpointId);
 				if (!self || !self->m_unbindRequestActive || self->m_unbindTimerToken != token)
 					return;
 				if (NOW() >= self->m_unbindDeadline_ns)
@@ -359,10 +382,12 @@ namespace jam::net
 	void UdpSession::ScheduleUnbindTombstoneExpiry()
 	{
 		const uint32 token = ++m_unbindTimerToken;
-		const SessionRef<UdpSession> selfRef(this);
-		SubmitAfter(Job([selfRef, token]()
+		const SessionId sessionId = GetSessionId();
+		const EndpointId endpointId = GetEndpointId();
+		auto service = GetServiceRef();
+		SubmitAfter(Job([service, sessionId, endpointId, token]()
 			{
-				auto* self = selfRef.TryGet();
+				auto* self = FindScheduledUdpSession(service, sessionId, endpointId);
 				if (!self || !self->m_unbindTombstone || self->m_unbindTimerToken != token)
 					return;
 				if (NOW() < self->m_unbindDeadline_ns)
