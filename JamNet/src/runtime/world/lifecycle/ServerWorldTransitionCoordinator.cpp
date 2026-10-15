@@ -17,6 +17,7 @@
 #include "jamnet/runtime/world/actor/ActorArchetypesLoader.h"
 #include "jamnet/runtime/world/data/ActorLevelsLoader.h"
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
+#include "jamnet/runtime/world/lifecycle/ServerWorldSyncSystem.h"
 
 namespace jam::net
 {
@@ -211,7 +212,7 @@ namespace jam::net
 		auto state = std::make_shared<BootstrapState>();
 		state->remaining.store(instances.size(), std::memory_order_relaxed);
 		state->completed = std::move(completed);
-		
+
 		for (const auto& instance : instances)
 		{
 			EnsureWorldAsync(instance, [state](std::optional<WorldRef> world)
@@ -246,7 +247,7 @@ namespace jam::net
 				auto& state = GetOrCreateWorldShardState(CurrentShardLocalChecked());
 				if (const auto* entry = state.FindAuthoritativeWorldEntry(world.worldId))
 				{
-					if (!state.BeginDestroyWorld(world.worldId, eMailboxCloseMode::Abort, [world, weak]()
+					if (!state.BeginDestroyMembershipWorld(world.worldId, eMailboxCloseMode::Abort, [world, weak]()
 						{
 							if (const auto coordinator = weak.lock())
 								coordinator->CompleteWorldDestruction(world, true);
@@ -269,7 +270,7 @@ namespace jam::net
 
 	void ServerWorldTransitionCoordinator::Enter(UserId userId, const EnterWorldRequest& request, Timestamp nowNs)
 	{
-		if (!SubmitToUserShard(userId, Job(weak_from_this(), &ServerWorldTransitionCoordinator::EnterOnUserShard, eJobPriority::Control, userId, request, nowNs)))
+		if (!SubmitToUserShard(userId, Job(weak_from_this(), &ServerWorldTransitionCoordinator::EnterMembershipOnUserShard, eJobPriority::Control, userId, request, nowNs)))
 		{
 			JAM_LOG_WARN("Failed to route world enter request to user shard. userId={}", userId);
 		}
@@ -277,7 +278,7 @@ namespace jam::net
 
 	void ServerWorldTransitionCoordinator::Leave(UserId userId, const LeaveWorldRequest& request)
 	{
-		if (!SubmitToUserShard(userId, Job(weak_from_this(), &ServerWorldTransitionCoordinator::LeaveOnUserShard, eJobPriority::Control, userId, request)))
+		if (!SubmitToUserShard(userId, Job(weak_from_this(), &ServerWorldTransitionCoordinator::LeaveMembershipOnUserShard, eJobPriority::Control, userId, request)))
 		{
 			JAM_LOG_WARN("Failed to route world leave request to user shard. userId={}", userId);
 		}
@@ -296,10 +297,10 @@ namespace jam::net
 	UserContext* ServerWorldTransitionCoordinator::FindExpectedTransition(const WorldTransitionContinuation& continuation) const
 	{
 		UserContext* user = FindUserOnCurrentShard(continuation.userId);
-		if (!user || !user->worldTransition.active)
+		if (!user || !user->worldTransition.IsActive())
 			return nullptr;
 
-		const WorldTransitionState& transition = *user->worldTransition.active;
+		const WorldTransitionState& transition = user->worldTransition;
 		return transition.token == continuation.token && transition.phase == continuation.expectedPhase ? user : nullptr;
 	}
 
@@ -325,205 +326,9 @@ namespace jam::net
 	WorldTransitionState& ServerWorldTransitionCoordinator::BeginTransition(UserContext& user, WorldTransitionState transition, eWorldTransitionPhase initialPhase)
 	{
 		transition.phase = initialPhase;
-		user.worldTransition.active = std::move(transition);
-		return *user.worldTransition.active;
+		user.worldTransition = std::move(transition);
+		return user.worldTransition;
 	}
-
-	bool ServerWorldTransitionCoordinator::AdvanceTransition(UserContext& user, eWorldTransitionPhase nextPhase)
-	{
-		JAM_ASSERT(user.worldTransition.active);
-		auto& transition = *user.worldTransition.active;
-		transition.phase = nextPhase;
-
-		const WorldTransitionContinuation continuation{ transition.userId, transition.token, transition.phase };
-		switch (nextPhase)
-		{
-		case eWorldTransitionPhase::ReservingTarget:
-		{
-			const auto token  = transition.token;
-			const auto userId = transition.userId;
-			const auto target = *transition.target;
-			return SubmitWorldCommand(target, continuation, [token, userId, target](WorldShardState& state)
-				{
-					if (!state.ReserveEnter(token, userId, target))
-						return false;
-					if (state.PrepareEnter(token))
-						return true;
-					state.RollbackEnter(token);
-					return false;
-				});
-		}
-		case eWorldTransitionPhase::DetachingSource:
-		{
-			const auto token  = transition.token;
-			const auto userId = transition.userId;
-			const auto source = *transition.source;
-			return SubmitWorldCommand(source, continuation, [token, userId, source](WorldShardState& state)
-				{
-					if (!state.PrepareLeave(token, userId, source))
-						return false;
-					if (state.DetachMain(token))
-						return true;
-					state.CancelPreparedLeave(token);
-					return false;
-				});
-		}
-		case eWorldTransitionPhase::AttachingTarget:
-		{
-			const WorldUserContext worldUser{
-				.accountId	  = user.accountId,
-				.userId		  = transition.userId,
-				.mainRevision = transition.expectedRevision + 1,
-				.sessions	  = ResolveUserSessionBundle(user),
-			};
-			const auto token = transition.token;
-			return SubmitWorldCommand(*transition.target, continuation, [token, worldUser](WorldShardState& state)
-				{ return state.AttachPrepared(token, worldUser); });
-		}
-		case eWorldTransitionPhase::PreparingTargetContent:
-		{
-			const ServerWorldMemberContentContext context{
-				.accountId		 = user.accountId,
-				.userId			 = transition.userId,
-				.transitionToken = transition.token,
-				.correlation	 = {
-					.world		  = *transition.target,
-					.mainRevision = transition.expectedRevision + 1,
-				},
-				.entryPoint = transition.contentEntryPoint,
-			};
-			const auto weak = weak_from_this();
-			return SubmitWorldJob(*transition.target, [continuation, context, weak](WorldBase& base)
-				{
-					auto* world = dynamic_cast<ServerWorld*>(&base);
-					if (!world) return;
-
-					world->PrepareMemberContent(context, [continuation, weak](bool succeeded)
-						{
-							SubmitToUserShard(continuation.userId, Job([continuation, succeeded, weak]()
-								{
-									if (const auto coordinator = weak.lock())
-										coordinator->OnWorldCommandCompleted(continuation, succeeded);
-								}, eJobPriority::Control));
-						});
-				}, eJobPriority::Control);
-		}
-		case eWorldTransitionPhase::ActivatingTarget:
-		{
-			const auto token = transition.token;
-			return SubmitWorldCommand(*transition.target, continuation, [token](WorldShardState& state)
-				{ return state.ActivateAttached(token); });
-		}
-		case eWorldTransitionPhase::CommittingSourceLeave:
-		{
-			const auto token = transition.token;
-			return SubmitWorldCommand(*transition.source, continuation, [token](WorldShardState& state)
-				{ return state.CommitLeave(token); });
-		}
-		case eWorldTransitionPhase::RollingBackTarget:
-		{
-			const auto token = transition.token;
-			return SubmitWorldCommand(*transition.target, continuation, [token](WorldShardState& state)
-				{ return state.RollbackEnter(token); });
-		}
-		case eWorldTransitionPhase::RestoringSource:
-		{
-			const WorldUserContext worldUser{
-				.accountId	  = user.accountId,
-				.userId		  = transition.userId,
-				.mainRevision = user.worldState.revision,
-				.sessions	  = ResolveUserSessionBundle(user),
-			};
-			const auto token = transition.token;
-			return SubmitWorldCommand(*transition.source, continuation, [token, worldUser](WorldShardState& state)
-				{ return state.RestoreDetachedMain(token, worldUser); });
-		}
-		case eWorldTransitionPhase::WaitingClientPrepared:
-			if (transition.terminalFailure != eWorldTransitionFailure::None)
-				return true;
-
-			SendToUser(transition.userId, codec::MakeClientWorldPreparePacket(
-				{
-					.token			= transition.syncToken,
-					.kind			= eWorldSyncKind::WorldPrepare,
-					.correlation	= { .world = *transition.target, .mainRevision = transition.expectedRevision },
-					.archetypeKey	= transition.target ? transition.target->instance.archetypeKey : WorldArchetypeKey{},
-				}), eProtocolType::TCP);
-
-			return true;
-		case eWorldTransitionPhase::WaitingClientApplied:
-			if (transition.terminalFailure != eWorldTransitionFailure::None)
-				return true;
-			SendToUser(transition.userId, codec::MakeClientWorldCommitPacket(
-				{
-					.token		   = transition.syncToken,
-					.correlation = { .world = *transition.target, .mainRevision = user.worldState.revision },
-				}), eProtocolType::TCP);
-			return true;
-		case eWorldTransitionPhase::CommittingMain:
-			if (transition.kind == eWorldTransitionKind::Leave)
-			{
-				if (!CommitMain(transition.userId, transition.expectedRevision, std::nullopt))
-					return false;
-				return AdvanceTransition(user, eWorldTransitionPhase::CommittingSourceLeave);
-			}
-			if (!CommitMain(transition.userId, transition.expectedRevision, transition.target))
-				return false;
-			return AdvanceTransition(user, eWorldTransitionPhase::WaitingClientApplied);
-		default:
-			return true;
-		}
-	}
-
-	void ServerWorldTransitionCoordinator::FailTransition(UserContext& user, eWorldTransitionFailure failure, bool commandInFlight)
-	{
-		auto& transition = *user.worldTransition.active;
-		transition.terminalFailure = failure;
-
-		if (transition.phase == eWorldTransitionPhase::RollingBackTarget || transition.phase == eWorldTransitionPhase::RestoringSource)
-			return;
-		if (commandInFlight && (transition.phase == eWorldTransitionPhase::ReservingTarget
-			|| transition.phase == eWorldTransitionPhase::DetachingSource
-			|| transition.phase == eWorldTransitionPhase::AttachingTarget
-			|| transition.phase == eWorldTransitionPhase::PreparingTargetContent
-			|| transition.phase == eWorldTransitionPhase::ActivatingTarget
-			|| transition.phase == eWorldTransitionPhase::CommittingSourceLeave))
-			return;
-		if (transition.phase == eWorldTransitionPhase::ResolvingTarget
-			|| transition.phase == eWorldTransitionPhase::ReservingTarget)
-		{
-			FinishFailure(user);
-			return;
-		}
-
-		if (transition.kind == eWorldTransitionKind::Enter && transition.target)
-		{
-			if (user.worldState.main && *user.worldState.main == *transition.target)
-				CommitMain(transition.userId, user.worldState.revision, transition.source);
-
-			if (!AdvanceTransition(user, eWorldTransitionPhase::RollingBackTarget))
-			{
-				if (transition.sourceDetached && transition.source
-					&& AdvanceTransition(user, eWorldTransitionPhase::RestoringSource))
-					return;
-				FinishFailure(user);
-			}
-			return;
-		}
-
-		if (transition.sourceDetached && transition.source)
-		{
-			if (!user.worldState.main)
-				CommitMain(transition.userId, user.worldState.revision, transition.source);
-
-			if (AdvanceTransition(user, eWorldTransitionPhase::RestoringSource))
-				return;
-		}
-		FinishFailure(user);
-	}
-
-
-
 
 
 	WorldTransitionToken ServerWorldTransitionCoordinator::IssueTransitionToken()
@@ -536,15 +341,6 @@ namespace jam::net
 		}
 	}
 
-	WorldSyncToken ServerWorldTransitionCoordinator::IssueWorldSyncToken()
-	{
-		for (;;)
-		{
-			const uint64 value = m_nextWorldSyncToken.fetch_add(1, std::memory_order_relaxed);
-			if (value != 0)
-				return WorldSyncToken{ value };
-		}
-	}
 
 	std::optional<WorldInstanceRef> ServerWorldTransitionCoordinator::ResolveDestination(const EnterWorldRequest& request) const
 	{
@@ -742,562 +538,90 @@ namespace jam::net
 			StartWorldCreation(world.instance);
 	}
 
-	bool ServerWorldTransitionCoordinator::SubmitWorldCommand(const WorldRef& world,
-		const WorldTransitionContinuation& continuation, std::function<bool(WorldShardState&)> command)
-	{
-		if (!world.IsValid() || !command)
-		{
-			JAM_LOG_WARN("[WorldTransition] SubmitWorldCommand rejected invalid input. userId={}, token={}, phase={}, worldId={}, worldValid={}, commandValid={}",
-				continuation.userId, continuation.token.value, static_cast<uint32>(continuation.expectedPhase), world.worldId,
-				world.IsValid(), static_cast<bool>(command));
-			return false;
-		}
-
-		const std::weak_ptr<ServerWorldTransitionCoordinator> weak = weak_from_this();
-		const bool submitted = SubmitToWorldShard(world.worldId, Job([worldId = world.worldId, continuation, command = std::move(command), weak]() mutable
-			{
-				auto& state = GetOrCreateWorldShardState(CurrentShardLocalChecked());
-				const bool succeeded = state.FindAuthoritativeWorldEntry(worldId) && command(state);
-				auto userShard = GLOBAL_EXEC.GetShardFromIndex(GetUserShardIndex(continuation.userId));
-				if (!userShard)
-					return;
-				userShard->Submit(Job([continuation, succeeded, weak]()
-					{
-						if (const auto coordinator = weak.lock())
-							coordinator->OnWorldCommandCompleted(continuation, succeeded);
-					}, eJobPriority::Control));
-			}, eJobPriority::Control));
-		if (!submitted)
-		{
-			JAM_LOG_WARN("[WorldTransition] SubmitWorldCommand failed to route. userId={}, token={}, phase={}, worldId={}",
-				continuation.userId, continuation.token.value, static_cast<uint32>(continuation.expectedPhase), world.worldId);
-		}
-		return submitted;
-	}
-
-	void ServerWorldTransitionCoordinator::EnterOnUserShard(UserId userId, const EnterWorldRequest& request, Timestamp now)
-	{
-		UserContext* user = FindUserOnCurrentShard(userId);
-		if (!user)
-		{
-			JAM_LOG_WARN("World transition requested for missing user. userId={}", userId);
-			return;
-		}
-
-		if (!m_owner || !request.IsValid() || user->worldTransition.active)
-		{
-			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
-				{ 
-					.kind		= eWorldTransitionKind::Enter, 
-					.requestId	= request.requestId, 
-					.failure	= eWorldTransitionFailure::InvalidRequest 
-				}), eProtocolType::TCP);
-			return;
-		}
-
-		const UserWorldState current = user->worldState;
-		if (current.revision != request.expectedMainRevision)
-		{
-			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
-				{ 
-					.kind		= eWorldTransitionKind::Enter, 
-					.requestId	= request.requestId, 
-					.failure	= eWorldTransitionFailure::StaleRevision, 
-					.state		= current 
-				}), eProtocolType::TCP);
-			return;
-		}
-
-		EnterWorldRequest resolvedRequest = request;
-		if (resolvedRequest.IsServerResolved())
-		{
-			const auto archetypeKey = m_owner->ResolveEnterWorldDestination(user->accountId, userId);
-			if (archetypeKey)
-				resolvedRequest.archetypeKey = *archetypeKey;
-		}
-
-		const auto instance = ResolveDestination(resolvedRequest);
-		if (!instance)
-		{
-			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
-				{ 
-					.kind		= eWorldTransitionKind::Enter, 
-					.requestId	= request.requestId, 
-					.failure	= eWorldTransitionFailure::DestinationUnavailable, 
-					.state		= current 
-				}), eProtocolType::TCP);
-			return;
-		}
-
-		WorldTransitionState transition = {};
-		transition.token				= IssueTransitionToken();
-		transition.kind					= eWorldTransitionKind::Enter;
-		transition.userId				= userId;
-		transition.requestId			= request.requestId;
-		transition.source				= current.main;
-		transition.targetInstance		= *instance;
-		transition.expectedRevision		= current.revision;
-		transition.contentEntryPoint	= request.contentEntryPoint;
-		transition.syncToken			= IssueWorldSyncToken();
-		transition.deadline				= now + m_worldSyncTimeoutNs;
-
-		auto& active = BeginTransition(*user, std::move(transition), eWorldTransitionPhase::ResolvingTarget);
-
-		const WorldTransitionContinuation continuation{ userId, active.token, active.phase };
-		const std::weak_ptr<ServerWorldTransitionCoordinator> weak = weak_from_this();
-		EnsureWorldAsync(*instance, [weak, continuation](std::optional<WorldRef> world)
-			{
-				if (const auto coordinator = weak.lock())
-				{
-					SubmitToUserShard(continuation.userId, Job([weak, continuation, world]()
-						{
-							if (const auto resumed = weak.lock())
-								resumed->OnWorldReady(continuation, world);
-						}, eJobPriority::Control));
-				}
-			});
-	}
-
-	void ServerWorldTransitionCoordinator::LeaveOnUserShard(UserId userId, const LeaveWorldRequest& request)
-	{
-		UserContext* user = FindUserOnCurrentShard(userId);
-		if (!user)
-		{
-			JAM_LOG_WARN("World transition requested for missing user. userId={}", userId);
-			return;
-		}
-
-		const auto current = user->worldState;
-		if (!m_owner || user->worldTransition.active || current.revision != request.expectedMainRevision)
-		{
-			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
-				{
-					.kind		= eWorldTransitionKind::Leave,
-					.requestId	= request.requestId,
-					.failure	= current.revision != request.expectedMainRevision ? eWorldTransitionFailure::StaleRevision : eWorldTransitionFailure::InvalidRequest,
-					.state		= current
-				}), eProtocolType::TCP);
-			return;
-		}
-		if (!current.main)
-		{
-			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
-				{
-					.kind		= eWorldTransitionKind::Leave,
-					.requestId	= request.requestId,
-					.state		= current
-				}), eProtocolType::TCP);
-			return;
-		}
-
-		WorldTransitionState transition
-		{
-			.token				= IssueTransitionToken(),
-			.kind				= eWorldTransitionKind::Leave,
-			.userId				= userId,
-			.requestId			= request.requestId,
-			.source				= current.main,
-			.expectedRevision	= current.revision,
-			.deadline			= NOW() + m_worldSyncTimeoutNs,
-		};
-		BeginTransition(*user, std::move(transition), eWorldTransitionPhase::DetachingSource);
-
-		if (!AdvanceTransition(*user, eWorldTransitionPhase::DetachingSource))
-			FailTransition(*user, eWorldTransitionFailure::WorldDestroyed);
-	}
-
-	void ServerWorldTransitionCoordinator::OnWorldReady(const WorldTransitionContinuation& continuation, std::optional<WorldRef> world)
-	{
-		ReduceTransition(WorldReadyEvent{ continuation, world });
-	}
-
-
-	void ServerWorldTransitionCoordinator::OnClientWorldSyncResult(uint64 userId, const ClientWorldSyncResult& result, Timestamp now)
-	{
-		if (UserContext* resyncUser = FindUserOnCurrentShard(userId);
-			resyncUser && resyncUser->worldResync.phase != eUserWorldResyncPhase::None
-			&& resyncUser->worldResync.token == result.token)
-		{
-			auto& resync = resyncUser->worldResync;
-			if (!result.succeeded || resync.deadline <= now)
-			{
-				FailWorldResync(*resyncUser);
-				return;
-			}
-
-			if (resync.phase == eUserWorldResyncPhase::WaitingClientPrepared)
-			{
-				resync.phase = eUserWorldResyncPhase::WaitingClientApplied;
-				SendToUser(userId, codec::MakeClientWorldCommitPacket({
-					.token = resync.token,
-					.correlation = { .world = resync.world, .mainRevision = resync.mainRevision },
-				}), eProtocolType::TCP);
-				return;
-			}
-
-			if (resync.phase == eUserWorldResyncPhase::WaitingClientApplied)
-			{
-				resync.phase = eUserWorldResyncPhase::WaitingTransport;
-				TryCompleteWorldResync(*resyncUser);
-			}
-			return;
-		}
-
-		ReduceTransition(ClientWorldSyncCompletedEvent{ userId, result, now });
-	}
-
-	void ServerWorldTransitionCoordinator::OnWorldCommandCompleted(const WorldTransitionContinuation& continuation, bool succeeded)
-	{
-		ReduceTransition(WorldCommandCompletedEvent{ continuation, succeeded });
-	}
-
-	void ServerWorldTransitionCoordinator::ReduceTransition(const WorldTransitionEvent& event)
-	{
-		if (const auto* ready = std::get_if<WorldReadyEvent>(&event))
-		{
-			UserContext* user = FindExpectedTransition(ready->continuation);
-			if (!user) return;
-
-			auto& transition = *user->worldTransition.active;
-			if (!ready->world || ready->world->instance != transition.targetInstance)
-			{
-				FailTransition(*user, eWorldTransitionFailure::DestinationUnavailable);
-				return;
-			}
-
-			if (transition.source && *transition.source == *ready->world)
-			{
-				CompleteEnter(*user, user->worldState);
-				return;
-			}
-			transition.target = *ready->world;
-			if (!AdvanceTransition(*user, eWorldTransitionPhase::ReservingTarget))
-				FailTransition(*user, eWorldTransitionFailure::DestinationUnavailable);
-			return;
-		}
-
-		if (const auto* sync = std::get_if<ClientWorldSyncCompletedEvent>(&event))
-		{
-			UserContext* user = FindUserOnCurrentShard(sync->userId);
-			if (!user || !user->worldTransition.active)
-				return;
-
-			const WorldTransitionState& transition = *user->worldTransition.active;
-			if ((transition.phase != eWorldTransitionPhase::WaitingClientApplied
-				&& transition.phase != eWorldTransitionPhase::WaitingClientPrepared)
-				|| transition.syncToken != sync->result.token)
-				return;
-
-			if (transition.deadline <= sync->now)
-			{
-				FailTransition(*user, eWorldTransitionFailure::Timeout);
-				return;
-			}
-
-			if (transition.phase == eWorldTransitionPhase::WaitingClientApplied)
-			{
-				if (sync->result.succeeded)
-				{
-					if (!AdvanceTransition(*user, eWorldTransitionPhase::ActivatingTarget))
-						FailTransition(*user, eWorldTransitionFailure::InternalError);
-				}
-				else
-				{
-					FailTransition(*user, sync->result.failure == eWorldTransitionFailure::None ? eWorldTransitionFailure::ClientPrepareFailed : sync->result.failure);
-				}
-
-				return;
-			}
-
-			if (!sync->result.succeeded)
-			{
-				FailTransition(*user, sync->result.failure == eWorldTransitionFailure::None ? eWorldTransitionFailure::ClientPrepareFailed : sync->result.failure);
-				return;
-			}
-
-			if (transition.source)
-			{
-				if (!AdvanceTransition(*user, eWorldTransitionPhase::DetachingSource))
-					FailTransition(*user, eWorldTransitionFailure::WorldDestroyed);
-			}
-			else if (!AdvanceTransition(*user, eWorldTransitionPhase::AttachingTarget))
-			{
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-			}
-
-			return;
-		}
-
-		if (const auto* timedOut = std::get_if<TransitionTimedOutEvent>(&event))
-		{
-			JAM_ASSERT(CurrentShardLocal() && CurrentShardLocal()->shardIndex == GetUserShardIndex(timedOut->continuation.userId));
-			UserContext* user = FindExpectedTransition(timedOut->continuation);
-			if (!user || user->worldTransition.active->deadline > timedOut->now)
-				return;
-
-			FailTransition(*user, eWorldTransitionFailure::Timeout, true);
-			return;
-		}
-
-		if (const auto* disconnected = std::get_if<UserDisconnectedEvent>(&event))
-		{
-			JAM_ASSERT(CurrentShardLocal() && CurrentShardLocal()->shardIndex == GetUserShardIndex(disconnected->continuation.userId));
-			UserContext* user = FindExpectedTransition(disconnected->continuation);
-			if (!user)
-				return;
-
-			FailTransition(*user, eWorldTransitionFailure::Disconnected, true);
-			return;
-		}
-
-		const auto& completed = std::get<WorldCommandCompletedEvent>(event);
-		const auto& continuation = completed.continuation;
-		const bool succeeded = completed.succeeded;
-
-		UserContext* user = FindExpectedTransition(continuation);
-		if (!user) return;
-
-		auto& transition = *user->worldTransition.active;
-		switch (continuation.expectedPhase)
-		{
-		case eWorldTransitionPhase::RollingBackTarget:
-			if (transition.sourceDetached && transition.source)
-			{
-				if (!AdvanceTransition(*user, eWorldTransitionPhase::RestoringSource))
-					FinishFailure(*user);
-			}
-			else
-			{
-				FinishFailure(*user);
-			}
-			return;
-
-		case eWorldTransitionPhase::RestoringSource:
-			FinishFailure(*user);
-			return;
-
-		default:
-			break;
-		}
-
-		if (transition.terminalFailure != eWorldTransitionFailure::None)
-		{
-			if ((continuation.expectedPhase == eWorldTransitionPhase::ActivatingTarget
-				|| continuation.expectedPhase == eWorldTransitionPhase::CommittingSourceLeave) && succeeded)
-			{
-				transition.terminalFailure = eWorldTransitionFailure::None;
-			}
-			else
-			{
-				if (continuation.expectedPhase == eWorldTransitionPhase::DetachingSource && succeeded)
-					transition.sourceDetached = true;
-
-				const eWorldTransitionFailure failure = transition.terminalFailure;
-				AdvanceTransition(*user, eWorldTransitionPhase::WaitingClientPrepared);
-				FailTransition(*user, failure);
-				return;
-			}
-		}
-		switch (continuation.expectedPhase)
-		{
-		case eWorldTransitionPhase::ReservingTarget:
-			if (!succeeded)
-			{
-				FailTransition(*user, eWorldTransitionFailure::CapacityExceeded);
-			}
-			else
-			{
-				//JAMNET_LOG_INFO("[EnterWorld] target reserved. userId={}, token={}; sending prepare", transition.userId, transition.token.value);
-				AdvanceTransition(*user, eWorldTransitionPhase::WaitingClientPrepared);
-			}
-			return;
-
-		case eWorldTransitionPhase::DetachingSource:
-			if (!succeeded)
-			{
-				FailTransition(*user, eWorldTransitionFailure::WorldDestroyed);
-				return;
-			}
-			transition.sourceDetached = true;
-			
-			if (transition.kind == eWorldTransitionKind::Leave)
-			{
-				if (!AdvanceTransition(*user, eWorldTransitionPhase::CommittingMain))
-					FailTransition(*user, eWorldTransitionFailure::InternalError);
-			}
-			else if (!AdvanceTransition(*user, eWorldTransitionPhase::AttachingTarget))
-			{
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-			}
-			
-			return;
-
-		case eWorldTransitionPhase::AttachingTarget:
-			if (!succeeded)
-			{
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-				return;
-			}
-			if (!AdvanceTransition(*user, eWorldTransitionPhase::PreparingTargetContent))
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-			return;
-
-		case eWorldTransitionPhase::PreparingTargetContent:
-			if (!succeeded)
-			{
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-				return;
-			}
-			if (!AdvanceTransition(*user, eWorldTransitionPhase::CommittingMain))
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-
-			return;
-
-		case eWorldTransitionPhase::ActivatingTarget:
-			if (!succeeded)
-			{
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-				return;
-			}
-			if (transition.source)
-			{
-				if (!AdvanceTransition(*user, eWorldTransitionPhase::CommittingSourceLeave))
-					FailTransition(*user, eWorldTransitionFailure::InternalError);
-			}
-			else
-			{
-				CompleteEnter(*user, user->worldState);
-			}
-			return;
-
-		case eWorldTransitionPhase::CommittingSourceLeave:
-			if (transition.kind == eWorldTransitionKind::Enter)
-			{
-				if (!succeeded)
-					JAM_LOG_WARN("Source leave commit failed after target activation. userId={}, token={}", transition.userId, transition.token.value);
-				CompleteEnter(*user, user->worldState);
-			}
-			else if (succeeded)
-			{
-				CompleteLeave(*user, user->worldState);
-			}
-			else
-			{
-				FailTransition(*user, eWorldTransitionFailure::InternalError);
-			}
-			return;
-
-		default:
-			return;
-		}
-	}
-
 	void ServerWorldTransitionCoordinator::CompleteEnter(UserContext& user, const UserWorldState& state)
 	{
-		const WorldTransitionState transition = *user.worldTransition.active;
-		user.worldTransition.active.reset();
+		const WorldTransitionState transition = user.worldTransition;
+		user.worldTransition = {};
 
 		SendToUser(transition.userId, codec::MakeWorldTransitionResultPacket(
-			{ 
-				.kind			 = eWorldTransitionKind::Enter, 
-				.requestId		 = transition.requestId, 
-				.transitionToken = transition.token, 
-				.state			 = state 
+			{
+				.kind			 = eWorldTransitionKind::Enter,
+				.requestId		 = transition.requestId,
+				.transitionToken = transition.token,
+				.state			 = state
 			}), eProtocolType::TCP);
 
 		SendToUser(transition.userId, codec::MakeUserMainWorldChangedPacket(state), eProtocolType::TCP);
-		
-		if (user.connectionState == eUserConnectionState::Connected && user.worldResync.phase == eUserWorldResyncPhase::WaitingTransition)
-			BeginWorldResync(user);
+
+		if (user.IsConnected())
+			if (m_owner) m_owner->GetWorldSyncSystem()->BeginWorldSync(user);
 	}
 
 	void ServerWorldTransitionCoordinator::CompleteLeave(UserContext& user, const UserWorldState& state)
 	{
-		const WorldTransitionState transition = *user.worldTransition.active;
-		user.worldTransition.active.reset();
+		const WorldTransitionState transition = user.worldTransition;
+		user.worldTransition = {};
 
-		SendToUser(transition.userId, codec::MakeWorldTransitionResultPacket(
-			{ 
-				.kind			 = eWorldTransitionKind::Leave, 
-				.requestId		 = transition.requestId, 
-				.transitionToken = transition.token, 
-				.state			 = state 
-			}), eProtocolType::TCP);
-		
-		SendToUser(transition.userId, codec::MakeUserMainWorldChangedPacket(state), eProtocolType::TCP);
-		
-		if (user.connectionState == eUserConnectionState::Connected && user.worldResync.phase == eUserWorldResyncPhase::WaitingTransition)
-			BeginWorldResync(user);
-		
-		if (user.connectionState == eUserConnectionState::Released && user.tcp == kInvalidSessionId && user.udp == kInvalidSessionId && !user.worldState.main)
-			GetOrCreateUserShardState(CurrentShardLocalChecked()).FreeUserContext(transition.userId);
-	}
-
-	
-
-	void ServerWorldTransitionCoordinator::FinishFailure(UserContext& user)
-	{
-		const WorldTransitionState transition = *user.worldTransition.active;
-		const UserWorldState state = user.worldState;
-		user.worldTransition.active.reset();
-
-		SendToUser(transition.userId, codec::MakeWorldTransitionResultPacket(
-			{
-				.kind			 = transition.kind, 
-				.requestId		 = transition.requestId,
-				.transitionToken = transition.token, 
-				.failure		 = transition.terminalFailure, 
-				.state			 = state 
-			}), eProtocolType::TCP);
-
-		if (transition.kind == eWorldTransitionKind::Enter)
-			JAM_LOG_WARN("[EnterWorld] failed. userId={}, requestId={}, token={}, failure={}", transition.userId, transition.requestId, transition.token.value, static_cast<uint32>(transition.terminalFailure));
-
-		if (user.connectionState == eUserConnectionState::Connected
-			&& user.worldResync.phase == eUserWorldResyncPhase::WaitingTransition)
+		if (transition.reason == eWorldTransitionReason::Request)
 		{
-			BeginWorldResync(user);
+			SendToUser(transition.userId, codec::MakeWorldTransitionResultPacket(
+				{
+					.kind			 = eWorldTransitionKind::Leave,
+					.requestId		 = transition.requestId,
+					.transitionToken = transition.token,
+					.state			 = state
+				}), eProtocolType::TCP);
+
+			SendToUser(transition.userId, codec::MakeUserMainWorldChangedPacket(state), eProtocolType::TCP);
+
 		}
 
-		if (user.connectionState == eUserConnectionState::Released
-			&& user.tcp == kInvalidSessionId && user.udp == kInvalidSessionId && !user.worldState.main)
+		if (user.IsConnected() && user.worldSync.phase == eUserWorldSyncPhase::WaitingTransition)
+			if (m_owner) m_owner->GetWorldSyncSystem()->BeginWorldSync(user);
+
+		if (user.CanRelease())
 			GetOrCreateUserShardState(CurrentShardLocalChecked()).FreeUserContext(transition.userId);
 	}
+
+
+
 
 	void ServerWorldTransitionCoordinator::Tick(Timestamp now)
 	{
 		auto* local = CurrentShardLocal();
-		if (!local)
-			return;
+		if (!local) return;
+
 		auto& state = GetOrCreateUserShardState(*local);
 		for (auto& entry : state.usersById.entries)
 		{
 			if (!entry.occupied)
 				continue;
 
-			if (entry.value.worldTransition.active)
+			if (entry.value.worldTransition.IsActive())
 			{
-				const auto& transition = *entry.value.worldTransition.active;
-				if (transition.deadline <= now)
+				const auto& transition = entry.value.worldTransition;
+				if (transition.deadline <= now || (transition.retryAt != Timestamp::Zero() && transition.retryAt <= now))
 				{
-					ReduceTransition(TransitionTimedOutEvent{
-						.continuation = { transition.userId, transition.token, transition.phase },
-						.now = now,
-					});
+					HandleWorldTransitionEvent(TransitionTimedOutEvent{
+							.continuation = { transition.userId, transition.token, transition.phase },
+							.now = now,
+						});
 				}
 			}
 
-			if (entry.occupied && entry.value.worldResync.phase != eUserWorldResyncPhase::None
-				&& entry.value.worldResync.deadline <= now)
-			{
-				FailWorldResync(entry.value);
-			}
 
 			if (entry.occupied
 				&& entry.value.connectionState == eUserConnectionState::Reconnecting
 				&& entry.value.reconnectDeadline <= now)
 			{
-				ReleaseReconnectingUser(entry.value);
+				ReleaseMembershipUser(entry.value);
+			}
+
+			if (entry.occupied && entry.value.connectionState == eUserConnectionState::Released
+				&& entry.value.worldState.main
+				&& !entry.value.worldTransition.IsActive())
+			{
+				ReleaseMembershipUser(entry.value);
 			}
 		}
 	}
@@ -1310,18 +634,18 @@ namespace jam::net
 
 		user->connectionState     = eUserConnectionState::Reconnecting;
 		user->reconnectDeadline	  = NOW() + m_reconnectTimeout;
-		user->worldResync		  = {};
+		ServerWorldSyncSystem::ResetWorldSync(*user);
 
 		if (!m_owner)
 		{
-			ReleaseReconnectingUser(*user);
+			ReleaseMembershipUser(*user);
 			return;
 		}
 
-		if (user->worldTransition.active)
+		if (user->worldTransition.IsActive())
 		{
-			const auto& transition = *user->worldTransition.active;
-			ReduceTransition(UserDisconnectedEvent{
+			const auto& transition = user->worldTransition;
+			HandleWorldTransitionEvent(UserDisconnectedEvent{
 				.continuation = { transition.userId, transition.token, transition.phase },
 			});
 		}
@@ -1351,23 +675,23 @@ namespace jam::net
 		{
 			if (user->connectionState == eUserConnectionState::Reconnecting)
 			{
-				if (user->tcp == kInvalidSessionId || user->udp == kInvalidSessionId)
+				if (!user->HasBothSessions())
 					return;
 
 				user->connectionState	= eUserConnectionState::Connected;
 				user->reconnectDeadline = Timestamp::Zero();
 
 				RefreshWorldUserContext(*user);
-				BeginWorldResync(*user);
-				
+				if (m_owner) m_owner->GetWorldSyncSystem()->BeginWorldSync(*user);
+
 				return;
 			}
 
-			if (user->connectionState != eUserConnectionState::Connected)
+			if (!user->IsConnected())
 				return;
 
 			RefreshWorldUserContext(*user);
-			TryCompleteWorldResync(*user);
+			if (m_owner) m_owner->GetWorldSyncSystem()->TryCompleteWorldSync(*user);
 		}
 	}
 
@@ -1401,159 +725,547 @@ namespace jam::net
 			});
 	}
 
-	void ServerWorldTransitionCoordinator::BeginWorldResync(UserContext& user)
+	void ServerWorldTransitionCoordinator::EnterMembershipOnUserShard(UserId userId, const EnterWorldRequest& request, Timestamp now)
 	{
-		if (user.connectionState != eUserConnectionState::Connected)
-			return;
-		if (!user.worldState.main)
+		UserContext* user = FindUserOnCurrentShard(userId);
+		if (!user)
 		{
-			user.worldResync = {};
-			return;
-		}
-		if (user.worldTransition.active)
-		{
-			user.worldResync = {
-				.phase = eUserWorldResyncPhase::WaitingTransition,
-				.deadline = NOW() + m_worldSyncTimeoutNs,
-			};
+			JAM_LOG_WARN("World transition requested for missing user. userId={}", userId);
 			return;
 		}
 
-		const WorldRef  world = *user.worldState.main;
-		const WorldSyncToken token = IssueWorldSyncToken();
-		user.worldResync = {
-			.phase		  = eUserWorldResyncPhase::WaitingClientPrepared,
-			.token		  = token,
-			.world		  = world,
-			.mainRevision = user.worldState.revision,
-			.deadline	  = NOW() + m_worldSyncTimeoutNs,
+		if (!m_owner || !request.IsValid() || user->HasPendingWorldWork())
+		{
+			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
+				{
+					.kind		= eWorldTransitionKind::Enter,
+					.requestId	= request.requestId,
+					.failure	= eWorldTransitionFailure::InvalidRequest
+				}), eProtocolType::TCP);
+			return;
+		}
+
+		const UserWorldState current = user->worldState;
+		if (current.revision != request.expectedMainRevision)
+		{
+			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
+				{
+					.kind		= eWorldTransitionKind::Enter,
+					.requestId	= request.requestId,
+					.failure	= eWorldTransitionFailure::StaleRevision,
+					.state		= current
+				}), eProtocolType::TCP);
+			return;
+		}
+
+		EnterWorldRequest resolvedRequest = request;
+		if (resolvedRequest.IsServerResolved())
+		{
+			const auto archetypeKey = m_owner->ResolveEnterWorldDestination(user->accountId, userId);
+			if (archetypeKey)
+				resolvedRequest.archetypeKey = *archetypeKey;
+		}
+
+		const auto instance = ResolveDestination(resolvedRequest);
+		if (!instance)
+		{
+			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
+				{
+					.kind		= eWorldTransitionKind::Enter,
+					.requestId	= request.requestId,
+					.failure	= eWorldTransitionFailure::DestinationUnavailable,
+					.state		= current
+				}), eProtocolType::TCP);
+			return;
+		}
+
+		WorldTransitionState transition = {};
+		transition.token				= IssueTransitionToken();
+		transition.kind					= eWorldTransitionKind::Enter;
+		transition.userId				= userId;
+		transition.requestId			= request.requestId;
+		transition.source				= current.main;
+		transition.targetInstance		= *instance;
+		transition.expectedRevision		= current.revision;
+		transition.contentEntryPoint	= request.contentEntryPoint;
+		transition.deadline				= now + m_transitionTimeout;
+
+		auto& active = BeginTransition(*user, std::move(transition), eWorldTransitionPhase::ResolvingTarget);
+
+		const WorldTransitionContinuation continuation{ userId, active.token, active.phase };
+		const std::weak_ptr<ServerWorldTransitionCoordinator> weak = weak_from_this();
+		EnsureWorldAsync(*instance, [weak, continuation](std::optional<WorldRef> world)
+			{
+				if (const auto coordinator = weak.lock())
+				{
+					SubmitToUserShard(continuation.userId, Job([weak, continuation, world]()
+						{
+							if (const auto resumed = weak.lock())
+								resumed->HandleWorldTransitionEvent(WorldReadyEvent{ continuation, world });
+						}, eJobPriority::Control));
+				}
+			});
+	}
+
+	void ServerWorldTransitionCoordinator::LeaveMembershipOnUserShard(UserId userId, const LeaveWorldRequest& request)
+	{
+		UserContext* user = FindUserOnCurrentShard(userId);
+		if (!user)
+		{
+			JAM_LOG_WARN("World transition requested for missing user. userId={}", userId);
+			return;
+		}
+
+		const auto current = user->worldState;
+		if (!m_owner || user->HasPendingWorldWork() || current.revision != request.expectedMainRevision)
+		{
+			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
+				{
+					.kind		= eWorldTransitionKind::Leave,
+					.requestId	= request.requestId,
+					.failure	= current.revision != request.expectedMainRevision ? eWorldTransitionFailure::StaleRevision : eWorldTransitionFailure::InvalidRequest,
+					.state		= current
+				}), eProtocolType::TCP);
+			return;
+		}
+		if (!current.main)
+		{
+			SendToUser(userId, codec::MakeWorldTransitionResultPacket(
+				{
+					.kind		= eWorldTransitionKind::Leave,
+					.requestId	= request.requestId,
+					.state		= current
+				}), eProtocolType::TCP);
+			return;
+		}
+
+		WorldTransitionState transition
+		{
+			.token				= IssueTransitionToken(),
+			.kind				= eWorldTransitionKind::Leave,
+			.userId				= userId,
+			.requestId			= request.requestId,
+			.source				= current.main,
+			.expectedRevision	= current.revision,
+			.deadline			= NOW() + m_transitionTimeout,
+		};
+		BeginTransition(*user, std::move(transition), eWorldTransitionPhase::DetachingMembership);
+
+		if (!AdvanceMembershipTransition(*user, eWorldTransitionPhase::DetachingMembership))
+			FailMembershipTransition(*user, eWorldTransitionFailure::WorldDestroyed);
+	}
+
+
+	bool ServerWorldTransitionCoordinator::SubmitMembershipCommand(
+		const WorldRef& world,
+		const WorldTransitionContinuation& continuation,
+		std::function<eWorldTransitionFailure(WorldShardState&)> command)
+	{
+		const auto weak = weak_from_this();
+
+		return SubmitToWorldShard(world.worldId, Job([continuation, command = std::move(command), weak]() mutable
+			{
+				auto& state = GetOrCreateWorldShardState(CurrentShardLocalChecked());
+				const auto failure = command(state);
+
+				SubmitToUserShard(continuation.userId, Job([continuation, failure, weak]()
+					{
+						if (const auto coordinator = weak.lock())
+						{
+							coordinator->HandleWorldTransitionEvent(WorldCommandCompletedEvent{ continuation, failure });
+						}
+					}, eJobPriority::Control));
+			}, eJobPriority::Control));
+	}
+
+	bool ServerWorldTransitionCoordinator::AdvanceMembershipTransition(UserContext& user, eWorldTransitionPhase phase)
+	{
+		auto& transition = user.worldTransition;
+		transition.phase    = phase;
+		transition.retryAt  = Timestamp::Zero();
+		transition.inFlight = true;
+
+		const WorldTransitionContinuation continuation{ user.userId, transition.token, phase };
+		const auto token  = transition.token;
+		const auto userId = user.userId;
+
+		WorldUserContext member{
+			.accountId		= user.accountId,
+			.userId			= userId,
+			.mainRevision	= user.worldState.revision,
+			.sessions		= ResolveUserSessionBundle(user),
 		};
 
-		SuspendWorldUser(user);
-		SendToUser(user.userId, codec::MakeClientWorldPreparePacket({
-			.token		  = token,
-			.kind		  = eWorldSyncKind::WorldResync,
-			.correlation  = { .world = world, .mainRevision = user.worldState.revision },
-			.archetypeKey = world.instance.archetypeKey,
-		}), eProtocolType::TCP);
+		bool submitted = false;
+
+		switch (phase)
+		{
+		case eWorldTransitionPhase::JoiningMembership:
+		{
+			member.mainRevision = transition.expectedRevision + 1;
+			const auto target = *transition.target;
+			submitted = SubmitMembershipCommand(target, continuation,
+				[target, member, token, entryPoint = transition.contentEntryPoint](WorldShardState& state) mutable
+				{
+					return state.JoinWorldMembership(target, std::move(member), token, std::move(entryPoint));
+				});
+			break;
+		}
+
+		case eWorldTransitionPhase::DetachingMembership:
+		case eWorldTransitionPhase::FinalizingMembershipLeave:
+		case eWorldTransitionPhase::RecoveringMembership:
+		{
+			const auto source = *transition.source;
+			const bool disconnect = transition.reason == eWorldTransitionReason::Disconnect;
+
+			if (phase == eWorldTransitionPhase::RecoveringMembership && user.worldState.main != transition.source)
+				++member.mainRevision; // Correlate restored Player with the following Main change.
+
+			submitted = SubmitMembershipCommand(source, continuation, [source, token, userId, member, phase, disconnect](WorldShardState& state)
+				{
+					if (disconnect && !state.FindWorld(source.worldId))
+						return eWorldTransitionFailure::None;
+
+					bool succeeded = false;
+
+					if (phase == eWorldTransitionPhase::DetachingMembership)
+						succeeded = state.DetachWorldMembership(source, userId, token);
+					else if (phase == eWorldTransitionPhase::RecoveringMembership)
+						succeeded = state.RecoverWorldMembership(source, member, token);
+					else
+						succeeded = state.CompleteWorldMembershipLeave(source, userId, token);
+
+					return succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::InternalError;
+				});
+			break;
+		}
+
+		case eWorldTransitionPhase::CancellingMembership:
+		case eWorldTransitionPhase::AcceptingMembership:
+		{
+			const auto target = *transition.target;
+			submitted = SubmitMembershipCommand(target, continuation, [target, token, userId, phase](WorldShardState& state)
+				{
+					const bool succeeded = phase == eWorldTransitionPhase::CancellingMembership
+						? state.CancelWorldMembership(target, userId, token)
+						: state.CompleteWorldMembershipEntry(target, userId, token);
+
+					return succeeded ? eWorldTransitionFailure::None : eWorldTransitionFailure::InternalError;
+				});
+			break;
+		}
+
+		default:
+			break;
+		}
+
+		if (!submitted)
+		{
+			transition.inFlight = false;
+			transition.retryAt  = NOW() + 1_s;
+		}
+
+		return submitted;
 	}
 
-	void ServerWorldTransitionCoordinator::TryCompleteWorldResync(UserContext& user)
+	void ServerWorldTransitionCoordinator::FailMembershipTransition(UserContext& user, eWorldTransitionFailure failure)
 	{
-		if (user.worldResync.phase != eUserWorldResyncPhase::WaitingTransport
-			|| user.connectionState != eUserConnectionState::Connected
-			|| user.udp == kInvalidSessionId || !user.worldState.main
-			|| *user.worldState.main != user.worldResync.world
-			|| user.worldState.revision != user.worldResync.mainRevision)
+		auto& transition = user.worldTransition;
+
+		if (transition.reason == eWorldTransitionReason::Disconnect)
 		{
+			if (!transition.inFlight)
+				transition.retryAt = NOW() + 1_s;
+
 			return;
 		}
+
+		if (transition.IsCommitted())
+			return;
+
+		if (transition.failure == eWorldTransitionFailure::None)
+			transition.failure = failure;
+
+		if (transition.inFlight)
+			return;
+
+		if (transition.phase == eWorldTransitionPhase::CancellingMembership || transition.phase == eWorldTransitionPhase::RecoveringMembership)
+			return;
+
+		if (transition.target
+			&& transition.phase == eWorldTransitionPhase::JoiningMembership
+			&& transition.kind == eWorldTransitionKind::Enter)
+		{
+			AdvanceMembershipTransition(user, eWorldTransitionPhase::CancellingMembership);
+			return;
+		}
+
+		FinishMembershipFailure(user);
+	}
+
+
+	void ServerWorldTransitionCoordinator::HandleWorldTransitionEvent(const WorldTransitionEvent& event)
+	{
+		if (const auto* ready = std::get_if<WorldReadyEvent>(&event))
+		{
+			auto* user = FindExpectedTransition(ready->continuation);
+			if (!user) return;
+
+			auto& transition = user->worldTransition;
+			if (!ready->world || ready->world->instance != transition.targetInstance)
+			{
+				FailMembershipTransition(*user, eWorldTransitionFailure::DestinationUnavailable);
+				return;
+			}
+
+			if (transition.source == ready->world)
+			{
+				CompleteMembershipTransition(*user);
+				return;
+			}
+
+			transition.target = ready->world;
+			if (!AdvanceMembershipTransition(*user, transition.source ? eWorldTransitionPhase::DetachingMembership : eWorldTransitionPhase::JoiningMembership))
+				FailMembershipTransition(*user, eWorldTransitionFailure::WorldDestroyed);
+
+			return;
+		}
+
+		if (const auto* timedOut = std::get_if<TransitionTimedOutEvent>(&event))
+		{
+			auto* user = FindExpectedTransition(timedOut->continuation);
+			if (!user) return;
+
+			auto& transition = user->worldTransition;
+			if (transition.reason == eWorldTransitionReason::Disconnect)
+			{
+				if (!transition.inFlight && transition.retryAt <= timedOut->now)
+					AdvanceMembershipTransition(*user, transition.phase);
+
+				return;
+			}
+
+			if (transition.inFlight)
+			{
+				FailMembershipTransition(*user, eWorldTransitionFailure::Timeout);
+				return;
+			}
+
+			if (transition.IsCleanupPending())
+			{
+				if (transition.retryAt <= timedOut->now)
+					AdvanceMembershipTransition(*user, transition.phase);
+			}
+			else
+			{
+				FailMembershipTransition(*user, eWorldTransitionFailure::Timeout);
+			}
+
+			return;
+		}
+
+		if (const auto* disconnected = std::get_if<UserDisconnectedEvent>(&event))
+		{
+			if (auto* user = FindExpectedTransition(disconnected->continuation))
+				FailMembershipTransition(*user, eWorldTransitionFailure::Disconnected);
+			return;
+		}
+
+		const auto& completed = std::get<WorldCommandCompletedEvent>(event);
+		auto* user = FindExpectedTransition(completed.continuation);
+		if (!user) return;
+
+		auto& transition = user->worldTransition;
+		transition.inFlight = false;
+
+		const auto phase	 = completed.continuation.expectedPhase;
+		const bool succeeded = completed.failure == eWorldTransitionFailure::None;
+
+		if (phase == eWorldTransitionPhase::DetachingMembership)
+		{
+			if (!succeeded)
+			{
+				FailMembershipTransition(*user, completed.failure);
+				return;
+			}
+
+			if (transition.failure != eWorldTransitionFailure::None)
+			{
+				AdvanceMembershipTransition(*user, eWorldTransitionPhase::RecoveringMembership);
+				return;
+			}
+
+			if (transition.kind == eWorldTransitionKind::Leave)
+			{
+				if (!CommitMain(user->userId, transition.expectedRevision, std::nullopt))
+				{
+					transition.failure = eWorldTransitionFailure::InternalError;
+					AdvanceMembershipTransition(*user, eWorldTransitionPhase::RecoveringMembership);
+					return;
+				}
+
+				AdvanceMembershipTransition(*user, eWorldTransitionPhase::FinalizingMembershipLeave);
+			}
+			else if (!AdvanceMembershipTransition(*user, eWorldTransitionPhase::JoiningMembership))
+			{
+				FailMembershipTransition(*user, eWorldTransitionFailure::InternalError);
+			}
+
+			return;
+		}
+
+		if (transition.IsCleanupPending())
+		{
+			if (!succeeded)
+			{
+				transition.retryAt = NOW() + 1_s;
+				JAM_LOG_WARN("Membership cleanup/recovery will retry. userId={}, token={}, phase={}", user->userId, transition.token.value, static_cast<uint32>(phase));
+				return;
+			}
+
+			if (phase == eWorldTransitionPhase::CancellingMembership)
+			{
+				if (transition.source)
+				{
+					AdvanceMembershipTransition(*user, eWorldTransitionPhase::RecoveringMembership);
+				}
+				else
+				{
+					if (user->worldState.main == transition.target)
+						CommitMain(user->userId, user->worldState.revision, std::nullopt);
+
+					FinishMembershipFailure(*user);
+				}
+			}
+			else if (phase == eWorldTransitionPhase::RecoveringMembership)
+			{
+				if (user->worldState.main != transition.source)
+					CommitMain(user->userId, user->worldState.revision, transition.source);
+
+				FinishMembershipFailure(*user);
+			}
+			else if (phase == eWorldTransitionPhase::AcceptingMembership)
+			{
+				if (transition.source)
+					AdvanceMembershipTransition(*user, eWorldTransitionPhase::FinalizingMembershipLeave);
+				else
+					CompleteMembershipTransition(*user);
+			}
+			else
+			{
+				CompleteMembershipTransition(*user);
+			}
+
+			return;
+		}
+
+		if (transition.failure != eWorldTransitionFailure::None || !succeeded)
+		{
+			FailMembershipTransition(*user, transition.failure != eWorldTransitionFailure::None ? transition.failure : completed.failure);
+			return;
+		}
+
+		if (!CommitMain(user->userId, transition.expectedRevision, transition.target))
+		{
+			FailMembershipTransition(*user, eWorldTransitionFailure::InternalError);
+			return;
+		}
+
+		RefreshWorldUserContext(*user);
+		AdvanceMembershipTransition(*user, eWorldTransitionPhase::AcceptingMembership);
+	}
+
+	void ServerWorldTransitionCoordinator::FinishMembershipFailure(UserContext& user)
+	{
+		const bool syncRequired = user.worldState.main.has_value() || user.worldSync.phase == eUserWorldSyncPhase::WaitingTransition;
+
+		const WorldTransitionState transition = user.worldTransition;
+		const UserWorldState state = user.worldState;
+		user.worldTransition = {};
+
+		SendToUser(transition.userId, codec::MakeWorldTransitionResultPacket(
+			{
+				.kind			 = transition.kind,
+				.requestId		 = transition.requestId,
+				.transitionToken = transition.token,
+				.failure		 = transition.failure,
+				.state			 = state
+			}), eProtocolType::TCP);
+
+		if (transition.kind == eWorldTransitionKind::Enter)
+			JAM_LOG_WARN("[EnterWorld] failed. userId={}, requestId={}, token={}, failure={}", transition.userId, transition.requestId, transition.token.value, static_cast<uint32>(transition.failure));
+
+		if (m_owner && syncRequired && user.IsConnected())
+		{
+			m_owner->GetWorldSyncSystem()->BeginWorldSync(user);
+		}
+
+		if (user.CanRelease())
+		{
+			GetOrCreateUserShardState(CurrentShardLocalChecked()).FreeUserContext(transition.userId);
+			return;
+		}
+
+		if (user.connectionState == eUserConnectionState::Released)
+		{
+			ReleaseMembershipUser(user);
+		}
+	}
+
+	void ServerWorldTransitionCoordinator::CompleteMembershipTransition(UserContext& user)
+	{
+		const UserId userId = user.userId;
+
+		if (user.worldTransition.kind == eWorldTransitionKind::Enter)
+			CompleteEnter(user, user.worldState);
+		else
+			CompleteLeave(user, user.worldState);
+
+		if (auto* remaining = FindUserOnCurrentShard(userId); remaining && remaining->connectionState == eUserConnectionState::Released)
+			ReleaseMembershipUser(*remaining);
+	}
+
+	void ServerWorldTransitionCoordinator::ReleaseMembershipUser(UserContext& user)
+	{
+		if (user.connectionState != eUserConnectionState::Reconnecting && user.connectionState != eUserConnectionState::Released)
+			return;
 
 		const UserId userId = user.userId;
-		const WorldRef world = user.worldResync.world;
-		if (!SubmitWorldJob(world, [userId](WorldBase& base)
-			{
-				if (auto* serverWorld = dynamic_cast<ServerWorld*>(&base))
-					serverWorld->ResumeMemberReplication(userId);
-			}))
+
+		if (user.connectionState != eUserConnectionState::Released)
 		{
-			return;
+			user.connectionState   = eUserConnectionState::Released;
+			user.reconnectDeadline = Timestamp::Zero();
+			GetOrCreateUserShardState(CurrentShardLocalChecked()).ReleaseAccountBinding(userId);
+			if (m_owner)
+				m_owner->NotifyUserReleased(userId);
 		}
 
-		user.worldResync = {};
-	}
-
-	void ServerWorldTransitionCoordinator::FailWorldResync(UserContext& user)
-	{
-		JAM_LOG_WARN("[WorldResync] failed or timed out. userId={}, token={}, phase={}", user.userId, user.worldResync.token.value, static_cast<uint32>(user.worldResync.phase));
-		
-		user.worldResync = {};
-		const ServerSessionBundle sessions = ResolveUserSessionBundle(user);
-		const SessionRef<ServerTcpSession> tcpRef = sessions.tcp;
-		if (!tcpRef.TryPost(Job([tcpRef]()
-			{
-				if (auto* tcp = tcpRef.TryGet(); tcp && !tcp->IsClosing())
-					tcp->Disconnect();
-			}, eJobPriority::Control)))
+		if (user.worldTransition.IsActive())
 		{
-			user.tcp = kInvalidSessionId;
-			user.udp = kInvalidSessionId;
-			OnDisconnected(user.userId);
-		}
-	}
-
-	void ServerWorldTransitionCoordinator::ReleaseReconnectingUser(UserContext& user)
-	{
-		if (user.connectionState != eUserConnectionState::Reconnecting)
-			return;
-
-		const UserId userId = user.userId;
-		user.connectionState   = eUserConnectionState::Released;
-		user.reconnectDeadline = Timestamp::Zero();
-
-		GetOrCreateUserShardState(CurrentShardLocalChecked()).ReleaseAccountBinding(userId);
-		if (m_owner)
-			m_owner->NotifyUserReleased(userId);
-
-		if (user.worldTransition.active)
-		{
-			const auto& transition = *user.worldTransition.active;
-			ReduceTransition(UserDisconnectedEvent{
-				.continuation = { transition.userId, transition.token, transition.phase },
-			});
+			const auto& transition = user.worldTransition;
+			HandleWorldTransitionEvent(UserDisconnectedEvent{ { userId, transition.token, transition.phase } });
+			return; // Recovery/commit must finish before disconnecting the resulting membership.
 		}
 
-		UserContext* current = FindUserOnCurrentShard(userId);
-		if (!current)
-			return;
-
-		const std::optional<WorldRef> main = current->worldState.main;
-		if (!main)
+		if (!user.worldState.main)
 		{
-			if (current->tcp == kInvalidSessionId && current->udp == kInvalidSessionId && !current->worldTransition.active)
+			if (user.HasNoSessions())
 				GetOrCreateUserShardState(CurrentShardLocalChecked()).FreeUserContext(userId);
 			return;
 		}
 
-		auto worldShard = GLOBAL_EXEC.GetShardFromIndex(GetWorldShardIndex(main->worldId));
-		if (!worldShard)
-		{
-			CompleteDisconnectedWorldLeave(userId, *main);
-			return;
-		}
+		WorldTransitionState transition{};
+		transition.token			= IssueTransitionToken();
+		transition.kind				= eWorldTransitionKind::Leave;
+		transition.userId			= userId;
+		transition.source			= user.worldState.main;
+		transition.expectedRevision = user.worldState.revision;
+		transition.reason			= eWorldTransitionReason::Disconnect;
+		transition.deadline			= NOW() + m_transitionTimeout;
 
-		if (auto* local = CurrentShardLocal(); local && local->shardIndex == GetWorldShardIndex(main->worldId))
-		{
-			GetOrCreateWorldShardState(*local).DisconnectMember(userId, *main);
-			CompleteDisconnectedWorldLeave(userId, *main);
-		}
-		else
-		{
-			const std::weak_ptr<ServerWorldTransitionCoordinator> weak = weak_from_this();
-			worldShard->Submit(Job([weak, userId, world = *main]()
-				{
-					GetOrCreateWorldShardState(CurrentShardLocalChecked()).DisconnectMember(userId, world);
-					if (const auto coordinator = weak.lock())
-					{
-						SubmitToUserShard(userId, Job([weak, userId, world]()
-							{
-								if (const auto resumed = weak.lock())
-									resumed->CompleteDisconnectedWorldLeave(userId, world);
-							}, eJobPriority::Control));
-					}
-				}, eJobPriority::Control));
-		}
-	}
-
-	void ServerWorldTransitionCoordinator::CompleteDisconnectedWorldLeave(uint64 userId, const WorldRef& world)
-	{
-		UserContext* user = FindUserOnCurrentShard(userId);
-		if (user)
-			user->worldState.ClearIfWorld(world.worldId);
-
-		if (user && user->connectionState == eUserConnectionState::Released
-			&& user->tcp == kInvalidSessionId && user->udp == kInvalidSessionId
-			&& !user->worldState.main && !user->worldTransition.active)
-			GetOrCreateUserShardState(CurrentShardLocalChecked()).FreeUserContext(userId);
+		BeginTransition(user, std::move(transition), eWorldTransitionPhase::DetachingMembership);
+		AdvanceMembershipTransition(user, eWorldTransitionPhase::DetachingMembership);
 	}
 }

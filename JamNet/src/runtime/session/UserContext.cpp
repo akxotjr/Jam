@@ -107,12 +107,6 @@ namespace jam::net
 
 	UserContext* UserShardState::EnsureUserContext(AccountId accountId)
 	{
-		if (accountId == kInvalidAccountId)
-			return nullptr;
-
-		if (auto* existing = FindUserContextByAccount(accountId))
-			return existing;
-
 		return AllocUserContext(accountId);
 	}
 

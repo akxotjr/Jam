@@ -104,6 +104,11 @@ namespace jam::net
 
 		bool IsValid() const noexcept { return !main || main->IsValid(); }
 
+		bool Matches(const WorldRef& world, WorldStateRevision expectedRevision) const noexcept
+		{
+			return main && *main == world && revision == expectedRevision;
+		}
+
 		bool SetMain(const WorldRef& value)
 		{
 			if (!value.IsValid() || (main && *main == value))
@@ -168,36 +173,60 @@ namespace jam::net
 
 	enum class eWorldTransitionPhase : uint8
 	{
-		ResolvingTarget			= 0,
-		ReservingTarget			= 1,
-		WaitingClientPrepared	= 2,
-		DetachingSource			= 3,
-		AttachingTarget			= 4,
-		CommittingMain			= 5,
-		ActivatingTarget		= 6,
-		CommittingSourceLeave	= 7,
-		WaitingClientApplied	= 8,
-		RollingBackTarget		= 9,
-		RestoringSource			= 10,
-		PreparingTargetContent	= 11,
+		None = 0,
+		ResolvingTarget,
+		// No destination reservation or separate content activation phase.
+		DetachingMembership = 12,
+		JoiningMembership,
+		AcceptingMembership,
+		FinalizingMembershipLeave,
+		CancellingMembership,
+		RecoveringMembership,
 	};
 
+	// Disconnect uses the Leave flow, retries cleanup, and sends no client result.
+	enum class eWorldTransitionReason : uint8
+	{
+		Request,
+		Disconnect,
+	};
+
+	// None means idle. Finish a transition by resetting the entire state.
 	struct WorldTransitionState
 	{
 		WorldTransitionToken				token			 = {};
 		eWorldTransitionKind				kind			 = eWorldTransitionKind::Enter;
 		uint64								userId			 = 0;
 		ClientRequestId						requestId		 = kInvalidClientRequestId;
-		eWorldTransitionPhase				phase			 = eWorldTransitionPhase::ResolvingTarget;
+		eWorldTransitionPhase				phase			 = eWorldTransitionPhase::None;
 		std::optional<WorldRef>				source			 = std::nullopt;
 		std::optional<WorldRef>				target			 = std::nullopt;
 		WorldInstanceRef					targetInstance	 = {};
 		WorldStateRevision					expectedRevision = 0;
-		WorldSyncToken						syncToken		 = {};
 		Timestamp							deadline		 = Timestamp::Zero();
-		eWorldTransitionFailure				terminalFailure  = eWorldTransitionFailure::None;
-		bool								sourceDetached	 = false;
+		eWorldTransitionFailure				failure			 = eWorldTransitionFailure::None;
+		eWorldTransitionReason				reason			 = eWorldTransitionReason::Request;
+		bool								inFlight		 = false;							// Waiting for the current phase's submitted World-shard command result.
+		Timestamp							retryAt			 = Timestamp::Zero();				// Earliest time to retry the current phase; zero means no scheduled retry.
 		std::string							contentEntryPoint;
+
+		bool IsActive() const noexcept
+		{
+			return phase != eWorldTransitionPhase::None;
+		}
+
+		bool IsCommitted() const noexcept
+		{
+			return phase == eWorldTransitionPhase::AcceptingMembership
+				|| phase == eWorldTransitionPhase::FinalizingMembershipLeave;
+		}
+
+		bool IsCleanupPending() const noexcept
+		{
+			return IsCommitted()
+				|| phase == eWorldTransitionPhase::CancellingMembership
+				|| phase == eWorldTransitionPhase::RecoveringMembership;
+		}
 	};
 
 	struct WorldTransitionContinuation

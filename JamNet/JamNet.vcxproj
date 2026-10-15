@@ -313,7 +313,7 @@
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldActionTypes.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldBase.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldIdentity.h" />
-    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldRuntimeLifecycle.h" />
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\ServerWorldSyncSystem.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldShardState.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldTemplateKey.h" />
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldTransitionTypes.h" />
@@ -425,7 +425,7 @@
     <ClCompile Include="src\runtime\world\lifecycle\ClientMainWorldState.cpp" />
     <ClCompile Include="src\runtime\world\lifecycle\ServerWorldTransitionCoordinator.cpp" />
     <ClCompile Include="src\runtime\world\lifecycle\WorldBase.cpp" />
-    <ClCompile Include="src\runtime\world\lifecycle\WorldRuntimeLifecycle.cpp" />
+    <ClCompile Include="src\runtime\world\lifecycle\ServerWorldSyncSystem.cpp" />
     <ClCompile Include="src\runtime\world\lifecycle\WorldShardState.cpp" />
     <ClCompile Include="src\runtime\world\simulation\client\ClientCharacterControlCoordinator.cpp" />
     <ClCompile Include="src\runtime\world\simulation\client\ClientInputSystem.cpp" />

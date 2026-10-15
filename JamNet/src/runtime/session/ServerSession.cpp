@@ -9,6 +9,7 @@
 #include "jamnet/core/utils/Clock.h"
 
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
+#include "jamnet/runtime/world/lifecycle/WorldShardState.h"
 #include "jamnet/runtime/protocol/codec/ReplicationCodec.h"
 #include "jamnet/runtime/protocol/codec/WorldCodec.h"
 #include "jamnet/runtime/protocol/codec/SocialCodec.h"
@@ -19,15 +20,18 @@
 #include "jamnet/runtime/application/ServerNetworkManager.h"
 #include "jamnet/runtime/session/RuntimeShardRouting.h"
 #include "jamnet/runtime/world/lifecycle/ServerWorldTransitionCoordinator.h"
+#include "jamnet/runtime/world/lifecycle/ServerWorldSyncSystem.h"
 
 namespace jam::net
 {
 	namespace
 	{
-		void SendSpawnActorResponse(entt::entity e, fb::fbSpawnActorFailure failure, ClientRequestId clientRequestId, ActorId actorId, uint32 requestId)
+		void SendSpawnActorResponse(entt::entity e, fb::fbSpawnActorResult result, ClientRequestId clientRequestId, ActorId actorId, uint32 requestId)
 		{
-			const bool success = failure == fb::fbSpawnActorFailure_None && actorId.IsValid();
-			const auto payload = codec::EncodeSpawnActorResponse(success, failure, clientRequestId, actorId);
+			const bool succeeded = result == fb::fbSpawnActorResult_Succeeded && actorId.IsValid();
+			if (result == fb::fbSpawnActorResult_Succeeded && !succeeded)
+				result = fb::fbSpawnActorResult_SpawnFailed;
+			const auto payload = codec::EncodeSpawnActorResponse(result, clientRequestId, succeeded ? actorId : ActorId::Invalid());
 			RPCSendResponse<fb::fbSpawnActorRes>(e, payload.data, payload.size, requestId, eChannel::RELIABLE_ORDERED);
 		}
 
@@ -154,8 +158,8 @@ namespace jam::net
 			if (!codec::DecodeClientWorldSyncResult(view.Payload(), view.PayloadSize(), result))
 				return;
 
-			if (auto* coordinator = m_manager->GetWorldTransitionSystem())
-				coordinator->OnClientWorldSyncResult(m_userId, result, NOW());
+			if (auto* synchronization = m_manager->GetWorldSyncSystem())
+				synchronization->OnClientWorldSyncResult(m_userId, result, NOW());
 
 			return;
 		}
@@ -278,7 +282,7 @@ namespace jam::net
 			{
 				if (ctx->udp == GetSessionId())
 					ctx->udp = kInvalidSessionId;
-				if (ctx->connectionState == eUserConnectionState::Released && ctx->tcp == kInvalidSessionId && ctx->udp == kInvalidSessionId && !ctx->worldState.main)
+				if (ctx->CanRelease())
 					state.FreeUserContext(m_userId);
 			}
 
@@ -387,7 +391,7 @@ namespace jam::net
 		const WorldEventCorrelation correlation{ .world = targetWorld, .mainRevision = req.expected_main_revision() };
 
 		SpawnParams params{};
-		if (!codec::DecodeSpawnPlayerRequest(req, m_userId, params)
+		if (!codec::DecodeSpawnPlayerRequest(req, params)
 			|| !IsValidAssetKey(params.actorArchetypeKey))
 		{
 			SendSpawnPlayerResponse(e, fb::fbSpawnPlayerFailure_SpawnFailed, req.client_request_id(), ActorId::Invalid(), requestId);
@@ -406,30 +410,33 @@ namespace jam::net
 		const uint32 reqId		= requestId;
 		const ClientRequestId clientRequestId = req.client_request_id();
 
-		if (SubmitWorldJob(targetWorld, [params, correlation, sessionId, reqId, clientRequestId, userId](WorldBase& world) mutable
-			{
-				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
-				if (!physicalWorld) return;
-				physicalWorld->SpawnPlayerAsync(userId, correlation, params, [sessionId, reqId, clientRequestId](ActorId actorId, ePlayerSpawnFailure failure) mutable
-					{
-						const auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId));
-						if (!shard)
-							return;
-
-						shard->Submit(Job([sessionId, actorId, clientRequestId, reqId, failure]() mutable
-							{
-								auto& state = GetOrCreateSessionShardState();
-								auto* self = static_cast<ServerTcpSession*>(state.FindSession(sessionId));
-								if (!self)
-									return;
-
-								SendSpawnPlayerResponse(self->GetEntity(), codec::EncodeSpawnPlayerFailure(failure), clientRequestId, actorId, reqId);
-							}));
-					});
-			}))
+		const auto worldShard = GLOBAL_EXEC.GetShardFromIndex(GetWorldShardIndex(targetWorld.worldId));
+		if (!worldShard)
 		{
-			SendSpawnPlayerResponse(e, fb::fbSpawnPlayerFailure_SpawnFailed, req.client_request_id(), ActorId::Invalid(), requestId);
+			SendSpawnPlayerResponse(e, fb::fbSpawnPlayerFailure_SpawnFailed, clientRequestId, ActorId::Invalid(), requestId);
+			return;
 		}
+		worldShard->Submit(Job([targetWorld, params, correlation, sessionId, reqId, clientRequestId, userId]()
+			{
+				auto complete = [sessionId, reqId, clientRequestId](ActorId actorId, ePlayerSpawnFailure failure)
+					{
+						if (auto sessionShard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
+							sessionShard->Submit(Job([sessionId, actorId, clientRequestId, reqId, failure]()
+								{
+									auto* self = static_cast<ServerTcpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
+									if (self)
+										SendSpawnPlayerResponse(self->GetEntity(), codec::EncodeSpawnPlayerFailure(failure), clientRequestId, actorId, reqId);
+								}));
+					};
+				auto* base = GetOrCreateWorldShardState(CurrentShardLocalChecked()).FindWorld(targetWorld.worldId);
+				auto* world = dynamic_cast<ServerWorld*>(base);
+				if (!world || world->GetWorldRef() != targetWorld)
+				{
+					complete(ActorId::Invalid(), ePlayerSpawnFailure::InvalidCorrelation);
+					return;
+				}
+				world->SpawnPlayerAsync(userId, correlation, params, complete);
+			}));
 	}
 
 	void ServerTcpSession::OnDespawnPlayerRequest(entt::entity e, const fb::fbDespawnPlayerReq& req, uint32 requestId)
@@ -459,71 +466,90 @@ namespace jam::net
 		const SessionId sessionId = GetSessionId();
 		const ActorId actorId = ActorId(req.actor_id());
 		const WorldEventCorrelation correlation{ .world = world, .mainRevision = req.expected_main_revision() };
-		if (!SubmitWorldJob(world, [sessionId, e, requestId, actorId, userId = m_userId, correlation](WorldBase& target)
-			{
-				auto* physicalWorld = dynamic_cast<ServerWorld*>(&target);
-				if (!physicalWorld) return;
-				const bool ok = physicalWorld->DespawnPlayer(userId, correlation, actorId);
-				if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
-					shard->Submit(Job([sessionId, e, requestId, ok]()
-					{
-						auto* self = static_cast<ServerTcpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
-						if (self && self->GetEntity() == e)
-							SendDespawnPlayerResponse(e, ok, requestId);
-					}));
-			}))
+		const auto worldShard = GLOBAL_EXEC.GetShardFromIndex(GetWorldShardIndex(world.worldId));
+		if (!worldShard)
 		{
 			SendDespawnPlayerResponse(e, false, requestId);
+			return;
 		}
+		worldShard->Submit(Job([world, sessionId, e, requestId, actorId, userId = m_userId, correlation]()
+			{
+				auto complete = [sessionId, e, requestId](bool ok)
+					{
+						if (auto sessionShard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
+							sessionShard->Submit(Job([sessionId, e, requestId, ok]()
+								{
+									auto* self = static_cast<ServerTcpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
+									if (self && self->GetEntity() == e)
+										SendDespawnPlayerResponse(e, ok, requestId);
+								}));
+					};
+				auto* base = GetOrCreateWorldShardState(CurrentShardLocalChecked()).FindWorld(world.worldId);
+				auto* target = dynamic_cast<ServerWorld*>(base);
+				if (!target || target->GetWorldRef() != world)
+				{
+					complete(false);
+					return;
+				}
+				target->DespawnPlayerAsync(userId, correlation, actorId, complete);
+			}));
 	}
 
 	void ServerUdpSession::OnSpawnActorRequest(entt::entity e, const fb::fbSpawnActorReq& req, uint32 requestId)
 	{
 		if (!m_manager || m_userId == kInvalidUserId)
 		{
-			SendSpawnActorResponse(e, fb::fbSpawnActorFailure_InvalidCorrelation, req.client_request_id(), ActorId::Invalid(), requestId);
+			SendSpawnActorResponse(e, fb::fbSpawnActorResult_InvalidCorrelation, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
 
 		const auto targetWorld = ResolveRequestedMainWorld(m_userId, req.world_id());
 		if (!targetWorld || targetWorld->instance.instanceId != WorldInstanceId{ req.world_instance_id() })
 		{
-			SendSpawnActorResponse(e, fb::fbSpawnActorFailure_InvalidCorrelation, req.client_request_id(), ActorId::Invalid(), requestId);
+			SendSpawnActorResponse(e, fb::fbSpawnActorResult_InvalidCorrelation, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
 
 		SpawnParams params{};
 		if (!codec::DecodeSpawnActorRequest(req, params)
-			|| !IsValidAssetKey(params.actorArchetypeKey)
-			|| (params.owner != 0 && params.owner != m_userId)
-			|| params.controller != 0)
+			|| !IsValidAssetKey(params.actorArchetypeKey))
 		{
-			SendSpawnActorResponse(e, fb::fbSpawnActorFailure_SpawnFailed, req.client_request_id(), ActorId::Invalid(), requestId);
+			SendSpawnActorResponse(e, fb::fbSpawnActorResult_InvalidArgument, req.client_request_id(), ActorId::Invalid(), requestId);
 			return;
 		}
-		params.owner = params.owner != 0 ? m_userId : 0;
 		params.desc.spawnSrc = px::eSpawnSource::Runtime;
 
 		const SessionId sessionId = GetSessionId();
 		const ClientRequestId clientRequestId = req.client_request_id();
-		if (SubmitWorldJob(*targetWorld, [params, sessionId, e, requestId, clientRequestId](WorldBase& world) mutable
+		const UserId requester = m_userId;
+		const auto shard = GLOBAL_EXEC.GetShardFromIndex(GetWorldShardIndex(targetWorld->worldId));
+		if (!shard)
+		{
+			SendSpawnActorResponse(e, fb::fbSpawnActorResult_SpawnFailed, clientRequestId, ActorId::Invalid(), requestId);
+			return;
+		}
+		// Explicitly queue even if the session and World happen to share a shard.
+		shard->Submit(Job([target = *targetWorld, params, requester, sessionId, e, requestId, clientRequestId]() mutable
 			{
-				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
-				if (!physicalWorld) return;
-				physicalWorld->SpawnActorAsync(std::move(params), [sessionId, e, requestId, clientRequestId](ActorId actorId)
+				auto complete = [sessionId, e, requestId, clientRequestId](ActorId actorId)
 					{
-						if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
-							shard->Submit(Job([sessionId, e, requestId, clientRequestId, actorId]()
+						if (auto sessionShard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
+							sessionShard->Submit(Job([sessionId, e, requestId, clientRequestId, actorId]()
 								{
 									auto* self = static_cast<ServerUdpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
 									if (self && self->GetEntity() == e)
-										SendSpawnActorResponse(e, actorId.IsValid() ? fb::fbSpawnActorFailure_None : fb::fbSpawnActorFailure_SpawnFailed, clientRequestId, actorId, requestId);
+										SendSpawnActorResponse(e, actorId.IsValid() ? fb::fbSpawnActorResult_Succeeded : fb::fbSpawnActorResult_SpawnFailed, clientRequestId, actorId, requestId);
 								}));
-					});
-			}))
-		{
-			SendSpawnActorResponse(e, fb::fbSpawnActorFailure_SpawnFailed, req.client_request_id(), ActorId::Invalid(), requestId);
-		}
+					};
+				auto* base = GetOrCreateWorldShardState(CurrentShardLocalChecked()).FindWorld(target.worldId);
+				auto* world = dynamic_cast<ServerWorld*>(base);
+				if (!world || world->GetWorldRef() != target)
+				{
+					complete(ActorId::Invalid());
+					return;
+				}
+				world->SpawnActorAsync(requester, std::move(params), std::move(complete));
+			}));
 	}
 
 	void ServerUdpSession::OnDespawnActorRequest(entt::entity e, const fb::fbDespawnActorReq& req, uint32 requestId)
@@ -545,24 +571,33 @@ namespace jam::net
 		const ActorId actorId = ActorId(req.actor_id());
 		const SessionId sessionId = GetSessionId();
 
-		if (!SubmitWorldJob(*targetWorld, [actorId, userId, sessionId, e, requestId](WorldBase& world)
+		const auto shard = GLOBAL_EXEC.GetShardFromIndex(GetWorldShardIndex(targetWorld->worldId));
+		if (!shard)
+		{
+			SendDespawnActorResponse(e, false, requestId);
+			return;
+		}
+		shard->Submit(Job([target = *targetWorld, actorId, userId, sessionId, e, requestId]()
 			{
-				auto* physicalWorld = dynamic_cast<ServerWorld*>(&world);
-				if (!physicalWorld) return;
-				physicalWorld->DespawnActorAsync(actorId, userId, [sessionId, e, requestId](bool ok)
+				auto complete = [sessionId, e, requestId](bool ok)
 					{
-						if (auto shard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
-							shard->Submit(Job([sessionId, e, requestId, ok]()
+						if (auto sessionShard = GLOBAL_EXEC.GetShardFromIndex(GetRuntimeShardIndex(sessionId)))
+							sessionShard->Submit(Job([sessionId, e, requestId, ok]()
 								{
 									auto* self = static_cast<ServerUdpSession*>(GetOrCreateSessionShardState().FindSession(sessionId));
 									if (self && self->GetEntity() == e)
 										SendDespawnActorResponse(e, ok, requestId);
 								}));
-					});
-			}))
-		{
-			SendDespawnActorResponse(e, false, requestId);
-		}
+					};
+				auto* base = GetOrCreateWorldShardState(CurrentShardLocalChecked()).FindWorld(target.worldId);
+				auto* world = dynamic_cast<ServerWorld*>(base);
+				if (!world || world->GetWorldRef() != target)
+				{
+					complete(false);
+					return;
+				}
+				world->DespawnActorAsync(userId, actorId, complete);
+			}));
 	}
 
 }

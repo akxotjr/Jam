@@ -3,6 +3,8 @@
 
 #include "jamnet/core/utils/Clock.h"
 #include "jamnet/core/executor/GlobalExecutor.h"
+#include "jamnet/core/executor/ShardExecutor.h"
+#include "jamnet/core/executor/ThreadContext.h"
 #include "jamnet/core/net/Service.h"
 
 #include "jamnet/runtime/world/simulation/server/ServerWorld.h"
@@ -13,6 +15,7 @@
 #include "jamnet/runtime/content/social/SocialService.h"
 #include "jamnet/runtime/content/generic/GenericContentService.h"
 #include "jamnet/runtime/world/lifecycle/ServerWorldTransitionCoordinator.h"
+#include "jamnet/runtime/world/lifecycle/ServerWorldSyncSystem.h"
 #include "jamnet/runtime/world/data/SharedDataManifestLoader.h"
 #include "jamnet/runtime/protocol/transport/CustomPacketHelper.h"
 #include "jamnet/runtime/protocol/codec/WorldCodec.h"
@@ -27,6 +30,7 @@ namespace jam::net
 	{
 		m_manifest = SharedDataManifestLoader::Load(config.sharedDataManifestPath);
 		m_worldTransitions = std::make_shared<ServerWorldTransitionCoordinator>();
+		m_worldSync = std::make_shared<ServerWorldSyncSystem>();
 	}
 
 	ServerNetworkManager::~ServerNetworkManager()
@@ -51,8 +55,13 @@ namespace jam::net
 
 		if (!m_worldTransitions)
 			m_worldTransitions = std::make_shared<ServerWorldTransitionCoordinator>();
+		if (!m_worldSync) m_worldSync = std::make_shared<ServerWorldSyncSystem>();
+		m_worldSync->Initialize(this);
 		if (!m_worldTransitions->Initialize(this))
+		{
+			m_worldSync->Close();
 			return false;
+		}
 
 		if (m_config.socialContent)
 		{
@@ -61,6 +70,7 @@ namespace jam::net
 			{
 				m_socialService.reset();
 				m_worldTransitions->Close();
+				m_worldSync->Close();
 				return false;
 			}
 		}
@@ -75,6 +85,7 @@ namespace jam::net
 					m_socialService->Stop();
 				m_socialService.reset();
 				m_worldTransitions->Close();
+				m_worldSync->Close();
 				return false;
 			}
 		}
@@ -88,6 +99,7 @@ namespace jam::net
 				m_socialService->Stop();
 			m_socialService.reset();
 			m_worldTransitions->Close();
+			m_worldSync->Close();
 			return false;
 		}
 
@@ -104,6 +116,7 @@ namespace jam::net
 			return;
 
 		StopWorldTransitionTicks();
+		if (m_worldSync) m_worldSync->Close();
 
 		if (m_worldTransitions)
 			m_worldTransitions->Close();
@@ -116,6 +129,7 @@ namespace jam::net
 			m_contentService->Stop();
 
 		m_worldTransitions.reset();
+		m_worldSync.reset();
 		m_socialService.reset();
 		m_contentService.reset();
 
@@ -301,27 +315,40 @@ namespace jam::net
 	void ServerNetworkManager::StartWorldTransitionTicks()
 	{
 		StopWorldTransitionTicks();
+
 		const std::weak_ptr<ServerWorldTransitionCoordinator> coordinator = m_worldTransitions;
-		for (const auto& shard : GLOBAL_EXEC.GetShards())
-		{
-			if (!shard)
-				continue;
-			const PeriodicHandle handle = shard->ScheduleFixedDelay(
-				Job([coordinator]()
+		const std::weak_ptr<ServerWorldSyncSystem> synchronization = m_worldSync;
+
+		GLOBAL_EXEC.ConveyAll(Job([coordinator, synchronization]()
+			{
+				auto& local = CurrentShardLocalChecked();
+				const ShardDomain domain{ DomainOf("USER_WORLD"), 0 };
+
+				// Replace any previous registration on this owning shard.
+				local.domainGroups.erase(domain);
+				RegisterShardSystemFn(local, domain, 100_ms,
+					[coordinator, synchronization](ShardLocal&, Timestamp, Duration)
 					{
+						// Domain timestamps may lag during catch-up; deadlines use real time.
+						const Timestamp now = NOW();
+
 						if (const auto locked = coordinator.lock())
-							locked->Tick(NOW());
-					}, eJobPriority::Control),
-				{ .period = 100_ms, .initialDelay = 100_ms, .name = "WorldTransition.Tick" });
-			m_worldTransitionTicks.emplace_back(shard, handle);
-		}
+							locked->Tick(now);
+
+						if (const auto locked = synchronization.lock())
+							locked->Tick(now);
+					});
+
+				local.domainGroups.at(domain).nextTick = NOW() + 100_ms;
+			}, eJobPriority::Control));
 	}
 
 	void ServerNetworkManager::StopWorldTransitionTicks()
 	{
-		for (auto& [shard, handle] : m_worldTransitionTicks)
-			if (shard)
-				shard->CancelPeriodic(handle);
-		m_worldTransitionTicks.clear();
+		GLOBAL_EXEC.ConveyAll(Job([]()
+			{
+				const ShardDomain domain{ DomainOf("USER_WORLD"), 0 };
+				CurrentShardLocalChecked().domainGroups.erase(domain);
+			}, eJobPriority::Control));
 	}
 }

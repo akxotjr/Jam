@@ -378,7 +378,7 @@
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldIdentity.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldRuntimeLifecycle.h">
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\ServerWorldSyncSystem.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldShardState.h">
@@ -740,7 +740,7 @@
     <ClCompile Include="src\runtime\world\actor\ActorArchetypesLoader.cpp">
       <Filter>runtime\world\actor</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\lifecycle\WorldRuntimeLifecycle.cpp">
+    <ClCompile Include="src\runtime\world\lifecycle\ServerWorldSyncSystem.cpp">
       <Filter>runtime\world\lifecycle</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\lifecycle\WorldShardState.cpp">

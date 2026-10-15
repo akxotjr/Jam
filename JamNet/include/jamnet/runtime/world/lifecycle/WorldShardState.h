@@ -1,6 +1,7 @@
 #pragma once
 
 #include "jamnet/core/executor/ShardOwnedObject.h"
+#include "jamnet/runtime/session/UserContext.h"
 #include "jamnet/runtime/world/data/WorldInstanceDatabase.h"
 #include "jamnet/runtime/world/lifecycle/WorldActionTypes.h"
 #include "jamnet/runtime/world/lifecycle/WorldTransitionTypes.h"
@@ -34,32 +35,14 @@ namespace jam::net
 		WorldGroup					group				= kInvalidWorldGroup;
 		uint32						capacity			= 0;
 		uint32						memberCount			= 0;
+		// Detached source slots remain available for recovery until final leave.
+		uint32						recoveryMemberCount = 0;
 		eWorldRuntimeState			state				= eWorldRuntimeState::Absent;
-		uint32						pendingAttachCount	= 0;
 		uint32						lifecyclePinCount	= 0;
-		uint64						destroyRevision		= 0;
 
 		bool IsValid() const { return instance.IsValid(); }
 		bool HasWorld() const { return world.IsValid(); }
-		bool HasCapacity() const { return capacity == 0 || memberCount < capacity; }
-	};
-
-	enum class eWorldTransitionMemberState : uint8
-	{
-		Reserved = 0,
-		Prepared,
-		AttachedPendingCommit,
-		Active,
-		DetachedPendingCommit,
-	};
-
-	struct WorldTransitionMember
-	{
-		WorldTransitionToken		token = {};
-		uint64						userId = 0;
-		WorldId						worldId = kInvalidWorldId;
-		eWorldTransitionMemberState state = eWorldTransitionMemberState::Reserved;
-		bool						hostMemberAttached = false;
+		bool HasMembershipCapacity() const { return capacity == 0 || static_cast<uint64>(memberCount) + recoveryMemberCount < capacity; }
 	};
 
 	struct WorldShardState
@@ -67,8 +50,6 @@ namespace jam::net
 		uint16																shardIndex = 0;
 		ShardOwnedObjectTable<WorldBase>									worldsById;
 		std::unordered_map<WorldId, WorldRecord>							worldRecordsById;
-		std::unordered_map<WorldTransitionToken, WorldTransitionMember, WorldTransitionTokenHash> enterTransitionMembers;
-		std::unordered_map<WorldTransitionToken, WorldTransitionMember, WorldTransitionTokenHash> leaveTransitionMembers;
 
 		WorldId										AllocWorldId();
 		void										FreeWorldId(WorldId worldId);
@@ -86,19 +67,14 @@ namespace jam::net
 		WorldRecord*								FindAuthoritativeWorldEntry(WorldId worldId);
 		const WorldRecord*							FindAuthoritativeWorldEntry(WorldId worldId) const;
 
-		bool										ReserveEnter(WorldTransitionToken token, uint64 userId, const WorldRef& target);
-		bool										PrepareEnter(WorldTransitionToken token);
-		bool										AttachPrepared(WorldTransitionToken token, const WorldUserContext& user);
-		bool										ActivateAttached(WorldTransitionToken token);
-		bool										RollbackEnter(WorldTransitionToken token);
-		bool										PrepareLeave(WorldTransitionToken token, uint64 userId, const WorldRef& source);
-		bool										DetachMain(WorldTransitionToken token);
-		bool										CancelPreparedLeave(WorldTransitionToken token);
-		bool										CommitLeave(WorldTransitionToken token);
-		bool										RestoreDetachedMain(WorldTransitionToken token, const WorldUserContext& user);
-		bool										DisconnectMember(uint64 userId, const WorldRef& world);
-		bool										TryBeginWorldDrain(WorldId worldId, uint64 expectedDestroyRevision);
-		bool										CanDestroyWorld(WorldId worldId, uint64 expectedDestroyRevision) const;
+		// Record counters and lifetime only; ServerWorld owns all content work.
+		eWorldTransitionFailure JoinWorldMembership(const WorldRef& world, WorldUserContext user, WorldTransitionToken token, std::string entryPoint);
+		bool DetachWorldMembership(const WorldRef& world, UserId userId, WorldTransitionToken token);
+		bool CancelWorldMembership(const WorldRef& world, UserId userId, WorldTransitionToken token);
+		bool RecoverWorldMembership(const WorldRef& world, WorldUserContext user, WorldTransitionToken token);
+		bool CompleteWorldMembershipLeave(const WorldRef& world, UserId userId, WorldTransitionToken token);
+		bool CompleteWorldMembershipEntry(const WorldRef& world, UserId userId, WorldTransitionToken token);
+		bool BeginDestroyMembershipWorld(WorldId worldId, eMailboxCloseMode mode, std::function<void()> onDestroyed);
 	};
 
 	WorldShardState& GetOrCreateWorldShardState(ShardLocal& local);

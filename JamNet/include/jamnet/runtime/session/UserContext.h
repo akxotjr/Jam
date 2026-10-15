@@ -3,7 +3,6 @@
 #include "jamnet/core/executor/ShardOwnedObject.h"
 #include "jamnet/runtime/world/lifecycle/WorldTransitionTypes.h"
 
-#include <optional>
 #include <unordered_map>
 
 namespace jam
@@ -40,11 +39,6 @@ namespace jam::net
 		return GetRuntimeGeneration(id);
 	}
 
-	struct UserWorldTransitionContext
-	{
-		std::optional<WorldTransitionState> active;
-	};
-
 	enum class eUserConnectionState : uint8
 	{
 		Connected,
@@ -52,24 +46,40 @@ namespace jam::net
 		Released,
 	};
 
-	enum class eUserWorldResyncPhase : uint8
+	enum class eUserWorldSyncPhase : uint8
 	{
 		None,
 		WaitingTransition,
 		WaitingClientPrepared,
 		WaitingClientApplied,
 		WaitingTransport,
+		WaitingActivation,
 	};
 
-	struct UserWorldResyncContext
+	struct UserWorldSyncContext
 	{
-		eUserWorldResyncPhase	phase			= eUserWorldResyncPhase::None;
+		eUserWorldSyncPhase		phase			= eUserWorldSyncPhase::None;
 		WorldSyncToken			token			= {};
 		WorldRef				world			= {};
 		WorldStateRevision		mainRevision	= 0;
 		Timestamp				deadline		= Timestamp::Zero();
+		Timestamp				retryAt			= Timestamp::Zero();
+
+		bool IsActive() const noexcept
+		{
+			return phase != eUserWorldSyncPhase::None;
+		}
+
+		bool MatchesRequest(const UserWorldSyncContext& request) const noexcept
+		{
+			return token == request.token
+				&& world == request.world
+				&& mainRevision == request.mainRevision;
+		}
 	};
 
+	// User is one client identity with its TCP/UDP sessions; replacing a session
+	// does not by itself replace the User. A User has at most one committed World membership.
 	struct UserContext
 	{
 		AccountId						accountId			= kInvalidAccountId;
@@ -78,9 +88,38 @@ namespace jam::net
 		SessionId						udp					= kInvalidSessionId;
 		eUserConnectionState			connectionState		= eUserConnectionState::Connected;
 		Timestamp						reconnectDeadline   = Timestamp::Zero();
-		UserWorldResyncContext			worldResync;
+		UserWorldSyncContext			worldSync;
 		UserWorldState					worldState;
-		UserWorldTransitionContext		worldTransition;
+		WorldTransitionState			worldTransition;
+
+		bool IsConnected() const noexcept
+		{
+			return connectionState == eUserConnectionState::Connected;
+		}
+
+		// Session registration only; does not inspect live transport objects.
+		bool HasBothSessions() const noexcept
+		{
+			return tcp != kInvalidSessionId && udp != kInvalidSessionId;
+		}
+
+		bool HasNoSessions() const noexcept
+		{
+			return tcp == kInvalidSessionId && udp == kInvalidSessionId;
+		}
+
+		bool HasPendingWorldWork() const noexcept
+		{
+			return worldTransition.IsActive() || worldSync.IsActive();
+		}
+
+		bool CanRelease() const noexcept
+		{
+			return connectionState == eUserConnectionState::Released
+				&& HasNoSessions()
+				&& !worldState.main
+				&& !worldTransition.IsActive();
+		}
 	};
 
 	struct UserShardState

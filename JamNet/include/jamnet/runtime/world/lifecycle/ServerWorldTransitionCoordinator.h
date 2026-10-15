@@ -39,8 +39,6 @@ namespace jam::net
 		void					Enter(UserId userId, const EnterWorldRequest& request, Timestamp nowNs);
 		void					Leave(UserId userId, const LeaveWorldRequest& request);
 		
-		void					OnClientWorldSyncResult(UserId userId, const ClientWorldSyncResult& result, Timestamp now);
-		
 		void					Tick(Timestamp now);
 		
 		void					OnDisconnected(UserId userId);
@@ -58,13 +56,7 @@ namespace jam::net
 		struct WorldCommandCompletedEvent
 		{
 			WorldTransitionContinuation	continuation;
-			bool						succeeded = false;
-		};
-		struct ClientWorldSyncCompletedEvent
-		{
-			UserId						userId = {};
-			ClientWorldSyncResult		result;
-			Timestamp					now    = Timestamp::Zero();
+			eWorldTransitionFailure		failure = eWorldTransitionFailure::None;
 		};
 		struct TransitionTimedOutEvent
 		{
@@ -79,7 +71,6 @@ namespace jam::net
 		using WorldTransitionEvent = std::variant<
 			WorldReadyEvent, 
 			WorldCommandCompletedEvent, 
-			ClientWorldSyncCompletedEvent,
 			TransitionTimedOutEvent, 
 			UserDisconnectedEvent>;
 
@@ -105,46 +96,38 @@ namespace jam::net
 		std::optional<UserWorldState>		CommitMain(UserId userId, WorldStateRevision expectedRevision, std::optional<WorldRef> main);
 		
 		WorldTransitionState&				BeginTransition(UserContext& user, WorldTransitionState transition, eWorldTransitionPhase initialPhase);
-		bool								AdvanceTransition(UserContext& user, eWorldTransitionPhase nextPhase);
-		void								FailTransition(UserContext& user, eWorldTransitionFailure failure, bool commandInFlight = false);
-		void								ReduceTransition(const WorldTransitionEvent& event);
+
+		void								EnterMembershipOnUserShard(UserId userId, const EnterWorldRequest& request, Timestamp now);
+		void								LeaveMembershipOnUserShard(UserId userId, const LeaveWorldRequest& request);
+		bool								AdvanceMembershipTransition(UserContext& user, eWorldTransitionPhase phase);
+		void								FailMembershipTransition(UserContext& user, eWorldTransitionFailure failure);
+		void								HandleWorldTransitionEvent(const WorldTransitionEvent& event);
+		bool								SubmitMembershipCommand(const WorldRef& world, const WorldTransitionContinuation& continuation, std::function<eWorldTransitionFailure(WorldShardState&)> command);
+		void								FinishMembershipFailure(UserContext& user);
+		void								CompleteMembershipTransition(UserContext& user);
+		void								ReleaseMembershipUser(UserContext& user);
 		
 		WorldTransitionToken				IssueTransitionToken();
-		WorldSyncToken						IssueWorldSyncToken();
 		
 		std::optional<WorldInstanceRef>		ResolveDestination(const EnterWorldRequest& request) const;
 		
-		void								EnterOnUserShard(UserId userId, const EnterWorldRequest& request, Timestamp now);
-		void								LeaveOnUserShard(UserId userId, const LeaveWorldRequest& request);
 		
 		void								EnsureWorldAsync(const WorldInstanceRef& instance, WorldReadyFn completed);
 		void								StartWorldCreation(const WorldInstanceRef& instance);
 		void								CompleteWorldCreation(const WorldInstanceRef& instance, std::optional<WorldRecord> record);
 		void								CompleteWorldDestruction(const WorldRef& world, bool destroyed);
-		void								OnWorldReady(const WorldTransitionContinuation& continuation, std::optional<WorldRef> world);
-
-		bool								SubmitWorldCommand(const WorldRef& world, const WorldTransitionContinuation& continuation, std::function<bool(WorldShardState&)> command);
-		void								OnWorldCommandCompleted(const WorldTransitionContinuation& continuation, bool succeeded);
-		
-		void								FinishFailure(UserContext& user);
 		
 		void								CompleteEnter(UserContext& user, const UserWorldState& state);
 		void								CompleteLeave(UserContext& user, const UserWorldState& state);
 		
 		void								RefreshWorldUserContext(const UserContext& user);
 		void								SuspendWorldUser(const UserContext& user);
-		void								BeginWorldResync(UserContext& user);
-		void								TryCompleteWorldResync(UserContext& user);
-		void								FailWorldResync(UserContext& user);
-		void								ReleaseReconnectingUser(UserContext& user);
-		void								CompleteDisconnectedWorldLeave(UserId userId, const WorldRef& world);
 
 	private:
 
 		std::atomic<uint64>						m_nextTransitionToken = 1;
-		std::atomic<uint64>						m_nextWorldSyncToken  = 1;
 
-		Duration								m_worldSyncTimeoutNs  = 15_s;
+		Duration								m_transitionTimeout = 15_s;
 		Duration								m_reconnectTimeout  = 15_s;
 
 		ServerNetworkManager*					m_owner = nullptr;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "jamnet/core/executor/ExecutorPeriodic.h"
 #include "jamnet/core/net/Buffer.h"
 #include "jamnet/core/net/IAuthenticator.h"
 #include "jamnet/core/net/NetAddress.h"
@@ -19,7 +18,6 @@
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace jam
 {
@@ -38,6 +36,7 @@ namespace jam::net
 	class ServerUdpSession;
 	class WorldBase;
 	class IWorldContent;
+	class ServerWorldSyncSystem;
 
 	struct ServerConfig
 	{
@@ -69,6 +68,7 @@ namespace jam::net
 		bool									IsRunning() const { return m_running.load(std::memory_order_acquire); };
 
 		ServerWorldTransitionCoordinator*		GetWorldTransitionSystem() const { return m_worldTransitions.get(); }
+		ServerWorldSyncSystem*					GetWorldSyncSystem() const { return m_worldSync.get(); }
 		void									EnterWorld(UserId userId, const EnterWorldRequest& request);
 		void									LeaveWorld(UserId userId, const LeaveWorldRequest& request);
 		bool									DispatchSocialCommand(UserId userId, SocialCommand command);
@@ -98,10 +98,10 @@ namespace jam::net
 
 		std::shared_ptr<ServerService>						m_service			= nullptr;
 		std::shared_ptr<ServerWorldTransitionCoordinator>	m_worldTransitions	= nullptr;
+		std::shared_ptr<ServerWorldSyncSystem>				m_worldSync;
 		std::shared_ptr<SocialService>						m_socialService		= nullptr;
 		std::shared_ptr<GenericContentService>				m_contentService	= nullptr;
 
-		std::vector<std::pair<std::shared_ptr<ShardExecutor>, PeriodicHandle>> m_worldTransitionTicks;
 
 		std::atomic<bool>									m_running			= false;
 	};
