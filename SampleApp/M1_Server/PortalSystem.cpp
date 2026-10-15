@@ -66,7 +66,7 @@ namespace m1
 		const auto* portal  = registry.try_get<PortalComponent>(portalEntity);
 		const auto* control = registry.try_get<jam::net::ControlTag>(otherEntity);
 		
-		if (!portal || !control || control->userId == jam::net::kInvalidUserId || world.GetControlledEntity(control->userId) != otherEntity)
+		if (!portal || !control || control->userId == jam::net::kInvalidUserId || world.GetPlayerEntity(control->userId) != otherEntity)
 		{
 			return false;
 		}

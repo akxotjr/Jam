@@ -59,12 +59,14 @@ namespace m1
 
 		bool SelectCharacter(jam::net::AccountId accountId, jam::net::UserId userId, const CharacterRecord& character);
 		bool UpdateLocation(jam::net::UserId userId, jam::net::WorldArchetypeKey worldArchetypeKey, const jam::px::Vec3& position);
-		bool BeginMaterialization(jam::net::AccountId accountId, jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& target, PersistentCharacterState& outCharacter);
-		bool CompleteMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token, PlayerActorBinding targetPlayer);
-		void FailMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token);
+		// Membership materialization retains the selected character on failed first entry.
+		bool BeginMembershipMaterialization(jam::net::AccountId accountId, jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& target, PersistentCharacterState& outCharacter);
+		bool CompleteMembershipMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token, PlayerActorBinding player);
+		bool ResetMembershipActivation(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& target);
+		bool CancelMembershipMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& target);
+		bool FinalizeMembershipSource(jam::net::UserId userId, jam::net::WorldTransitionToken token, const PlayerActorBinding& source);
+		void AcceptMembershipMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token);
 
-		std::optional<PlayerActorBinding>		RollbackMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& target);
-		std::optional<PlayerActorBinding>		CommitLeave(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& source);
 		std::optional<PlayerActorBinding>		FindActivePlayer(jam::net::UserId userId, const jam::net::WorldRef& world) const;
 		std::optional<PersistentCharacterState> FindSelectedCharacter(jam::net::UserId userId) const;
 

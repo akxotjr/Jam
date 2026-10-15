@@ -9,7 +9,7 @@
 #include "jamnet/core/executor/ShardExecutor.h"
 #include "jamnet/runtime/world/simulation/common/ActorComponents.h"
 #include "jamnet/runtime/world/simulation/common/WorldContext.h"
-#include "jamnet/runtime/world/simulation/common/ShardJobBridge.h"
+#include "jamnet/runtime/world/simulation/server/ServerActorLifecycleSystem.h"
 #include "jamnet/runtime/world/simulation/server/ServerInputSystem.h"
 #include "jamnet/runtime/world/simulation/server/ServerPhysicsSystem.h"
 #include "jamnet/runtime/world/simulation/server/ServerAoiSystem.h"
@@ -81,35 +81,38 @@ namespace jam::net
 			return false;
 		}
 
-		px::ActorId BindingTarget(entt::registry& world, const entt::entity e, ActorId target, const ActorDirectory& actors)
+		bool IsValidPlayerSpawnRequest(const ServerWorld& world, UserId userId, const WorldEventCorrelation& correlation, const SpawnParams& params, bool canExecute, bool isMember)
 		{
-			if (!target.IsValid()) return px::INVALID_ACTOR_ID;
-
-			const entt::entity candidate = actors.Resolve(target);
-			if (candidate != entt::null && world.valid(candidate) && world.all_of<PhysicsSpawnedTag>(candidate))
-			{
-				const px::ActorId resolved = GetPhysicsActorId(world, candidate);
-				world.emplace<TargetInfo>(e, TargetInfo{ .targetActorId = target, .resolvedActorId = resolved });
-				return resolved;
-			}
-
-			return px::INVALID_ACTOR_ID;
+			return canExecute
+				&& isMember
+				&& userId != kInvalidUserId
+				&& correlation.world == world.GetWorldRef()
+				&& correlation.world.IsValid()
+				&& params.clientRequestId != kInvalidClientRequestId
+				&& !params.desc.IsRigid();
 		}
 
-		void YieldCurrentWorldFiber()
+		bool IsValidPlayerDespawnRequest(const ServerWorld& world, UserId userId, const WorldEventCorrelation& correlation, entt::entity player, bool canExecute, bool isMember)
 		{
-			auto* local = CurrentShardLocal();
-			if (!local || !local->scheduler || local->scheduler->Current() == 0)
-				return;
-
-			local->scheduler->YieldFiber();
+			return canExecute
+				&& isMember
+				&& userId != kInvalidUserId
+				&& correlation.world == world.GetWorldRef()
+				&& player != entt::null
+				&& world.GetPlayerEntity(userId) == player;
 		}
 
+		bool IsValidPlayerRestoreRequest(UserId userId, entt::entity player, const entt::registry& registry, bool canExecute, bool isMember)
+		{
+			return canExecute
+				&& isMember
+				&& userId != kInvalidUserId
+				&& player != entt::null
+				&& registry.valid(player)
+				&& registry.all_of<ActorId, PhysicsSpawnedTag>(player);
+		}
 
 	} // anonymous namespace
-
-
-
 
 
 	ServerWorld::ServerWorld(
@@ -124,36 +127,39 @@ namespace jam::net
 
 	ServerWorld::~ServerWorld() = default;
 
+	px::eMotionType ServerWorld::FindActorMotionType(px::PhysicsArchetypeKey archetype) const
+	{
+		return m_physics ? m_physics->FindMotionType(archetype) : px::eMotionType::None;
+	}
+
+	px::eBodyType ServerWorld::FindActorBodyType(px::PhysicsArchetypeKey archetype) const
+	{
+		return m_physics ? m_physics->FindBodyType(archetype) : px::eBodyType::None;
+	}
+
 	bool ServerWorld::OnInitialize()
 	{
 		if (!PhysicalWorld::OnInitialize()) return false;
 
-		if (auto shard = m_shard.lock())
-			m_bridge = std::make_unique<ShardJobBridge>(*shard);
-
 		if (!m_physics) return false;
 
 		ClearActorDirectory();
-		m_userToControlledEntity.clear();
-		m_playerSpawnResults.clear();
-		m_pendingPlayerSpawns.clear();
+		m_userToPlayerEntity.clear();
 		m_metrics.Init(GetWorldId(), GetWorldShardIndex(GetWorldId()));
 
-		m_physics->SetConfig(px::PhysicsConfig{ .enableReplay = false });
-		m_physics->SetJobBridge(m_bridge.get());
+		m_physics->SetConfig(px::PhysicsConfig{
+			.enableReplay = false,
+		});
 		m_physics->Init();
 
-		m_replicationSystem.reset();
-		m_aoiSystem.reset();
-		m_physicsSystem.reset();
-		m_inputSystem.reset();
 
 		m_tickCounter.Init();
 
-		m_inputSystem		= std::make_unique<ServerInputSystem>(m_registry, *this);
-		m_physicsSystem		= std::make_unique<ServerPhysicsSystem>(m_registry, m_physics.get(), *this, *m_inputSystem);
-		m_aoiSystem			= std::make_unique<ServerAoiSystem>(m_registry, m_physics.get(), m_metrics, *this, *m_physicsSystem, m_tickCounter);
-		m_replicationSystem = std::make_unique<ServerReplicationSystem>(m_registry, m_metrics, *this, *m_inputSystem, *m_aoiSystem, *m_physicsSystem, m_tickCounter);
+		m_actorSystem		= std::make_unique<ServerActorLifecycleSystem>(*this, m_registry, m_actorDirectory, m_actorArchetypes);
+		m_inputSystem		= std::make_unique<ServerInputSystem>(*this, m_registry);
+		m_physicsSystem		= std::make_unique<ServerPhysicsSystem>(*this, m_registry, m_physics.get());
+		m_aoiSystem			= std::make_unique<ServerAoiSystem>(*this, m_registry, m_physics.get(), m_metrics, m_tickCounter);
+		m_replicationSystem = std::make_unique<ServerReplicationSystem>(*this, m_registry, m_metrics);
 
 		m_inputSystem->Init();
 		m_physicsSystem->Init();
@@ -164,14 +170,14 @@ namespace jam::net
 
 		if (m_content)
 		{
-			if (!m_content->Initialize(*this))
+			if (!m_content->OnInitialize(*this))
 			{
-				m_content->Close(*this);
+				m_content->OnClose(*this);
 				return false;
 			}
 			m_contentInitialized = true;
 		}
-		
+
 		return true;
 	}
 
@@ -179,12 +185,12 @@ namespace jam::net
 	{
 		if (m_content && m_contentInitialized)
 		{
-			m_content->Close(*this);
+			m_content->OnClose(*this);
 			m_contentInitialized = false;
 		}
 
 		Stop();
-		ShutdownPhysicsWhenPipelineStops();
+		ShutdownPhysicsAfterTick();
 	}
 
 	void ServerWorld::DispatchPhysicsEvents(std::span<const px::PhysicsEvent> events)
@@ -196,7 +202,7 @@ namespace jam::net
 	void ServerWorld::Start(Duration dt)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
-		StartTickPipeline({ DOMAIN_PHYSICS, GetWorldLocalIndex(GetWorldId()) }, dt);
+		StartDomainTick({ DOMAIN_PHYSICS, GetWorldLocalIndex(GetWorldId()) }, dt);
 	}
 
 	void ServerWorld::Resume(Duration dt)
@@ -207,21 +213,12 @@ namespace jam::net
 	void ServerWorld::Stop()
 	{
 		JAM_ASSERT(IsCurrentShardContext());
-		StopTickPipeline();
+		StopDomainTick();
 	}
 
-	bool ServerWorld::AddMember(WorldUserContext user)
+	bool ServerWorld::OnUserEntered(UserId userId)
 	{
-		const UserId userId = user.userId;
-		if (!WorldMembershipHost::AddMember(std::move(user)))
-			return false;
-
-		if (!m_replicationSystem || !m_replicationSystem->AttachUser(userId))
-		{
-			WorldMembershipHost::RemoveMember(userId);
-			return false;
-		}
-		return true;
+		return m_replicationSystem->AttachUser(userId);
 	}
 
 	void ServerWorld::SuspendMemberReplication(UserId userId)
@@ -229,8 +226,7 @@ namespace jam::net
 		JAM_ASSERT(IsCurrentShardContext());
 		if (!m_userContexts.contains(userId))
 			return;
-		if (m_replicationSystem)
-			m_replicationSystem->SuspendUser(userId);
+		m_replicationSystem->SuspendUser(userId);
 	}
 
 	bool ServerWorld::ResumeMemberReplication(UserId userId)
@@ -239,34 +235,37 @@ namespace jam::net
 		if (!m_userContexts.contains(userId))
 			return false;
 
-		if (m_inputSystem)
-			m_inputSystem->RemoveUser(userId);
-		if (m_replicationSystem)
-			return m_replicationSystem->ResumeUserWithFullSync(userId);
-		return false;
+		m_inputSystem->ResetInputStream(userId);
+		return m_replicationSystem->ResumeUserWithFullSync(userId, GetPlayerEntity(userId) != entt::null);
 	}
 
 
 	void ServerWorld::SendTo(Packet packet, UserId userId)
 	{
+		TrySendTo(std::move(packet), userId);
+	}
+
+	bool ServerWorld::TrySendTo(Packet packet, UserId userId)
+	{
 		if (!packet.IsValid())
 		{
 			JAM_LOG_WARN_LOC("send packet is invalid");
-			return;
+			return false;
 		}
 
 		const eProtocolType protocol = ResolveProtocol(packet);
 		if (protocol == eProtocolType::NONE)
-			return;
+			return false;
 
 		const PacketHeaderView view = PacketHeaderView::Parse(packet->Head(), packet->Size());
 		if (!view.IsValid())
-			return;
+			return false;
 
 		if (const auto it = m_userContexts.find(userId); it != m_userContexts.end())
 		{
-			PostToSession(it->second.sessions, protocol, std::move(packet));
+			return PostToSession(it->second.sessions, protocol, std::move(packet));
 		}
+		return false;
 	}
 
 	void ServerWorld::Multicast(Packet packet)
@@ -316,8 +315,7 @@ namespace jam::net
 			const auto* batch = fb::GetfbBaselineAckBatch(view.Payload());
 			if (!batch || batch->world_id() != GetWorldId() || batch->world_instance_id() != GetWorldInstance().instanceId.value)
 				break;
-			if (m_replicationSystem)
-				m_replicationSystem->HandleBaselineFeedback(userId, *batch);
+			m_replicationSystem->HandleBaselineFeedback(userId, *batch, m_aoiSystem->GetState(userId));
 			break;
 		}
 		default: break;
@@ -327,160 +325,86 @@ namespace jam::net
 	void ServerWorld::SpawnPlayerAsync(UserId userId, const WorldEventCorrelation& correlation, SpawnParams params, std::function<void(ActorId, ePlayerSpawnFailure)> onDone)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
-
-		if (IsPipelineTickInProgress())
-		{
-			const bool deferred = DeferUntilPipelineSafePoint(
-				[this, userId, correlation, params = params, onDone = std::move(onDone)]() mutable
-				{
-					SpawnPlayerAsync(userId, correlation, params, std::move(onDone));
-				});
-			JAM_ASSERT(deferred);
-			return;
-		}
+		JAM_ASSERT(!IsTickInProgress());
 
 		auto complete = [&onDone](ActorId actorId, ePlayerSpawnFailure failure)
 			{
-				if (onDone)
-					onDone(actorId, failure);
+				if (onDone) onDone(actorId, failure);
 			};
 
-		if (userId == 0 || !correlation.world.IsValid() || correlation.world != GetWorldRef()
-			|| !m_userContexts.contains(userId) || !m_replicationSystem
-			|| params.controller != userId || params.desc.IsRigid())
+		if (!IsValidPlayerSpawnRequest(*this, userId, correlation, params,
+			!IsTickInProgress() && m_alive.load(std::memory_order_acquire), m_userContexts.contains(userId)))
 		{
 			complete(ActorId::Invalid(), ePlayerSpawnFailure::InvalidCorrelation);
 			return;
 		}
 
-		if (const auto it = m_playerSpawnResults.find(userId); it != m_playerSpawnResults.end())
+		if (GetPlayerEntity(userId) != entt::null)
 		{
-			if (it->second.clientRequestId == params.clientRequestId)
-				complete(it->second.actorId, ePlayerSpawnFailure::None);
-			else
-				complete(ActorId::Invalid(), ePlayerSpawnFailure::AlreadySpawned);
-			return;
-		}
-		if (auto it = m_pendingPlayerSpawns.find(userId); it != m_pendingPlayerSpawns.end())
-		{
-			if (it->second.clientRequestId == params.clientRequestId)
-			{
-				if (onDone)
-					it->second.completions.push_back(std::move(onDone));
-			}
-			else
-			{
-				complete(ActorId::Invalid(), ePlayerSpawnFailure::AlreadySpawned);
-			}
+			complete(ActorId::Invalid(), ePlayerSpawnFailure::AlreadySpawned);
 			return;
 		}
 
-		if (!m_replicationSystem->IsAwaitingPlayer(userId))
+		if (!m_replicationSystem->IsAwaitingPlayer(userId) && !m_replicationSystem->IsSuspended(userId))
 		{
 			complete(ActorId::Invalid(), ePlayerSpawnFailure::InvalidCorrelation);
 			return;
 		}
 
-		const ClientRequestId clientRequestId = params.clientRequestId;
-		const ActorId actorId = SpawnActor(params);
+		params.owner = userId;
+		const auto [actorId, entity] = ExecuteSpawnActor(params, true);
 		if (!actorId.IsValid())
 		{
 			complete(ActorId::Invalid(), ePlayerSpawnFailure::SpawnFailed);
 			return;
 		}
 
-		const entt::entity entity = ResolveActor(actorId);
-		if (entity == entt::null || !m_registry.valid(entity))
+		if (!BindPlayer(userId, entity))
 		{
+			ExecuteDespawnActor(userId, actorId);
 			complete(ActorId::Invalid(), ePlayerSpawnFailure::SpawnFailed);
 			return;
 		}
 
-		EnsureUserAoiRegistration(userId);
-
-		PendingPlayerSpawn pending
-		{
-			.correlation = correlation,
-			.clientRequestId = clientRequestId,
-			.actorId = actorId,
-			.entity = entity,
-			.deadlineNs = NOW() + 10_s,
-		};
-		if (onDone)
-			pending.completions.push_back(std::move(onDone));
-		m_pendingPlayerSpawns.emplace(userId, std::move(pending));
+		complete(actorId, ePlayerSpawnFailure::None);
 	}
 
-	bool ServerWorld::DespawnPlayer(UserId userId, const WorldEventCorrelation& correlation, ActorId actorId)
+	void ServerWorld::DespawnPlayerAsync(UserId userId, const WorldEventCorrelation& correlation, ActorId actorId, std::function<void(bool)> onDone)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
 		const entt::entity player = ResolveActor(actorId);
-		const bool valid = userId != 0
-			&& correlation.world == GetWorldRef()
-			&& m_userContexts.contains(userId)
-			&& player != entt::null
-			&& GetControlledEntity(userId) == player;
-		return valid && DespawnActor(actorId, userId);
+		const bool valid =
+			IsValidPlayerDespawnRequest(*this, userId, correlation, player, !IsTickInProgress() && m_alive.load(std::memory_order_acquire), m_userContexts.contains(userId));
+		const bool succeeded = valid && ExecuteDespawnActor(userId, actorId);
+
+		if (onDone) onDone(succeeded);
 	}
 
-	bool ServerWorld::RestorePlayerControl(UserId userId, ActorId actorId)
+	bool ServerWorld::RestorePlayerBinding(UserId userId, ActorId actorId)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
 		const entt::entity player = ResolveActor(actorId);
-		if (userId == kInvalidUserId || !m_userContexts.contains(userId)
-			|| player == entt::null || !m_registry.valid(player))
-		{
+		if (!IsValidPlayerRestoreRequest(userId, player, m_registry, !IsTickInProgress() && m_alive.load(std::memory_order_acquire), m_userContexts.contains(userId)))
 			return false;
-		}
 
-		if (!ApplyInitialControl(player, userId))
+		const entt::entity currentPlayer = GetPlayerEntity(userId);
+		if (currentPlayer != entt::null && currentPlayer != player)
 			return false;
-		EnsureUserAoiRegistration(userId);
-		if (m_replicationSystem)
-		{
-			m_replicationSystem->MarkActorDirty(player, true);
-			if (m_replicationSystem->IsAwaitingPlayer(userId) && !m_replicationSystem->BeginInitialSync(userId))
-				return false;
-		}
-		return GetControlledEntity(userId) == player;
+
+		return BindPlayer(userId, player, currentPlayer == player);
 	}
 
-	void ServerWorld::PrepareMemberContent(const ServerWorldMemberContentContext& context, IWorldContent::PrepareMemberCompletion completion)
-	{
-		JAM_ASSERT(IsCurrentShardContext());
-		if (!m_content || !m_userContexts.contains(context.userId))
-		{
-			if (completion) completion(!m_content);
-			return;
-		}
-		m_content->PrepareMemberContent(*this, context, std::move(completion));
-	}
 
-	void ServerWorld::RollbackMemberContent(UserId userId, WorldTransitionToken transitionToken)
-	{
-		JAM_ASSERT(IsCurrentShardContext());
-		if (m_content)
-			m_content->RollbackMemberContent(*this, userId, transitionToken);
-	}
-
-	bool ServerWorld::CommitMemberLeave(UserId userId, WorldTransitionToken transitionToken)
-	{
-		JAM_ASSERT(IsCurrentShardContext());
-		return !m_content || m_content->CommitMemberLeave(*this, userId, transitionToken);
-	}
-
-	bool ServerWorld::RestoreMemberContent(const WorldUserContext& user, WorldTransitionToken transitionToken)
-	{
-		JAM_ASSERT(IsCurrentShardContext());
-		return !m_content || m_content->RestoreMemberContent(*this, user, transitionToken);
-	}
-
-	entt::entity ServerWorld::GetControlledEntity(UserId userId) const
+	entt::entity ServerWorld::GetPlayerEntity(UserId userId) const
 	{
 		if (userId == 0)
 			return entt::null;
 
-		if (auto it = m_userToControlledEntity.find(userId); it != m_userToControlledEntity.end())
+		if (auto it = m_userToPlayerEntity.find(userId); it != m_userToPlayerEntity.end())
 			return it->second;
 		return entt::null;
 	}
@@ -494,183 +418,86 @@ namespace jam::net
 			return false;
 
 		request.expectedMainRevision = member->second.mainRevision;
-		m_enterWorld(userId, request);
-		return true;
-	}
 
+		// Portal callbacks run inside Tick. Start the transition after Tick returns.
+		return Post(Job([this, userId, request = std::move(request)]()
+			{
+				const auto current = m_userContexts.find(userId);
+				if (!m_alive.load(std::memory_order_acquire)
+					|| current == m_userContexts.end()
+					|| current->second.mainRevision != request.expectedMainRevision)
+				{
+					return;
+				}
+
+				m_enterWorld(userId, request);
+			}, eJobPriority::Control));
+	}
 
 
 	void ServerWorld::Tick()
 	{
-		if (!m_inputSystem || !m_physicsSystem || !m_aoiSystem || !m_replicationSystem)
-			return;
+		JAM_ASSERT(IsCurrentShardContext());
 
 		std::array<uint64, 6> phases{};
 		const uint64 tickStartNs = NOW().Ns();
 		m_tickCounter.Tick();
 
 		uint64 phaseStartNs = NOW().Ns();
+
 		m_inputSystem->Tick();
 		phases[1] = NOW().Ns() - phaseStartNs;
 
 		phaseStartNs = NOW().Ns();
 		m_physicsSystem->Tick();
+		m_inputSystem->MarkInputApplied(m_physicsSystem->GetLastAppliedInputUsers());
+		const auto activeEntities = m_physicsSystem->GetLastActiveEntities();
 		phases[2] = NOW().Ns() - phaseStartNs;
-		YieldCurrentWorldFiber();
 
 		phaseStartNs = NOW().Ns();
-		m_aoiSystem->Tick();
+		m_aoiSystem->Tick(activeEntities);
 		phases[3] = NOW().Ns() - phaseStartNs;
-		YieldCurrentWorldFiber();
 
 		phaseStartNs = NOW().Ns();
-		m_replicationSystem->Tick();
+		m_replicationSystem->BeginTick(activeEntities);
+		for (const auto& userId : m_userContexts | std::views::keys)
+		{
+			m_replicationSystem->ReplicateUser(ReplicationUserInput{
+				.userId					= userId,
+				.appliedInputSequence   = m_inputSystem->LastAppliedSeq(userId),
+				.appliedControlRevision = m_inputSystem->LastAppliedControlRevision(userId),
+				.aoiState				= m_aoiSystem->GetState(userId)
+			}, m_tickCounter.tick);
+		}
+		m_replicationSystem->EndTick();
+		m_aoiSystem->ClearTransientEvents();
 		phases[4] = NOW().Ns() - phaseStartNs;
 
-		phaseStartNs = NOW().Ns();
-		FinalizePendingPlayerSpawns();
 		const Timestamp profileNow = NOW();
 		const uint64 profileNowNs = profileNow.Ns();
-		phases[5] = profileNowNs - phaseStartNs;
+		// Preserve the metric layout; player completion no longer has a tick phase.
+		phases[5] = 0;
 		phases[0] = profileNowNs - tickStartNs;
 		m_metrics.RecordTick(phases, m_userContexts.size(), profileNow);
 		SubmitWorldMetrics(profileNow);
 	}
 
-	void ServerWorld::SubmitWorldMetrics(Timestamp nowNs)
+	void ServerWorld::SubmitWorldMetrics(Timestamp now)
 	{
-		if (!m_metrics.IsReadyToSubmit(nowNs))
+		if (!m_metrics.IsReadyToSubmit(now))
 			return;
 
-		m_metrics.SubmitSnapshot(nowNs);
+		m_metrics.SubmitSnapshot(now);
 		m_metrics.Reset();
-	}
-
-	void ServerWorld::FinalizePendingPlayerSpawns()
-	{
-		if (m_pendingPlayerSpawns.empty())
-			return;
-
-		if (!m_aoiSystem || !m_replicationSystem)
-			return;
-
-		const Timestamp now = NOW();
-		std::vector<uint64> readyUsers;
-		std::vector<uint64> failedUsers;
-		readyUsers.reserve(m_pendingPlayerSpawns.size());
-		failedUsers.reserve(m_pendingPlayerSpawns.size());
-
-		for (const auto& [userId, pending] : m_pendingPlayerSpawns)
-		{
-			if (!m_userContexts.contains(userId)
-				|| pending.correlation.world != GetWorldRef()
-				|| !m_replicationSystem->IsAwaitingPlayer(userId)
-				|| pending.entity == entt::null
-				|| !m_registry.valid(pending.entity)
-				|| ResolveActor(pending.actorId) != pending.entity)
-			{
-				failedUsers.push_back(userId);
-				continue;
-			}
-
-			EnsureUserAoiRegistration(userId);
-
-			const auto* control = m_registry.try_get<ControlTag>(pending.entity);
-			const bool playerReady = m_registry.all_of<PhysicsSpawnedTag>(pending.entity)
-				&& control && control->userId == userId
-				&& GetControlledEntity(userId) == pending.entity
-				&& m_aoiSystem->IsActorRegistered(pending.entity)
-				&& m_aoiSystem->IsUserReady(userId);
-
-			if (playerReady)
-				readyUsers.push_back(userId);
-			else if (now >= pending.deadlineNs)
-				failedUsers.push_back(userId);
-		}
-
-		for (const uint64 userId : readyUsers)
-		{
-			auto it = m_pendingPlayerSpawns.find(userId);
-			if (it == m_pendingPlayerSpawns.end())
-				continue;
-
-			const ActorId actorId = it->second.actorId;
-			if (m_replicationSystem->BeginInitialSync(userId))
-				CompletePendingPlayerSpawn(userId, actorId, ePlayerSpawnFailure::None);
-			else
-				CompletePendingPlayerSpawn(userId, ActorId::Invalid(), ePlayerSpawnFailure::SpawnFailed);
-		}
-
-		for (const uint64 userId : failedUsers)
-			CompletePendingPlayerSpawn(userId, ActorId::Invalid(), ePlayerSpawnFailure::SpawnFailed);
-	}
-
-	void ServerWorld::CompletePendingPlayerSpawn(UserId userId, ActorId actorId, ePlayerSpawnFailure failure)
-	{
-		auto it = m_pendingPlayerSpawns.find(userId);
-		if (it == m_pendingPlayerSpawns.end())
-			return;
-
-		PendingPlayerSpawn pending = std::move(it->second);
-		m_pendingPlayerSpawns.erase(it);
-
-		if (failure == ePlayerSpawnFailure::None && actorId.IsValid())
-		{
-			m_playerSpawnResults.insert_or_assign(userId, PlayerSpawnResult
-				{
-					.clientRequestId = pending.clientRequestId,
-					.actorId = actorId,
-				});
-		}
-		else
-		{
-			actorId = ActorId::Invalid();
-			if (pending.actorId.IsValid())
-				DespawnActor(pending.actorId, userId);
-		}
-
-		for (auto& completion : pending.completions)
-			if (completion) completion(actorId, failure);
 	}
 
 	void ServerWorld::OnUserLeft(UserId userId)
 	{
-		if (m_inputSystem)
-			m_inputSystem->RemoveUser(userId);
+		UnbindPlayer(userId);
 
-		if (auto it = m_userToControlledEntity.find(userId); it != m_userToControlledEntity.end())
-		{
-			const entt::entity controlled = it->second;
-			m_userToControlledEntity.erase(it);
-			if (m_registry.valid(controlled) && m_registry.all_of<ControlTag>(controlled))
-			{
-				auto& control = m_registry.get<ControlTag>(controlled);
-				if (control.userId == userId)
-				{
-					control.userId = 0;
-					m_registry.remove<px::CharacterMotorInput>(controlled);
-					if (m_replicationSystem)
-						m_replicationSystem->MarkActorDirty(controlled, true);
-				}
-			}
-		}
+		m_replicationSystem->OnUserLeave(userId);
 
-		if (m_replicationSystem)
-			m_replicationSystem->OnUserLeave(userId);
-
-		if (m_aoiSystem)
-			m_aoiSystem->OnUserLeave(userId);
-
-		if (auto it = m_pendingPlayerSpawns.find(userId); it != m_pendingPlayerSpawns.end())
-		{
-			PendingPlayerSpawn pending = std::move(it->second);
-			m_pendingPlayerSpawns.erase(it);
-			if (pending.actorId.IsValid())
-				DespawnActor(pending.actorId, userId);
-			for (auto& completion : pending.completions)
-				if (completion) completion(ActorId::Invalid(), ePlayerSpawnFailure::SpawnFailed);
-		}
-		m_playerSpawnResults.erase(userId);
+		m_actorSystem->RemoveUser(userId);
 	}
 
 	void ServerWorld::BootstrapLevelActors()
@@ -680,342 +507,145 @@ namespace jam::net
 
 		for (const ActorLevelInstanceData& instance : m_actorLevels.instances)
 		{
-			const ActorArchetypeData* actorArchetype = m_actorArchetypes.Find(instance.actorArchetype);
-			if (!actorArchetype || !actorArchetype->AllowsSpawn(eActorSpawnSource::Level)
-				|| !IsValidAssetKey(actorArchetype->key) || !IsValidAssetKey(actorArchetype->physicsArchetype))
+			SpawnParams params{};
+			const auto result = m_actorSystem->PrepareLevelSpawn(instance, params);
+			if (!result.Succeeded())
 				continue;
 
-			const px::PhysicsArchetypeKey physicsArchetypeKey = actorArchetype->physicsArchetype;
-			if (!IsValidAssetKey(physicsArchetypeKey))
-				continue;
-
-			const px::eBodyType bodyType = m_physics->FindBodyType(physicsArchetypeKey);
-			if (bodyType == px::eBodyType::None)
-				continue;
-
-			const ActorId actorId = ActorId(instance.actorId);
-			if (!actorId.IsValid() || ResolveActor(actorId) != entt::null)
+			if (!m_physicsSystem->SpawnActor(result.entity, params.desc))
 			{
-				JAM_LOG_WARN("[ServerPhysicalWorld::BootstrapLevelActors] invalid or duplicate actorId={}", instance.actorId);
+				m_actorSystem->ReleaseActor(result.actorId, result.entity);
 				continue;
 			}
 
-			const entt::entity e = m_registry.create();
-
-			if (!m_actorDirectory.Bind(actorId, e))
-			{
-				m_registry.destroy(e);
-				continue;
-			}
-			m_registry.emplace<ActorId>(e, actorId);
-
-			px::SpawnDesc desc{};
-			desc.archetype = physicsArchetypeKey;
-			desc.pose = instance.pose;
-			desc.spawnSrc = px::eSpawnSource::Level;
-			desc.overrides = (bodyType == px::eBodyType::Character)
-				? std::variant<px::RigidSpawnOverrides, px::CharacterSpawnOverrides>(px::CharacterSpawnOverrides{})
-				: std::variant<px::RigidSpawnOverrides, px::CharacterSpawnOverrides>(px::RigidSpawnOverrides{});
-
-			m_registry.emplace<ActorBodyType>(e, ActorBodyType{ bodyType });
-			m_registry.emplace<ActorArchetypeRef>(e, ActorArchetypeRef{ actorArchetype->key });
-			m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ physicsArchetypeKey });
-			m_registry.emplace<OwnershipTag>(e);
-			m_registry.emplace<ControlTag>(e);
-
-			if (bodyType == px::eBodyType::Character)
-			{
-				px::CharacterState state{};
-				state.pos = instance.pose.p;
-				m_registry.emplace<CharAuthorityState>(e, state);
-			}
-			else
-			{
-				px::RigidState state{};
-				state.pose = instance.pose;
-				m_registry.emplace<RigidAuthorityState>(e, state);
-			}
-
-			m_registry.emplace<NewlyCreatedTag>(e);
-			if (!actorArchetype->allowReplication)
-				m_registry.emplace<ReplicationDisabledTag>(e);
-			else if (m_physics->FindMotionType(physicsArchetypeKey) == px::eMotionType::Static)
-				m_registry.emplace<ReplicationStaticTag>(e);
-
-			m_physicsSystem->SpawnActor(e, desc);
-			if (!m_registry.valid(e))
-			{
-				m_actorDirectory.Unbind(actorId);
-				continue;
-			}
-
-			if (!m_registry.all_of<PhysicsSpawnedTag>(e))
-			{
-				ReleaseActorId(e);
-				m_registry.destroy(e);
-				continue;
-			}
-
-			if (!m_registry.all_of<ReplicationDisabledTag>(e) && m_registry.all_of<PhysicsSpawnedTag>(e))
-			{
-				if (m_aoiSystem)
-					m_aoiSystem->OnActorSpawned(e);
-			}
+			m_aoiSystem->OnActorSpawned(result.entity);
 		}
 		JAM_ASSERT(ValidateActorIdentities());
 	}
 
-	ActorId ServerWorld::SpawnActor(SpawnParams params)
+	std::pair<ActorId, entt::entity> ServerWorld::ExecuteSpawnActor(SpawnParams params, bool clientRequest)
 	{
-		JAM_ASSERT(IsCurrentShardContext());
-		JAM_ASSERT(!IsPipelineTickInProgress());
-		if (IsPipelineTickInProgress())
-			return ActorId::Invalid();
+		const auto result = m_actorSystem->PrepareSpawn(params, clientRequest);
+		if (!result.Succeeded())
+			return { ActorId::Invalid(), entt::null };
 
-		if (!IsValidAssetKey(params.actorArchetypeKey))
-			return ActorId::Invalid();
-
-		const ActorArchetypeData* actorArchetype = m_actorArchetypes.Find(params.actorArchetypeKey);
-		if (!actorArchetype || !actorArchetype->AllowsSpawn(eActorSpawnSource::Runtime)
-			|| !IsValidAssetKey(actorArchetype->physicsArchetype))
-			return ActorId::Invalid();
-
-		if (IsValidAssetKey(params.desc.archetype) && params.desc.archetype != actorArchetype->physicsArchetype)
-			return ActorId::Invalid();
-		params.desc.archetype = actorArchetype->physicsArchetype;
-
-		if (!IsValidAssetKey(params.desc.archetype))
-			return ActorId::Invalid();
-
-		const entt::entity e = m_registry.create();
-		const ActorId actorId = AllocateActorId(e);
-		if (!actorId.IsValid())
+		const entt::entity entity = result.entity;
+		if (!m_physicsSystem->SpawnActor(entity, params.desc))
 		{
-			m_registry.destroy(e);
-			return ActorId::Invalid();
-		}
-		const px::eBodyType body = params.desc.IsRigid() ? px::eBodyType::Rigid : px::eBodyType::Character;
-
-		m_registry.emplace<ActorBodyType>(e, ActorBodyType{ body });
-		m_registry.emplace<ActorArchetypeRef>(e, ActorArchetypeRef{ params.actorArchetypeKey });
-		m_registry.emplace<PhysicsArchetypeRef>(e, PhysicsArchetypeRef{ params.desc.archetype });
-		m_registry.emplace<OwnershipTag>(e, OwnershipTag{ params.owner });
-		m_registry.emplace<ControlTag>(e);
-
-		if (!actorArchetype->allowReplication)
-			m_registry.emplace<ReplicationDisabledTag>(e);
-		else if (m_physics->FindMotionType(params.desc.archetype) == px::eMotionType::Static)
-			m_registry.emplace<ReplicationStaticTag>(e);
-		
-		if (body == px::eBodyType::Rigid)
-		{
-			m_registry.emplace<RigidAuthorityState>(e);
-		}
-		else
-		{
-			m_registry.emplace<CharAuthorityState>(e);
+			m_actorSystem->ReleaseActor(result.actorId, entity);
+			return { ActorId::Invalid(), entt::null };
 		}
 
-		m_registry.emplace<NewlyCreatedTag>(e);
-		m_registry.emplace<ClientRequestCorrelation>(e, ClientRequestCorrelation{ params.clientRequestId });
-
-
-		if (params.controller != 0 && !ApplyInitialControl(e, params.controller))
-		{
-			ReleaseActorId(e);
-			m_registry.destroy(e);
-			return ActorId::Invalid();
-		}
-
-		params.desc.targetActorId = BindingTarget(m_registry, e, params.targetActorId, m_actorDirectory);
-
-		m_physicsSystem->SpawnActor(e, params.desc);
-		if (!m_registry.valid(e))
-		{
-			m_actorDirectory.Release(actorId);
-			if (params.controller != 0)
-			{
-				auto it = m_userToControlledEntity.find(params.controller);
-				if (it != m_userToControlledEntity.end() && it->second == e)
-					m_userToControlledEntity.erase(it);
-			}
-			return ActorId::Invalid();
-		}
-
-		if (!m_registry.all_of<PhysicsSpawnedTag>(e))
-		{
-			ReleaseActorId(e);
-			m_registry.destroy(e);
-			if (params.controller != 0)
-			{
-				auto it = m_userToControlledEntity.find(params.controller);
-				if (it != m_userToControlledEntity.end() && it->second == e)
-					m_userToControlledEntity.erase(it);
-			}
-			return ActorId::Invalid();
-		}
-
-		if (!m_registry.all_of<ReplicationDisabledTag>(e) && m_registry.all_of<PhysicsSpawnedTag>(e))
-		{
-			if (m_aoiSystem)
-				m_aoiSystem->OnActorSpawned(e);
-		}
-
-
+		m_aoiSystem->OnActorSpawned(entity);
 		JAM_ASSERT(ValidateActorIdentities());
-		return actorId;
+		return { result.actorId, entity };
 	}
 
-	void ServerWorld::SpawnActorAsync(SpawnParams params, std::function<void(ActorId)> onDone)
+	void ServerWorld::SpawnActorAsync(UserId requester, SpawnParams params, std::function<void(ActorId)> onDone)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
-		if (IsPipelineTickInProgress())
-		{
-			const bool deferred = DeferUntilPipelineSafePoint(
-				[this, params = params, onDone = std::move(onDone)]() mutable
-				{
-					SpawnActorAsync(params, std::move(onDone));
-				});
-			JAM_ASSERT(deferred);
-			return;
-		}
+		JAM_ASSERT(!IsTickInProgress());
 
-		const ActorId actorId = SpawnActor(params);
+		const ActorId actorId = [&]() -> ActorId
+		{
+			if (!m_alive.load(std::memory_order_acquire) || IsTickInProgress())
+				return ActorId::Invalid();
+
+			const bool clientRequest = requester != kInvalidUserId;
+			if (clientRequest)
+			{
+				if (params.clientRequestId == kInvalidClientRequestId || !m_userContexts.contains(requester))
+					return ActorId::Invalid();
+
+				if (const auto result = m_actorSystem->FindSpawnResult(requester, params.clientRequestId))
+					return *result;
+			}
+
+			params.owner = requester;
+			const ActorId spawnedActorId = ExecuteSpawnActor(params, clientRequest).first;
+			if (clientRequest)
+			{
+				m_actorSystem->RecordSpawnResult(requester, params.clientRequestId, spawnedActorId);
+			}
+			return spawnedActorId;
+		}();
+
 		if (onDone)
 			onDone(actorId);
 	}
 
-	bool ServerWorld::DespawnActor(ActorId actorId, UserId requester)
+	bool ServerWorld::ExecuteDespawnActor(UserId requester, ActorId actorId)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
-		if (IsPipelineTickInProgress())
-		{
-			const bool deferred = DeferUntilPipelineSafePoint(
-				[this, actorId, requester]()
-				{
-					DespawnActor(actorId, requester);
-				});
-			JAM_ASSERT(deferred);
-			return deferred;
-		}
+		JAM_ASSERT(!IsTickInProgress());
+		if (IsTickInProgress()) return false;
 
-		const entt::entity targetEntity = ResolveActor(actorId);
-
-		if (targetEntity == entt::null)
+		const auto result = m_actorSystem->PrepareDespawn(requester, actorId);
+		if (!result.Succeeded())
 			return false;
 
-		if (auto* ownership = m_registry.try_get<OwnershipTag>(targetEntity))
-		{
-			if (requester != kInvalidUserId && ownership->userId != requester)
-				return false;
-		}
+		const entt::entity targetEntity = result.entity;
 
-		if (m_replicationSystem)
-			m_replicationSystem->OnActorDestroyed(targetEntity);
-		if (m_aoiSystem)
-			m_aoiSystem->OnActorDestroyed(targetEntity);
+		if (!m_physicsSystem->DespawnActor(targetEntity))
+			return false;
+
+		m_replicationSystem->OnActorDestroyed(targetEntity);
+		m_aoiSystem->OnActorDestroyed(targetEntity);
 
 		if (const auto* control = m_registry.try_get<ControlTag>(targetEntity))
 		{
-			if (control->userId != 0)
-			{
-				auto it = m_userToControlledEntity.find(control->userId);
-				if (it != m_userToControlledEntity.end() && it->second == targetEntity)
-					m_userToControlledEntity.erase(it);
-			}
+			JAM_ASSERT(GetPlayerEntity(control->userId) == targetEntity);
+			UnbindPlayer(control->userId);
 		}
 
-		for (auto it = m_playerSpawnResults.begin(); it != m_playerSpawnResults.end();)
-		{
-			if (it->second.actorId == actorId)
-				it = m_playerSpawnResults.erase(it);
-			else
-				++it;
-		}
-
-		if (m_registry.all_of<PhysicsSpawnedTag>(targetEntity))
-		{
-			if (!m_physicsSystem)
-				return false;
-			m_physicsSystem->DespawnActor(targetEntity);
-		}
-
-		ReleaseActorId(targetEntity);
-		m_registry.destroy(targetEntity);
+		m_actorSystem->ReleaseActor(actorId, targetEntity);
 
 		JAM_ASSERT(ValidateActorIdentities());
 		return true;
 	}
 
-	void ServerWorld::DespawnActorAsync(ActorId actorId, UserId requester, std::function<void(bool)> onDone)
+	void ServerWorld::DespawnActorAsync(UserId requester, ActorId actorId, std::function<void(bool)> onDone)
 	{
 		JAM_ASSERT(IsCurrentShardContext());
-		if (IsPipelineTickInProgress())
-		{
-			const bool deferred = DeferUntilPipelineSafePoint(
-				[this, actorId, requester, onDone = std::move(onDone)]() mutable
-				{
-					DespawnActorAsync(actorId, requester, std::move(onDone));
-				});
-			JAM_ASSERT(deferred);
-			return;
-		}
-
-		const bool succeeded = DespawnActor(actorId, requester);
+		JAM_ASSERT(!IsTickInProgress());
+		const bool succeeded = !IsTickInProgress() && ExecuteDespawnActor(requester, actorId);
 		if (onDone)
 			onDone(succeeded);
 	}
 
-	void ServerWorld::EnsureUserAoiRegistration(UserId userId)
+	bool ServerWorld::BindPlayer(UserId userId, entt::entity entity, bool alreadyBound)
 	{
-		if (userId == kInvalidUserId || !m_userContexts.contains(userId))
-			return;
+		if (!m_actorSystem->BindPlayer(userId, entity))
+			return false;
 
-		const entt::entity controlled = GetControlledEntity(userId);
-		if (controlled == entt::null || !m_registry.valid(controlled) || !m_registry.all_of<PhysicsSpawnedTag>(controlled))
-			return;
+		m_userToPlayerEntity[userId] = entity;
 
-		if (m_aoiSystem && !m_aoiSystem->GetState(userId))
-			m_aoiSystem->OnUserEnter(userId);
+		if (!m_aoiSystem->PreparePlayer(userId, entity)
+			|| (m_replicationSystem->IsAwaitingPlayer(userId) && !m_replicationSystem->BeginInitialSync(userId)))
+		{
+			if (!alreadyBound) UnbindPlayer(userId);
+			return false;
+		}
+
+		if (!alreadyBound) m_replicationSystem->MarkActorDirty(entity);
+		return true;
 	}
 
-	bool ServerWorld::ApplyInitialControl(entt::entity entity, UserId userId)
+	void ServerWorld::UnbindPlayer(UserId userId)
 	{
-		if (userId == 0 || !m_registry.valid(entity))
-			return false;
-
-		const auto* targetControl = m_registry.try_get<ControlTag>(entity);
-		const bool controlledByOtherUser = targetControl
-			&& targetControl->userId != 0
-			&& targetControl->userId != userId;
-		JAM_ASSERT(!controlledByOtherUser);
-		if (controlledByOtherUser)
-			return false;
-
-		const entt::entity previous = GetControlledEntity(userId);
-		if (previous != entt::null && previous != entity && m_registry.valid(previous) && m_registry.all_of<ControlTag>(previous))
+		if (const auto it = m_userToPlayerEntity.find(userId); it != m_userToPlayerEntity.end())
 		{
-			auto& control = m_registry.get<ControlTag>(previous);
-			if (control.userId == userId)
+			const entt::entity player = it->second;
+			m_userToPlayerEntity.erase(it);
+			if (m_actorSystem->UnbindPlayer(userId, player))
 			{
-				control.userId = 0;
-				m_registry.remove<px::CharacterMotorInput>(previous);
-				if (m_replicationSystem)
-					m_replicationSystem->MarkActorDirty(previous, true);
+				m_replicationSystem->MarkActorDirty(player);
 			}
 		}
 
-		m_registry.emplace_or_replace<ControlTag>(entity, ControlTag{ userId });
-		if (const auto* body = m_registry.try_get<ActorBodyType>(entity); body && body->body == px::eBodyType::Character)
-			m_registry.emplace_or_replace<px::CharacterMotorInput>(entity);
-
-		m_userToControlledEntity[userId] = entity;
-		if (m_aoiSystem)
-			m_aoiSystem->OnControlledActorChanged(userId);
-
-		if (m_replicationSystem)
-			m_replicationSystem->MarkActorDirty(entity, true);
-		return true;
+		m_inputSystem->ResetInputStream(userId);
+		m_aoiSystem->UnregisterSubscription(userId);
+		m_replicationSystem->AwaitPlayer(userId);
 	}
 
 	void ServerWorld::ProcessGameInput(UserId userId, const PacketHeaderView& pkt)
@@ -1025,7 +655,7 @@ namespace jam::net
 
 		const auto* wireCommand = fb::GetfbCharacterControlCommand(pkt.Payload());
 		if (!wireCommand) return;
-		if (userId == 0 || !m_userContexts.contains(userId) || GetControlledEntity(userId) == entt::null)
+		if (userId == 0 || !m_userContexts.contains(userId) || GetPlayerEntity(userId) == entt::null)
 			return;
 
 		CharacterControlCommand cmd{};
@@ -1037,27 +667,208 @@ namespace jam::net
 		cmd.intent.viewPolicy		 = static_cast<eCharacterViewPolicy>(wireCommand->view_policy());
 		cmd.intent.continuousActions = wireCommand->continuous_action_flags();
 		cmd.intent.edgeActions		 = wireCommand->edge_action_flags();
-		
+
 		switch (wireCommand->locomotion_kind())
 		{
-		case fb::fbLocomotionKind_Directional: 
-			cmd.intent.locomotion = DirectionalMoveIntent{ wireCommand->local_x(), wireCommand->local_y() }; 
+		case fb::fbLocomotionKind_Directional:
+			cmd.intent.locomotion = DirectionalMoveIntent{ wireCommand->local_x(), wireCommand->local_y() };
 			break;
 
-		case fb::fbLocomotionKind_MoveToPosition: 
-			cmd.intent.locomotion = MoveToPositionIntent{ px::Vec3(wireCommand->target_x(), wireCommand->target_y(), wireCommand->target_z()) }; 
+		case fb::fbLocomotionKind_MoveToPosition:
+			cmd.intent.locomotion = MoveToPositionIntent{ px::Vec3(wireCommand->target_x(), wireCommand->target_y(), wireCommand->target_z()) };
 			break;
 
-		case fb::fbLocomotionKind_FollowActor: 
-			cmd.intent.locomotion = FollowActorIntent{ ActorId(wireCommand->target_actor_id()) }; 
+		case fb::fbLocomotionKind_FollowActor:
+			cmd.intent.locomotion = FollowActorIntent{ ActorId(wireCommand->target_actor_id()) };
 			break;
 
-		default: 
-			cmd.intent.locomotion = StopMovementIntent{}; 
+		default:
+			cmd.intent.locomotion = StopMovementIntent{};
 			break;
 		}
 
-		if (m_inputSystem)
-			m_inputSystem->EnqueueInput(userId, cmd);
+		m_inputSystem->EnqueueInput(userId, cmd);
+	}
+
+	eWorldTransitionFailure ServerWorld::JoinMembership(WorldUserContext user, WorldTransitionToken token, std::string entryPoint)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
+		if (IsTickInProgress()
+			|| !m_alive.load(std::memory_order_acquire)
+			|| !token.IsValid()
+			|| user.mainRevision == 0
+			|| m_membershipEntries.contains(token)
+			|| m_detachedMemberships.contains(token))
+		{
+			return eWorldTransitionFailure::InvalidRequest;
+		}
+
+		const WorldMembershipContext context{
+			.accountId			= user.accountId,
+			.userId				= user.userId,
+			.transitionToken	= token,
+			.correlation		= { GetWorldRef(), user.mainRevision },
+			.entryPoint			= std::move(entryPoint),
+		};
+
+		if (m_content && !m_content->OnJoiningMembership(*this, context))
+			return eWorldTransitionFailure::InvalidRequest;
+
+		if (!AddMember(user))
+			return eWorldTransitionFailure::InternalError;
+
+		m_membershipEntries.emplace(token, MembershipEntry{ user.userId });
+		m_pendingActivations[user.userId] = context;
+
+		if (m_content && !m_content->OnPreparedMembership(*this, context))
+		{
+			CancelMembership(user.userId, token);
+			return eWorldTransitionFailure::InternalError;
+		}
+
+		return eWorldTransitionFailure::None;
+	}
+
+	bool ServerWorld::DetachMembership(UserId userId, WorldTransitionToken token)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
+		const auto member = m_userContexts.find(userId);
+
+		if (IsTickInProgress()
+			|| !m_alive.load(std::memory_order_acquire)
+			|| !token.IsValid()
+			|| member == m_userContexts.end()
+			|| m_detachedMemberships.contains(token)
+			|| m_membershipEntries.contains(token))
+		{
+			return false;
+		}
+
+		for (const auto& entry : m_membershipEntries | std::views::values)
+			if (entry.userId == userId) return false;
+
+		const WorldUserContext saved = member->second;
+		if (m_content && !m_content->OnDetachingMembership(*this, userId, token))
+			return false;
+
+		m_detachedMemberships.emplace(token, saved);
+		return RemoveMember(userId);
+	}
+
+	bool ServerWorld::CancelMembership(UserId userId, WorldTransitionToken token)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
+		auto entry = m_membershipEntries.find(token);
+
+		if (IsTickInProgress() || entry == m_membershipEntries.end() || entry->second.userId != userId)
+			return false;
+
+		if (m_content && !m_content->OnRollbackMembership(*this, userId, token))
+			return false;
+
+		if (!RemoveMember(userId))
+			return false;
+
+		m_pendingActivations.erase(userId);
+		m_membershipEntries.erase(token);
+		return true;
+	}
+
+	bool ServerWorld::RecoverMembership(WorldUserContext user, WorldTransitionToken token)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
+		const auto source = m_detachedMemberships.find(token);
+		if (IsTickInProgress()
+			|| !m_alive.load(std::memory_order_acquire)
+			|| source == m_detachedMemberships.end()
+			|| source->second.userId != user.userId
+			|| source->second.accountId != user.accountId || !AddMember(user))
+		{
+			return false;
+		}
+
+
+		if (m_content && !m_content->OnRestoredMembership(*this, user, token))
+		{
+			RemoveMember(user.userId);
+			return false;
+		}
+
+		m_detachedMemberships.erase(token);
+		return true;
+	}
+
+	bool ServerWorld::CompleteMembershipLeave(UserId userId, WorldTransitionToken token)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
+		const auto source = m_detachedMemberships.find(token);
+		if (IsTickInProgress() || source == m_detachedMemberships.end() || source->second.userId != userId)
+			return false;
+
+		if (m_content && !m_content->OnRemovedMembership(*this, userId, token))
+			return false;
+
+		m_pendingActivations.erase(userId);
+		m_detachedMemberships.erase(token);
+		return true;
+	}
+
+	bool ServerWorld::CompleteMembershipEntry(UserId userId, WorldTransitionToken token)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+
+		const auto entry = m_membershipEntries.find(token);
+		if (entry == m_membershipEntries.end() || entry->second.userId != userId)
+			return false;
+
+		if (m_content)
+			m_content->OnCommittedMembership(*this, userId, token);
+
+		m_membershipEntries.erase(token);
+		return true;
+	}
+
+	bool ServerWorld::ActivateMemberReplication(const WorldUserContext& user)
+	{
+		JAM_ASSERT(IsCurrentShardContext());
+		JAM_ASSERT(!IsTickInProgress());
+
+		const UserId userId = user.userId;
+		const auto member = m_userContexts.find(userId);
+
+		if (IsTickInProgress()
+			|| !m_alive.load(std::memory_order_acquire)
+			|| member == m_userContexts.end()
+			|| member->second.mainRevision != user.mainRevision
+			|| member->second.sessions.tcp.ownerId != user.sessions.tcp.ownerId
+			|| member->second.sessions.udp.ownerId != user.sessions.udp.ownerId)
+		{
+			return false;
+		}
+
+		const auto pending = m_pendingActivations.find(userId);
+		if (pending == m_pendingActivations.end())
+		{
+			return ResumeMemberReplication(userId);
+		}
+
+		WorldMembershipContext context = pending->second;
+		context.correlation.mainRevision = user.mainRevision;
+
+		const bool succeeded = !m_content || m_content->OnActivatedMembership(*this, context);
+		if (succeeded)
+			m_pendingActivations.erase(userId);
+
+		return succeeded && ResumeMemberReplication(userId);
 	}
 }

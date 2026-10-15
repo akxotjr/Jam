@@ -252,6 +252,8 @@
     <ClInclude Include="include\jamnet\core\utils\Clock.h" />
     <ClInclude Include="include\jamnet\core\utils\ScopedTimer.h" />
     <ClInclude Include="include\jamnet\core\utils\MetricsAggregator.h" />
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ActorLifecycleTypes.h" />
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerActorLifecycleSystem.h" />
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\WorldMetrics.h" />
     <ClInclude Include="include\jamnet\core\utils\TimeUnits.h" />
     <ClInclude Include="include\jamnet\JamNet.h" />
@@ -366,6 +368,7 @@
     <ClCompile Include="src\core\memory\DefaultAllocator.cpp" />
     <ClCompile Include="src\core\net\AdmissionContext.cpp" />
     <ClCompile Include="src\core\utils\MetricsAggregator.cpp" />
+    <ClCompile Include="src\runtime\world\simulation\server\ServerActorLifecycleSystem.cpp" />
     <ClCompile Include="src\runtime\world\simulation\server\WorldMetrics.cpp" />
     <ClCompile Include="src\core\net\Buffer.cpp" />
     <ClCompile Include="src\core\net\BufferReader.cpp" />

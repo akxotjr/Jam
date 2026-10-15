@@ -51,7 +51,7 @@ namespace m1
 		return m_characters && m_characters->UpdateLocation(characterId, worldArchetypeKey, position);
 	}
 
-	bool CharacterSessionStore::BeginMaterialization(
+	bool CharacterSessionStore::BeginMembershipMaterialization(
 		jam::net::AccountId accountId,
 		jam::net::UserId userId,
 		jam::net::WorldTransitionToken token,
@@ -88,101 +88,6 @@ namespace m1
 		return true;
 	}
 
-	bool CharacterSessionStore::CompleteMaterialization(
-		jam::net::UserId userId,
-		jam::net::WorldTransitionToken token,
-		PlayerActorBinding targetPlayer)
-	{
-		std::scoped_lock lock(m_mutex);
-		const auto it = m_sessions.find(userId);
-		if (it == m_sessions.end() || !targetPlayer.IsValid())
-			return false;
-
-		CharacterSessionContext& session = it->second;
-		if (session.transitionToken.value != token.value || !session.pendingTargetWorld
-			|| *session.pendingTargetWorld != targetPlayer.world)
-		{
-			return false;
-		}
-
-		session.activePlayer = targetPlayer;
-		session.pendingTargetWorld.reset();
-		if (!session.rollbackSourcePlayer)
-			session.transitionToken = {};
-		return true;
-	}
-
-	void CharacterSessionStore::FailMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token)
-	{
-		std::scoped_lock lock(m_mutex);
-		const auto it = m_sessions.find(userId);
-		if (it == m_sessions.end() || it->second.transitionToken.value != token.value)
-			return;
-
-		it->second.pendingTargetWorld.reset();
-		it->second.activePlayer = it->second.rollbackSourcePlayer;
-		it->second.rollbackSourcePlayer.reset();
-		it->second.transitionToken = {};
-	}
-
-	std::optional<PlayerActorBinding> CharacterSessionStore::RollbackMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& targetWorld)
-	{
-		std::scoped_lock lock(m_mutex);
-		const auto it = m_sessions.find(userId);
-		if (it == m_sessions.end())
-			return std::nullopt;
-
-		CharacterSessionContext& session = it->second;
-		if (session.transitionToken.value != token.value)
-		{
-			if (!session.transitionToken.IsValid() && session.activePlayer && session.activePlayer->world == targetWorld && !session.rollbackSourcePlayer)
-			{
-				const PlayerActorBinding target = *session.activePlayer;
-				m_sessions.erase(it);
-				return target;
-			}
-			return std::nullopt;
-		}
-
-		std::optional<PlayerActorBinding> target;
-		if (session.activePlayer && (!session.rollbackSourcePlayer || session.activePlayer->world != session.rollbackSourcePlayer->world))
-		{
-			target = session.activePlayer;
-		}
-
-		session.activePlayer = session.rollbackSourcePlayer;
-		session.rollbackSourcePlayer.reset();
-		session.pendingTargetWorld.reset();
-		session.transitionToken = {};
-		return target;
-	}
-
-	std::optional<PlayerActorBinding> CharacterSessionStore::CommitLeave(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& source)
-	{
-		std::scoped_lock lock(m_mutex);
-		const auto it = m_sessions.find(userId);
-		if (it == m_sessions.end())
-			return std::nullopt;
-
-		CharacterSessionContext& session = it->second;
-		if (session.rollbackSourcePlayer && session.rollbackSourcePlayer->world == source)
-		{
-			const PlayerActorBinding result = *session.rollbackSourcePlayer;
-			session.rollbackSourcePlayer.reset();
-			session.transitionToken = {};
-			return result;
-		}
-		if (session.activePlayer && session.activePlayer->world == source)
-		{
-			const PlayerActorBinding result = *session.activePlayer;
-			m_sessions.erase(it);
-			return result;
-		}
-
-		(void)token;
-		return std::nullopt;
-	}
-
 	std::optional<PlayerActorBinding> CharacterSessionStore::FindActivePlayer(jam::net::UserId userId, const jam::net::WorldRef& world) const
 	{
 		std::scoped_lock lock(m_mutex);
@@ -201,5 +106,89 @@ namespace m1
 			return std::nullopt;
 
 		return it->second.persistentCharacter;
+	}
+}
+
+namespace m1
+{
+
+	bool CharacterSessionStore::CompleteMembershipMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token, PlayerActorBinding player)
+	{
+		std::scoped_lock lock(m_mutex);
+		auto it = m_sessions.find(userId);
+		if (it == m_sessions.end() || !player.IsValid()) return false;
+		auto& session = it->second;
+		if (session.transitionToken != token || !session.pendingTargetWorld || *session.pendingTargetWorld != player.world)
+			return false;
+		session.activePlayer = player;
+		session.pendingTargetWorld.reset();
+		// Keep the token even on first entry until the client accepts or cancels.
+		return true;
+	}
+
+	bool CharacterSessionStore::CancelMembershipMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& target)
+	{
+		std::scoped_lock lock(m_mutex);
+		auto it = m_sessions.find(userId);
+		if (it == m_sessions.end()) return true; // Preparation never acquired character state.
+		auto& session = it->second;
+		if (session.transitionToken != token)
+			return !session.transitionToken.IsValid() && (!session.activePlayer || session.activePlayer->world != target);
+		session.activePlayer = session.rollbackSourcePlayer;
+		session.rollbackSourcePlayer.reset();
+		session.pendingTargetWorld.reset();
+		session.transitionToken = {};
+		return true;
+	}
+
+	bool CharacterSessionStore::ResetMembershipActivation(jam::net::UserId userId, jam::net::WorldTransitionToken token, const jam::net::WorldRef& target)
+	{
+		std::scoped_lock lock(m_mutex);
+		const auto it = m_sessions.find(userId);
+		if (it == m_sessions.end() || it->second.transitionToken != token) return false;
+		auto& session = it->second;
+		session.activePlayer.reset();
+		session.pendingTargetWorld = target;
+		return true;
+	}
+
+	bool CharacterSessionStore::FinalizeMembershipSource(jam::net::UserId userId, jam::net::WorldTransitionToken token, const PlayerActorBinding& source)
+	{
+		std::scoped_lock lock(m_mutex);
+		auto it = m_sessions.find(userId);
+		if (it == m_sessions.end()) return false;
+		auto& session = it->second;
+		// A committed Member may disconnect before its first activation completes.
+		if (!session.rollbackSourcePlayer && (session.pendingTargetWorld == source.world
+			|| (session.activePlayer && session.activePlayer->world == source.world && session.activePlayer->actorId == source.actorId)))
+		{
+			m_sessions.erase(it);
+			return true;
+		}
+		if (session.transitionToken.IsValid() && session.transitionToken != token) return false;
+		if (session.rollbackSourcePlayer && session.rollbackSourcePlayer->world == source.world
+			&& session.rollbackSourcePlayer->actorId == source.actorId)
+		{
+			if (session.activePlayer && session.activePlayer->world == source.world)
+				session.activePlayer.reset();
+			session.rollbackSourcePlayer.reset();
+			if (!session.pendingTargetWorld) session.transitionToken = {};
+			return true;
+		}
+		if (session.activePlayer && session.activePlayer->world == source.world && session.activePlayer->actorId == source.actorId)
+		{
+			m_sessions.erase(it);
+			return true;
+		}
+		return false;
+	}
+
+	void CharacterSessionStore::AcceptMembershipMaterialization(jam::net::UserId userId, jam::net::WorldTransitionToken token)
+	{
+		std::scoped_lock lock(m_mutex);
+		auto it = m_sessions.find(userId);
+		if (it != m_sessions.end() && it->second.transitionToken == token
+			&& !it->second.rollbackSourcePlayer && !it->second.pendingTargetWorld)
+			it->second.transitionToken = {};
 	}
 }

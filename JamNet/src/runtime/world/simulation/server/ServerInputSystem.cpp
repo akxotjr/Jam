@@ -61,8 +61,8 @@ namespace jam::net
 
 	}
 
-	ServerInputSystem::ServerInputSystem(entt::registry& world, ServerWorld& serverWorld)
-		: m_world(world), m_serverWorld(serverWorld)
+	ServerInputSystem::ServerInputSystem(ServerWorld& world, entt::registry& registry)
+		: m_world(world), m_registry(registry)
 	{
 	}
 
@@ -73,7 +73,7 @@ namespace jam::net
 
 	void ServerInputSystem::Tick()
 	{
-		auto view = m_world.view<ControlTag, px::CharacterMotorInput>();
+		auto view = m_registry.view<ControlTag, px::CharacterMotorInput>();
 		for (auto e : view)
 		{
 			const auto& control = view.get<ControlTag>(e);
@@ -85,11 +85,11 @@ namespace jam::net
 
 			auto& input = view.get<px::CharacterMotorInput>(e);
 			CharacterControlResolveContext context{};
-			if (const auto* auth = m_world.try_get<CharAuthorityState>(e))
+			if (const auto* auth = m_registry.try_get<CharAuthorityState>(e))
 				context.selfState = &auth->state;
 
 			if (const auto* follow = std::get_if<FollowActorIntent>(&cmd.intent.locomotion))
-				context.hasFollowTargetPosition = TryResolveTargetPos(m_world, m_serverWorld, follow->target.Value(), context.followTargetPosition);
+				context.hasFollowTargetPosition = TryResolveTargetPos(m_registry, m_world, follow->target.Value(), context.followTargetPosition);
 
 			input = CharacterControlResolver::Resolve(cmd.intent, context, m_controlResolveConfig);
 			m_userInputs[control.userId].current = cmd;
@@ -101,7 +101,7 @@ namespace jam::net
 		QueuePendingInput(userId, cmd);
 	}
 
-	void ServerInputSystem::RemoveUser(uint64 userId)
+	void ServerInputSystem::ResetInputStream(uint64 userId)
 	{
 		if (userId == 0)
 			return;
@@ -109,18 +109,21 @@ namespace jam::net
 		m_userInputs.erase(userId);
 	}
 
-	void ServerInputSystem::MarkInputApplied(uint64 userId)
+	void ServerInputSystem::MarkInputApplied(std::span<const uint64> userIds)
 	{
-		if (userId == 0)
-			return;
+		for (const uint64 userId : userIds)
+		{
+			if (userId == 0)
+				continue;
 
-		auto userIt = m_userInputs.find(userId);
-		if (userIt == m_userInputs.end() || !userIt->second.current)
-			return;
+			auto userIt = m_userInputs.find(userId);
+			if (userIt == m_userInputs.end() || !userIt->second.current)
+				continue;
 
-		ServerUserInputState& inputState = userIt->second;
-		if (!inputState.applied || inputState.current->sequence > inputState.applied->sequence)
-			inputState.applied = inputState.current;
+			ServerUserInputState& inputState = userIt->second;
+			if (!inputState.applied || inputState.current->sequence > inputState.applied->sequence)
+				inputState.applied = inputState.current;
+		}
 	}
 
 	uint32 ServerInputSystem::LastAppliedSeq(uint64 userId) const
