@@ -32,8 +32,6 @@ namespace jam
 	{
 		if (m_running.exchange(true))
 			return;
-		m_workerRunning.store(true, std::memory_order_release);
-		m_workerThread = std::thread([this]() { WorkerLoop(); });
 
 		m_local.scheduler = m_scheduler.get();
 
@@ -87,9 +85,6 @@ namespace jam
 			return;
 
 		NotifyWorkAvailable();
-		m_workerRunning.store(false, std::memory_order_release);
-		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
-		m_workerWakeEpoch.notify_all();
 
 		if (m_shardSlot)
 		{
@@ -104,8 +99,6 @@ namespace jam
 	{
 		if (m_thread.joinable())
 			m_thread.join();
-		if (m_workerThread.joinable())
-			m_workerThread.join();
 	}
 
 	void ShardExecutor::Submit(Job j)
@@ -113,109 +106,6 @@ namespace jam
 		m_ingressJobSubmitCount.fetch_add(1, std::memory_order_relaxed);
 		m_jobIngress.enqueue(std::move(j));
 		NotifyWorkAvailable();
-	}
-
-	void ShardExecutor::SubmitWorkerJob(Job j)
-	{
-		m_workerJobSubmitCount.fetch_add(1, std::memory_order_relaxed);
-		m_workerIngress.enqueue(std::move(j));
-		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
-		m_workerWakeEpoch.notify_one();
-	}
-
-	void ShardExecutor::WorkerLoop()
-	{
-		std::string threadName = std::format("ShardPhysics#{}", m_config.index);
-		InitThreadContext(threadName, nullptr);
-
-		if (m_pinEnabled && m_pinSlot.siblingMask != 0)
-		{
-			const CoreSlot siblingSlot{
-				.group = m_pinSlot.group,
-				.mask = m_pinSlot.siblingMask,
-			};
-
-			if (PinCurrentThreadTo(siblingSlot))
-			{
-				JAM_LOG_DEBUG("ShardPhysics#{} pinned. group={}, mask=0x{:X}",
-					m_config.index, siblingSlot.group, static_cast<unsigned long long>(siblingSlot.mask));
-			}
-			else
-			{
-				JAM_LOG_WARN_LOC("ShardPhysics#{} pinning failed. group={}, mask=0x{:X}, error={}",
-					m_config.index, siblingSlot.group, static_cast<unsigned long long>(siblingSlot.mask), GetLastError());
-			}
-		}
-		else if (m_pinEnabled)
-		{
-			JAM_LOG_WARN("ShardPhysics#{} has no SMT sibling affinity; worker remains unpinned", m_config.index);
-		}
-
-		constexpr uint32   kActiveSpinCount = 256;
-		constexpr Duration kPreWakeSpin     = 1_ms;
-
-		for (;;)
-		{
-			Job job;
-			if (m_workerIngress.try_dequeue(job))
-			{
-				job.Execute();
-				continue;
-			}
-
-			if (!m_workerRunning.load(std::memory_order_acquire))
-				break;
-
-			const uint64 preWakeDeadlineNs = m_workerPreWakeDeadlineNs.exchange(0, std::memory_order_acq_rel);
-			if (preWakeDeadlineNs != 0)
-			{
-				const Timestamp spinStart = NOW();
-				const Timestamp spinEnd   = spinStart + kPreWakeSpin;
-
-				bool preWakeHit = false;
-
-				while (NOW() < spinEnd)
-				{
-					if (m_workerIngress.try_dequeue(job))
-					{
-						preWakeHit = true;
-						break;
-					}
-					_mm_pause();
-				}
-
-				if (preWakeHit)
-				{
-					job.Execute();
-					continue;
-				}
-			}
-
-			bool foundWork = false;
-			for (uint32 spin = 0; spin < kActiveSpinCount; ++spin)
-			{
-				if (m_workerIngress.try_dequeue(job))
-				{
-					job.Execute();
-					foundWork = true;
-					break;
-				}
-				_mm_pause();
-			}
-			if (foundWork)
-				continue;
-
-			const uint64 observedWakeEpoch = m_workerWakeEpoch.load(std::memory_order_acquire);
-			if (m_workerIngress.try_dequeue(job))
-			{
-				job.Execute();
-				continue;
-			}
-			if (!m_workerRunning.load(std::memory_order_acquire))
-				break;
-
-			m_workerWakeEpoch.wait(observedWakeEpoch, std::memory_order_acquire);
-		}
 	}
 
 	void ShardExecutor:: SubmitAfter(Job j, Duration delay)
@@ -352,102 +242,72 @@ namespace jam
 	{
 		auto& L = m_local;
 		bool didWork = false;
-		
-		for (auto& group : L.domainGroups | std::views::values)
+
+		// Domain callbacks may stop worlds or register new domains. Do not retain
+		// map iterators or execute functions owned by a group across a callback.
+		thread_local std::vector<ShardDomain> domains;
+		thread_local std::vector<ShardSystemGroup::SystemFn> systems;
+		domains.clear();
+		for (const auto& [tag, group] : L.domainGroups)
+			domains.push_back(tag);
+
+		for (const auto tag : domains)
 		{
-			if (!group.bootstraps.empty())
-			{
-				auto bootstraps = std::move(group.bootstraps);
-				group.bootstraps.clear();
+			auto it = L.domainGroups.find(tag);
+			if (it == L.domainGroups.end())
+				continue;
 
+			if (!it->second.bootstraps.empty())
+			{
+				auto bootstraps = std::move(it->second.bootstraps);
+				it->second.bootstraps.clear();
 				for (auto& fn : bootstraps)
-				{
 					if (fn) fn(L);
-				}
-
 				didWork = true;
 			}
-
-			if (group.systems.empty())
-				continue;
-
-			const Duration period_ns = group.tickPeriod;
-
-			if (period_ns.IsZero())
-			{
-				group.nextTick = now;
-
-				for (auto& fn : group.systems)
-				{
-					if (fn)
-						fn(L, now, 0_ns);
-				}
-
-				++m_metrics.tickCount;
-				didWork = true;
-				continue;
-			}
-
-			if (group.nextTick.IsZero())
-				group.nextTick = now;
-
-			if (now < group.nextTick)
-				continue;
 
 			int32 catches = 0;
 			const int32 maxCatchUp = std::max(1, m_config.maxTickCatchUp);
-			while (now >= group.nextTick && catches < maxCatchUp)
+			while (catches < maxCatchUp)
 			{
+				it = L.domainGroups.find(tag);
+				if (it == L.domainGroups.end() || it->second.systems.empty())
+					break;
+
+				auto& group = it->second;
+				const Duration period = group.tickPeriod;
+				if (group.nextTick.IsZero() || period.IsZero())
+					group.nextTick = now;
+				if (now < group.nextTick)
+					break;
+
 				const Timestamp tickNow = group.nextTick;
-				group.nextTick += period_ns;
-
-				for (auto& fn : group.systems)
+				group.nextTick += period;
+				systems.assign(group.systems.begin(), group.systems.end());
+				for (const auto& fn : systems)
 				{
-					if (fn)
-						fn(L, tickNow, period_ns);
+					if (!L.domainGroups.contains(tag))
+						break;
+					if (fn) fn(L, tickNow, period);
 				}
-
+				systems.clear();
 				++m_metrics.tickCount;
 				++catches;
 				didWork = true;
+				didWork |= ServiceMailboxesAtBoundary();
+				if (period.IsZero())
+					break;
 			}
 
-			if (now >= group.nextTick)
+			it = L.domainGroups.find(tag);
+			if (catches == maxCatchUp && it != L.domainGroups.end()
+				&& !it->second.tickPeriod.IsZero() && now >= it->second.nextTick)
 			{
-				group.nextTick = now + period_ns;
+				it->second.nextTick = now + it->second.tickPeriod;
 				++m_metrics.tickCatchUpCount;
 			}
 		}
-
 		return didWork;
-	}
-
-	void ShardExecutor::PublishDueWorkerPreWakes(Timestamp now)
-	{
-		Timestamp spinDeadline = Timestamp::Zero();
-
-		for (auto& group : m_local.domainGroups | std::views::values)
-		{
-			if (group.systems.empty() || group.tickPeriod.IsZero() || group.nextTick.IsZero() || group.workerPreWakeLead.IsZero() || group.workerPreWakePublishedTick == group.nextTick)
-				continue;
-
-			const Timestamp preWake = group.nextTick.SaturatingSub(group.workerPreWakeLead);
-			if (now < preWake)
-				continue;
-
-			group.workerPreWakePublishedTick = group.nextTick;
-			if (spinDeadline.IsZero() || group.nextTick < spinDeadline)
-			{
-				spinDeadline = group.nextTick;
-			}
-		}
-
-		if (spinDeadline.IsZero())
-			return;
-
-		m_workerPreWakeDeadlineNs.store(spinDeadline.Ns(), std::memory_order_release);
-		m_workerWakeEpoch.fetch_add(1, std::memory_order_release);
-		m_workerWakeEpoch.notify_one();
 	}
 
 	bool ShardExecutor::ProcessDefers()
@@ -489,25 +349,6 @@ namespace jam
 
 		return wait;
 	}
-
-	Duration ShardExecutor::TimeUntilNextWorkerPreWake(Timestamp now) const
-	{
-		Duration wait = Duration::Max();
-		for (const auto& group : m_local.domainGroups | std::views::values)
-		{
-			if (group.systems.empty() || group.tickPeriod.IsZero() || group.nextTick.IsZero()
-				|| group.workerPreWakeLead.IsZero() || group.workerPreWakePublishedTick == group.nextTick)
-				continue;
-
-			const Timestamp preWake = group.nextTick.SaturatingSub(group.workerPreWakeLead);
-			if (now >= preWake)
-				return Duration::Zero();
-			wait = std::min(wait, preWake - now);
-		}
-		return wait;
-	}
-
-
 
 	void ShardExecutor::BeginDrain()
 	{
@@ -657,12 +498,12 @@ namespace jam
 			const uint64 mailboxMovedBefore = m_metrics.mailboxJobMoveCount;
 			const uint64 jobsExecutedBefore = m_metrics.processJobsExecCount;
 			
+			m_mailboxBudgetExhaustedThisLoop = false;
 			++m_metrics.loopCount;
 			bool didWork = false;
 
 			const uint64 observedWakeEpoch = m_wakeEpoch.load(std::memory_order_acquire);
 			
-			PublishDueWorkerPreWakes(NOW());
 
 			didWork |= ProcessJobsOnce(m_config.localExecuteBudgetPerPreTickPass);
 			DrainReadyMailboxes(m_config.mailboxServiceBudgetPerLoop, m_config.mailboxMoveBudgetPerLoop, m_config.mailboxMoveBudgetPerMailbox);
@@ -684,8 +525,8 @@ namespace jam
 			if (fiberMetrics.lastPollReadyRunCount > 0)
 				didWork = true;
 
+			didWork |= ServiceMailboxesAtBoundary();
 			const Timestamp now_ns = NOW();
-			PublishDueWorkerPreWakes(now_ns);
 			didWork |= RunDueDomainGroups(now_ns);
 			didWork |= ProcessDefers();
 
@@ -708,8 +549,8 @@ namespace jam
 			if (secondFiberMetrics.lastPollReadyRunCount > 0)
 				didWork = true;
 
-			// Preserve the pre-tick work bound while retaining additional local
-			// recovery capacity after domain deadlines and fiber resumes are serviced.
+			// Service mailbox arrivals during defers/Poll before local recovery.
+			didWork |= ServiceMailboxesAtBoundary();
 			didWork |= ProcessJobsOnce(m_config.localRecoveryBudgetAfterTick, false);
 
 			if (!didWork)
@@ -724,9 +565,6 @@ namespace jam
 				if (nextDomainDue != Duration::Max())
 					idleWait = std::min(idleWait, nextDomainDue);
 				
-				const Duration nextWorkerPreWake = TimeUntilNextWorkerPreWake(idleNow);
-				if (nextWorkerPreWake != Duration::Max())
-					idleWait = std::min(idleWait, nextWorkerPreWake);
 
 				const Timestamp nextFiberWakeup = m_scheduler->NextWakeupTime();
 				if (!nextFiberWakeup.IsZero())
@@ -740,6 +578,7 @@ namespace jam
 				++m_metrics.didWorkLoopCount;
 			}
 
+			m_metrics.mailboxServiceBudgetExhaustedLoopCount += m_mailboxBudgetExhaustedThisLoop ? 1 : 0;
 			const Timestamp loopEnd = NOW();
 
 			UpdateMetricsWindow(
@@ -861,7 +700,7 @@ namespace jam
 		return true;
 	}
 
-	bool ShardExecutor::ProcessJobsOnce(int32 executeBudget, bool drainIngress)
+	bool ShardExecutor::ProcessJobsOnce(int32 executeBudget, bool drainIngress, Timestamp deadline)
 	{
 		++m_metrics.processJobsCallCount;
 		bool didWork = false;
@@ -880,6 +719,8 @@ namespace jam
 		// 3) 실행
 		for (int32 i = 0; i < executeBudget; ++i)
 		{
+			if (!deadline.IsZero() && NOW() >= deadline)
+				break;
 			Job j;
 			if (!TryPopLocal(j))
 				break;
@@ -958,7 +799,7 @@ namespace jam
 	}
 
 
-	void ShardExecutor::DrainReadyMailboxes(int32 maxMailboxes, int32 totalJobBudget, int32 budgetPerMailbox)
+	void ShardExecutor::DrainReadyMailboxes(int32 maxMailboxes, int32 totalJobBudget, int32 budgetPerMailbox, Timestamp deadline)
 	{
 		if (maxMailboxes <= 0 || totalJobBudget <= 0 || budgetPerMailbox <= 0)
 			return;
@@ -969,6 +810,8 @@ namespace jam
 
 		for (; servicedMailboxes < maxMailboxes && remainingJobBudget > 0; ++servicedMailboxes)
 		{
+			if (!deadline.IsZero() && NOW() >= deadline)
+				break;
 			if (!m_readyMailboxes.try_dequeue(readyEntry))
 				break;
 			const uint32 mailboxId = readyEntry.mailboxId;
@@ -998,7 +841,28 @@ namespace jam
 
 		m_metrics.mailboxTotalJobBudgetHitCount += totalJobBudgetHit ? 1 : 0;
 		m_metrics.mailboxCountBudgetHitCount += mailboxCountBudgetHit ? 1 : 0;
-		m_metrics.mailboxServiceBudgetExhaustedLoopCount += totalJobBudgetHit || mailboxCountBudgetHit ? 1 : 0;
+		m_mailboxBudgetExhaustedThisLoop |= totalJobBudgetHit || mailboxCountBudgetHit;
+	}
+
+	bool ShardExecutor::ServiceMailboxesAtBoundary()
+	{
+		const Timestamp start = NOW();
+		const Timestamp deadline = m_config.mailboxServiceTimeBudgetPerBoundary.IsZero()
+			? Timestamp::Zero() : start + m_config.mailboxServiceTimeBudgetPerBoundary;
+		const uint64 servicedBefore = m_metrics.mailboxProcessCount;
+		const uint64 executedBefore = m_metrics.processJobsExecCount;
+
+		// Move no more than this pass can execute. Existing local work retains
+		// its normal priority; mailbox jobs are never executed out of band.
+		DrainReadyMailboxes(m_config.mailboxServiceBudgetPerBoundary,
+			std::min(m_config.mailboxMoveBudgetPerBoundary, m_config.localExecuteBudgetPerBoundary),
+			m_config.mailboxMoveBudgetPerBoundaryMailbox, deadline);
+		ProcessJobsOnce(m_config.localExecuteBudgetPerBoundary, false, deadline);
+		++m_metrics.mailboxBoundaryServiceCount;
+		if (!deadline.IsZero() && NOW() >= deadline
+			&& (m_readyMailboxes.size_approx() != 0 || m_jobLocalTotal.load(std::memory_order_relaxed) != 0))
+			++m_metrics.mailboxBoundaryTimeBudgetHitCount;
+		return m_metrics.mailboxProcessCount != servicedBefore || m_metrics.processJobsExecCount != executedBefore;
 	}
 
 	Mailbox* ShardExecutor::FindMailbox(uint32 id)
@@ -1022,7 +886,6 @@ namespace jam
 	void ShardExecutor::SubmitMetricsWindow(const Timestamp windowEnd)
 	{
 		m_metrics.ingressJobSubmitCount = m_ingressJobSubmitCount.exchange(0, std::memory_order_relaxed);
-		m_metrics.workerJobSubmitCount = m_workerJobSubmitCount.exchange(0, std::memory_order_relaxed);
 		MetricSnapshot snapshot{
 			.windowIndex = m_metricsWindowIndex,
 			.windowStartNs = m_metricsWindowStart_ns.Ns(),
@@ -1039,8 +902,9 @@ namespace jam
 				{ "ingress_batch_count", m_metrics.ingressBatchCount },
 				{ "ingress_jobs_submitted", m_metrics.ingressJobSubmitCount },
 				{ "ingress_jobs_moved", m_metrics.ingressJobCount },
-				{ "worker_jobs_submitted", m_metrics.workerJobSubmitCount },
 				{ "mailbox_service_count", m_metrics.mailboxProcessCount },
+				{ "mailbox_boundary_service_count", m_metrics.mailboxBoundaryServiceCount },
+				{ "mailbox_boundary_time_budget_hit_count", m_metrics.mailboxBoundaryTimeBudgetHitCount },
 				{ "mailbox_jobs_moved", m_metrics.mailboxJobMoveCount },
 				{ "mailbox_service_budget_exhausted_loop_count", m_metrics.mailboxServiceBudgetExhaustedLoopCount },
 				{ "mailbox_total_job_budget_hit_count", m_metrics.mailboxTotalJobBudgetHitCount },
@@ -1062,8 +926,6 @@ namespace jam
 				{ "tick_catch_up_count", m_metrics.tickCatchUpCount },
 				{ "ingress_queue_current", m_metrics.ingressQueueCurrent, eMetricAggregation::Latest },
 				{ "ingress_queue_peak", m_metrics.ingressQueuePeak, eMetricAggregation::Maximum },
-				{ "worker_queue_current", m_metrics.workerQueueCurrent, eMetricAggregation::Latest },
-				{ "worker_queue_peak", m_metrics.workerQueuePeak, eMetricAggregation::Maximum },
 				{ "ready_mailbox_current", m_metrics.readyMailboxCurrent, eMetricAggregation::Latest },
 				{ "ready_mailbox_peak", m_metrics.readyMailboxPeak, eMetricAggregation::Maximum },
 				{ "ready_mailbox_sample_count", m_metrics.readyMailboxSampleCount },
@@ -1121,7 +983,6 @@ namespace jam
 				peak = std::max(peak, current);
 			};
 		updateGauge(m_jobIngress.size_approx(), m_metrics.ingressQueueCurrent, m_metrics.ingressQueuePeak);
-		updateGauge(m_workerIngress.size_approx(), m_metrics.workerQueueCurrent, m_metrics.workerQueuePeak);
 		const uint64 readyMailboxCount = m_readyMailboxes.size_approx();
 		updateGauge(readyMailboxCount, m_metrics.readyMailboxCurrent, m_metrics.readyMailboxPeak);
 		++m_metrics.readyMailboxSampleCount;

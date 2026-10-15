@@ -31,11 +31,12 @@ namespace jam
 		uint64 ingressBatchCount        = 0;
 		uint64 ingressJobSubmitCount    = 0;
 		uint64 ingressJobCount          = 0;
-		uint64 workerJobSubmitCount     = 0;
 
 		uint64 processJobsCallCount     = 0;
 		uint64 processJobsExecCount     = 0;
 
+		uint64 mailboxBoundaryServiceCount = 0;
+		uint64 mailboxBoundaryTimeBudgetHitCount = 0;
 		uint64 mailboxProcessCount						= 0;
 		uint64 mailboxJobMoveCount						= 0;
 		uint64 mailboxServiceBudgetExhaustedLoopCount	= 0;
@@ -62,8 +63,6 @@ namespace jam
 
 		uint64 ingressQueueCurrent      = 0;
 		uint64 ingressQueuePeak         = 0;
-		uint64 workerQueueCurrent       = 0;
-		uint64 workerQueuePeak          = 0;
 		uint64 readyMailboxCurrent      = 0;
 		uint64 readyMailboxPeak         = 0;
 		uint64 readyMailboxSampleCount  = 0;
