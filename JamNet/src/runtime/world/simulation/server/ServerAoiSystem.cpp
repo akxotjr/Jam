@@ -525,10 +525,19 @@ namespace jam::net
 			&& certificate.lastAbsDz + movementBoundZ + kCertificateSafetyMargin <= static_cast<double>(m_cfg.aabbZ + m_cfg.hysteresisOffset);
 	}
 
-	void ServerAoiSystem::EnqueueVisibleRelation(uint64 userId, const AoiUserState&, entt::entity actor, const AoiActorState*)
+	void ServerAoiSystem::EnqueueVisibleRelation(uint64 userId, const AoiUserState& user, entt::entity actor, const AoiActorState* actorState)
 	{
-		// The before variant checks the certificate in EvaluateVisibility.
-		EnqueueVisibilityEval(userId, actor);
+		m_metrics.RecordAoiCertificatePrecheck();
+		const auto membership = m_visibleMembership.find(MakeVisibilityKey(userId, actor));
+		if (actorState && membership != m_visibleMembership.end()
+			&& PassesVisibilityCertificate(membership->second, user, *actorState))
+		{
+			m_metrics.RecordAoiCertificatePrecheckHit();
+			return;
+		}
+		// A failed precheck only disables a repeated optimization; range/LOS
+		// and generation/entity validation still run when this item is resolved.
+		EnqueueVisibilityEval(userId, actor, true);
 	}
 
 	void ServerAoiSystem::EvaluateVisibility(uint64 userId, entt::entity actor)
