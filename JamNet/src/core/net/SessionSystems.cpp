@@ -12,6 +12,7 @@
 
 #include "jambase/EnumUtils.h"
 #include "jamnet/runtime/protocol/schema/RPCSchemaIds.h"
+#include "jamnet/runtime/protocol/transport/CustomPacketHelper.h"
 
 
 namespace jam::net
@@ -721,7 +722,19 @@ namespace jam::net
 		}
 
 		ctx.header.WriteHeaderTo(ctx.packet);
-		txQueue->Enqueue(ctx.packet);
+		Timestamp notBefore = Timestamp::Zero();
+		if (ch == eChannel::UNRELIABLE_SEQUENCED && ctx.header.Type() == ePacketType::CUSTOM
+			&& ctx.header.Id() == CustomPacketId::SNAPSHOT)
+		{
+			const auto* info = ctx.L.registry.try_get<SessionInfo>(ctx.e);
+			if (info && info->session && info->session->IsServerSide())
+			{
+				const auto sessionId = info->session->GetSessionId();
+				const uint32 slot = (GetRuntimeLocalIndex(sessionId) + GetRuntimeShardIndex(sessionId)) % 8;
+				notBefore = ctx.now_ns + Duration::FromMs(slot);
+			}
+		}
+		txQueue->Enqueue(ctx.packet, notBefore);
 		return true;
 	}
 
@@ -930,6 +943,7 @@ namespace jam::net
 			};
 
 			auto* udp = static_cast<UdpSession*>(info.session);
+			const Timestamp flushTime = NOW();
 			size_t remainingCount = txQueue.queue.size();
 			while (remainingCount != 0)
 			{
@@ -942,6 +956,16 @@ namespace jam::net
 				while (remainingCount != 0)
 				{
 					const auto& front = txQueue.queue.front();
+					if (front.notBefore > flushTime)
+					{
+						// Selected packets must stay at the tail until this datagram is submitted.
+						if (selectedCount != 0)
+							break;
+						txQueue.queue.push_back(std::move(txQueue.queue.front()));
+						txQueue.queue.pop_front();
+						--remainingCount;
+						continue;
+					}
 					const auto header = front.packet.IsValid() ? PacketHeaderView::Parse(front.packet->Head(), front.packet->Size()) : PacketHeaderView{};
 
 					if (!header.IsValid() || (header.IsReliable() && (!reliability || !reliability->TryGetPending(header.ReliabilitySequence()))))

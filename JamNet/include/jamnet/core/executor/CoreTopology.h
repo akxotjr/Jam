@@ -48,7 +48,7 @@ namespace jam
 	struct ExecutorAffinityConfig
 	{
 		bool                    useProfileDefaults = true;
-		bool                    pinShardWorkers    = true;
+		bool                    pinShardWorkers    = false;
 		bool                    pinOffloadWorkers  = false;
 		bool                    pinFiberWorker     = false;
 		bool                    pinIocpWorkers     = false;
@@ -65,8 +65,8 @@ namespace jam
 
 		if (profile == CoreProfileServer)
 		{
-			cfg.pinOffloadWorkers = true;
-			cfg.pinFiberWorker    = true;
+			cfg.pinOffloadWorkers = false;
+			cfg.pinFiberWorker    = false;
 		}
 		else if (profile == CoreProfileMultipleClient)
 		{

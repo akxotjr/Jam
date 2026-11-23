@@ -312,12 +312,6 @@
     <ClInclude Include="include\jamnet\core\utils\MetricsAggregator.h">
       <Filter>core\utils</Filter>
     </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ActorLifecycleTypes.h">
-      <Filter>runtime\world\simulation\server</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerActorLifecycleSystem.h">
-      <Filter>runtime\world\simulation\server</Filter>
-    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\simulation\server\WorldMetrics.h">
       <Filter>runtime\world\simulation\server</Filter>
     </ClInclude>
@@ -369,6 +363,9 @@
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\ServerWorldTransitionCoordinator.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\lifecycle\ServerWorldSyncSystem.h">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldActionTypes.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
@@ -376,9 +373,6 @@
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldIdentity.h">
-      <Filter>runtime\world\lifecycle</Filter>
-    </ClInclude>
-    <ClInclude Include="include\jamnet\runtime\world\lifecycle\ServerWorldSyncSystem.h">
       <Filter>runtime\world\lifecycle</Filter>
     </ClInclude>
     <ClInclude Include="include\jamnet\runtime\world\lifecycle\WorldShardState.h">
@@ -540,6 +534,12 @@
     <ClInclude Include="include\jamnet\core\net\AdmissionContext.h">
       <Filter>core\net\admission</Filter>
     </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ServerActorLifecycleSystem.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
+    <ClInclude Include="include\jamnet\runtime\world\simulation\server\ActorLifecycleTypes.h">
+      <Filter>runtime\world\simulation\server</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -598,9 +598,6 @@
     </ClCompile>
     <ClCompile Include="src\core\utils\MetricsAggregator.cpp">
       <Filter>core\utils</Filter>
-    </ClCompile>
-    <ClCompile Include="src\runtime\world\simulation\server\ServerActorLifecycleSystem.cpp">
-      <Filter>runtime\world\simulation\server</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\simulation\server\WorldMetrics.cpp">
       <Filter>runtime\world\simulation\server</Filter>
@@ -743,9 +740,6 @@
     <ClCompile Include="src\runtime\world\actor\ActorArchetypesLoader.cpp">
       <Filter>runtime\world\actor</Filter>
     </ClCompile>
-    <ClCompile Include="src\runtime\world\lifecycle\ServerWorldSyncSystem.cpp">
-      <Filter>runtime\world\lifecycle</Filter>
-    </ClCompile>
     <ClCompile Include="src\runtime\world\lifecycle\WorldShardState.cpp">
       <Filter>runtime\world\lifecycle</Filter>
     </ClCompile>
@@ -753,6 +747,9 @@
       <Filter>runtime\world\lifecycle</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\lifecycle\ServerWorldTransitionCoordinator.cpp">
+      <Filter>runtime\world\lifecycle</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\lifecycle\ServerWorldSyncSystem.cpp">
       <Filter>runtime\world\lifecycle</Filter>
     </ClCompile>
     <ClCompile Include="src\runtime\world\lifecycle\WorldBase.cpp">
@@ -829,6 +826,9 @@
     </ClCompile>
     <ClCompile Include="src\core\net\AdmissionContext.cpp">
       <Filter>core\net\admission</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime\world\simulation\server\ServerActorLifecycleSystem.cpp">
+      <Filter>runtime\world\simulation\server</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

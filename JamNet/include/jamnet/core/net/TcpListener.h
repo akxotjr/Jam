@@ -9,7 +9,7 @@ namespace jam::net
 	class TcpListener : public IocpObject
 	{
 	public:
-		static constexpr int32 NumOutstanding = 32;
+		static constexpr int32 NumOutstanding = 1024;
 
 	public:
 		TcpListener() = default;

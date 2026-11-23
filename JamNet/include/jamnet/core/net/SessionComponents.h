@@ -341,6 +341,7 @@ namespace jam::net
 		{
 			uint32						size	 = 0;
 			Packet						packet;
+			Timestamp					notBefore = Timestamp::Zero();
 		};
 
 		std::deque<PendingPacket>		queue;
@@ -348,7 +349,7 @@ namespace jam::net
 		uint64							bytesQueued		 = 0;
 		bool							flushRequested	 = false;
 
-		void						Enqueue(Packet packet);
+		void						Enqueue(Packet packet, Timestamp notBefore = Timestamp::Zero());
 		bool						ShouldFlush(Timestamp now) const;
 		void						Clear();
 	};

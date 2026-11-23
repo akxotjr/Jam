@@ -582,12 +582,12 @@ namespace jam::net
 	//  TransmissionWaitingQueue
 	// ============================================================
 
-	void TransmissionWaitingQueue::Enqueue(Packet packet)
+	void TransmissionWaitingQueue::Enqueue(Packet packet, Timestamp notBefore)
 	{
 		if (!packet.IsValid()) return;
 
 		const uint32 size = packet->Size();
-		queue.push_back({ size, packet });
+		queue.push_back({ size, packet, notBefore });
 		bytesQueued += size;
 	}
 
