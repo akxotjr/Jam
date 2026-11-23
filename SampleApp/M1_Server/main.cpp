@@ -16,7 +16,8 @@
 
 int main(int argc, char* argv[])
 {
-	std::string bindIp = "192.168.50.1";
+	//std::string bindIp = "192.168.50.1";
+	std::string bindIp = "127.0.0.1";
 	uint16 tcpPort = 7777;
 	uint16 udpPort = 8888;
 	std::filesystem::path sharedDataRoot = "../M1_Shared/Data";
@@ -81,14 +82,22 @@ int main(int argc, char* argv[])
 	}
 	catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 
+	const jam::AutoCoreLayoutConfig layoutCfg = {
+		.mode			 = jam::Balance,
+		.reservedThreads = 1,
+		.profile		 = jam::CoreProfileServer
+	};
+
 	jam::net::RuntimeConfig runtimeConfig = {
 		.geConfig = {
-			.autoTune = true,
-			.layoutCfg = {
-				.mode			 = jam::Balance,
-				.reservedThreads = 1,
-				.profile		 = jam::CoreProfileServer
-			},
+			.autoTune = false,
+			.layout = [&layoutCfg]()
+			{
+				auto layout = jam::AutoLayout(layoutCfg);
+				layout.shards = 8;
+				return layout;
+			}(),
+			.layoutCfg = layoutCfg,
 			.metrics = {
 				.enabled		 = true,
 				.windowPeriod	 = jam::Sec(5),

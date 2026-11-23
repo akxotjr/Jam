@@ -162,7 +162,9 @@ BotRunner::~BotRunner()
 
 bool BotRunner::Initialize(const BotRunnerConfig& config)
 {
-	if (m_initialized || config.botCount == 0 || config.botCount > kBotAccountEnd - kBotAccountBegin + 1)
+	if (m_initialized || config.botCount == 0
+		|| config.accountBegin < kBotAccountBegin || config.accountBegin > kBotAccountEnd
+		|| config.botCount > kBotAccountEnd - config.accountBegin + 1)
 	{
 		return false;
 	}
@@ -226,7 +228,7 @@ bool BotRunner::Initialize(const BotRunnerConfig& config)
 			}
 
 			const uint32 targetIndex = directBegin + ((i - directBegin + 1) % directCount);
-			const jam::net::AccountId targetAccountId = kBotAccountBegin + targetIndex;
+			const jam::net::AccountId targetAccountId = config.accountBegin + targetIndex;
 			
 			scenarioConfig.chat.directTargetName = "Bot" + std::to_string(targetAccountId);
 		}
@@ -237,7 +239,7 @@ bool BotRunner::Initialize(const BotRunnerConfig& config)
 			return false;
 		}
 
-		const jam::net::AccountId accountId = kBotAccountBegin + i;
+		const jam::net::AccountId accountId = config.accountBegin + i;
 		jam::net::ClientConfig clientConfig{};
 
 		clientConfig.accountId				= accountId;

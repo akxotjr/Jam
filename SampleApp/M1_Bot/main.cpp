@@ -31,6 +31,7 @@ namespace
 		std::cout << "  --data_root <path>      Shared data root (default: ../M1_Shared/Data)\n";
 		std::cout << "  --output_dir <path>     Log directory\n";
 		std::cout << "  --seed <number>         Random seed (default: 1)\n";
+		std::cout << "  --account_begin <id>    First bot account (default: 6000); range must fit in 6000-9999\n";
 		std::cout << "  --connect_per_second <count> Connection starts per second (default: 50)\n";
 		std::cout << "  --stats_interval <seconds> Automatic stats period, 0 disables (default: 5)\n";
 		std::cout << "  --stop_file <path>      Create this file to abort gracefully\n";
@@ -164,6 +165,12 @@ int main(int argc, char* argv[])
 					if (valid)
 						botConfig.botCount = number;
 				}
+				else if (option == "--account_begin")
+				{
+					valid = number >= 6000 && number <= 9999;
+					if (valid)
+						botConfig.accountBegin = number;
+				}
 				else if (option == "--warm_up")
 				{
 					valid = true;
@@ -191,6 +198,12 @@ int main(int argc, char* argv[])
 			return -1;
 		}
 	}
+	if (botConfig.botCount > 9999 - botConfig.accountBegin + 1)
+	{
+		std::cerr << "Bot account range exceeds 9999; adjust --account_begin or --ccu\n";
+		return -1;
+	}
+
 	try
 	{
 		if (!stopFile.empty() && std::filesystem::exists(stopFile))

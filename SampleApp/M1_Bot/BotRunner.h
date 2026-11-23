@@ -22,6 +22,7 @@ enum class eBotProfile : uint8
 struct BotRunnerConfig
 {
 	uint32						botCount			   = 1;
+	jam::net::AccountId			accountBegin		   = 6000;
 	uint32						connectPerSecond	   = 50;
 	std::string					serverIp			   = "127.0.0.1";
 	uint16						tcpPort				   = 7777;
