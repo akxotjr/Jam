@@ -16,3 +16,24 @@ MonoBehaviour:
   - worldArchetypeName: Field
     worldArchetypeKey: 4801378031484380967
     worldPrefab: {fileID: 555379802442336616, guid: e5b719c2a88a5624794c5416b5182214, type: 3}
+  instanceNames:
+  - instanceName: field-01
+    displayName: Field#1
+  - instanceName: field-02
+    displayName: Field#2
+  - instanceName: field-03
+    displayName: Field#3
+  - instanceName: field-04
+    displayName: Field#4
+  - instanceName: field-05
+    displayName: Field#5
+  - instanceName: field-06
+    displayName: Field#6
+  - instanceName: field-07
+    displayName: Field#7
+  - instanceName: field-08
+    displayName: Field#8
+  - instanceName: field-09
+    displayName: Field#9
+  - instanceName: field-10
+    displayName: Field#10

@@ -892,6 +892,7 @@ GameObject:
   m_Component:
   - component: {fileID: 222277385}
   - component: {fileID: 222277384}
+  - component: {fileID: 222277386}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -979,6 +980,35 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+--- !u!114 &222277386
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 222277383}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &235285287
 GameObject:
   m_ObjectHideFlags: 0
@@ -15827,8 +15857,8 @@ MonoBehaviour:
     SharedDataManifestPath: C:/Users/akxotjr/GameWorkSpace/Jam-dev/SampleApp/M1_Shared/Data/shared_data_manifest.json
     HeadlessMode: 0
     LogNativeMessages: 1
-  cameraProfile: {fileID: 11400000, guid: 7fedf6becaeb455896e3111781f69ae1, type: 2}
-  movementProfile: {fileID: 11400000, guid: f1aa3a489a354e2593a58f85e5df1bef, type: 2}
+  cameraProfile: {fileID: 11400000, guid: 70f09d19f4754b3092d9ef0d2bccf05e, type: 2}
+  movementProfile: {fileID: 11400000, guid: 8d7169610b1a464581b4b3bc72f9d9ce, type: 2}
   pointerCamera: {fileID: 1634895130}
   worldPresentationRoot: {fileID: 2099969356}
   worldPresentationDB: {fileID: 11400000, guid: 47ca6b1da2fd73c46b349061fa4a9ec2, type: 2}

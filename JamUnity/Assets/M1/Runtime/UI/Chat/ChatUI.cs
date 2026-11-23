@@ -254,7 +254,7 @@ namespace JamUnity.UI.Chat
 		private void UpdateWorldTitle()
 		{
 			chatTitle.text = socialManager != null && socialManager.TryGetMainWorldName(out string worldName)
-				? $"# World {worldName}"
+				? worldName
 				: "# World";
 		}
 

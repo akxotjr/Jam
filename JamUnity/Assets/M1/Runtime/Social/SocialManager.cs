@@ -78,9 +78,18 @@ namespace JamUnity.Runtime.Client
 		{
 			worldName = string.Empty;
 			if (!nativeManager.TryGetMainWorldRef(out CoreNative.WorldRuntimeRef world)
-				|| world.worldArchetypeKey == 0 || worldPresentationDatabase == null
-				|| !worldPresentationDatabase.TryGetEntry(world.worldArchetypeKey, out var entry))
+				|| worldPresentationDatabase == null)
 				return false;
+
+			if (worldPresentationDatabase.TryGetInstanceDisplayName(world.worldInstanceId, out string displayName))
+			{
+				worldName = displayName;
+				return true;
+			}
+
+			if (!worldPresentationDatabase.TryGetEntry(world.worldArchetypeKey, out var entry))
+				return false;
+
 			worldName = entry.WorldArchetypeName;
 			return !string.IsNullOrEmpty(worldName);
 		}

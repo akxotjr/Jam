@@ -405,7 +405,7 @@ JAM_eResult UnityClientCore::PollEvent(JAM_ClientEvent& outEvent)
 	{
 		const auto& value = std::get<net::ActorLifecycleEvent>(event.payload);
 		outEvent.type = JAM_eClientEventType::ActorLifecycleChanged;
-		outEvent.payload.actorLifecycleChanged = { .accountId = value.accountId, .userId = value.userId, .worldId = value.worldId, .clientRequestId = value.clientRequestId, .actorId = value.actorId.Value(), .isLocal = value.isLocal ? 1 : 0, .reason = static_cast<JAM_eActorLifecycleReason>(value.reason), .actorArchetypeKey = value.actorArchetypeKey.v };
+		outEvent.payload.actorLifecycleChanged = { .accountId = value.accountId, .userId = value.userId, .worldId = value.worldId, .actorId = value.actorId.Value(), .isLocal = value.isLocal ? 1 : 0, .reason = static_cast<JAM_eActorLifecycleReason>(value.reason), .actorArchetypeKey = value.actorArchetypeKey.v };
 		break;
 	}
 	case net::eClientEventType::WorldRayResolved:

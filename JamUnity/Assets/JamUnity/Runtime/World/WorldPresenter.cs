@@ -49,6 +49,13 @@ namespace JamUnity.World.Runtime
         
         [SerializeField] private ActorManager   actorManager;
         [SerializeField] private WorldRoot      worldRoot;
+        [SerializeField] private Renderer       minimapFloor;
+
+        public bool TryGetMinimapBounds(out Bounds bounds)
+        {
+            bounds = minimapFloor != null ? minimapFloor.bounds : default;
+            return bounds.size.x > 0.0f && bounds.size.z > 0.0f;
+        }
     
         private readonly Dictionary<ActorId, ActorView> actors = new();
         private readonly Dictionary<ulong, Stack<ActorView>> pooledActors = new();
@@ -90,6 +97,17 @@ namespace JamUnity.World.Runtime
             return null;
         }
     
+        public void CopyRemoteActorPositions(List<Vector3> positions)
+        {
+            positions.Clear();
+            foreach (var actor in actors.Values)
+            {
+                if (!actor.isLocal && actor.hasPresentedTransform && actor.go != null && actor.go.activeInHierarchy
+                    && (minimapFloor == null || !minimapFloor.transform.IsChildOf(actor.go.transform)))
+                    positions.Add(actor.go.transform.position);
+            }
+        }
+
         public void OnActorSpawned(ActorId actorId, ulong actorArchetypeKey, bool isLocal)
         {
 			if (actorId == 0)

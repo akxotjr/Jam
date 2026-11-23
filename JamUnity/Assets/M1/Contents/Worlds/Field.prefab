@@ -52,6 +52,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::JamUnity.World.Runtime.WorldPresenter
   actorManager: {fileID: 1599536518138692302}
   worldRoot: {fileID: 6196555384168372897}
+  minimapFloor: {fileID: 5813447165063711502}
 --- !u!114 &1599536518138692302
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -324,6 +325,11 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 3361814374735006391}
   m_SourcePrefab: {fileID: 100100000, guid: c27a1262b41736b4186eb8467d651f6d, type: 3}
+--- !u!23 &5813447165063711502 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 8748172528834232035, guid: c27a1262b41736b4186eb8467d651f6d, type: 3}
+  m_PrefabInstance: {fileID: 7192943936446833212}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &282582025087970969 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6933738838538964133, guid: c27a1262b41736b4186eb8467d651f6d, type: 3}

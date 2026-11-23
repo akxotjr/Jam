@@ -2,6 +2,7 @@ using System;
 using JamUnity.Core.Native;
 using JamUnity.World.Presentation;
 using JamUnity.UI.Chat;
+using JamUnity.UI;
 using UnityEngine;
 using JamUnity.Client.Runtime;
 using JamUnity.Actor.Runtime;
@@ -41,6 +42,7 @@ namespace JamUnity.Runtime.Client
         private SocialManager socialManager;
         private CharacterContent characterContent;
         private CameraFollow cameraFollow;
+        private AoiMinimap aoiMinimap;
         private bool characterListRequested;
         private bool initialWorldRequested;
         private bool characterControlEnabled;
@@ -84,6 +86,10 @@ namespace JamUnity.Runtime.Client
             if (activeCamera != null && activeCamera.TryGetComponent(out cameraFollow))
                 cameraFollow.SetProfile(cameraProfile);
 
+            Canvas hud = chatUI != null ? chatUI.GetComponentInParent<Canvas>(true) : null;
+            if (hud != null && cameraFollow != null && !config.HeadlessMode)
+                aoiMinimap = AoiMinimap.Create(hud);
+
             worldManager.Init(new WorldManager.Config
             {
                 PresentationRoot = worldPresentationRoot != null ? worldPresentationRoot : transform,
@@ -118,6 +124,8 @@ namespace JamUnity.Runtime.Client
 
             nativeManager.Process(Time.deltaTime);
             worldManager.Tick(nativeManager, Time.deltaTime);
+            if (aoiMinimap != null)
+                aoiMinimap.Present(worldManager.ActiveWorldPresenter, cameraFollow, characterControlEnabled);
         }
 
         private void OnApplicationFocus(bool hasFocus)
@@ -140,6 +148,8 @@ namespace JamUnity.Runtime.Client
             }
 
             chatUI?.Unbind();
+            if (aoiMinimap != null)
+                Destroy(aoiMinimap.gameObject);
 
 			if (characterContent != null)
 			{
@@ -229,6 +239,8 @@ namespace JamUnity.Runtime.Client
             activeMainWorldId = world.worldId;
             SetChatVisible(world.worldId != 0);
 			chatUI?.RefreshWorldChannel();
+            if (aoiMinimap != null)
+                aoiMinimap.SetWorldName(socialManager.TryGetMainWorldName(out string worldName) ? worldName : "World");
             inputManager?.Reset();
             SetCharacterControlEnabled(world.worldId != 0 && worldManager.HasLocalPlayer(world.worldId));
         }

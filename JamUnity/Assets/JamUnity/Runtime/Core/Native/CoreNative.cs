@@ -93,7 +93,8 @@ namespace JamUnity.Core.Native
             ActorNotFound,
             TransportUnavailable,
             Rejected,
-            Shutdown
+            Shutdown,
+            OutcomeUnknown
         }
 
         public enum eCharacterLocomotionKind : byte
@@ -426,7 +427,6 @@ namespace JamUnity.Core.Native
             public ulong accountId;
             public ulong userId;
             public ulong worldId;
-            public ulong clientRequestId;
             public uint actorId;
             public int isLocal;
             public eActorLifecycleReason reason;

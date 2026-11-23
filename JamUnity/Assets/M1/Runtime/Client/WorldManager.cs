@@ -37,6 +37,7 @@ namespace JamUnity.Runtime.Client
         private ulong           lastMainWorldArchetypeKey   = ulong.MaxValue;
 
         public event Action<CoreNative.WorldRuntimeRef> MainWorldActivated;
+        public WorldPresenter ActiveWorldPresenter => activeWorldPresenter;
         public event Action<ulong, bool> LocalPlayerAvailabilityChanged;
         private readonly HashSet<ulong> localPlayerWorlds = new();
 
@@ -236,8 +237,13 @@ namespace JamUnity.Runtime.Client
                 presentationInterpolationElapsed += Time.unscaledDeltaTime;
             }
 
+            uint tickDelta = unchecked(currentFrame.tick - previousFrame.tick);
+            if (tickDelta == 0)
+                return 1.0f;
+
             const float simulationTickInterval = 1.0f / 30.0f;
-            return Mathf.Clamp01(presentationInterpolationElapsed / simulationTickInterval);
+            float frameInterval = tickDelta * simulationTickInterval;
+            return Mathf.Clamp01(presentationInterpolationElapsed / frameInterval);
         }
 
         private void ResizeActorBuffers(CoreNative.FrameCopyInfo copyInfo)

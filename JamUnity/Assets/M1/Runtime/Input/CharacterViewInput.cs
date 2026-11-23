@@ -1,5 +1,8 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace JamUnity.Runtime.Client
 {
@@ -38,7 +41,8 @@ namespace JamUnity.Runtime.Client
                 ReleaseCursor();
 
             if (profile != null && mouse != null && Cursor.lockState != CursorLockMode.Locked
-                && mouse.leftButton.wasPressedThisFrame)
+                && mouse.leftButton.wasPressedThisFrame
+                && !IsPointerOverUi(mouse.position.ReadValue()))
             {
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
@@ -71,6 +75,25 @@ namespace JamUnity.Runtime.Client
             publishElapsed = 0.0f;
             publishPending = false;
             return true;
+        }
+
+        private static bool IsPointerOverUi(Vector2 position)
+        {
+            EventSystem eventSystem = EventSystem.current;
+            if (eventSystem == null)
+                return false;
+
+            // Check the current position even if the UI input module has not updated yet.
+            var pointer = new PointerEventData(eventSystem) { position = position };
+            var hits = new List<RaycastResult>();
+            eventSystem.RaycastAll(pointer, hits);
+            foreach (RaycastResult hit in hits)
+            {
+                if (hit.module is GraphicRaycaster)
+                    return true;
+            }
+
+            return false;
         }
 
         private void ResolveViewAngles(out float yaw, out float pitch)

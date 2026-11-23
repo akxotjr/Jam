@@ -36,10 +36,19 @@ namespace JamUnity.World.Presentation
             }
         }
 
+        [Serializable]
+        private sealed class InstanceName
+        {
+            public string instanceName;
+            public string displayName;
+        }
+
         [SerializeField] private List<Entry> entries = new();
+        [SerializeField] private List<InstanceName> instanceNames = new();
 
         [NonSerialized] private readonly Dictionary<string, Entry> entriesByName = new(StringComparer.OrdinalIgnoreCase);
         [NonSerialized] private readonly Dictionary<ulong, Entry> entriesByKey = new();
+        [NonSerialized] private readonly Dictionary<ulong, string> displayNamesByInstanceId = new();
 
         public IReadOnlyList<Entry> Entries => EntriesReadonly;
 
@@ -79,6 +88,12 @@ namespace JamUnity.World.Presentation
                 && (worldPrefab = entry.WorldPrefab) != null;
         }
 
+        public bool TryGetInstanceDisplayName(ulong worldInstanceId, out string displayName)
+        {
+            EnsureLookupBuilt();
+            return displayNamesByInstanceId.TryGetValue(worldInstanceId, out displayName);
+        }
+
         protected override List<Entry> EntryStorage
         {
             get => entries;
@@ -100,6 +115,17 @@ namespace JamUnity.World.Presentation
         {
             entriesByName.Clear();
             entriesByKey.Clear();
+            displayNamesByInstanceId.Clear();
+            foreach (var instance in instanceNames)
+            {
+                if (instance == null || string.IsNullOrWhiteSpace(instance.instanceName)
+                    || string.IsNullOrWhiteSpace(instance.displayName))
+                    continue;
+
+                displayNamesByInstanceId.TryAdd(
+                    Core.Util.StableKey.MakeStableKey(instance.instanceName.Trim()), instance.displayName.Trim());
+            }
+
             if (entries == null)
                 return;
 

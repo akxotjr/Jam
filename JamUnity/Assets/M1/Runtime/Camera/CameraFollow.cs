@@ -21,6 +21,9 @@ namespace JamUnity.Client.Runtime
         private float orbitPitch;
         private bool aoiDebugView;
 
+        public float AoiHalfExtent => aoiHalfExtent;
+        public float AoiHysteresis => aoiHysteresis;
+
         public void SetProfile(CameraProfile nextProfile)
         {
             profile = nextProfile;
@@ -78,6 +81,30 @@ namespace JamUnity.Client.Runtime
             transform.position = target.position + followOffset;
             transform.LookAt(target.position + profile.LookAtOffset);
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            if (!aoiDebugView || presenter == null)
+                return;
+
+            Transform target = presenter.GetLocalActorTransform();
+            if (target == null)
+                return;
+
+            Vector3 center = target.position + Vector3.up * 0.05f;
+            float enterSize = 2.0f * aoiHalfExtent;
+            float retainSize = 2.0f * (aoiHalfExtent + aoiHysteresis);
+            Color previousColor = Gizmos.color;
+
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireCube(center, new Vector3(enterSize, 0.0f, enterSize));
+            Gizmos.color = new Color(1.0f, 0.65f, 0.0f);
+            Gizmos.DrawWireCube(center, new Vector3(retainSize, 0.0f, retainSize));
+
+            Gizmos.color = previousColor;
+        }
+#endif
 
         private void ApplyProjection()
         {

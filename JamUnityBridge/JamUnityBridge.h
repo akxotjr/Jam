@@ -89,6 +89,7 @@ enum class JAM_eActorActionReason : uint8_t
 	TransportUnavailable,
 	Rejected,
 	Shutdown,
+	OutcomeUnknown,
 };
 
 enum class JAM_eCharacterLocomotionKind : uint8_t
@@ -388,7 +389,6 @@ struct JAM_ActorLifecycleChangedEvent
 	uint64_t					accountId; 
 	uint64_t					userId; 
 	uint64_t					worldId; 
-	uint64_t					clientRequestId; 
 	uint32_t					actorId; 
 	int32_t						isLocal; 
 	JAM_eActorLifecycleReason	reason; 
